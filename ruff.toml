@@ -1,0 +1,39 @@
+# Ruff configuration for QuantaLogic2
+
+# Target Python version
+target-version = "py312"
+
+# Line length
+line-length = 120
+
+# Linting rules
+[lint]
+# Enable specific rules
+select = [
+    "E",  # pycodestyle errors
+    "F",  # pyflakes
+    "I",  # isort
+    "N",  # pep8-naming
+    "D",  # pydocstyle
+    "UP", # pyupgrade
+]
+
+# Ignore specific rules
+ignore = [
+    "D203",  # 1 blank line required before class docstring
+    "D213",  # Multi-line docstring summary should start at the second line
+    "E501",  # line too long
+    "UP035", #
+    "UP007",
+    "UP006",
+    "UP008",
+    "UP009",
+]
+
+# Docstring configuration
+[lint.pydocstyle]
+convention = "google"
+
+# Import sorting
+[lint.isort]
+known-first-party = ["quantalogic"]

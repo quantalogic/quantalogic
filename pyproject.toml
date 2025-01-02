@@ -1,0 +1,64 @@
+[tool.poetry]
+name = "quantalogic2"
+version = "0.1.0"
+description = "QuantaLogic AI Tools"
+authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
+readme = "README.md"
+packages = [{include = "quantalogic"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pydantic = "^2.10.4"
+litellm = "^1.56.4"
+rich = "^13.9.4"
+loguru = "^0.7.3"
+boto3 = "^1.35.86"
+tree-sitter-python = "^0.23.6"
+tree-sitter = "^0.23.2"
+tree-sitter-javascript = "^0.23.1"
+tree-sitter-typescript = "^0.23.2"
+tree-sitter-java = "^0.23.5"
+tree-sitter-scala = "^0.23.4"
+tree-sitter-go = "^0.23.4"
+tree-sitter-rust = "^0.23.2"
+tree-sitter-c = "^0.23.4"
+tree-sitter-cpp = "^0.23.4"
+markitdown = "^0.0.1a3"
+prompt-toolkit = "^3.0.48"
+uvicorn = "^0.34.0"
+fastapi = "^0.115.6"
+websocket = "^0.2.1"
+tenacity = "^9.0.0"
+
+[tool.poetry.scripts]
+quantalogic = "quantalogic.main:main"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.8.4"
+pytest = "^8.2.0"
+pytest-mock = "^3.14.0"
+litellm = "^1.55.9"
+ollama = "^0.4.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+extend-select = ["F", "E", "W", "I", "N", "UP", "ASYNC", "B", "A", "C4", "DTZ", "T10", "ISC", "ICN", "G", "PIE", "T20", "PYI", "PT"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+preview = true
+
+[tool.pytest.ini_options]
+addopts = "-v"
+markers = [
+    "integration: marks integration tests that require external services",
+    "unit: marks unit tests"
+]
+testpaths = ["tests"]

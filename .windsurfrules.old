@@ -1,0 +1,78 @@
+## Python 3.12 Development Guide
+.
+
+### Python Version and Environment
+- **Use Python 3.12**: Ensure that all developments are based on Python 3.12 to leverage the latest features and improvements.
+- **Dependency Management with Poetry**: Always use [Poetry](https://python-poetry.org/) for dependency management to simplify package management and project configuration.
+- **Isolated Environments**: Maintain isolated virtual environments for each project to avoid dependency conflicts and ensure reproducibility.
+
+## Library Development
+
+- pydantic v2: Use pydantic v2 for data models and validation.
+- rich: Utilize rich for rich text formatting and styling.
+- loguru: Utilize loguru for logging and structured logging.
+
+### Project Configuration
+- **Version Control**: Always include `pyproject.toml` and `poetry.lock` files in version control to track project dependencies accurately.
+- **Project Settings**: Configure all project settings within `pyproject.toml`, including dependencies, scripts, and metadata.
+
+### Dependency Management
+- **Installing Dependencies**: Use the command:
+  ```bash
+  poetry install
+  ```
+- **Adding New Dependencies**: To add a new package, use:
+  ```bash
+  poetry add package_name
+  ```
+- **Updating Dependencies**: Keep dependencies up-to-date with:
+  ```bash
+  poetry update
+  ```
+
+### Code Quality and Linting
+- **Linting and Formatting**: Use [Ruff](https://ruff.rs/) for linting and code formatting.
+- **Run Lint Checks**: Execute lint checks with:
+  ```bash
+  poetry run ruff check .
+  ```
+- **Automatic Fixes**: Automatically fix linting issues using:
+  ```bash
+  poetry run ruff fix .
+  ```
+- **CI/CD Integration**: Integrate Ruff checks into your CI/CD pipelines to enforce code quality consistently.
+
+### Type Annotations and Imports
+- **Native Type Hints**: Utilize native type hints for improved readability:
+  - Use `list[Type]` instead of `typing.List[Type]`
+  - Use `dict[KeyType, ValueType]` instead of `typing.Dict[KeyType, ValueType]`
+- **Enhanced Type Features**: Take advantage of Python 3.12's enhanced type annotation features, such as `Self` for class methods.
+- **Prefer Built-ins**: Favor built-in types over their `typing` equivalents whenever possible.
+
+### Data Validation
+- **Pydantic v2 for Data Models**: Utilize [Pydantic v2](https://docs.pydantic.dev/) for data modeling and validation.
+- **Robust Data Models**: Create robust data models with comprehensive type annotations.
+- **Custom Validators**: Implement custom validators as necessary to enforce business rules.
+- **Performance Optimization**: Leverage Pydantic's improved performance features for efficient data handling.
+
+### Testing
+- **Comprehensive Unit Tests**: Write thorough unit tests to ensure code correctness.
+- **Testing Framework**: Use [pytest](https://docs.pytest.org/en/stable/) as the testing framework for its flexibility and ease of use.
+- **High Test Coverage**: Aim for high test coverage to catch potential issues early.
+- **Run Tests**: Execute tests with:
+  ```bash
+  poetry run pytest
+  ```
+
+### Documentation
+- **Clear Documentation Practices**: Use type hints and docstrings to provide clear documentation within the code.
+- **Documentation Generation**: Generate project documentation using tools like [Sphinx](https://www.sphinx-doc.org/en/master/).
+- **Keep Documentation Current**: Regularly update documentation to reflect code changes accurately.
+
+### Best Practices
+- **PEP 8 Compliance**: Adhere to [PEP 8](https://peps.python.org/pep-0008/) style guidelines for consistent coding style.
+- **Clean Code Principles**: Write clean, readable, and maintainable code that is easy to understand.
+- **Meaningful Naming Conventions**: Use descriptive variable and function names that convey purpose clearly.
+- **Focused Functions and Methods**: Keep functions and methods focused on a single task to enhance readability and maintainability.
+
+By following this guide, developers can create high-quality Python applications that are maintainable, scalable, and efficient while fully utilizing the capabilities of Python 3.12.
