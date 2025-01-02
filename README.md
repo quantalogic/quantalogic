@@ -2,7 +2,6 @@
 # QuantaLogic AI Assistant 🤖
 
 
-![QuantaLogic Logo](https://via.placeholder.com/150x150.png?text=QuantaLogic)
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/your/repo)
 [![License](https://img.shields.io/badge/license-APACHE2-green.svg)](LICENSE)
