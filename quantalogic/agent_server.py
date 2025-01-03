@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Lock
-from typing import Any, AsyncGenerator, Dict, Optional, List
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -47,12 +47,15 @@ logger.add(
 SHUTDOWN_TIMEOUT = 5.0  # seconds
 VALIDATION_TIMEOUT = 30.0  # seconds
 
+
 def handle_sigterm(signum, frame):
     """Handle SIGTERM signal."""
     logger.info("Received SIGTERM signal")
     raise SystemExit(0)
 
+
 signal.signal(signal.SIGTERM, handle_sigterm)
+
 
 def get_version() -> str:
     """Get the current version of the package."""
@@ -105,9 +108,7 @@ class EventMessage(BaseModel):
     data: Dict[str, Any]
     timestamp: str
 
-    model_config = {
-        "extra": "forbid"
-    }
+    model_config = {"extra": "forbid"}
 
 
 class UserValidationRequest(BaseModel):
@@ -116,9 +117,7 @@ class UserValidationRequest(BaseModel):
     question: str
     validation_id: str | None = None
 
-    model_config = {
-        "extra": "forbid"
-    }
+    model_config = {"extra": "forbid"}
 
 
 class UserValidationResponse(BaseModel):
@@ -126,23 +125,22 @@ class UserValidationResponse(BaseModel):
 
     response: bool
 
-    model_config = {
-        "extra": "forbid"
-    }
+    model_config = {"extra": "forbid"}
 
 
 class TaskSubmission(BaseModel):
     """Request model for task submission."""
+
     task: str
     model_name: Optional[str] = MODEL_NAME
     max_iterations: Optional[int] = 30
-    
-    model_config = {
-        "extra": "forbid"
-    }
+
+    model_config = {"extra": "forbid"}
+
 
 class TaskStatus(BaseModel):
     """Task status response model."""
+
     task_id: str
     status: str  # "pending", "running", "completed", "failed"
     created_at: str
@@ -266,19 +264,13 @@ class AgentState:
         """SSE-based user validation method."""
         validation_id = str(uuid.uuid4())
         response_queue = asyncio.Queue()
-        
+
         # Store validation request and response queue
-        self.validation_requests[validation_id] = {
-            "question": question,
-            "timestamp": datetime.now().isoformat()
-        }
+        self.validation_requests[validation_id] = {"question": question, "timestamp": datetime.now().isoformat()}
         self.validation_responses[validation_id] = response_queue
 
         # Broadcast validation request
-        self.broadcast_event("user_validation_request", {
-            "validation_id": validation_id,
-            "question": question
-        })
+        self.broadcast_event("user_validation_request", {"validation_id": validation_id, "question": question})
 
         try:
             # Wait for response with timeout
@@ -351,7 +343,7 @@ class AgentState:
         self.tasks[task_id] = {
             "status": "pending",
             "created_at": datetime.now().isoformat(),
-            "request": task_request.dict()
+            "request": task_request.dict(),
         }
         self.task_queues[task_id] = asyncio.Queue()
         return task_id
@@ -372,10 +364,8 @@ class AgentState:
             result = await loop.run_in_executor(
                 None,
                 functools.partial(
-                    self.agent.solve_task,
-                    task["request"]["task"],
-                    max_iterations=task["request"]["max_iterations"]
-                )
+                    self.agent.solve_task, task["request"]["task"], max_iterations=task["request"]["max_iterations"]
+                ),
             )
 
             # Update task status
@@ -386,12 +376,15 @@ class AgentState:
             task["model_name"] = self.get_current_model_name()
 
             # Broadcast completion event
-            self.broadcast_event("task_complete", {
-                "task_id": task_id,
-                "result": result,
-                "total_tokens": self.agent.total_tokens,
-                "model_name": self.get_current_model_name()
-            })
+            self.broadcast_event(
+                "task_complete",
+                {
+                    "task_id": task_id,
+                    "result": result,
+                    "total_tokens": self.agent.total_tokens,
+                    "model_name": self.get_current_model_name(),
+                },
+            )
 
         except Exception as e:
             logger.error(f"Task execution failed: {e}", exc_info=True)
@@ -400,15 +393,13 @@ class AgentState:
             task["error"] = str(e)
 
             # Broadcast error event
-            self.broadcast_event("task_error", {
-                "task_id": task_id,
-                "error": str(e)
-            })
+            self.broadcast_event("task_error", {"task_id": task_id, "error": str(e)})
 
 
 # Initialize global states
 server_state = ServerState()
 agent_state = AgentState()
+
 
 # Initialize FastAPI app
 @asynccontextmanager
@@ -418,10 +409,7 @@ async def lifespan(app: FastAPI):
         # Setup signal handlers
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(
-                sig,
-                lambda s=sig: asyncio.create_task(handle_shutdown(s))
-            )
+            loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(handle_shutdown(s)))
         yield
     finally:
         logger.info("Shutting down server gracefully...")
@@ -430,6 +418,7 @@ async def lifespan(app: FastAPI):
         server_state.shutdown_complete.set()
         logger.info("Server shutdown complete")
 
+
 async def handle_shutdown(sig):
     """Handle shutdown signals."""
     if sig == signal.SIGINT and server_state.interrupt_count >= 1:
@@ -437,6 +426,7 @@ async def handle_shutdown(sig):
         await server_state.initiate_shutdown(force=True)
     else:
         server_state.handle_interrupt()
+
 
 app = FastAPI(
     title="QuantaLogic API",
@@ -459,6 +449,7 @@ app.mount("/static", StaticFiles(directory="quantalogic/static"), name="static")
 
 # Configure Jinja2 templates
 templates = Jinja2Templates(directory="quantalogic/templates")
+
 
 # Middleware to log requests
 @app.middleware("http")
@@ -483,7 +474,7 @@ async def submit_validation_response(validation_id: str, response: UserValidatio
     """Submit a validation response."""
     if validation_id not in agent_state.validation_responses:
         raise HTTPException(status_code=404, detail="Validation request not found")
-    
+
     try:
         response_queue = agent_state.validation_responses[validation_id]
         await response_queue.put(response.response)
@@ -515,7 +506,7 @@ async def event_stream(request: Request) -> StreamingResponse:
 
                 # Check for shutdown during event processing
                 if server_state.is_shutting_down:
-                    yield "event: shutdown\ndata: {\"message\": \"Server shutting down\"}\n\n"
+                    yield 'event: shutdown\ndata: {"message": "Server shutting down"}\n\n'
                     break
 
         finally:
@@ -529,7 +520,7 @@ async def event_stream(request: Request) -> StreamingResponse:
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "Transfer-Encoding": "chunked",
-        }
+        },
     )
 
 
@@ -551,28 +542,26 @@ async def submit_task(request: TaskSubmission) -> Dict[str, str]:
     asyncio.create_task(agent_state.execute_task(task_id))
     return {"task_id": task_id}
 
+
 @app.get("/tasks/{task_id}")
 async def get_task_status(task_id: str) -> TaskStatus:
     """Get the status of a specific task."""
     if task_id not in agent_state.tasks:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     task = agent_state.tasks[task_id]
     return TaskStatus(task_id=task_id, **task)
 
+
 @app.get("/tasks")
-async def list_tasks(
-    status: Optional[str] = None,
-    limit: int = 10,
-    offset: int = 0
-) -> List[TaskStatus]:
+async def list_tasks(status: Optional[str] = None, limit: int = 10, offset: int = 0) -> List[TaskStatus]:
     """List all tasks with optional filtering."""
     tasks = []
     for task_id, task in agent_state.tasks.items():
         if status is None or task["status"] == status:
             tasks.append(TaskStatus(task_id=task_id, **task))
-    
-    return tasks[offset:offset + limit]
+
+    return tasks[offset : offset + limit]
 
 
 # Update the Agent initialization to use SSE validation by default
@@ -587,7 +576,7 @@ if __name__ == "__main__":
         log_level="info",
         timeout_keep_alive=5,
         access_log=True,
-        timeout_graceful_shutdown=5  # Reduced from 10 to 5 seconds
+        timeout_graceful_shutdown=5,  # Reduced from 10 to 5 seconds
     )
     server = uvicorn.Server(config)
     server_state.server = server
