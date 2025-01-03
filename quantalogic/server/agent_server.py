@@ -4,15 +4,12 @@
 import asyncio
 import functools
 import json
-import logging
 import signal
 import sys
 import time
-import traceback
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from pathlib import Path
 from queue import Empty, Queue
 from threading import Lock
 from typing import Any, AsyncGenerator, Dict, List, Optional
@@ -66,6 +63,7 @@ class ServerState:
     """Global server state management."""
 
     def __init__(self):
+        """Initialize the global server state."""
         self.interrupt_count = 0
         self.force_exit = False
         self.is_shutting_down = False
@@ -171,8 +169,8 @@ class AgentState:
         self.task_queues: Dict[str, asyncio.Queue] = {}
 
     def add_client(self, task_id: Optional[str] = None) -> str:
-        """
-        Add a new client and return its ID.
+        """Add a new client and return its ID.
+
         Ensures unique client-task combination.
         """
         with self.queue_lock:
@@ -203,9 +201,7 @@ class AgentState:
             return client_id
 
     def remove_client(self, client_id: str, task_id: Optional[str] = None):
-        """
-        Remove a client's event queue, optionally for a specific task.
-        """
+        """Remove a client's event queue, optionally for a specific task."""
         with self.queue_lock:
             if client_id in self.event_queues:
                 if task_id and task_id in self.event_queues[client_id]:
@@ -224,8 +220,8 @@ class AgentState:
                         del self.active_agents[client_id]
 
     def broadcast_event(self, event_type: str, data: Dict[str, Any], task_id: Optional[str] = None, client_id: Optional[str] = None):
-        """
-        Broadcast an event to specific client-task queues or globally.
+        """Broadcast an event to specific client-task queues or globally.
+
         Allows optional filtering by client_id and task_id to prevent event leakage.
         """
         event = EventMessage(
@@ -305,7 +301,7 @@ class AgentState:
             async with asyncio.timeout(VALIDATION_TIMEOUT):
                 response = await response_queue.get()
                 return response
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Validation request timed out: {validation_id}")
             return False
         finally:
@@ -356,7 +352,7 @@ class AgentState:
                 # Clear agent
                 self.agent = None
                 logger.info("Cleanup completed")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Cleanup timed out after {SHUTDOWN_TIMEOUT} seconds")
         except Exception as e:
             logger.error(f"Error during cleanup: {e}", exc_info=True)
