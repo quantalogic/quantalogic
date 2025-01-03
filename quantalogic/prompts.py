@@ -19,28 +19,26 @@ Be very concise and precise in the <thinking> block
 1. Analysis Block:
 ```xml
 <thinking>
- <task_analysis> 
-    * Restate the main objective of the <task> and its context.
+ <task_analysis_if_no_history> 
+   Only if no conversation history:
+    * Restate the main objective of the <task> and its context
     * If not previously defined, clarify detailed criteria for task completion.
     * Identify key components, constraints, and potential challenges.
     * Break down complex tasks into concrete sub-tasks.
-  </task_analysis>
-  <success_criteria>
+  </task_analysis_if_no_history>
+  <success_criteria_if_no_history>
+     If no conversation history: 
     * Specify measurable outcomes for task completion.
     * Define explicit quality benchmarks and performance indicators.
     * Note any constraints or limitations that may affect the task.
-  </success_criteria>
-   <strategic_approach>
+  </success_criteria_if_no_history>
+   <strategic_approach_if_no_history>
+      If no conversation history: 
     * Lay out a clear, high-level strategy for solving the task.
     * Identify required resources, tools, or information.
     * Anticipate possible roadblocks and outline contingency plans.
-  </strategic_approach>
-  <tool_execution_summary>
-    * Summarize recent tool calls and their results.
-    * If repeating a tool call, explain the necessity and any parameter changes.
-    * If a tool call failed, analyze the cause and propose alternatives.
-  </tool_execution_summary>
-  <progess_analysis
+  </strategic_approach_if_no_history>
+  <progess_analysis>
     * Detail each step completed successfully so far.
     * Identify and evaluate any blockers or challenges.
     * Provide potential solutions, and if needed, suggest reevaluating the approach.
