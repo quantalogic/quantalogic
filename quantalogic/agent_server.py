@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Lock
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional, List
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -96,36 +96,12 @@ class ServerState:
 
 
 # Models
-class TaskRequest(BaseModel):
-    """Request model for task solving."""
-
-    task: str
-    model_name: Optional[str] = MODEL_NAME
-    max_iterations: Optional[int] = 30
-
-    model_config = {
-        "extra": "forbid"
-    }
-
-
-class TaskResponse(BaseModel):
-    """Response model for task solving."""
-
-    result: str
-    total_tokens: int
-    model_name: str
-    version: str
-
-    model_config = {
-        "extra": "forbid"
-    }
-
-
 class EventMessage(BaseModel):
     """Event message model for SSE."""
 
     id: str
     event: str
+    task_id: Optional[str] = None  # Added task_id field
     data: Dict[str, Any]
     timestamp: str
 
@@ -155,6 +131,29 @@ class UserValidationResponse(BaseModel):
     }
 
 
+class TaskSubmission(BaseModel):
+    """Request model for task submission."""
+    task: str
+    model_name: Optional[str] = MODEL_NAME
+    max_iterations: Optional[int] = 30
+    
+    model_config = {
+        "extra": "forbid"
+    }
+
+class TaskStatus(BaseModel):
+    """Task status response model."""
+    task_id: str
+    status: str  # "pending", "running", "completed", "failed"
+    created_at: str
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    result: Optional[str] = None
+    error: Optional[str] = None
+    total_tokens: Optional[int] = None
+    model_name: Optional[str] = None
+
+
 class AgentState:
     """Manages agent state and event queues."""
 
@@ -167,6 +166,8 @@ class AgentState:
         self.console = Console()
         self.validation_requests: Dict[str, Dict[str, Any]] = {}
         self.validation_responses: Dict[str, asyncio.Queue] = {}
+        self.tasks: Dict[str, Dict[str, Any]] = {}
+        self.task_queues: Dict[str, asyncio.Queue] = {}
 
     def add_client(self) -> str:
         """Add a new client and return its ID."""
@@ -191,6 +192,7 @@ class AgentState:
             event = EventMessage(
                 id=f"evt_{datetime.now().timestamp()}",
                 event=event_type,
+                task_id=data.get("task_id"),  # Include task_id if present
                 data=formatted_data,
                 timestamp=datetime.now().isoformat(),
             )
@@ -343,6 +345,66 @@ class AgentState:
             if server_state.force_exit:
                 sys.exit(1)
 
+    async def submit_task(self, task_request: TaskSubmission) -> str:
+        """Submit a new task and return its ID."""
+        task_id = str(uuid.uuid4())
+        self.tasks[task_id] = {
+            "status": "pending",
+            "created_at": datetime.now().isoformat(),
+            "request": task_request.dict()
+        }
+        self.task_queues[task_id] = asyncio.Queue()
+        return task_id
+
+    async def execute_task(self, task_id: str):
+        """Execute a task asynchronously."""
+        try:
+            task = self.tasks[task_id]
+            task["status"] = "running"
+            task["started_at"] = datetime.now().isoformat()
+
+            # Initialize agent if needed
+            if not self.agent:
+                self.initialize_agent_with_sse_validation(task["request"]["model_name"])
+
+            # Execute task
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    self.agent.solve_task,
+                    task["request"]["task"],
+                    max_iterations=task["request"]["max_iterations"]
+                )
+            )
+
+            # Update task status
+            task["status"] = "completed"
+            task["completed_at"] = datetime.now().isoformat()
+            task["result"] = result
+            task["total_tokens"] = self.agent.total_tokens
+            task["model_name"] = self.get_current_model_name()
+
+            # Broadcast completion event
+            self.broadcast_event("task_complete", {
+                "task_id": task_id,
+                "result": result,
+                "total_tokens": self.agent.total_tokens,
+                "model_name": self.get_current_model_name()
+            })
+
+        except Exception as e:
+            logger.error(f"Task execution failed: {e}", exc_info=True)
+            task["status"] = "failed"
+            task["completed_at"] = datetime.now().isoformat()
+            task["error"] = str(e)
+
+            # Broadcast error event
+            self.broadcast_event("task_error", {
+                "task_id": task_id,
+                "error": str(e)
+            })
+
 
 # Initialize global states
 server_state = ServerState()
@@ -431,40 +493,6 @@ async def submit_validation_response(validation_id: str, response: UserValidatio
         raise HTTPException(status_code=500, detail="Failed to process validation response")
 
 
-@app.post("/solve_task")
-async def solve_task(request: TaskRequest) -> TaskResponse:
-    """Solve a task using the AI agent."""
-    try:
-        # Initialize agent if not already initialized
-        if not agent_state.agent:
-            agent_state.initialize_agent_with_sse_validation(request.model_name)
-
-        # Run solve_task in a thread pool since it's a blocking operation
-        loop = asyncio.get_event_loop()
-        solution = await loop.run_in_executor(
-            None, functools.partial(agent_state.agent.solve_task, request.task, max_iterations=request.max_iterations)
-        )
-
-        # Emit task completion event with the final answer
-        agent_state.broadcast_event("task_complete", {
-            "result": solution,
-            "total_tokens": agent_state.agent.total_tokens,
-            "model_name": agent_state.get_current_model_name(),
-            "timestamp": datetime.now().isoformat()
-        })
-
-        return TaskResponse(
-            result=solution,
-            total_tokens=agent_state.agent.total_tokens,
-            model_name=agent_state.get_current_model_name(),
-            version=get_version(),
-        )
-
-    except Exception as e:
-        logger.error(f"Error solving task: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail={"error": str(e), "traceback": traceback.format_exc()})
-
-
 @app.get("/events")
 async def event_stream(request: Request) -> StreamingResponse:
     """SSE endpoint for streaming agent events."""
@@ -513,6 +541,38 @@ async def get_index(request: Request) -> HTMLResponse:
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+@app.post("/tasks")
+async def submit_task(request: TaskSubmission) -> Dict[str, str]:
+    """Submit a new task and return its ID."""
+    task_id = await agent_state.submit_task(request)
+    # Start task execution in background
+    asyncio.create_task(agent_state.execute_task(task_id))
+    return {"task_id": task_id}
+
+@app.get("/tasks/{task_id}")
+async def get_task_status(task_id: str) -> TaskStatus:
+    """Get the status of a specific task."""
+    if task_id not in agent_state.tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task = agent_state.tasks[task_id]
+    return TaskStatus(task_id=task_id, **task)
+
+@app.get("/tasks")
+async def list_tasks(
+    status: Optional[str] = None,
+    limit: int = 10,
+    offset: int = 0
+) -> List[TaskStatus]:
+    """List all tasks with optional filtering."""
+    tasks = []
+    for task_id, task in agent_state.tasks.items():
+        if status is None or task["status"] == status:
+            tasks.append(TaskStatus(task_id=task_id, **task))
+    
+    return tasks[offset:offset + limit]
 
 
 # Update the Agent initialization to use SSE validation by default
