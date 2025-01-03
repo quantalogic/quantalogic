@@ -1,0 +1,121 @@
+"""State management for the QuantaLogic server."""
+
+import asyncio
+import logging
+import sys
+import traceback
+from datetime import datetime
+from queue import Queue
+from threading import Lock
+from typing import Any, Dict, Optional
+
+from loguru import logger
+from rich.console import Console
+
+# Configure logger
+logger.remove()
+logger.add(
+    sys.stderr,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+    level="INFO",
+)
+
+
+class ServerState:
+    """Global server state management."""
+
+    def __init__(self):
+        self.interrupt_count = 0
+        self.force_exit = False
+        self.is_shutting_down = False
+        self.shutdown_initiated = asyncio.Event()
+        self.shutdown_complete = asyncio.Event()
+        self.server = None
+
+    async def initiate_shutdown(self, force: bool = False):
+        """Initiate the shutdown process."""
+        if not self.is_shutting_down or force:
+            logger.info("Initiating server shutdown...")
+            self.is_shutting_down = True
+            self.force_exit = force
+            self.shutdown_initiated.set()
+            if force:
+                logger.warning("Forcing immediate shutdown...")
+                sys.exit(1)
+            await self.shutdown_complete.wait()
+
+    def handle_interrupt(self):
+        """Handle interrupt signal."""
+        self.interrupt_count += 1
+        if self.interrupt_count == 1:
+            logger.info("Graceful shutdown initiated (press Ctrl+C again to force)")
+            asyncio.create_task(self.initiate_shutdown(force=False))
+        else:
+            logger.warning("Forced shutdown initiated...")
+            asyncio.create_task(self.initiate_shutdown(force=True))
+
+
+class AgentState:
+    """Manages agent state and event queues."""
+
+    def __init__(self):
+        """Initialize the agent state."""
+        self.agent = None
+        self.event_queues: Dict[str, Queue] = {}
+        self.task_event_queues: Dict[str, Queue] = {}
+        self.queue_lock = Lock()
+        self.client_counter = 0
+        self.console = Console()
+        self.validation_requests: Dict[str, Dict[str, Any]] = {}
+        self.validation_responses: Dict[str, asyncio.Queue] = {}
+        self.tasks: Dict[str, Dict[str, Any]] = {}
+        self.task_queues: Dict[str, asyncio.Queue] = {}
+
+    def add_client(self) -> str:
+        """Add a new client and return its ID."""
+        with self.queue_lock:
+            self.client_counter += 1
+            client_id = f"client_{self.client_counter}"
+            self.event_queues[client_id] = Queue()
+            logger.info(f"New client connected: {client_id}")
+            return client_id
+
+    def remove_client(self, client_id: str):
+        """Remove a client and its event queue."""
+        with self.queue_lock:
+            if client_id in self.event_queues:
+                del self.event_queues[client_id]
+                logger.info(f"Client disconnected: {client_id}")
+
+    def _format_data_for_client(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Format data for client consumption."""
+        if isinstance(data, dict):
+            return {k: str(v) if isinstance(v, (datetime, bytes)) else v for k, v in data.items()}
+        return data
+
+    def broadcast_event(self, event_type: str, data: Dict[str, Any]):
+        """Broadcast an event to all connected clients or specific task queue."""
+        from quantalogic.models import EventMessage  # Import here to avoid circular dependency
+
+        try:
+            formatted_data = self._format_data_for_client(data)
+            event = EventMessage(
+                id=f"evt_{datetime.now().timestamp()}",
+                event=event_type,
+                task_id=data.get("task_id"),
+                data=formatted_data,
+                timestamp=datetime.now().isoformat(),
+            )
+
+            with self.queue_lock:
+                task_id = data.get("task_id")
+                if task_id and task_id in self.task_event_queues:
+                    # Send to task-specific queue
+                    self.task_event_queues[task_id].put(event.model_dump())
+                else:
+                    # Broadcast to all clients
+                    for queue in self.event_queues.values():
+                        queue.put(event.model_dump())
+        except Exception as e:
+            logger.error(f"Error broadcasting event: {e}")
+            logger.error(traceback.format_exc())

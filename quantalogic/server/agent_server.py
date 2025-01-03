@@ -464,10 +464,10 @@ app.add_middleware(
 )
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="quantalogic/static"), name="static")
+app.mount("/static", StaticFiles(directory="quantalogic/server/static"), name="static")
 
 # Configure Jinja2 templates
-templates = Jinja2Templates(directory="quantalogic/templates")
+templates = Jinja2Templates(directory="quantalogic/server/templates")
 
 
 # Middleware to log requests
