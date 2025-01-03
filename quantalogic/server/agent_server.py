@@ -158,8 +158,10 @@ class AgentState:
     def __init__(self):
         """Initialize the agent state."""
         self.agent = None
-        self.event_queues: Dict[str, Queue] = {}
-        self.task_event_queues: Dict[str, Queue] = {}  # New task-specific event queues
+        # Use a nested dictionary to track event queues per client and task
+        self.event_queues: Dict[str, Dict[str, Queue]] = {}
+        # Track active agents per client-task combination
+        self.active_agents: Dict[str, Dict[str, Any]] = {}
         self.queue_lock = Lock()
         self.client_counter = 0
         self.console = Console()
@@ -168,63 +170,84 @@ class AgentState:
         self.tasks: Dict[str, Dict[str, Any]] = {}
         self.task_queues: Dict[str, asyncio.Queue] = {}
 
-    def add_client(self) -> str:
-        """Add a new client and return its ID."""
+    def add_client(self, task_id: Optional[str] = None) -> str:
+        """
+        Add a new client and return its ID.
+        Ensures unique client-task combination.
+        """
         with self.queue_lock:
-            self.client_counter += 1
+            # Generate a unique client ID
             client_id = f"client_{self.client_counter}"
-            self.event_queues[client_id] = Queue()
-            logger.info(f"New client connected: {client_id}")
+            self.client_counter += 1
+
+            # Initialize nested event queue structure
+            if client_id not in self.event_queues:
+                self.event_queues[client_id] = {}
+                self.active_agents[client_id] = {}
+
+            if task_id:
+                # Prevent multiple agents for the same client-task combination
+                if task_id in self.active_agents[client_id]:
+                    raise ValueError(f"An agent already exists for client {client_id} and task {task_id}")
+                
+                # Create a specific queue for this client-task combination
+                self.event_queues[client_id][task_id] = Queue()
+                self.active_agents[client_id][task_id] = {
+                    'created_at': datetime.utcnow().isoformat(),
+                    'status': 'active'
+                }
+            else:
+                # Global client queue
+                self.event_queues[client_id] = {'global': Queue()}
+
             return client_id
 
-    def remove_client(self, client_id: str):
-        """Remove a client and its event queue."""
+    def remove_client(self, client_id: str, task_id: Optional[str] = None):
+        """
+        Remove a client's event queue, optionally for a specific task.
+        """
         with self.queue_lock:
             if client_id in self.event_queues:
-                del self.event_queues[client_id]
-                logger.info(f"Client disconnected: {client_id}")
-
-    def broadcast_event(self, event_type: str, data: Dict[str, Any]):
-        """Broadcast an event to all connected clients or specific task queue."""
-        try:
-            formatted_data = self._format_data_for_client(data)
-            event = EventMessage(
-                id=f"evt_{datetime.now().timestamp()}",
-                event=event_type,
-                task_id=data.get("task_id"),  # Include task_id if present
-                data=formatted_data,
-                timestamp=datetime.now().isoformat(),
-            )
-
-            with self.queue_lock:
-                # Broadcast to global clients
-                for queue in self.event_queues.values():
-                    queue.put_nowait(event)
-                # Broadcast to task-specific queue
-                if event.task_id and event.task_id in self.task_event_queues:
-                    self.task_event_queues[event.task_id].put_nowait(event)
-
-            logger.debug(f"Broadcasted event: {event_type} for task_id: {event.task_id}")
-        except Exception as e:
-            logger.error(f"Error broadcasting event: {e}", exc_info=True)
-
-    def _format_data_for_client(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Format data for client-side rendering."""
-        try:
-            formatted_data = {}
-
-            for key, value in data.items():
-                if isinstance(value, (int, float, str, bool, list)):
-                    formatted_data[key] = value
-                elif isinstance(value, dict):
-                    formatted_data[key] = self._format_data_for_client(value)
+                if task_id and task_id in self.event_queues[client_id]:
+                    # Remove specific task queue for this client
+                    del self.event_queues[client_id][task_id]
+                    
+                    # Remove active agent for this client-task
+                    if client_id in self.active_agents and task_id in self.active_agents[client_id]:
+                        del self.active_agents[client_id][task_id]
                 else:
-                    formatted_data[key] = str(value)
+                    # Remove entire client entry
+                    del self.event_queues[client_id]
+                    
+                    # Remove all active agents for this client
+                    if client_id in self.active_agents:
+                        del self.active_agents[client_id]
 
-            return formatted_data
-        except Exception as e:
-            logger.error(f"Error formatting data: {e}", exc_info=True)
-            return {"error": "Error formatting data"}
+    def broadcast_event(self, event_type: str, data: Dict[str, Any], task_id: Optional[str] = None, client_id: Optional[str] = None):
+        """
+        Broadcast an event to specific client-task queues or globally.
+        Allows optional filtering by client_id and task_id to prevent event leakage.
+        """
+        event = EventMessage(
+            id=str(uuid.uuid4()),
+            event=event_type,
+            task_id=task_id,
+            data=data,
+            timestamp=datetime.utcnow().isoformat()
+        )
+
+        with self.queue_lock:
+            for curr_client_id, client_queues in self.event_queues.items():
+                # Skip if specific client_id is provided and doesn't match
+                if client_id and curr_client_id != client_id:
+                    continue
+
+                if task_id and task_id in client_queues:
+                    # Send to specific task queue
+                    client_queues[task_id].put(event)
+                elif not task_id and 'global' in client_queues:
+                    # Send to global queue if no task specified
+                    client_queues['global'].put(event)
 
     def initialize_agent_with_sse_validation(self, model_name: str = MODEL_NAME):
         """Initialize agent with SSE-based user validation."""
@@ -403,15 +426,15 @@ class AgentState:
     async def get_task_event_queue(self, task_id: str) -> Queue:
         """Get or create a task-specific event queue."""
         with self.queue_lock:
-            if task_id not in self.task_event_queues:
-                self.task_event_queues[task_id] = Queue()
-            return self.task_event_queues[task_id]
+            if task_id not in self.task_queues:
+                self.task_queues[task_id] = Queue()
+            return self.task_queues[task_id]
 
     def remove_task_event_queue(self, task_id: str):
         """Remove a task-specific event queue."""
         with self.queue_lock:
-            if task_id in self.task_event_queues:
-                del self.task_event_queues[task_id]
+            if task_id in self.task_queues:
+                del self.task_queues[task_id]
                 logger.info(f"Removed event queue for task_id: {task_id}")
 
 
@@ -508,45 +531,39 @@ async def event_stream(request: Request, task_id: Optional[str] = None) -> Strea
     """SSE endpoint for streaming agent events."""
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        if task_id:
-            event_queue = await agent_state.get_task_event_queue(task_id)
-            logger.info(f"Client subscribed to task_id: {task_id}")
-        else:
-            event_queue = None
-            logger.info("Client subscribed to all events")
+        # Ensure unique client-task combination
+        client_id = agent_state.add_client(task_id)
+        logger.info(f"Client {client_id} subscribed to {'task_id: ' + task_id if task_id else 'all events'}")
 
-        client_id = agent_state.add_client() if not task_id else None
         try:
             while not server_state.is_shutting_down:
                 if await request.is_disconnected():
                     break
 
-                if event_queue:
-                    try:
-                        event = event_queue.get_nowait()
-                        yield f"event: {event.event}\ndata: {json.dumps(event.dict())}\n\n"
-                    except Empty:
-                        yield ": keepalive\n\n"
-                        await asyncio.sleep(0.1)
-                else:
-                    try:
-                        event = agent_state.event_queues[client_id].get_nowait()
-                        yield f"event: {event.event}\ndata: {json.dumps(event.dict())}\n\n"
-                    except Empty:
-                        yield ": keepalive\n\n"
-                        await asyncio.sleep(0.1)
+                try:
+                    # Prioritize task-specific queue if task_id is provided
+                    if task_id:
+                        event = agent_state.event_queues[client_id][task_id].get_nowait()
+                    else:
+                        # Fall back to global queue if no task_id
+                        event = agent_state.event_queues[client_id]['global'].get_nowait()
+                    
+                    # Yield the event
+                    yield f"event: {event.event}\ndata: {json.dumps(event.dict())}\n\n"
+                
+                except Empty:
+                    # Send keepalive to maintain connection
+                    yield ": keepalive\n\n"
+                    await asyncio.sleep(0.1)
 
                 if server_state.is_shutting_down:
                     yield 'event: shutdown\ndata: {"message": "Server shutting down"}\n\n'
                     break
 
         finally:
-            if task_id:
-                agent_state.remove_task_event_queue(task_id)
-                logger.info(f"Client unsubscribed from task_id: {task_id}")
-            else:
-                agent_state.remove_client(client_id)
-                logger.info(f"Client {client_id} disconnected")
+            # Clean up the client's event queue
+            agent_state.remove_client(client_id, task_id)
+            logger.info(f"Client {client_id} {'unsubscribed from task_id: ' + task_id if task_id else 'disconnected'}")
 
     return StreamingResponse(
         event_generator(),
