@@ -71,13 +71,29 @@ class AgentState:
         self.tasks: Dict[str, Dict[str, Any]] = {}
         self.task_queues: Dict[str, asyncio.Queue] = {}
 
-    def add_client(self) -> str:
-        """Add a new client and return its ID."""
+    def add_client(self, task_id: Optional[str] = None) -> str:
+        """
+        Add a new client and return its ID.
+        
+        Args:
+            task_id (Optional[str]): Optional task ID to associate with the client.
+        
+        Returns:
+            str: Unique client ID
+        """
         with self.queue_lock:
             self.client_counter += 1
             client_id = f"client_{self.client_counter}"
+            
+            # Create a client-specific event queue
             self.event_queues[client_id] = Queue()
-            logger.info(f"New client connected: {client_id}")
+            
+            # If a task_id is provided, create or use an existing task-specific queue
+            if task_id:
+                if task_id not in self.task_event_queues:
+                    self.task_event_queues[task_id] = Queue()
+            
+            logger.info(f"New client connected: {client_id} for task: {task_id}")
             return client_id
 
     def remove_client(self, client_id: str):
@@ -94,7 +110,13 @@ class AgentState:
         return data
 
     def broadcast_event(self, event_type: str, data: Dict[str, Any]):
-        """Broadcast an event to all connected clients or specific task queue."""
+        """
+        Broadcast an event to all connected clients or specific task queue.
+        
+        Args:
+            event_type (str): Type of the event.
+            data (Dict[str, Any]): Event data.
+        """
         from quantalogic.models import EventMessage  # Import here to avoid circular dependency
 
         try:
@@ -109,13 +131,36 @@ class AgentState:
 
             with self.queue_lock:
                 task_id = data.get("task_id")
+                
+                # If task_id is provided, send to task-specific queue
                 if task_id and task_id in self.task_event_queues:
-                    # Send to task-specific queue
                     self.task_event_queues[task_id].put(event.model_dump())
+                    logger.debug(f"Event sent to task-specific queue: {task_id}")
+                
+                # Optionally broadcast to global event queues if needed
                 else:
-                    # Broadcast to all clients
                     for queue in self.event_queues.values():
                         queue.put(event.model_dump())
+                    logger.debug("Event broadcast to all client queues")
+        
         except Exception as e:
             logger.error(f"Error broadcasting event: {e}")
             logger.error(traceback.format_exc())
+
+    def remove_task_event_queue(self, task_id: str):
+        """
+        Remove a task-specific event queue safely.
+        
+        Args:
+            task_id (str): The task ID to remove from event queues.
+        """
+        with self.queue_lock:
+            if task_id in self.task_event_queues:
+                del self.task_event_queues[task_id]
+            
+            # Additional cleanup for related task resources
+            if task_id in self.tasks:
+                del self.tasks[task_id]
+            
+            if task_id in self.task_queues:
+                del self.task_queues[task_id]

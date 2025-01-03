@@ -31,42 +31,52 @@ async def submit_validation_response(validation_id: str, response: UserValidatio
 
 async def event_stream(request: Request, task_id: Optional[str] = None):
     """SSE endpoint for streaming agent events."""
-    client_id = agent_state.add_client()
+    client_id = agent_state.add_client(task_id)
     
-    if task_id:
-        if task_id not in agent_state.task_event_queues:
-            agent_state.task_event_queues[task_id] = Queue()
-        queue = agent_state.task_event_queues[task_id]
-    else:
-        queue = agent_state.event_queues[client_id]
+    try:
+        # Determine the appropriate queue based on task_id
+        if task_id:
+            if task_id not in agent_state.task_event_queues:
+                agent_state.task_event_queues[task_id] = Queue()
+            queue = agent_state.task_event_queues[task_id]
+        else:
+            queue = agent_state.event_queues[client_id]
 
-    async def generate():
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
+        async def generate():
+            try:
+                while True:
+                    # Check for client disconnection
+                    if await request.is_disconnected():
+                        break
 
-                try:
-                    event = queue.get_nowait()
-                    yield f"data: {json.dumps(event)}\n\n"
-                except Empty:
-                    await asyncio.sleep(0.1)
-        except Exception as e:
-            logger.error(f"Error in event stream: {e}")
-        finally:
-            agent_state.remove_client(client_id)
-            if task_id and task_id in agent_state.task_event_queues:
-                del agent_state.task_event_queues[task_id]
+                    try:
+                        # Non-blocking get with a short timeout
+                        event = queue.get_nowait()
+                        yield f"data: {json.dumps(event)}\n\n"
+                    except Empty:
+                        # Prevent tight loop and allow for disconnection checks
+                        await asyncio.sleep(0.1)
+            except Exception as e:
+                logger.error(f"Error in event stream for client {client_id}: {e}")
+            finally:
+                # Ensure cleanup of client and task-specific resources
+                agent_state.remove_client(client_id)
+                if task_id:
+                    agent_state.remove_task_event_queue(task_id)
 
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Content-Type": "text/event-stream",
-        },
-    )
+        return StreamingResponse(
+            generate(), 
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream",
+            }
+        )
+    except Exception as e:
+        logger.error(f"Event stream initialization error: {e}")
+        agent_state.remove_client(client_id)
+        raise
 
 
 async def get_index(request: Request):

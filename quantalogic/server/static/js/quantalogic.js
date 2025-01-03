@@ -7,6 +7,7 @@ class QuantaLogicUI {
         this.eventVisualizer = new EventVisualizer();
         this.processedEventIds = new Set();
         this.activeValidationDialog = null;
+        this.connectionState = 'disconnected';
         this.initializeElements();
         this.attachEventListeners();
         this.connectSSE();
@@ -170,30 +171,82 @@ class QuantaLogicUI {
             this.eventSource.close();
         }
 
+        // Reset connection state
+        this.connectionState = 'connecting';
+        this.updateConnectionStatus();
+
         // Initialize a new EventSource with task_id
         this.eventSource = new EventSource(`/events?task_id=${taskId}`);
 
+        this.eventSource.onopen = () => {
+            this.connectionState = 'connected';
+            this.updateConnectionStatus();
+            console.log(`Connected to event stream for task ${taskId}`);
+        };
+
         this.eventSource.onmessage = (event) => {
-            const eventData = JSON.parse(event.data);
-            this.displayEvent(eventData);
+            try {
+                const eventData = JSON.parse(event.data);
+                this.displayEvent(eventData);
+            } catch (parseError) {
+                console.error('Error parsing event data:', parseError);
+            }
         };
 
         this.eventSource.addEventListener('task_complete', (event) => {
             const data = JSON.parse(event.data);
             console.log(`Task ${data.task_id} completed with result:`, data.result);
-            // ...handle task completion...
+            this.closeEventStream();
         });
 
         this.eventSource.addEventListener('task_error', (event) => {
             const data = JSON.parse(event.data);
             console.error(`Task ${data.task_id} failed with error:`, data.error);
-            // ...handle task error...
+            this.closeEventStream();
         });
 
         this.eventSource.onerror = (error) => {
+            this.connectionState = 'disconnected';
+            this.updateConnectionStatus();
             console.error('EventSource failed:', error);
-            this.eventSource.close();
+            
+            // Attempt reconnection with exponential backoff
+            this.reconnectEventStream(taskId);
         };
+    }
+
+    closeEventStream() {
+        if (this.eventSource) {
+            this.eventSource.close();
+            this.eventSource = null;
+        }
+        this.connectionState = 'disconnected';
+        this.updateConnectionStatus();
+    }
+
+    reconnectEventStream(taskId, attempt = 1) {
+        const maxAttempts = 5;
+        const baseDelay = 1000; // 1 second
+        
+        if (attempt > maxAttempts) {
+            console.error('Max reconnection attempts reached');
+            return;
+        }
+
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        
+        setTimeout(() => {
+            console.log(`Attempting to reconnect (Attempt ${attempt})...`);
+            this.initializeEventStream(taskId);
+        }, delay);
+    }
+
+    updateConnectionStatus() {
+        const statusElement = document.getElementById('connectionStatus');
+        if (statusElement) {
+            statusElement.textContent = `Connection: ${this.connectionState}`;
+            statusElement.className = this.connectionState;
+        }
     }
 
     async pollTaskStatus(taskId) {
@@ -280,23 +333,6 @@ class QuantaLogicUI {
             loadingIndicator?.classList.add('hidden');
             this.elements.submitTask.classList.remove('opacity-75');
         }
-    }
-
-    updateConnectionStatus(connected) {
-        const statusClasses = connected
-            ? ['bg-green-100', 'text-green-800']
-            : ['bg-red-100', 'text-red-800'];
-
-        this.elements.connectionStatus.className =
-            'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ' +
-            statusClasses.join(' ');
-
-        this.elements.connectionStatus.innerHTML = `
-            <svg class="w-4 h-4 mr-1.5 ${connected ? 'text-green-500' : 'text-red-500'}" fill="currentColor" viewBox="0 0 20 20">
-                <circle cx="10" cy="10" r="10" />
-            </svg>
-            ${connected ? 'Connected' : 'Disconnected'}
-        `;
     }
 
     async showValidationDialog(question) {
