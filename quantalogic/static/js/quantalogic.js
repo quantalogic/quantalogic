@@ -9,51 +9,8 @@ class QuantaLogicUI {
         this.activeValidationDialog = null;
         this.initializeElements();
         this.attachEventListeners();
-        this.sessionId = null;
-        this.initializeSession();
+        this.connectSSE();
         this.currentTaskId = null;  // Add tracking for current task
-    }
-
-    async initializeSession() {
-        try {
-            const response = await fetch('/api/session/initialize', {
-                method: 'POST'
-            });
-            const data = await response.json();
-            this.sessionId = data.sessionId;
-            
-            // Start heartbeat
-            this.startHeartbeat();
-            
-            // Connect SSE after session initialization
-            this.connectSSE();
-        } catch (error) {
-            console.error('Failed to initialize session:', error);
-            this.showNotification('Failed to initialize session. Please refresh the page.', 'error');
-        }
-    }
-
-    startHeartbeat() {
-        // Send heartbeat every 30 seconds
-        this.heartbeatInterval = setInterval(async () => {
-            try {
-                await fetch('/api/session/heartbeat', {
-                    method: 'POST',
-                    headers: {
-                        'X-Session-ID': this.sessionId
-                    }
-                });
-            } catch (error) {
-                console.error('Heartbeat failed:', error);
-                // Reconnect session if heartbeat fails
-                this.reconnectSession();
-            }
-        }, 30000);
-    }
-
-    async reconnectSession() {
-        clearInterval(this.heartbeatInterval);
-        await this.initializeSession();
     }
 
     initializeElements() {
@@ -98,8 +55,7 @@ class QuantaLogicUI {
             this.processedEventIds.clear();
         }
 
-        // Include session ID in SSE connection
-        this.eventSource = new EventSource(`/api/events?sessionId=${this.sessionId}`);
+        this.eventSource = new EventSource('/events');
 
         this.eventSource.onopen = () => {
             this.updateConnectionStatus(true);
@@ -152,11 +108,6 @@ class QuantaLogicUI {
     }
 
     async handleTaskSubmit() {
-        if (!this.sessionId) {
-            this.showNotification('Session not initialized. Please refresh the page.', 'error');
-            return;
-        }
-
         if (this.isProcessing) {
             this.showNotification('Please wait for the current task to complete.', 'warning');
             return;
@@ -173,11 +124,10 @@ class QuantaLogicUI {
 
         try {
             // Submit task using new endpoint
-            const submitResponse = await fetch('/api/tasks', {
+            const submitResponse = await fetch('/tasks', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Session-ID': this.sessionId
                 },
                 body: JSON.stringify({
                     task: task,
@@ -218,11 +168,7 @@ class QuantaLogicUI {
 
         const poll = async () => {
             try {
-                const response = await fetch(`/api/tasks/${taskId}`, {
-                    headers: {
-                        'X-Session-ID': this.sessionId
-                    }
-                });
+                const response = await fetch(`/tasks/${taskId}`);
                 if (!response.ok) {
                     throw new Error('Failed to fetch task status');
                 }
@@ -546,25 +492,9 @@ class QuantaLogicUI {
         // Implementation can be added for showing notifications
         console.log(`${type}: ${message}`);
     }
-
-    // Add cleanup on window unload
-    cleanup() {
-        if (this.heartbeatInterval) {
-            clearInterval(this.heartbeatInterval);
-        }
-        if (this.eventSource) {
-            this.eventSource.close();
-        }
-    }
 }
 
-// Initialize the UI and handle cleanup
+// Initialize the UI when the document is ready
 document.addEventListener('DOMContentLoaded', () => {
     window.quantaLogicUI = new QuantaLogicUI();
-});
-
-window.addEventListener('unload', () => {
-    if (window.quantaLogicUI) {
-        window.quantaLogicUI.cleanup();
-    }
 });
