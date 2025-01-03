@@ -146,6 +146,9 @@ class QuantaLogicUI {
             // Start polling for task status
             await this.pollTaskStatus(task_id);
 
+            // Initialize Event Stream with task_id
+            this.initializeEventStream(task_id);
+
         } catch (error) {
             console.error('Error:', error);
             this.handleEvent({
@@ -159,6 +162,38 @@ class QuantaLogicUI {
             this.setProcessingState(false);
             this.currentTaskId = null;  // Clear task ID when done
         }
+    }
+
+    initializeEventStream(taskId) {
+        // Close existing event source if any
+        if (this.eventSource) {
+            this.eventSource.close();
+        }
+
+        // Initialize a new EventSource with task_id
+        this.eventSource = new EventSource(`/events?task_id=${taskId}`);
+
+        this.eventSource.onmessage = (event) => {
+            const eventData = JSON.parse(event.data);
+            this.displayEvent(eventData);
+        };
+
+        this.eventSource.addEventListener('task_complete', (event) => {
+            const data = JSON.parse(event.data);
+            console.log(`Task ${data.task_id} completed with result:`, data.result);
+            // ...handle task completion...
+        });
+
+        this.eventSource.addEventListener('task_error', (event) => {
+            const data = JSON.parse(event.data);
+            console.error(`Task ${data.task_id} failed with error:`, data.error);
+            // ...handle task error...
+        });
+
+        this.eventSource.onerror = (error) => {
+            console.error('EventSource failed:', error);
+            this.eventSource.close();
+        };
     }
 
     async pollTaskStatus(taskId) {

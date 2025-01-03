@@ -159,6 +159,7 @@ class AgentState:
         """Initialize the agent state."""
         self.agent = None
         self.event_queues: Dict[str, Queue] = {}
+        self.task_event_queues: Dict[str, Queue] = {}  # New task-specific event queues
         self.queue_lock = Lock()
         self.client_counter = 0
         self.console = Console()
@@ -184,7 +185,7 @@ class AgentState:
                 logger.info(f"Client disconnected: {client_id}")
 
     def broadcast_event(self, event_type: str, data: Dict[str, Any]):
-        """Broadcast an event to all connected clients."""
+        """Broadcast an event to all connected clients or specific task queue."""
         try:
             formatted_data = self._format_data_for_client(data)
             event = EventMessage(
@@ -196,10 +197,14 @@ class AgentState:
             )
 
             with self.queue_lock:
+                # Broadcast to global clients
                 for queue in self.event_queues.values():
                     queue.put_nowait(event)
+                # Broadcast to task-specific queue
+                if event.task_id and event.task_id in self.task_event_queues:
+                    self.task_event_queues[event.task_id].put_nowait(event)
 
-            logger.debug(f"Broadcasted event: {event_type}")
+            logger.debug(f"Broadcasted event: {event_type} for task_id: {event.task_id}")
         except Exception as e:
             logger.error(f"Error broadcasting event: {e}", exc_info=True)
 
@@ -375,7 +380,7 @@ class AgentState:
             task["total_tokens"] = self.agent.total_tokens
             task["model_name"] = self.get_current_model_name()
 
-            # Broadcast completion event
+            # Broadcast completion event to task-specific queue
             self.broadcast_event(
                 "task_complete",
                 {
@@ -392,8 +397,22 @@ class AgentState:
             task["completed_at"] = datetime.now().isoformat()
             task["error"] = str(e)
 
-            # Broadcast error event
+            # Broadcast error event to task-specific queue
             self.broadcast_event("task_error", {"task_id": task_id, "error": str(e)})
+
+    async def get_task_event_queue(self, task_id: str) -> Queue:
+        """Get or create a task-specific event queue."""
+        with self.queue_lock:
+            if task_id not in self.task_event_queues:
+                self.task_event_queues[task_id] = Queue()
+            return self.task_event_queues[task_id]
+
+    def remove_task_event_queue(self, task_id: str):
+        """Remove a task-specific event queue."""
+        with self.queue_lock:
+            if task_id in self.task_event_queues:
+                del self.task_event_queues[task_id]
+                logger.info(f"Removed event queue for task_id: {task_id}")
 
 
 # Initialize global states
@@ -485,33 +504,49 @@ async def submit_validation_response(validation_id: str, response: UserValidatio
 
 
 @app.get("/events")
-async def event_stream(request: Request) -> StreamingResponse:
+async def event_stream(request: Request, task_id: Optional[str] = None) -> StreamingResponse:
     """SSE endpoint for streaming agent events."""
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        client_id = agent_state.add_client()
+        if task_id:
+            event_queue = await agent_state.get_task_event_queue(task_id)
+            logger.info(f"Client subscribed to task_id: {task_id}")
+        else:
+            event_queue = None
+            logger.info("Client subscribed to all events")
+
+        client_id = agent_state.add_client() if not task_id else None
         try:
             while not server_state.is_shutting_down:
                 if await request.is_disconnected():
                     break
 
-                try:
-                    # Try to get an event from the queue with a timeout
-                    event = agent_state.event_queues[client_id].get_nowait()
-                    yield f"event: {event.event}\ndata: {json.dumps(event.dict())}\n\n"
-                except Empty:
-                    # No events available, yield a keepalive comment
-                    yield ": keepalive\n\n"
-                    await asyncio.sleep(0.1)
+                if event_queue:
+                    try:
+                        event = event_queue.get_nowait()
+                        yield f"event: {event.event}\ndata: {json.dumps(event.dict())}\n\n"
+                    except Empty:
+                        yield ": keepalive\n\n"
+                        await asyncio.sleep(0.1)
+                else:
+                    try:
+                        event = agent_state.event_queues[client_id].get_nowait()
+                        yield f"event: {event.event}\ndata: {json.dumps(event.dict())}\n\n"
+                    except Empty:
+                        yield ": keepalive\n\n"
+                        await asyncio.sleep(0.1)
 
-                # Check for shutdown during event processing
                 if server_state.is_shutting_down:
                     yield 'event: shutdown\ndata: {"message": "Server shutting down"}\n\n'
                     break
 
         finally:
-            agent_state.remove_client(client_id)
-            logger.info(f"Client {client_id} disconnected")
+            if task_id:
+                agent_state.remove_task_event_queue(task_id)
+                logger.info(f"Client unsubscribed from task_id: {task_id}")
+            else:
+                agent_state.remove_client(client_id)
+                logger.info(f"Client {client_id} disconnected")
 
     return StreamingResponse(
         event_generator(),
