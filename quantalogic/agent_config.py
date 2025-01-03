@@ -81,7 +81,7 @@ def create_agent(model_name) -> Agent:
             RipgrepTool(),
             SearchDefinitionNames(),
             MarkitdownTool(),
-            LLMTool(model_name=MODEL_NAME),
+            LLMTool(model_name=model_name),
             DownloadHttpFileTool(),
         ],
     )
@@ -109,7 +109,7 @@ def create_full_agent(model_name: str) -> Agent:
             NodeJsTool(),
             SearchDefinitionNames(),
             MarkitdownTool(),
-            LLMTool(model_name=MODEL_NAME),
+            LLMTool(model_name=model_name),
             DownloadHttpFileTool(),
         ],
     )

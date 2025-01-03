@@ -4,18 +4,15 @@
 import asyncio
 import functools
 import json
-import logging
 import signal
 import sys
 import time
-import traceback
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from pathlib import Path
 from queue import Empty, Queue
 from threading import Lock
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -47,12 +44,15 @@ logger.add(
 SHUTDOWN_TIMEOUT = 5.0  # seconds
 VALIDATION_TIMEOUT = 30.0  # seconds
 
+
 def handle_sigterm(signum, frame):
     """Handle SIGTERM signal."""
     logger.info("Received SIGTERM signal")
     raise SystemExit(0)
 
+
 signal.signal(signal.SIGTERM, handle_sigterm)
+
 
 def get_version() -> str:
     """Get the current version of the package."""
@@ -63,6 +63,7 @@ class ServerState:
     """Global server state management."""
 
     def __init__(self):
+        """Initialize the global server state."""
         self.interrupt_count = 0
         self.force_exit = False
         self.is_shutting_down = False
@@ -96,42 +97,16 @@ class ServerState:
 
 
 # Models
-class TaskRequest(BaseModel):
-    """Request model for task solving."""
-
-    task: str
-    model_name: Optional[str] = MODEL_NAME
-    max_iterations: Optional[int] = 30
-
-    model_config = {
-        "extra": "forbid"
-    }
-
-
-class TaskResponse(BaseModel):
-    """Response model for task solving."""
-
-    result: str
-    total_tokens: int
-    model_name: str
-    version: str
-
-    model_config = {
-        "extra": "forbid"
-    }
-
-
 class EventMessage(BaseModel):
     """Event message model for SSE."""
 
     id: str
     event: str
+    task_id: Optional[str] = None  # Added task_id field
     data: Dict[str, Any]
     timestamp: str
 
-    model_config = {
-        "extra": "forbid"
-    }
+    model_config = {"extra": "forbid"}
 
 
 class UserValidationRequest(BaseModel):
@@ -140,9 +115,7 @@ class UserValidationRequest(BaseModel):
     question: str
     validation_id: str | None = None
 
-    model_config = {
-        "extra": "forbid"
-    }
+    model_config = {"extra": "forbid"}
 
 
 class UserValidationResponse(BaseModel):
@@ -150,9 +123,31 @@ class UserValidationResponse(BaseModel):
 
     response: bool
 
-    model_config = {
-        "extra": "forbid"
-    }
+    model_config = {"extra": "forbid"}
+
+
+class TaskSubmission(BaseModel):
+    """Request model for task submission."""
+
+    task: str
+    model_name: Optional[str] = MODEL_NAME
+    max_iterations: Optional[int] = 30
+
+    model_config = {"extra": "forbid"}
+
+
+class TaskStatus(BaseModel):
+    """Task status response model."""
+
+    task_id: str
+    status: str  # "pending", "running", "completed", "failed"
+    created_at: str
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    result: Optional[str] = None
+    error: Optional[str] = None
+    total_tokens: Optional[int] = None
+    model_name: Optional[str] = None
 
 
 class AgentState:
@@ -161,65 +156,94 @@ class AgentState:
     def __init__(self):
         """Initialize the agent state."""
         self.agent = None
-        self.event_queues: Dict[str, Queue] = {}
+        # Use a nested dictionary to track event queues per client and task
+        self.event_queues: Dict[str, Dict[str, Queue]] = {}
+        # Track active agents per client-task combination
+        self.active_agents: Dict[str, Dict[str, Any]] = {}
         self.queue_lock = Lock()
         self.client_counter = 0
         self.console = Console()
         self.validation_requests: Dict[str, Dict[str, Any]] = {}
         self.validation_responses: Dict[str, asyncio.Queue] = {}
+        self.tasks: Dict[str, Dict[str, Any]] = {}
+        self.task_queues: Dict[str, asyncio.Queue] = {}
 
-    def add_client(self) -> str:
-        """Add a new client and return its ID."""
+    def add_client(self, task_id: Optional[str] = None) -> str:
+        """Add a new client and return its ID.
+
+        Ensures unique client-task combination.
+        """
         with self.queue_lock:
-            self.client_counter += 1
+            # Generate a unique client ID
             client_id = f"client_{self.client_counter}"
-            self.event_queues[client_id] = Queue()
-            logger.info(f"New client connected: {client_id}")
+            self.client_counter += 1
+
+            # Initialize nested event queue structure
+            if client_id not in self.event_queues:
+                self.event_queues[client_id] = {}
+                self.active_agents[client_id] = {}
+
+            if task_id:
+                # Prevent multiple agents for the same client-task combination
+                if task_id in self.active_agents[client_id]:
+                    raise ValueError(f"An agent already exists for client {client_id} and task {task_id}")
+                
+                # Create a specific queue for this client-task combination
+                self.event_queues[client_id][task_id] = Queue()
+                self.active_agents[client_id][task_id] = {
+                    'created_at': datetime.utcnow().isoformat(),
+                    'status': 'active'
+                }
+            else:
+                # Global client queue
+                self.event_queues[client_id] = {'global': Queue()}
+
             return client_id
 
-    def remove_client(self, client_id: str):
-        """Remove a client and its event queue."""
+    def remove_client(self, client_id: str, task_id: Optional[str] = None):
+        """Remove a client's event queue, optionally for a specific task."""
         with self.queue_lock:
             if client_id in self.event_queues:
-                del self.event_queues[client_id]
-                logger.info(f"Client disconnected: {client_id}")
-
-    def broadcast_event(self, event_type: str, data: Dict[str, Any]):
-        """Broadcast an event to all connected clients."""
-        try:
-            formatted_data = self._format_data_for_client(data)
-            event = EventMessage(
-                id=f"evt_{datetime.now().timestamp()}",
-                event=event_type,
-                data=formatted_data,
-                timestamp=datetime.now().isoformat(),
-            )
-
-            with self.queue_lock:
-                for queue in self.event_queues.values():
-                    queue.put_nowait(event)
-
-            logger.debug(f"Broadcasted event: {event_type}")
-        except Exception as e:
-            logger.error(f"Error broadcasting event: {e}", exc_info=True)
-
-    def _format_data_for_client(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Format data for client-side rendering."""
-        try:
-            formatted_data = {}
-
-            for key, value in data.items():
-                if isinstance(value, (int, float, str, bool, list)):
-                    formatted_data[key] = value
-                elif isinstance(value, dict):
-                    formatted_data[key] = self._format_data_for_client(value)
+                if task_id and task_id in self.event_queues[client_id]:
+                    # Remove specific task queue for this client
+                    del self.event_queues[client_id][task_id]
+                    
+                    # Remove active agent for this client-task
+                    if client_id in self.active_agents and task_id in self.active_agents[client_id]:
+                        del self.active_agents[client_id][task_id]
                 else:
-                    formatted_data[key] = str(value)
+                    # Remove entire client entry
+                    del self.event_queues[client_id]
+                    
+                    # Remove all active agents for this client
+                    if client_id in self.active_agents:
+                        del self.active_agents[client_id]
 
-            return formatted_data
-        except Exception as e:
-            logger.error(f"Error formatting data: {e}", exc_info=True)
-            return {"error": "Error formatting data"}
+    def broadcast_event(self, event_type: str, data: Dict[str, Any], task_id: Optional[str] = None, client_id: Optional[str] = None):
+        """Broadcast an event to specific client-task queues or globally.
+
+        Allows optional filtering by client_id and task_id to prevent event leakage.
+        """
+        event = EventMessage(
+            id=str(uuid.uuid4()),
+            event=event_type,
+            task_id=task_id,
+            data=data,
+            timestamp=datetime.utcnow().isoformat()
+        )
+
+        with self.queue_lock:
+            for curr_client_id, client_queues in self.event_queues.items():
+                # Skip if specific client_id is provided and doesn't match
+                if client_id and curr_client_id != client_id:
+                    continue
+
+                if task_id and task_id in client_queues:
+                    # Send to specific task queue
+                    client_queues[task_id].put(event)
+                elif not task_id and 'global' in client_queues:
+                    # Send to global queue if no task specified
+                    client_queues['global'].put(event)
 
     def initialize_agent_with_sse_validation(self, model_name: str = MODEL_NAME):
         """Initialize agent with SSE-based user validation."""
@@ -264,26 +288,20 @@ class AgentState:
         """SSE-based user validation method."""
         validation_id = str(uuid.uuid4())
         response_queue = asyncio.Queue()
-        
+
         # Store validation request and response queue
-        self.validation_requests[validation_id] = {
-            "question": question,
-            "timestamp": datetime.now().isoformat()
-        }
+        self.validation_requests[validation_id] = {"question": question, "timestamp": datetime.now().isoformat()}
         self.validation_responses[validation_id] = response_queue
 
         # Broadcast validation request
-        self.broadcast_event("user_validation_request", {
-            "validation_id": validation_id,
-            "question": question
-        })
+        self.broadcast_event("user_validation_request", {"validation_id": validation_id, "question": question})
 
         try:
             # Wait for response with timeout
             async with asyncio.timeout(VALIDATION_TIMEOUT):
                 response = await response_queue.get()
                 return response
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Validation request timed out: {validation_id}")
             return False
         finally:
@@ -334,7 +352,7 @@ class AgentState:
                 # Clear agent
                 self.agent = None
                 logger.info("Cleanup completed")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Cleanup timed out after {SHUTDOWN_TIMEOUT} seconds")
         except Exception as e:
             logger.error(f"Error during cleanup: {e}", exc_info=True)
@@ -343,10 +361,83 @@ class AgentState:
             if server_state.force_exit:
                 sys.exit(1)
 
+    async def submit_task(self, task_request: TaskSubmission) -> str:
+        """Submit a new task and return its ID."""
+        task_id = str(uuid.uuid4())
+        self.tasks[task_id] = {
+            "status": "pending",
+            "created_at": datetime.now().isoformat(),
+            "request": task_request.dict(),
+        }
+        self.task_queues[task_id] = asyncio.Queue()
+        return task_id
+
+    async def execute_task(self, task_id: str):
+        """Execute a task asynchronously."""
+        try:
+            task = self.tasks[task_id]
+            task["status"] = "running"
+            task["started_at"] = datetime.now().isoformat()
+
+            # Initialize agent if needed
+            if not self.agent:
+                self.initialize_agent_with_sse_validation(task["request"]["model_name"])
+
+            # Execute task
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    self.agent.solve_task, task["request"]["task"], max_iterations=task["request"]["max_iterations"]
+                ),
+            )
+
+            # Update task status
+            task["status"] = "completed"
+            task["completed_at"] = datetime.now().isoformat()
+            task["result"] = result
+            task["total_tokens"] = self.agent.total_tokens
+            task["model_name"] = self.get_current_model_name()
+
+            # Broadcast completion event to task-specific queue
+            self.broadcast_event(
+                "task_complete",
+                {
+                    "task_id": task_id,
+                    "result": result,
+                    "total_tokens": self.agent.total_tokens,
+                    "model_name": self.get_current_model_name(),
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"Task execution failed: {e}", exc_info=True)
+            task["status"] = "failed"
+            task["completed_at"] = datetime.now().isoformat()
+            task["error"] = str(e)
+
+            # Broadcast error event to task-specific queue
+            self.broadcast_event("task_error", {"task_id": task_id, "error": str(e)})
+
+    async def get_task_event_queue(self, task_id: str) -> Queue:
+        """Get or create a task-specific event queue."""
+        with self.queue_lock:
+            if task_id not in self.task_queues:
+                self.task_queues[task_id] = Queue()
+            return self.task_queues[task_id]
+
+    def remove_task_event_queue(self, task_id: str):
+        """Remove a task-specific event queue."""
+        with self.queue_lock:
+            if task_id in self.task_queues:
+                del self.task_queues[task_id]
+                logger.info(f"Removed event queue for task_id: {task_id}")
+
 
 # Initialize global states
 server_state = ServerState()
 agent_state = AgentState()
+
 
 # Initialize FastAPI app
 @asynccontextmanager
@@ -356,10 +447,7 @@ async def lifespan(app: FastAPI):
         # Setup signal handlers
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(
-                sig,
-                lambda s=sig: asyncio.create_task(handle_shutdown(s))
-            )
+            loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(handle_shutdown(s)))
         yield
     finally:
         logger.info("Shutting down server gracefully...")
@@ -368,6 +456,7 @@ async def lifespan(app: FastAPI):
         server_state.shutdown_complete.set()
         logger.info("Server shutdown complete")
 
+
 async def handle_shutdown(sig):
     """Handle shutdown signals."""
     if sig == signal.SIGINT and server_state.interrupt_count >= 1:
@@ -375,6 +464,7 @@ async def handle_shutdown(sig):
         await server_state.initiate_shutdown(force=True)
     else:
         server_state.handle_interrupt()
+
 
 app = FastAPI(
     title="QuantaLogic API",
@@ -393,10 +483,11 @@ app.add_middleware(
 )
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="quantalogic/static"), name="static")
+app.mount("/static", StaticFiles(directory="quantalogic/server/static"), name="static")
 
 # Configure Jinja2 templates
-templates = Jinja2Templates(directory="quantalogic/templates")
+templates = Jinja2Templates(directory="quantalogic/server/templates")
+
 
 # Middleware to log requests
 @app.middleware("http")
@@ -421,7 +512,7 @@ async def submit_validation_response(validation_id: str, response: UserValidatio
     """Submit a validation response."""
     if validation_id not in agent_state.validation_responses:
         raise HTTPException(status_code=404, detail="Validation request not found")
-    
+
     try:
         response_queue = agent_state.validation_responses[validation_id]
         await response_queue.put(response.response)
@@ -431,68 +522,44 @@ async def submit_validation_response(validation_id: str, response: UserValidatio
         raise HTTPException(status_code=500, detail="Failed to process validation response")
 
 
-@app.post("/solve_task")
-async def solve_task(request: TaskRequest) -> TaskResponse:
-    """Solve a task using the AI agent."""
-    try:
-        # Initialize agent if not already initialized
-        if not agent_state.agent:
-            agent_state.initialize_agent_with_sse_validation(request.model_name)
-
-        # Run solve_task in a thread pool since it's a blocking operation
-        loop = asyncio.get_event_loop()
-        solution = await loop.run_in_executor(
-            None, functools.partial(agent_state.agent.solve_task, request.task, max_iterations=request.max_iterations)
-        )
-
-        # Emit task completion event with the final answer
-        agent_state.broadcast_event("task_complete", {
-            "result": solution,
-            "total_tokens": agent_state.agent.total_tokens,
-            "model_name": agent_state.get_current_model_name(),
-            "timestamp": datetime.now().isoformat()
-        })
-
-        return TaskResponse(
-            result=solution,
-            total_tokens=agent_state.agent.total_tokens,
-            model_name=agent_state.get_current_model_name(),
-            version=get_version(),
-        )
-
-    except Exception as e:
-        logger.error(f"Error solving task: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail={"error": str(e), "traceback": traceback.format_exc()})
-
-
 @app.get("/events")
-async def event_stream(request: Request) -> StreamingResponse:
+async def event_stream(request: Request, task_id: Optional[str] = None) -> StreamingResponse:
     """SSE endpoint for streaming agent events."""
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        client_id = agent_state.add_client()
+        # Ensure unique client-task combination
+        client_id = agent_state.add_client(task_id)
+        logger.info(f"Client {client_id} subscribed to {'task_id: ' + task_id if task_id else 'all events'}")
+
         try:
             while not server_state.is_shutting_down:
                 if await request.is_disconnected():
                     break
 
                 try:
-                    # Try to get an event from the queue with a timeout
-                    event = agent_state.event_queues[client_id].get_nowait()
+                    # Prioritize task-specific queue if task_id is provided
+                    if task_id:
+                        event = agent_state.event_queues[client_id][task_id].get_nowait()
+                    else:
+                        # Fall back to global queue if no task_id
+                        event = agent_state.event_queues[client_id]['global'].get_nowait()
+                    
+                    # Yield the event
                     yield f"event: {event.event}\ndata: {json.dumps(event.dict())}\n\n"
+                
                 except Empty:
-                    # No events available, yield a keepalive comment
+                    # Send keepalive to maintain connection
                     yield ": keepalive\n\n"
                     await asyncio.sleep(0.1)
 
-                # Check for shutdown during event processing
                 if server_state.is_shutting_down:
-                    yield "event: shutdown\ndata: {\"message\": \"Server shutting down\"}\n\n"
+                    yield 'event: shutdown\ndata: {"message": "Server shutting down"}\n\n'
                     break
 
         finally:
-            agent_state.remove_client(client_id)
-            logger.info(f"Client {client_id} disconnected")
+            # Clean up the client's event queue
+            agent_state.remove_client(client_id, task_id)
+            logger.info(f"Client {client_id} {'unsubscribed from task_id: ' + task_id if task_id else 'disconnected'}")
 
     return StreamingResponse(
         event_generator(),
@@ -501,7 +568,7 @@ async def event_stream(request: Request) -> StreamingResponse:
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "Transfer-Encoding": "chunked",
-        }
+        },
     )
 
 
@@ -513,6 +580,36 @@ async def get_index(request: Request) -> HTMLResponse:
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+@app.post("/tasks")
+async def submit_task(request: TaskSubmission) -> Dict[str, str]:
+    """Submit a new task and return its ID."""
+    task_id = await agent_state.submit_task(request)
+    # Start task execution in background
+    asyncio.create_task(agent_state.execute_task(task_id))
+    return {"task_id": task_id}
+
+
+@app.get("/tasks/{task_id}")
+async def get_task_status(task_id: str) -> TaskStatus:
+    """Get the status of a specific task."""
+    if task_id not in agent_state.tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    task = agent_state.tasks[task_id]
+    return TaskStatus(task_id=task_id, **task)
+
+
+@app.get("/tasks")
+async def list_tasks(status: Optional[str] = None, limit: int = 10, offset: int = 0) -> List[TaskStatus]:
+    """List all tasks with optional filtering."""
+    tasks = []
+    for task_id, task in agent_state.tasks.items():
+        if status is None or task["status"] == status:
+            tasks.append(TaskStatus(task_id=task_id, **task))
+
+    return tasks[offset : offset + limit]
 
 
 # Update the Agent initialization to use SSE validation by default
@@ -527,7 +624,7 @@ if __name__ == "__main__":
         log_level="info",
         timeout_keep_alive=5,
         access_log=True,
-        timeout_graceful_shutdown=5  # Reduced from 10 to 5 seconds
+        timeout_graceful_shutdown=5,  # Reduced from 10 to 5 seconds
     )
     server = uvicorn.Server(config)
     server_state.server = server

@@ -7,9 +7,11 @@ class QuantaLogicUI {
         this.eventVisualizer = new EventVisualizer();
         this.processedEventIds = new Set();
         this.activeValidationDialog = null;
+        this.connectionState = 'disconnected';
         this.initializeElements();
         this.attachEventListeners();
         this.connectSSE();
+        this.currentTaskId = null;  // Add tracking for current task
     }
 
     initializeElements() {
@@ -118,12 +120,12 @@ class QuantaLogicUI {
             return;
         }
 
-        // Clear events and results before starting new task
         this.clearEvents();
         this.setProcessingState(true);
 
         try {
-            const response = await fetch('/solve_task', {
+            // Submit task using new endpoint
+            const submitResponse = await fetch('/tasks', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -135,21 +137,18 @@ class QuantaLogicUI {
                 }),
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail?.error || 'Unknown error occurred');
+            if (!submitResponse.ok) {
+                throw new Error('Failed to submit task');
             }
 
-            const data = await response.json();
-            this.handleEvent({
-                event: 'final_result',
-                timestamp: new Date().toISOString(),
-                data: {
-                    result: data.result,
-                    total_tokens: data.total_tokens,
-                    model_name: data.model_name
-                }
-            });
+            const { task_id } = await submitResponse.json();
+            this.currentTaskId = task_id;  // Set current task ID
+
+            // Start polling for task status
+            await this.pollTaskStatus(task_id);
+
+            // Initialize Event Stream with task_id
+            this.initializeEventStream(task_id);
 
         } catch (error) {
             console.error('Error:', error);
@@ -162,6 +161,159 @@ class QuantaLogicUI {
             });
         } finally {
             this.setProcessingState(false);
+            this.currentTaskId = null;  // Clear task ID when done
+        }
+    }
+
+    initializeEventStream(taskId) {
+        // Close existing event source if any
+        if (this.eventSource) {
+            this.eventSource.close();
+        }
+
+        // Reset connection state
+        this.connectionState = 'connecting';
+        this.updateConnectionStatus();
+
+        // Initialize a new EventSource with task_id
+        this.eventSource = new EventSource(`/events?task_id=${taskId}`);
+
+        this.eventSource.onopen = () => {
+            this.connectionState = 'connected';
+            this.updateConnectionStatus();
+            console.log(`Connected to event stream for task ${taskId}`);
+        };
+
+        this.eventSource.onmessage = (event) => {
+            try {
+                const eventData = JSON.parse(event.data);
+                this.displayEvent(eventData);
+            } catch (parseError) {
+                console.error('Error parsing event data:', parseError);
+            }
+        };
+
+        this.eventSource.addEventListener('task_complete', (event) => {
+            const data = JSON.parse(event.data);
+            console.log(`Task ${data.task_id} completed with result:`, data.result);
+            this.closeEventStream();
+        });
+
+        this.eventSource.addEventListener('task_error', (event) => {
+            const data = JSON.parse(event.data);
+            console.error(`Task ${data.task_id} failed with error:`, data.error);
+            this.closeEventStream();
+        });
+
+        this.eventSource.onerror = (error) => {
+            this.connectionState = 'disconnected';
+            this.updateConnectionStatus();
+            console.error('EventSource failed:', error);
+            
+            // Attempt reconnection with exponential backoff
+            this.reconnectEventStream(taskId);
+        };
+    }
+
+    closeEventStream() {
+        if (this.eventSource) {
+            this.eventSource.close();
+            this.eventSource = null;
+        }
+        this.connectionState = 'disconnected';
+        this.updateConnectionStatus();
+    }
+
+    reconnectEventStream(taskId, attempt = 1) {
+        const maxAttempts = 5;
+        const baseDelay = 1000; // 1 second
+        
+        if (attempt > maxAttempts) {
+            console.error('Max reconnection attempts reached');
+            return;
+        }
+
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        
+        setTimeout(() => {
+            console.log(`Attempting to reconnect (Attempt ${attempt})...`);
+            this.initializeEventStream(taskId);
+        }, delay);
+    }
+
+    updateConnectionStatus() {
+        const statusElement = document.getElementById('connectionStatus');
+        if (statusElement) {
+            statusElement.textContent = `Connection: ${this.connectionState}`;
+            statusElement.className = this.connectionState;
+        }
+    }
+
+    async pollTaskStatus(taskId) {
+        const pollInterval = 1000; // 1 second
+        const maxAttempts = 300; // 5 minutes maximum
+        let attempts = 0;
+
+        const poll = async () => {
+            try {
+                const response = await fetch(`/tasks/${taskId}`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch task status');
+                }
+
+                const taskStatus = await response.json();
+
+                switch (taskStatus.status) {
+                    case 'completed':
+                        this.handleEvent({
+                            event: 'task_complete',
+                            task_id: taskId,
+                            timestamp: new Date().toISOString(),
+                            data: {
+                                result: taskStatus.result,
+                                total_tokens: taskStatus.total_tokens,
+                                model_name: taskStatus.model_name
+                            }
+                        });
+                        return true;
+
+                    case 'failed':
+                        this.handleEvent({
+                            event: 'error',
+                            task_id: taskId,
+                            timestamp: new Date().toISOString(),
+                            data: {
+                                error: taskStatus.error
+                            }
+                        });
+                        return true;
+
+                    case 'running':
+                        // Continue polling
+                        return false;
+
+                    default:
+                        if (++attempts >= maxAttempts) {
+                            throw new Error('Task polling timeout');
+                        }
+                        return false;
+                }
+            } catch (error) {
+                console.error('Polling error:', error);
+                this.handleEvent({
+                    event: 'error',
+                    task_id: taskId,
+                    timestamp: new Date().toISOString(),
+                    data: {
+                        error: error.message
+                    }
+                });
+                return true;
+            }
+        };
+
+        while (!(await poll())) {
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
         }
     }
 
@@ -181,23 +333,6 @@ class QuantaLogicUI {
             loadingIndicator?.classList.add('hidden');
             this.elements.submitTask.classList.remove('opacity-75');
         }
-    }
-
-    updateConnectionStatus(connected) {
-        const statusClasses = connected
-            ? ['bg-green-100', 'text-green-800']
-            : ['bg-red-100', 'text-red-800'];
-
-        this.elements.connectionStatus.className =
-            'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ' +
-            statusClasses.join(' ');
-
-        this.elements.connectionStatus.innerHTML = `
-            <svg class="w-4 h-4 mr-1.5 ${connected ? 'text-green-500' : 'text-red-500'}" fill="currentColor" viewBox="0 0 20 20">
-                <circle cx="10" cy="10" r="10" />
-            </svg>
-            ${connected ? 'Connected' : 'Disconnected'}
-        `;
     }
 
     async showValidationDialog(question) {
@@ -284,6 +419,11 @@ class QuantaLogicUI {
 
     handleEvent(eventData) {
         try {
+            // Only process events for the current task or events without task_id
+            if (eventData.task_id && eventData.task_id !== this.currentTaskId) {
+                return;
+            }
+
             if (eventData.id && this.processedEventIds.has(eventData.id)) {
                 return;
             }
@@ -300,7 +440,8 @@ class QuantaLogicUI {
             }
 
             // Update final answer without clearing events
-            if (eventData.event === 'final_result' || eventData.event === 'task_complete') {
+            if ((eventData.event === 'final_result' || eventData.event === 'task_complete') && 
+                (!eventData.task_id || eventData.task_id === this.currentTaskId)) {
                 this.displayFinalAnswer(eventData.data);
             }
         } catch (error) {
@@ -344,15 +485,15 @@ class QuantaLogicUI {
     }
 
     clearEvents() {
-        // Commented out to prevent clearing events
-        // if (this.elements.eventsContainer) {
-        //     while (this.elements.eventsContainer.firstChild) {
-        //         this.elements.eventsContainer.removeChild(this.elements.eventsContainer.firstChild);
-        //     }
-        // }
-        // this.processedEventIds.clear();
+        if (this.elements.eventsContainer) {
+            while (this.elements.eventsContainer.firstChild) {
+                this.elements.eventsContainer.removeChild(this.elements.eventsContainer.firstChild);
+            }
+        }
+        this.processedEventIds.clear();
         this.clearFinalAnswer();
         this.lastRunningEvent = null;
+        this.currentTaskId = null;  // Reset current task ID
     }
 
     clearFinalAnswer() {
