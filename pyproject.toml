@@ -1,6 +1,6 @@
 [tool.poetry]
-name = "quantalogic2"
-version = "0.1.0"
+name = "quantalogic"
+version = "0.1.1"
 description = "QuantaLogic AI Tools"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
