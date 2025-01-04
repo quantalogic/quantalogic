@@ -30,7 +30,7 @@ class ListDirectoryTool(Tool):
             type="string",
             description="Maximum depth for recursive directory listing.",
             required=False,
-            default="2",
+            default="1",
             example="2",
         ),
     ]

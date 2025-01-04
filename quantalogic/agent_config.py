@@ -37,7 +37,7 @@ def create_coding_agent(model_name: str) -> Agent:
         model_name=model_name,
         tools=[
             TaskCompleteTool(),
-            ReadFileTool(),
+         #   ReadFileTool(),
             ReadFileBlockTool(),
             WriteFileTool(),
             ReplaceInFileTool(),
@@ -45,7 +45,9 @@ def create_coding_agent(model_name: str) -> Agent:
             ListDirectoryTool(),
             RipgrepTool(),
             SearchDefinitionNames(),
-            LLMTool(model_name=MODEL_NAME),
+            LLMTool(model_name=MODEL_NAME,system_prompt="You are a software expert, your role is to answer coding questions.",name="coding_consultant"),
+            LLMTool(model_name=MODEL_NAME,system_prompt="You are a software architect, your role is to answer software architecture questions.",name="software_architect"),
+             
         ],
         specific_expertise=(
             "Expert in software development and problem-solving."

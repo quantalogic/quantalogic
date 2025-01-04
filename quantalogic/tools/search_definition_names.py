@@ -36,7 +36,7 @@ class SearchDefinitionNames(Tool):
     name: str = "search_definition_names_tool"
     description: str = (
         "Searches for definition names (classes, functions, methods) in a directory using Tree-sitter. "
-        "Very useful to locate quickly code locations of definitions in large projects."
+        "Very useful to locate quickly code locations of classes, functions, methods in large projects."
         "Returns the list of definition names grouped by file name, with line numbers. "
     )
     arguments: list = [

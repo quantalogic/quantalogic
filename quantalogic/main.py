@@ -157,8 +157,8 @@ def main():
             console.print("[yellow]Task submission cancelled. Exiting...[/yellow]")
             sys.exit(0)
 
-    agent = create_agent(args.model)
-    #agent = create_coding_agent(args.model)
+    #agent = create_agent(args.model)
+    agent = create_coding_agent(args.model)
     #agent = create_orchestrator_agent(args.model)
     result = agent.solve_task(task=task, max_iterations=300)
 
