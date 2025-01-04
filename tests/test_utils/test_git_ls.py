@@ -1,17 +1,13 @@
-import pytest
 from pathspec import PathSpec
-from quantalogic.tools.utils.git_ls import (
-    git_ls,
-    load_gitignore_spec,
-    generate_file_tree,
-    format_tree
-)
+
+from quantalogic.tools.utils.git_ls import format_tree, generate_file_tree, git_ls, load_gitignore_spec
+
 
 class TestGitLs:
-    """Test suite for git_ls utility functions"""
+    """Test suite for git_ls utility functions."""
     
     def test_git_ls_basic(self, tmp_path):
-        """Test basic git_ls functionality"""
+        """Test basic git_ls functionality."""
         # Create test directory structure
         (tmp_path / "file1.txt").touch()
         (tmp_path / "file2.txt").touch()
@@ -21,9 +17,19 @@ class TestGitLs:
 
         # Test basic listing
         result = git_ls(str(tmp_path))
-        assert "📄 file1.txt" in result
-        assert "📄 file2.txt" in result
-        assert "📁 subdir/" in result
+        
+        # Check that the result is not empty
+        assert result is not None, "git_ls should return a non-empty result"
+        
+        # Verify the result contains expected file and directory information
+        assert "📄 file1.txt" in result, "Result should contain file1.txt"
+        assert "📄 file2.txt" in result, "Result should contain file2.txt"
+        assert "📁 subdir/" in result, "Result should contain subdir"
+        
+        # Verify the result follows the expected format
+        lines = result.split('\n')
+        assert lines[0].startswith("==== Lines:"), "Result should start with line range information"
+        assert lines[-1] == "==== End of Block ====", "Result should end with block end marker"
         
     def test_load_gitignore_spec(self, tmp_path):
         """Test .gitignore pattern loading"""

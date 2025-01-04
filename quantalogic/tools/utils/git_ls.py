@@ -67,14 +67,21 @@ def generate_file_tree(
 
     tree = {"name": path.name, "type": "directory", "children": []}
 
-    if recursive and current_depth < max_depth:
-        # Sort children by name before adding to tree
-        children = sorted(path.iterdir(), key=lambda x: x.name.lower())
-        for child in children:
-            if not ignore_spec.match_file(child):
+    # Always list direct children, but only recursively list if recursive is True
+    children = sorted(path.iterdir(), key=lambda x: x.name.lower())
+    for child in children:
+        if not ignore_spec.match_file(child):
+            if child.is_file():
+                child_tree = generate_file_tree(child, ignore_spec, recursive, max_depth, current_depth)
+                tree["children"].append(child_tree)
+            elif child.is_dir():
+                # Always include directories
                 child_tree = generate_file_tree(child, ignore_spec, recursive, max_depth, current_depth + 1)
-                if child_tree:
-                    tree["children"].append(child_tree)
+                if recursive:
+                    if child_tree:
+                        tree["children"].append(child_tree)
+                else:
+                    tree["children"].append({"name": child.name, "type": "directory", "children": []})
 
     return tree
 
