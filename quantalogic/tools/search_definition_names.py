@@ -22,6 +22,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+MAX_RESULTS = 200
+
 class SearchDefinitionNames(Tool):
     """Tool for searching definition names in a directory using Tree-sitter.
 
@@ -316,6 +318,10 @@ class SearchDefinitionNames(Tool):
                             markdown += f"- `{var}` (line {line})\n"
 
                     markdown += "\n"
+
+            # Limit to 500 lines 
+            if len(markdown) > MAX_RESULTS:
+                markdown = markdown[:MAX_RESULTS] + "\n... ( ⚠️ Content was truncated) be more specific\n"
 
             return markdown
 
