@@ -203,8 +203,6 @@ class Agent(BaseModel):
                     "task_think_start",
                     {
                         "iteration": current_iteration,
-                        "current_prompt": current_prompt,
-                        "task": task,
                         "total_tokens": self.total_tokens,
                         "context_occupancy": self._calculate_context_occupancy(),
                         "max_input_tokens": max_input_tokens,
@@ -250,9 +248,7 @@ class Agent(BaseModel):
                     "task_think_end",
                     {
                         "iteration": current_iteration,
-                        "current_prompt": current_prompt,
                         "response": content,
-                        "task": task,
                         "token_usage": token_usage,
                         "total_tokens": self.total_tokens,
                         "context_occupancy": self._calculate_context_occupancy(),
@@ -271,8 +267,7 @@ class Agent(BaseModel):
                         "task_complete",
                         {
                             "iteration": current_iteration,
-                            "current_prompt": current_prompt,
-                            "task": task,
+                            "response": result.answer,
                             "total_tokens": self.total_tokens,
                             "max_input_tokens": max_input_tokens,
                             "context_occupancy": self._calculate_context_occupancy(),
@@ -301,8 +296,6 @@ class Agent(BaseModel):
                         "error_max_iterations_reached",
                         {
                             "iteration": current_iteration,
-                            "current_prompt": current_prompt,
-                            "task": task,
                             "total_tokens": self.total_tokens,
                             "max_input_tokens": max_input_tokens,
                             "context_occupancy": self._calculate_context_occupancy(),
@@ -321,8 +314,6 @@ class Agent(BaseModel):
             "task_solve_end",
             {
                 "iteration": current_iteration,
-                "current_prompt": current_prompt,
-                "task": task,
                 "total_tokens": self.total_tokens,
                 "context_occupancy": self._calculate_context_occupancy(),
                 "max_input_tokens": max_input_tokens,
@@ -376,6 +367,8 @@ class Agent(BaseModel):
                     and self.last_tool_call.get("arguments") == current_call["arguments"]
                 )
 
+                error_message = ""
+
                 if is_repeated_call:
                     repeat_count = self.last_tool_call.get("count", 0) + 1
                     if repeat_count >= 2:
@@ -390,12 +383,7 @@ class Agent(BaseModel):
                             "3. Use a different tool or modify the arguments\n"
                             "4. Ensure you're making progress towards the goal"
                         )
-                        logger.warning(f"Blocking repeated tool call: {tool_name}")
-                        return ObserveResponseResult(
-                            next_prompt=error_message,
-                            executed_tool="",
-                            answer=None,
-                        )
+
                     
                     # Update repeat count
                     current_call["count"] = repeat_count
@@ -408,7 +396,7 @@ class Agent(BaseModel):
 
                 if not executed_tool:
                     return ObserveResponseResult(
-                        next_prompt=response,
+                        next_prompt=response + "\n" + error_message,
                         executed_tool="",
                         answer=None,
                     )
@@ -466,11 +454,7 @@ class Agent(BaseModel):
             "\n"
             f"{self._get_variable_prompt()}"
             "\n"
-            f"--- Task to solve --- \n"
-            "\n"
-            f"<task>\n{self.task_to_solve}\n</task>\n"
-            "\n"
-            "You must analyze this answer and evaluate what to do next.\n"
+            "You must analyze this answer and evaluate what to do next to solve the task.\n"
             "If the step failed, take a step back and rethink your approach.\n"
             "\n"
             "--- Format ---\n"

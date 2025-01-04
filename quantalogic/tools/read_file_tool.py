@@ -13,7 +13,8 @@ class ReadFileTool(Tool):
     name: str = "read_file_tool"
     description: str = (f"Reads a local file or HTTP content and returns its content." 
             f"Cut to {MAX_LINES} first lines.\n" 
-            "Don't use on HTML files and large files.")
+            "Don't use on HTML files and large files."
+            "Prefer to use read file block tool to don't fill the memory.")
     arguments: list = [
         ToolArgument(
             name="file_path",

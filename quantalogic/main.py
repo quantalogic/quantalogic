@@ -37,10 +37,11 @@ main_agent = create_agent(MODEL_NAME)
 
 main_agent.event_emitter.on(
     [
-        "task_think_end",
         "task_complete",
         "task_think_start",
+        "task_think_end",
         "tool_execution_start",
+        "tool_execution_end",
         "error_max_iterations_reached",
         "memory_full",
         "memory_compacted",

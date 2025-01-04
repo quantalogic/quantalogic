@@ -57,6 +57,7 @@ Code Rules:
 - Document WHY not WHAT
 - Executable scripts
 - Write tests first
+- Test Must be written to be insensitive to changes of formatting and not based on strict rules of display
 
 5. Code Reviews
 - Question complexity
