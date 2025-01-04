@@ -29,7 +29,7 @@ logger.add(sys.stderr, level=log_level)
 MAX_OCCUPANCY = 90.0
 
 # Maximum response length in characters
-MAX_RESPONSE_LENGTH = 1024 * 16
+MAX_RESPONSE_LENGTH = 1024 * 32
 
 DEFAULT_MAX_INPUT_TOKENS = 128 * 1024
 DEFAULT_MAX_OUTPUT_TOKENS = 4096

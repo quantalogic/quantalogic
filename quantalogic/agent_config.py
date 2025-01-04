@@ -24,7 +24,7 @@ from quantalogic.tools import (
     WriteFileTool,
 )
 
-MODEL_NAME = "openrouter/deepseek/deepseek-chat"
+MODEL_NAME = "deepseek/deepseek-chat"
 
 
 def create_coding_agent(model_name: str) -> Agent:

@@ -1,0 +1,1 @@
+You must rewrite a 100% compatible class called quantalogic/react_agent that reproduced 100% of the features of quantalogic/agent.py following the guidelines in .windsurfrules file

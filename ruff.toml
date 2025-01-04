@@ -33,6 +33,7 @@ ignore = [
     "D101", # Missing docstring in public class
     "D102", # Missing docstring in public method
     "D212", # Multi-line docstring summary should start at the third line
+    "D205", # 1 blank line required between summary line and description
 ]
 
 # Docstring configuration
