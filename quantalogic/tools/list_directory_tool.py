@@ -1,7 +1,9 @@
 """Tool for listing the contents of a directory."""
+
 import os
 
 from quantalogic.tools.tool import Tool, ToolArgument
+from quantalogic.tools.utils.git_ls import git_ls
 
 
 class ListDirectoryTool(Tool):
@@ -27,7 +29,7 @@ class ListDirectoryTool(Tool):
         ),
         ToolArgument(
             name="max_depth",
-            type="string",
+            type="int",
             description="Maximum depth for recursive directory listing.",
             required=False,
             default="1",
@@ -35,7 +37,7 @@ class ListDirectoryTool(Tool):
         ),
         ToolArgument(
             name="start_line",
-            type="string",
+            type="int",
             description="Starting line number for paginated results (1-based).",
             required=False,
             default="1",
@@ -43,7 +45,7 @@ class ListDirectoryTool(Tool):
         ),
         ToolArgument(
             name="end_line",
-            type="string",
+            type="int",
             description="Ending line number for paginated results (1-based).",
             required=False,
             default="200",
@@ -51,27 +53,14 @@ class ListDirectoryTool(Tool):
         ),
     ]
 
-    @staticmethod
-    def _format_size(size_bytes: int) -> str:
-        """Converts file size in bytes to a human-readable format.
-
-        Args:
-            size_bytes (int): Size of the file in bytes.
-
-        Returns:
-            str: Human-readable file size.
-        """
-        if size_bytes < 1024:
-            return f"{size_bytes} B"
-        elif size_bytes < 1024 * 1024:
-            return f"{size_bytes / 1024:.2f} KB"
-        elif size_bytes < 1024 * 1024 * 1024:
-            return f"{size_bytes / (1024 * 1024):.2f} MB"
-        else:
-            return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
-
-    def execute(self, directory_path: str, recursive: str = "false", max_depth: str = "2",
-               start_line: str = "1", end_line: str = "200") -> str:
+    def execute(
+        self,
+        directory_path: str,
+        recursive: str = "false",
+        max_depth: str = "1",
+        start_line: str = "1",
+        end_line: str = "200",
+    ) -> str:
         """
         List directory contents with flexible and robust pagination.
 
@@ -120,111 +109,34 @@ class ListDirectoryTool(Tool):
         if not os.path.isdir(directory_path):
             raise ValueError(f"The path '{directory_path}' is not a directory.")
 
-        # Determine recursive listing mode
-        # Convert input to boolean, defaulting to non-recursive
-        is_recursive = recursive.lower() == "true"
+        # Safely convert inputs with default values
+        start = int(start_line or "1")
+        end = int(end_line or "200")
+        max_depth_int = int(max_depth or "1")
+        is_recursive = (recursive or "false").lower() == "true"
 
-        # Safe integer conversion with default values
-        # Handles various input scenarios: empty strings, non-numeric inputs, etc.
-        def safe_int_convert(value: str, default: int) -> int:
-            """
-            Safely convert string to integer with a fallback default.
-            
-            This helper prevents errors from invalid or empty string inputs,
-            ensuring the method can handle unexpected input gracefully.
-            
-            Args:
-                value (str): String to convert to integer
-                default (int): Value to return if conversion fails
-            
-            Returns:
-                int: Converted integer or default value
-            """
-            try:
-                return int(value) if value and value.strip() else default
-            except ValueError:
-                return default
-
-        # Convert parameters safely with sensible defaults
-        # Ensures consistent behavior even with unexpected inputs
-        max_depth_int = safe_int_convert(max_depth, 2)
-        start = max(0, safe_int_convert(start_line, 1) - 1)  # Convert to 0-based index
-        end = safe_int_convert(end_line, 200)
+        # Validate pagination parameters
+        if start > end:
+            raise ValueError("start_line must be less than or equal to end_line.")
 
         try:
-            # Recursive directory listing
-            # Uses os.walk to traverse directory tree with controlled depth
-            if is_recursive:
-                all_lines = []
-                for root, dirs, files in os.walk(directory_path):
-                    # Calculate directory nesting level
-                    level = root.replace(directory_path, '').count(os.sep)
-                    
-                    # Respect max_depth to prevent overwhelming output
-                    if level > max_depth_int:
-                        continue
-                    
-                    # Create indented representation of directory structure
-                    indent = '│   ' * (level - 1) + '├── ' if level > 0 else ''
-                    all_lines.append(f"{indent}{os.path.basename(root)}/ <DIR>")
-                    
-                    # List subdirectories
-                    for d in dirs:
-                        sub_indent = '│   ' * level + '├── '
-                        all_lines.append(f"{sub_indent}{d}/ <DIR>")
-                    
-                    # List files with human-readable sizes
-                    for f in files:
-                        sub_indent = '│   ' * level + '├── '
-                        file_path = os.path.join(root, f)
-                        file_size = os.path.getsize(file_path)
-                        all_lines.append(f"{sub_indent}{f} ({self._format_size(file_size)})")
-            else:
-                # Non-recursive directory listing
-                # Simple, flat listing of immediate directory contents
-                all_lines = []
-                items = os.listdir(directory_path)
-                for item in items:
-                    item_path = os.path.join(directory_path, item)
-                    if os.path.isdir(item_path):
-                        all_lines.append(f"├── {item}/ <DIR>")
-                    else:
-                        file_size = os.path.getsize(item_path)
-                        all_lines.append(f"├── {item} ({self._format_size(file_size)})")
-
-            # Handle empty directory scenario
-            # Provide a clear, informative response
-            if not all_lines:
-                return "The directory is empty."
-
-            # Pagination logic
-            # Ensures we don't return more data than requested
-            total_lines = len(all_lines)
-            end = min(end, total_lines)
-            is_last_block = end >= total_lines
-            
-            # Extract paginated content
-            # Handles cases where requested range might exceed available items
-            paginated_content = all_lines[start:end]
-            content = "\n".join(paginated_content) if paginated_content else "No content in this range."
-
-            # Create informative header and footer
-            # Provides context about the listing
-            header = f"Contents of directory: {directory_path}\n"
-            footer = f"\nShowing lines {start + 1}-{end} of {total_lines}"
-            if is_last_block:
-                footer += " (last block)"
-            footer += "\nEnd of directory listing."
-
-            # Return formatted directory listing
-            return header + content + footer
-
+            # Use git_ls for directory listing with .gitignore support
+            all_lines = git_ls(
+                directory_path=directory_path,
+                recursive=is_recursive,
+                max_depth=max_depth_int,
+                start_line=start,
+                end_line=end,
+            )
+            return all_lines
         except Exception as e:
-            # Catch-all error handling
-            # Ensures a meaningful error message is always returned
-            raise ValueError(f"Error listing directory '{directory_path}': {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return f"Error: {str(e)} occurred during directory listing. See logs for details."
 
 
 if __name__ == "__main__":
     tool = ListDirectoryTool()
+    current_directory = os.getcwd()
+    tool.execute(directory_path=current_directory, recursive="true")
     print(tool.to_markdown())
