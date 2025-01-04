@@ -28,6 +28,11 @@ ignore = [
     "UP006",
     "UP008",
     "UP009",
+    "D107", # Missing docstring in __init__
+    "D103", # Missing docstring in public function
+    "D101", # Missing docstring in public class
+    "D102", # Missing docstring in public method
+    "D212", # Multi-line docstring summary should start at the third line
 ]
 
 # Docstring configuration
