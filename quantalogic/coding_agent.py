@@ -12,6 +12,7 @@ from quantalogic.tools import (
     WriteFileTool,
 )
 from quantalogic.utils import get_coding_environment
+from quantalogic.utils.get_quantalogic_rules_content import get_quantalogic_rules_file_content
 
 
 def create_coding_agent(model_name: str) -> Agent:
@@ -26,6 +27,21 @@ def create_coding_agent(model_name: str) -> Agent:
             - Code search capabilities
             - Specialized language model tools for coding and architecture
     """
+    specific_expertise = (
+        "Software expert focused on pragmatic solutions."
+        "Validates codebase pre/post changes."
+        "Employs SearchDefinitionNames for code search; ReplaceInFileTool for updates."
+    )
+    quantalogic_rules_file_content = get_quantalogic_rules_file_content()
+
+    if quantalogic_rules_file_content:
+        specific_expertise += (
+            "\n\n"
+            "<coding_rules>\n"
+            f"{quantalogic_rules_file_content}"
+            "\n</coding_rules>\n"
+        )
+
     return Agent(
         model_name=model_name,
         tools=[
@@ -35,7 +51,6 @@ def create_coding_agent(model_name: str) -> Agent:
             WriteFileTool(),  # Creates new files
             ReplaceInFileTool(),  # Updates file sections
             EditWholeContentTool(),  # Modifies entire files
-            
             # Code navigation and search tools
             ListDirectoryTool(),  # Lists directory contents
             RipgrepTool(),  # Searches code with regex
@@ -53,10 +68,6 @@ def create_coding_agent(model_name: str) -> Agent:
             ),
             ReadFileTool(),
         ],
-        specific_expertise=(
-            "Software expert focused on pragmatic solutions."
-            "Validates codebase pre/post changes."
-            "Employs SearchDefinitionNames for code search; ReplaceInFileTool for updates."
-        ),
+        specific_expertise=specific_expertise,
         get_environment=get_coding_environment,
     )

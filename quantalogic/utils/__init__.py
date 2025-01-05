@@ -4,6 +4,7 @@ from .read_http_text_content import read_http_text_content
 from .git_ls import git_ls
 from .get_environment import get_environment
 from .get_coding_environment import get_coding_environment
+from .get_quantalogic_rules_content import get_quantalogic_rules_file_content
 
 __all__ = [
     "download_http_file",
@@ -12,4 +13,5 @@ __all__ = [
     "git_ls",
     "get_environment",
     "get_coding_environment",
+    "get_quantalogic_rules_file_content",
 ]

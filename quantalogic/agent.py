@@ -123,6 +123,8 @@ class Agent(BaseModel):
                 tools=tools_markdown, environment=environment, expertise=specific_expertise
             )
 
+            print(system_prompt_text)
+
             config = AgentConfig(
                 environment_details=environment,
                 tools_markdown=tools_markdown,
