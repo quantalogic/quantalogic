@@ -4,6 +4,7 @@
 
 # Local application imports
 from quantalogic.agent import Agent
+from quantalogic.coding_agent import create_coding_agent
 from quantalogic.tools import (
     AgentTool,
     DownloadHttpFileTool,
@@ -26,41 +27,6 @@ from quantalogic.tools import (
 
 MODEL_NAME = "deepseek/deepseek-chat"
 
-
-def create_coding_agent(model_name: str) -> Agent:
-    """Create an agent with the specified model and tools.
-
-    Args:
-        model_name (str): Name of the model to use
-    """
-    return Agent(
-        model_name=model_name,
-        tools=[
-            TaskCompleteTool(),
-            ReadFileBlockTool(),
-            WriteFileTool(),
-            ReplaceInFileTool(),
-            EditWholeContentTool(),
-            ListDirectoryTool(),
-            RipgrepTool(),
-            SearchDefinitionNames(),
-            LLMTool(model_name=MODEL_NAME,system_prompt="You are a software expert, your role is to answer coding questions.",name="coding_consultant"),
-            LLMTool(model_name=MODEL_NAME,system_prompt="You are a software architect, your role is to answer software architecture questions.",name="software_architect"),
-            ReadFileTool(),
-
-             
-        ],
-        specific_expertise=(
-            "Expert in software development and problem-solving."
-            "Prefer to localize with precise code snippets before updating the codebase."
-            "Always check the codebase before making changes."
-            "Prefer to use ReplaceInFileTool for code updates."
-            "Prefer to use SearchDefinitionNames for code search."
-        ),
-    )
-
-
-coding_agent = create_coding_agent(MODEL_NAME)
 
 
 def create_agent(model_name) -> Agent:

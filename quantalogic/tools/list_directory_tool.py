@@ -3,7 +3,7 @@
 import os
 
 from quantalogic.tools.tool import Tool, ToolArgument
-from quantalogic.tools.utils.git_ls import git_ls
+from quantalogic.utils.git_ls import git_ls
 
 
 class ListDirectoryTool(Tool):

@@ -36,6 +36,7 @@ ignore = [
     "D205", # 1 blank line required between summary line and description
     "D100", # Missing docstring in public module
     "D415", # First line should end with a period
+    "D104", # First word of the docstring should not be This
 ]
 
 # Docstring configuration

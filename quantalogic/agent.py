@@ -16,6 +16,7 @@ from quantalogic.prompts import system_prompt
 from quantalogic.tool_manager import ToolManager
 from quantalogic.tools.task_complete_tool import TaskCompleteTool
 from quantalogic.tools.tool import Tool
+from quantalogic.utils import get_environment
 from quantalogic.xml_parser import ToleranceXMLParser
 from quantalogic.xml_tool_parser import ToolParser
 
@@ -35,26 +36,6 @@ DEFAULT_MAX_INPUT_TOKENS = 128 * 1024
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 
 
-def get_environment() -> str:
-    """Retrieve the current environment details."""
-    try:
-        logger.debug("Retrieving environment details.")
-        shell = os.getenv("SHELL", "bash")
-        current_dir = os.getcwd()
-        operating_system = os.name
-        date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        environment_details = (
-            f"Current shell: {shell}\n"
-            f"Current directory: {current_dir}\n"
-            f"Operating system: {operating_system}\n"
-            f"Date and time: {date_time}"
-        )
-        logger.debug(f"Environment details:\n{environment_details}")
-        return environment_details
-    except Exception as e:
-        logger.error(f"Error retrieving environment details: {str(e)}")
-        return "Environment details unavailable."
 
 
 def default_ask_for_user_validation(question: str = "Do you want to continue?") -> bool:
@@ -73,7 +54,12 @@ def default_ask_for_user_validation(question: str = "Do you want to continue?") 
 
 class AgentConfig(BaseModel):
     """Configuration settings for the Agent."""
-
+    
+    model_config = ConfigDict(
+        extra='forbid',
+        frozen=True
+    )
+    
     environment_details: str
     tools_markdown: str
     system_prompt: str
@@ -82,6 +68,11 @@ class AgentConfig(BaseModel):
 class ObserveResponseResult(BaseModel):
     """Represents the result of observing the assistant's response."""
 
+    model_config = ConfigDict(
+        extra='forbid',
+        frozen=True
+    )
+    
     next_prompt: str
     executed_tool: str | None = None
     answer: str | None = None
@@ -116,6 +107,7 @@ class Agent(BaseModel):
         ask_for_user_validation: Callable[[str], bool] = default_ask_for_user_validation,
         task_to_solve: str = "",
         specific_expertise: str = "General AI assistant with coding and problem-solving capabilities",
+        get_environment: Callable[[], str] = get_environment,
     ):
         """Initialize the agent with model, memory, tools, and configurations."""
         try:
