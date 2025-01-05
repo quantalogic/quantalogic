@@ -30,6 +30,7 @@ fastapi = "^0.115.6"
 websocket = "^0.2.1"
 tenacity = "^9.0.0"
 google-auth = "^2.20.0"
+pathspec = "^0.12.1"
 
 [tool.poetry.scripts]
 quantalogic = "quantalogic.main:main"

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Union
 
+from pathspec import PathSpec
 from tree_sitter import Parser
 
 from quantalogic.tools.language_handlers.c_handler import CLanguageHandler
@@ -112,11 +113,16 @@ class SearchDefinitionNames(Tool):
 
             # Find files matching the pattern
             directory_path = os.path.expanduser(directory_path)
+            gitignore_spec = self._load_gitignore_spec(Path(directory_path))
             files = list(Path(directory_path).rglob(file_pattern))
 
             results = []
 
             for file_path in files:
+                # Skip files matching .gitignore patterns
+                if gitignore_spec.match_file(file_path):
+                    continue
+
                 if file_path.is_file():
                     try:
                         with open(file_path, 'rb') as f:
@@ -146,6 +152,30 @@ class SearchDefinitionNames(Tool):
         except Exception as e:
             logger.error(f"Error during search: {str(e)}")
             return {"error": str(e)}
+
+    def _load_gitignore_spec(self, path: Path) -> PathSpec:
+        """Load .gitignore patterns from directory and all parent directories."""
+        from pathspec import PathSpec
+        from pathspec.patterns import GitWildMatchPattern
+        
+        ignore_patterns = []
+        current = path.absolute()
+        
+        # Traverse up the directory tree
+        while current != current.parent:  # Stop at root
+            gitignore_path = current / ".gitignore"
+            if gitignore_path.exists():
+                with open(gitignore_path) as f:
+                    # Filter out empty lines and comments
+                    patterns = [
+                        line.strip() 
+                        for line in f.readlines() 
+                        if line.strip() and not line.startswith('#')
+                    ]
+                    ignore_patterns.extend(patterns)
+            current = current.parent
+
+        return PathSpec.from_lines(GitWildMatchPattern, ignore_patterns)
 
     def _extract_definitions(self, root_node, language_name: str) -> Dict:
         """Extracts definitions from a Tree-sitter syntax tree node.
@@ -409,7 +439,7 @@ if __name__ == "__main__":
 
 
     result_markdown = tool.execute(
-        directory_path="./quantalogic",
+        directory_path=".",
         language_name="javascript",
         file_pattern="**/*.js",
         output_format="markdown"
