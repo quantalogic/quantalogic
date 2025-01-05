@@ -7,22 +7,22 @@ from quantalogic.tools.utils.git_ls import git_ls
 
 
 class ListDirectoryTool(Tool):
-    """Tool to list the contents of a directory."""
+    """Lists directory contents with pagination and .gitignore support."""
 
     name: str = "list_directory_tool"
-    description: str = "Lists the contents of a specified directory."
+    description: str = "Lists directory contents with pagination and .gitignore filtering"
     arguments: list[ToolArgument] = [
         ToolArgument(
             name="directory_path",
             type="string",
-            description="The path to the directory to list.",
+            description="Absolute or relative path to target directory",
             required=True,
             example="~/documents/projects",
         ),
         ToolArgument(
             name="recursive",
             type="string",
-            description="Whether to list directories recursively (true/false).",
+            description="Enable recursive traversal (true/false)",
             required=False,
             default="false",
             example="true",
@@ -30,7 +30,7 @@ class ListDirectoryTool(Tool):
         ToolArgument(
             name="max_depth",
             type="int",
-            description="Maximum depth for recursive directory listing.",
+            description="Maximum directory traversal depth",
             required=False,
             default="1",
             example="1",
@@ -38,7 +38,7 @@ class ListDirectoryTool(Tool):
         ToolArgument(
             name="start_line",
             type="int",
-            description="Starting line number for paginated results (1-based).",
+            description="First line to return in paginated results",
             required=False,
             default="1",
             example="1",
@@ -46,7 +46,7 @@ class ListDirectoryTool(Tool):
         ToolArgument(
             name="end_line",
             type="int",
-            description="Ending line number for paginated results (1-based).",
+            description="Last line to return in paginated results",
             required=False,
             default="200",
             example="200",
@@ -62,40 +62,20 @@ class ListDirectoryTool(Tool):
         end_line: str = "200",
     ) -> str:
         """
-        List directory contents with flexible and robust pagination.
-
-        This method provides a comprehensive directory listing with several key features:
-        - Supports both recursive and non-recursive directory traversal
-        - Handles pagination to manage large directory listings
-        - Provides human-readable file sizes
-        - Robust against invalid input parameters
-
-        The method is designed to be flexible and handle various edge cases:
-        - Expands user home directory paths (e.g., '~')
-        - Safely converts string inputs to integers
-        - Provides meaningful default values
-        - Generates a structured output for easy consumption
+        List directory contents with pagination and .gitignore support.
 
         Args:
-            directory_path (str): Absolute or relative path to the directory.
-            recursive (str): Flag to enable recursive directory listing.
-                             Accepts "true" or "false" (case-insensitive).
-            max_depth (str): Limit the depth of recursive traversal.
-                             Prevents overwhelming output for deep directory structures.
-            start_line (str): Starting line for paginated results.
-                              Useful for handling large directory listings.
-            end_line (str): Ending line for paginated results.
-                            Prevents returning excessive amounts of data.
+            directory_path: Absolute or relative path to target directory
+            recursive: Enable recursive traversal (true/false)
+            max_depth: Maximum directory traversal depth
+            start_line: First line to return in paginated results
+            end_line: Last line to return in paginated results
 
         Returns:
-            str: A formatted directory listing string containing:
-                - Header with directory path
-                - Paginated list of directory contents
-                - Footer with pagination information
-                - Contextual information about the listing
+            str: Paginated directory listing with metadata
 
         Raises:
-            ValueError: If the directory path is invalid or cannot be accessed.
+            ValueError: For invalid directory paths or pagination parameters
         """
         # Expand user home directory to full path
         # This ensures compatibility with '~' shorthand for home directory
