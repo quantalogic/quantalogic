@@ -22,7 +22,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-MAX_RESULTS = 200
 
 class SearchDefinitionNames(Tool):
     """Tool for searching definition names in a directory using Tree-sitter.
@@ -319,9 +318,6 @@ class SearchDefinitionNames(Tool):
 
                     markdown += "\n"
 
-            # Limit to 500 lines 
-            if len(markdown) > MAX_RESULTS:
-                markdown = markdown[:MAX_RESULTS] + "\n... ( ⚠️ Content was truncated) be more specific\n"
 
             return markdown
 
@@ -374,7 +370,7 @@ if __name__ == "__main__":
         file_pattern="**/*.py",
         output_format="text"
     )
-    print(result_text)
+    #print(result_text)
 
     result_json = tool.execute(
         directory_path="./quantalogic",
@@ -382,7 +378,7 @@ if __name__ == "__main__":
         file_pattern="**/*.py",
         output_format="json"
     )
-    print(result_json)
+    #print(result_json)
 
     result_markdown = tool.execute(
         directory_path="./quantalogic",
