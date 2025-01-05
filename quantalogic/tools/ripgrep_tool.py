@@ -1,4 +1,5 @@
 """A tool to search for text blocks in files using ripgrep."""
+
 import json
 import logging
 import os
@@ -14,6 +15,7 @@ from quantalogic.tools.tool import Tool, ToolArgument
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+MAX_LINE_LENGTH = 120  # Maximum length for each line before truncation
 
 class RipgrepTool(Tool):
     """Search files using ripgrep with regex and file filters."""
@@ -63,7 +65,7 @@ class RipgrepTool(Tool):
         self,
         cwd: Optional[str] = None,
         directory_path: str = ".",
-        regex: str = "search",
+        regex_rust_syntax: str = "search",
         file_pattern: str = "**/*",
         context_lines: int = 1,
     ) -> str:
@@ -72,7 +74,7 @@ class RipgrepTool(Tool):
         Args:
             cwd (Optional[str]): The current working directory for relative path calculation.
             directory_path (str): The directory path to search in.
-            regex (str): The regex pattern to search for.
+            regex_rust_syntax (str): The regex pattern to search for (Rust syntax).
             file_pattern (str): Optional glob pattern to filter files.
             context_lines (int): Number of context lines to include before and after matches.
 
@@ -99,7 +101,7 @@ class RipgrepTool(Tool):
         args = [
             "--json",  # Output in JSON format for easier parsing
             "-e",
-            regex,  # Regex pattern to search for
+            regex_rust_syntax,  # Regex pattern to search for
             "--glob",
             file_pattern,  # File pattern to filter files
             "--context",
@@ -114,7 +116,7 @@ class RipgrepTool(Tool):
             if e.returncode == 1:
                 return "No results found."
             elif e.returncode == 2:
-                return f"Invalid regex pattern: {regex}"
+                return f"Invalid regex pattern: {regex_rust_syntax}"
             raise RuntimeError(f"Ripgrep process error (code {e.returncode}): {e}")
 
         results = self._parse_rg_output(output, cwd)
@@ -127,7 +129,7 @@ class RipgrepTool(Tool):
             Optional[str]: Path to the ripgrep binary, or None if not found.
         """
         bin_name = "rg.exe" if os.name == "nt" else "rg"
-        
+
         # Check environment variable first
         env_path = os.environ.get("RIPGREP_PATH")
         if env_path and Path(env_path).exists():
@@ -136,17 +138,21 @@ class RipgrepTool(Tool):
         # Common system paths
         system_paths = []
         if os.name == "nt":  # Windows
-            system_paths.extend([
-                Path(os.environ.get("ProgramFiles", "C:\\Program Files"), "ripgrep", bin_name),
-                Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "ripgrep", bin_name),
-            ])
+            system_paths.extend(
+                [
+                    Path(os.environ.get("ProgramFiles", "C:\\Program Files"), "ripgrep", bin_name),
+                    Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "ripgrep", bin_name),
+                ]
+            )
         else:  # Unix-like systems
-            system_paths.extend([
-                Path("/usr/local/bin", bin_name),
-                Path("/usr/bin", bin_name),
-                Path("/opt/local/bin", bin_name),
-                Path.home() / ".cargo" / "bin" / bin_name,  # Common Rust installation path
-            ])
+            system_paths.extend(
+                [
+                    Path("/usr/local/bin", bin_name),
+                    Path("/usr/bin", bin_name),
+                    Path("/opt/local/bin", bin_name),
+                    Path.home() / ".cargo" / "bin" / bin_name,  # Common Rust installation path
+                ]
+            )
 
         # VSCode/Node.js paths
         node_paths = [
@@ -261,7 +267,7 @@ class RipgrepTool(Tool):
         if not results:
             return "No results found."
 
-        MAX_LINE_LENGTH = 120  # Maximum length for each line before truncation
+
         formatted_output = []
         grouped_results: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -281,16 +287,20 @@ class RipgrepTool(Tool):
                 for i, line in enumerate(
                     result["before_context"], start=result["line"] - len(result["before_context"])
                 ):
-                    truncated_line = (line[:MAX_LINE_LENGTH] + '...') if len(line) > MAX_LINE_LENGTH else line
+                    truncated_line = (line[:MAX_LINE_LENGTH] + "...") if len(line) > MAX_LINE_LENGTH else line
                     formatted_output.append(f"{i:4d} │ {truncated_line}")
 
                 # Highlight the match line with line number
-                truncated_match = (result['match'][:MAX_LINE_LENGTH] + '...') if len(result['match']) > MAX_LINE_LENGTH else result['match']
+                truncated_match = (
+                    (result["match"][:MAX_LINE_LENGTH] + "...")
+                    if len(result["match"]) > MAX_LINE_LENGTH
+                    else result["match"]
+                )
                 formatted_output.append(f"{result['line']:4d} ▶ {truncated_match}")  # Use ▶ to highlight match
 
                 # Add context after the match with line numbers
                 for i, line in enumerate(result["after_context"], start=result["line"] + 1):
-                    truncated_line = (line[:MAX_LINE_LENGTH] + '...') if len(line) > MAX_LINE_LENGTH else line
+                    truncated_line = (line[:MAX_LINE_LENGTH] + "...") if len(line) > MAX_LINE_LENGTH else line
                     formatted_output.append(f"{i:4d} │ {truncated_line}")
 
                 formatted_output.append("─" * 80)  # Add a visual separator between matches
