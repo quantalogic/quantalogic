@@ -213,12 +213,7 @@ stateDiagram-v2
         UpdateAnswer --> [*]
     }
 
-    state UpdateSessionMemory {
-        [*] --> AddUserMessage
-        AddUserMessage --> AddAssistantMessage
-        AddAssistantMessage --> EmitSessionAddMessageEvent
-        EmitSessionAddMessageEvent --> [*]
-    }
+
 
     Idle --> [*]: Task Completed
     SolveTask --> Idle: Task Completed
