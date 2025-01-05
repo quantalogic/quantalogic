@@ -41,13 +41,18 @@ def git_ls(
 
 
 def load_gitignore_spec(path: Path) -> PathSpec:
-    """Load .gitignore patterns from directory."""
+    """Load .gitignore patterns from directory and all parent directories."""
     ignore_patterns = []
-    gitignore_path = path / ".gitignore"
-
-    if gitignore_path.exists():
-        with open(gitignore_path) as f:
-            ignore_patterns = f.readlines()
+    current = path
+    
+    # Traverse up the directory tree
+    while current != current.parent:  # Stop at root
+        gitignore_path = current / ".gitignore"
+        if gitignore_path.exists():
+            with open(gitignore_path) as f:
+                # Prepend parent patterns to maintain precedence
+                ignore_patterns = f.readlines() + ignore_patterns
+        current = current.parent
 
     return PathSpec.from_lines(GitWildMatchPattern, ignore_patterns)
 
