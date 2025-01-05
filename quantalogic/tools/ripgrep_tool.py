@@ -1,19 +1,16 @@
 """A tool to search for text blocks in files using ripgrep."""
 
 import json
-import logging
 import os
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from loguru import logger
+from pathspec import PathSpec
 from pydantic import ValidationError
 
 from quantalogic.tools.tool import Tool, ToolArgument
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
 
 MAX_LINE_LENGTH = 120  # Maximum length for each line before truncation
 
@@ -61,6 +58,30 @@ class RipgrepTool(Tool):
 
     model_config = {"extra": "allow"}
 
+    def _load_gitignore_spec(self, path: Path) -> PathSpec:
+        """Load .gitignore patterns from directory and all parent directories."""
+        from pathspec import PathSpec
+        from pathspec.patterns import GitWildMatchPattern
+        
+        ignore_patterns = []
+        current = path.absolute()
+        
+        # Traverse up the directory tree
+        while current != current.parent:  # Stop at root
+            gitignore_path = current / ".gitignore"
+            if gitignore_path.exists():
+                with open(gitignore_path) as f:
+                    # Filter out empty lines and comments
+                    patterns = [
+                        line.strip() 
+                        for line in f.readlines() 
+                        if line.strip() and not line.startswith('#')
+                    ]
+                    ignore_patterns.extend(patterns)
+            current = current.parent
+
+        return PathSpec.from_lines(GitWildMatchPattern, ignore_patterns)
+
     def execute(
         self,
         cwd: Optional[str] = None,
@@ -98,6 +119,9 @@ class RipgrepTool(Tool):
         if not rg_path:
             raise RuntimeError("Could not find ripgrep binary.")
 
+        # Load .gitignore patterns
+        gitignore_spec = self._load_gitignore_spec(Path(directory_path))
+
         args = [
             "--json",  # Output in JSON format for easier parsing
             "-e",
@@ -109,8 +133,18 @@ class RipgrepTool(Tool):
             directory_path,  # Directory to search in
         ]
 
+        # Find files matching the pattern
+        files = list(Path(directory_path).rglob(file_pattern))
+        filtered_files = [str(f) for f in files 
+                         if f.is_file() and not gitignore_spec.match_file(f)]
+
+        if not filtered_files:
+            return "No files matching the pattern (after .gitignore filtering)"
+
         try:
             logger.info(f"Executing ripgrep with args: {args}")
+            # Add filtered files to ripgrep command
+            args.extend(filtered_files)
             output = subprocess.check_output([rg_path] + args, text=True, cwd=cwd)
         except subprocess.CalledProcessError as e:
             if e.returncode == 1:
