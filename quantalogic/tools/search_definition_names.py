@@ -198,37 +198,43 @@ class SearchDefinitionNames(Tool):
         name_node = node.child_by_field_name('name')
         if name_node and name_node.type == 'identifier':
             definition_name = name_node.text.decode('utf-8')
-            line_number = name_node.start_point[0] + 1
+            start_line = node.start_point[0] + 1
+            end_line = node.end_point[0] + 1
             
             # Extract function signature
             parameters_node = node.child_by_field_name('parameters')
             if parameters_node:
                 signature = f"{definition_name}{parameters_node.text.decode('utf-8')}"
-                definitions.append((signature, line_number))
+                definitions.append((signature, start_line, end_line))
             else:
-                definitions.append((definition_name, line_number))
+                definitions.append((definition_name, start_line, end_line))
 
-    def _process_class(self, node) -> str:
+    def _process_class(self, node) -> tuple:
         """Process a class definition node.
         
         Args:
             node: The class definition node.
             
         Returns:
-            str: The class name.
+            tuple: (class_name, start_line, end_line)
         """
         name_node = node.child_by_field_name('name')
         if name_node and name_node.type == 'identifier':
-            return name_node.text.decode('utf-8')
-        return ""
+            return (
+                name_node.text.decode('utf-8'),
+                node.start_point[0] + 1,
+                node.end_point[0] + 1
+            )
+        return ("", 0, 0)
 
     def _process_method(self, node, definitions):
         """Process a method definition node."""
         name_node = node.child_by_field_name('name')
         if name_node and name_node.type == 'identifier':
             definition_name = name_node.text.decode('utf-8')
-            line_number = name_node.start_point[0] + 1
-            definitions.append((definition_name, line_number))
+            start_line = node.start_point[0] + 1
+            end_line = node.end_point[0] + 1
+            definitions.append((definition_name, start_line, end_line))
 
     def _process_class_variable(self, node, definitions):
         """Process a class variable definition node."""
@@ -270,15 +276,28 @@ class SearchDefinitionNames(Tool):
                 file_result = {
                     'file_path': result['file_path'],
                     'classes': [],
-                    'functions': result['definitions']['functions']
+                    'functions': [{
+                        'name': name,
+                        'start_line': start,
+                        'end_line': end
+                    } for name, start, end in result['definitions']['functions']]
                 }
 
                 for class_name, class_info in result['definitions']['classes'].items():
                     class_data = {
                         'name': class_name,
-                        'line': class_info['line'],
-                        'methods': class_info['methods'],
-                        'variables': class_info['variables']
+                        'start_line': class_info['line'][0],
+                        'end_line': class_info['line'][1],
+                        'methods': [{
+                            'name': name,
+                            'start_line': start,
+                            'end_line': end
+                        } for name, start, end in class_info['methods']],
+                        'variables': [{
+                            'name': name,
+                            'start_line': start,
+                            'end_line': end
+                        } for name, start, end in class_info['variables']]
                     }
                     file_result['classes'].append(class_data)
 
@@ -298,23 +317,23 @@ class SearchDefinitionNames(Tool):
                 # Add standalone functions
                 if result['definitions']['functions']:
                     markdown += "### Functions\n"
-                    for func, line in result['definitions']['functions']:
-                        markdown += f"- `{func}` (line {line})\n"
+                    for func, start, end in result['definitions']['functions']:
+                        markdown += f"- `{func}` (lines {start}-{end})\n"
                     markdown += "\n"
 
                 # Add classes with their methods and variables
                 for class_name, class_info in result['definitions']['classes'].items():
-                    markdown += f"### Class: {class_name} (line {class_info['line']})\n"
+                    markdown += f"### Class: {class_name} (lines {class_info['line'][0]}-{class_info['line'][1]})\n"
 
                     if class_info['methods']:
                         markdown += "#### Methods\n"
-                        for method, line in class_info['methods']:
-                            markdown += f"- `{method}` (line {line})\n"
+                        for method, start, end in class_info['methods']:
+                            markdown += f"- `{method}` (lines {start}-{end})\n"
 
                     if class_info['variables']:
                         markdown += "#### Variables\n"
-                        for var, line in class_info['variables']:
-                            markdown += f"- `{var}` (line {line})\n"
+                        for var, start, end in class_info['variables']:
+                            markdown += f"- `{var}` (lines {start}-{end})\n"
 
                     markdown += "\n"
 
@@ -335,23 +354,23 @@ class SearchDefinitionNames(Tool):
                 # Add standalone functions
                 if result['definitions']['functions']:
                     text += "Functions:\n"
-                    for func, line in result['definitions']['functions']:
-                        text += f"  - {func} (line {line})\n"
+                    for func, start, end in result['definitions']['functions']:
+                        text += f"  - {func} (lines {start}-{end})\n"
                     text += "\n"
 
                 # Add classes with their methods and variables
                 for class_name, class_info in result['definitions']['classes'].items():
-                    text += f"Class: {class_name} (line {class_info['line']})\n"
+                    text += f"Class: {class_name} (lines {class_info['line'][0]}-{class_info['line'][1]})\n"
 
                     if class_info['methods']:
                         text += "  Methods:\n"
-                        for method, line in class_info['methods']:
-                            text += f"    - {method} (line {line})\n"
+                        for method, start, end in class_info['methods']:
+                            text += f"    - {method} (lines {start}-{end})\n"
 
                     if class_info['variables']:
                         text += "  Variables:\n"
-                        for var, line in class_info['variables']:
-                            text += f"    - {var} (line {line})\n"
+                        for var, start, end in class_info['variables']:
+                            text += f"    - {var} (lines {start}-{end})\n"
 
                     text += "\n"
 
@@ -384,6 +403,15 @@ if __name__ == "__main__":
         directory_path="./quantalogic",
         language_name="python",
         file_pattern="**/*.py",
+        output_format="markdown"
+    )
+    print(result_markdown)
+
+
+    result_markdown = tool.execute(
+        directory_path="./quantalogic",
+        language_name="javascript",
+        file_pattern="**/*.js",
         output_format="markdown"
     )
     print(result_markdown)

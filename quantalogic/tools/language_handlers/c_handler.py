@@ -24,7 +24,7 @@ class CLanguageHandler:
         elif node.type == 'struct_specifier':
             class_name = process_class(node)
             definitions['classes'][class_name] = {
-                'line': node.start_point[0] + 1,
+                'line': (node.start_point[0] + 1, node.end_point[0] + 1),
                 'methods': [],
                 'variables': []
             }

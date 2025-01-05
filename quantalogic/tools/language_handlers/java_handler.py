@@ -24,7 +24,7 @@ class JavaLanguageHandler:
         elif node.type == 'class_declaration':
             class_name = process_class(node)
             definitions['classes'][class_name] = {
-                'line': node.start_point[0] + 1,
+                'line': (node.start_point[0] + 1, node.end_point[0] + 1),
                 'methods': [],
                 'variables': []
             }

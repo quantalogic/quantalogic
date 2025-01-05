@@ -22,9 +22,9 @@ class PythonLanguageHandler:
                 process_function(node, definitions['functions'])
             return 'function'
         elif node.type == 'class_definition':
-            class_name = process_class(node)
+            class_name, start_line, end_line = process_class(node)
             definitions['classes'][class_name] = {
-                'line': node.start_point[0] + 1,
+                'line': (start_line, end_line),
                 'methods': [],
                 'variables': []
             }
