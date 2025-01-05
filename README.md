@@ -253,6 +253,11 @@ sequenceDiagram
 
 #### Built-in Tools
 
+1. **Agent Tools**
+   - `agent_tool.py`: Core component for creating and managing intelligent agents
+     - Features: Agent initialization, task execution, memory management, tool integration
+     - Usage: See [Agent Tool Documentation](#agent-tool-documentation)
+
 1. **Code Execution Tools**
    - `PythonTool`: Execute Python code in Docker
    - `NodeJsTool`: Run Node.js/TypeScript code
@@ -297,6 +302,7 @@ class DatabaseTool(Tool):
 ```
 
 ## 🌐 Web Interface
+## 🌐 Web Interface
 
 Features:
 - Real-time event visualization
@@ -313,6 +319,29 @@ Features:
 | `/tasks/{task_id}` | GET    | Task status     |
 | `/events`          | GET    | SSE endpoint    |
 | `/validate`        | POST   | Task validation |
+
+### New Tools
+
+- `agent_tool.py`
+- `download_http_file_tool.py`
+- `edit_whole_content_tool.py`
+- `elixir_tool.py`
+- `execute_bash_command_tool.py`
+- `input_question_tool.py`
+- `list_directory_tool.py`
+- `llm_tool.py`
+- `markitdown_tool.py`
+- `nodejs_tool.py`
+- `python_tool.py`
+- `read_file_block_tool.py`
+- `read_file_tool.py`
+- `replace_in_file_tool.py`
+- `ripgrep_tool.py`
+- `search_definition_names.py`
+- `task_complete_tool.py`
+- `tool.py`
+- `unified_diff_tool.py`
+- `write_file_tool.py`
 
 ## 📖 Examples
 
