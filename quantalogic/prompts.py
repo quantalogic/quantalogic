@@ -60,6 +60,7 @@ Be very concise and precise in the <thinking> block
   <next_steps>
     * Outline immediate actions required.
     * Justify tool selection and parameter choices.
+    * Think about variable interpolation to minimize generation of tokens.
     * Consider alternatives if previous attempts were unsuccessful.
   </next_steps>
   <taskpad>
