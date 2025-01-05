@@ -287,78 +287,27 @@ class Agent(BaseModel):
             ObserveResponseResult: A result indicating if the task is done and the next prompt.
         """
         try:
-            xml_parser = ToleranceXMLParser()
-            tool_names = self.tools.tool_names()
-            executed_tool = ""
-
-            # Extract tool usage from the response
-            parsed_content = xml_parser.extract_elements(text=content, element_names=tool_names)
+            parsed_content = self._parse_tool_usage(content)
+            if not parsed_content:
+                return self._handle_no_tool_usage()
 
             for tool_name, tool_input in parsed_content.items():
                 tool = self.tools.get(tool_name)
                 if not tool:
-                    logger.warning(f"Tool '{tool_name}' not found in tool manager.")
-                    return ObserveResponseResult(
-                        next_prompt=f"Error: Tool '{tool_name}' not found in tool manager.",
-                        executed_tool="",
-                        answer=None,
-                    )
+                    return self._handle_tool_not_found(tool_name)
 
-                tool_parser = ToolParser(tool=tool)
-                arguments_with_values: dict[str, str] = tool_parser.parse(tool_input)
-
-                # Check for consecutive identical tool calls
-                current_call = {
-                    "tool_name": tool_name,
-                    "arguments": arguments_with_values,
-                    "timestamp": datetime.now().isoformat(),
-                }
-
-                is_repeated_call = (
-                    self.last_tool_call.get("tool_name") == current_call["tool_name"]
-                    and self.last_tool_call.get("arguments") == current_call["arguments"]
-                )
-
-                error_message = ""
+                arguments_with_values = self._parse_tool_arguments(tool, tool_input)
+                is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
 
                 if is_repeated_call:
-                    repeat_count = self.last_tool_call.get("count", 0) + 1
-                    if repeat_count >= 2:
-                        error_message = (
-                            "Error: Detected repeated identical tool call pattern.\n"
-                            f"Tool: {tool_name}\n"
-                            f"Arguments: {arguments_with_values}\n"
-                            f"Repeated {repeat_count} times\n\n"
-                            "PLEASE:\n"
-                            "1. Review your previous steps\n"
-                            "2. Consider a different approach\n"
-                            "3. Use a different tool or modify the arguments\n"
-                            "4. Ensure you're making progress towards the goal"
-                        )
+                    return self._handle_repeated_tool_call(tool_name, arguments_with_values)
 
-                    # Update repeat count
-                    current_call["count"] = repeat_count
-                else:
-                    current_call["count"] = 1
-
-                # Execute tool and store current call as last call
                 executed_tool, response = self._execute_tool(tool_name, tool, arguments_with_values)
-                self.last_tool_call = current_call
-
                 if not executed_tool:
-                    return ObserveResponseResult(
-                        next_prompt=response + "\n" + error_message,
-                        executed_tool="",
-                        answer=None,
-                    )
+                    return self._handle_tool_execution_failure(response)
 
-                # Store the response in variable memory
                 variable_name = self.variable_store.add(response)
-
-                # Format the response
-                new_prompt = self._format_observation_response(
-                    response=response, variable_name=variable_name, iteration=iteration
-                )
+                new_prompt = self._format_observation_response(response, variable_name, iteration)
 
                 return ObserveResponseResult(
                     next_prompt=new_prompt,
@@ -366,18 +315,114 @@ class Agent(BaseModel):
                     answer=response if executed_tool == "task_complete" else None,
                 )
 
-            # No tool usage found
-            return ObserveResponseResult(
-                next_prompt="Error: No tool usage found in response.", executed_tool=None, answer=None
+        except Exception as e:
+            return self._handle_error(e)
+
+    def _parse_tool_usage(self, content: str) -> dict:
+        """Extract tool usage from the response content."""
+        xml_parser = ToleranceXMLParser()
+        tool_names = self.tools.tool_names()
+        return xml_parser.extract_elements(text=content, element_names=tool_names)
+
+    def _parse_tool_arguments(self, tool, tool_input: str) -> dict:
+        """Parse the tool arguments from the tool input."""
+        tool_parser = ToolParser(tool=tool)
+        return tool_parser.parse(tool_input)
+
+    def _is_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> bool:
+        """Check if the tool call is repeated."""
+        current_call = {
+            "tool_name": tool_name,
+            "arguments": arguments_with_values,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        is_repeated_call = (
+            self.last_tool_call.get("tool_name") == current_call["tool_name"]
+            and self.last_tool_call.get("arguments") == current_call["arguments"]
+        )
+
+        if is_repeated_call:
+            repeat_count = self.last_tool_call.get("count", 0) + 1
+            current_call["count"] = repeat_count
+        else:
+            current_call["count"] = 1
+
+        self.last_tool_call = current_call
+        return is_repeated_call and repeat_count >= 2
+
+    def _handle_no_tool_usage(self) -> ObserveResponseResult:
+        """Handle the case where no tool usage is found in the response."""
+        return ObserveResponseResult(
+            next_prompt="Error: No tool usage found in response.", executed_tool=None, answer=None
+        )
+
+    def _handle_tool_not_found(self, tool_name: str) -> ObserveResponseResult:
+        """Handle the case where the tool is not found."""
+        logger.warning(f"Tool '{tool_name}' not found in tool manager.")
+        return ObserveResponseResult(
+            next_prompt=f"Error: Tool '{tool_name}' not found in tool manager.",
+            executed_tool="",
+            answer=None,
+        )
+
+    def _handle_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> ObserveResponseResult:
+        """Handle the case where a tool call is repeated."""
+        repeat_count = self.last_tool_call.get("count", 0)
+        error_message = (
+            "Error: Detected repeated identical tool call pattern.\n"
+            f"Tool: {tool_name}\n"
+            f"Arguments: {arguments_with_values}\n"
+            f"Repeated {repeat_count} times\n\n"
+            "PLEASE:\n"
+            "1. Review your previous steps\n"
+            "2. Consider a different approach\n"
+            "3. Use a different tool or modify the arguments\n"
+            "4. Ensure you're making progress towards the goal"
+        )
+        return ObserveResponseResult(
+            next_prompt=error_message,
+            executed_tool="",
+            answer=None,
+        )
+
+    def _handle_tool_execution_failure(self, response: str) -> ObserveResponseResult:
+        """Handle the case where tool execution fails."""
+        return ObserveResponseResult(
+            next_prompt=response,
+            executed_tool="",
+            answer=None,
+        )
+
+    def _handle_error(self, error: Exception) -> ObserveResponseResult:
+        """Handle any exceptions that occur during response observation."""
+        logger.error(f"Error in _observe_response: {str(error)}")
+        return ObserveResponseResult(
+            next_prompt=f"An error occurred while processing the response: {str(error)}",
+            executed_tool=None,
+            answer=None,
+        )
+
+    def _format_observation_response(self, response: str, variable_name: str, iteration: int) -> str:
+        """Format the observation response with the given response, variable name, and iteration."""
+        response_display = response
+        if len(response) > MAX_RESPONSE_LENGTH:
+            response_display = response[:MAX_RESPONSE_LENGTH]
+            response_display += (
+                f"... content was truncated. Full content available by interpolation in variable {variable_name}"
             )
 
-        except Exception as e:
-            logger.error(f"Error in _observe_response: {str(e)}")
-            return ObserveResponseResult(
-                next_prompt=f"An error occurred while processing the response: {str(e)}",
-                executed_tool=None,
-                answer=None,
-            )
+        formatted_response = (
+            "\n"
+            f"--- Observations for iteration {iteration} ---\n"
+            "\n"
+            f"\n --- Tool execution result stored in variable ${variable_name}$ --- \n"
+            "\n"
+            f"<{variable_name}>\n{response_display}\n</{variable_name}>\n" + "\n"
+            "\n"
+            "--- Tools --- \n"
+        )
+        return formatted_response
 
     def _format_observation_response(self, response: str, variable_name: str, iteration: int) -> str:
         """Format the observation response with the given response, variable name, and iteration."""
