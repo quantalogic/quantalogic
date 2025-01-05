@@ -36,7 +36,7 @@ class RipgrepTool(Tool):
             required=True,
         ),
         ToolArgument(
-            name="regex",
+            name="regex_rust_syntax",
             type="string",
             description="The regex pattern to search for (Regex must be in Rust syntax).",
             required=True,
