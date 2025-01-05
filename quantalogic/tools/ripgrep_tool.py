@@ -38,7 +38,7 @@ class RipgrepTool(Tool):
         ToolArgument(
             name="regex",
             type="string",
-            description="The regex pattern to search for (Rust syntax).",
+            description="The regex pattern to search for (Regex must be in Rust syntax).",
             required=True,
         ),
         ToolArgument(
@@ -113,7 +113,9 @@ class RipgrepTool(Tool):
         except subprocess.CalledProcessError as e:
             if e.returncode == 1:
                 return "No results found."
-            raise RuntimeError(f"Ripgrep process error: {e}")
+            elif e.returncode == 2:
+                return f"Invalid regex pattern: {regex}"
+            raise RuntimeError(f"Ripgrep process error (code {e.returncode}): {e}")
 
         results = self._parse_rg_output(output, cwd)
         return self._format_results(results, cwd)
