@@ -1,4 +1,27 @@
-Write a note taking application in TypeScript using Vite in demo01/ directory
+# Note Taking Application Specification
+
+## Overview
+Develop a note-taking application using TypeScript and Vite, located in the `demo01/` directory. The application will allow users to create, edit, delete, and organize notes.
+
+## Features
+1. **User Authentication**: Implement user accounts for personal note storage.
+2. **Create Notes**: Users can create new notes with a title and content.
+3. **Edit Notes**: Users can edit existing notes.
+4. **Delete Notes**: Users can delete notes they no longer need.
+5. **Organize Notes**: Users can categorize notes with tags or folders.
+6. **Search Functionality**: Users can search for notes by title or content.
+7. **Responsive Design**: Ensure the application works on both desktop and mobile devices.
+
+## Tech Stack
+- **Frontend**: TypeScript, React (or any other chosen framework)
+- **Backend**: Node.js (if applicable)
+- **Database**: (Optional) A lightweight database like SQLite or an in-memory solution for demo purposes.
+- **Build Tool**: Vite for fast development and build processes.
+
+## Development Guidelines
+- Follow TypeScript best practices.
+- Ensure code is modular and maintainable.
+- Write unit tests for critical components.
 
 # TypeScript Code Rules & Standards
 
