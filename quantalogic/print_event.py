@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich.tree import Tree
 
 
-def print_events(event: str, data: dict[str, any] = None):
+def console_print_events(event: str, data: dict[str, any] = None):
     """Print events with rich formatting.
 
     Args:

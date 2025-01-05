@@ -122,8 +122,6 @@ class GenerativeModel:
                 total_tokens=response.usage.total_tokens,
             )
 
-            print(response.usage)
-
             return ResponseStats(
                 response=response.choices[0].message.content,
                 usage=token_usage,
@@ -216,7 +214,12 @@ class GenerativeModel:
         """Get the maximum number of output tokens for the model."""
         try:
             model_info = self.get_model_info()
-            return model_info.get("max_output_tokens") if model_info else None
+            if model_info:
+                return model_info.get("max_output_tokens")
+            
+            # Fallback for unmapped models
+            logger.warning(f"No max output tokens found for {self.model}. Using default.")
+            return 4096  # A reasonable default for many chat models
         except Exception as e:
             logger.error(f"Error getting max output tokens for {self.model}: {e}")
             return None

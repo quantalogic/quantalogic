@@ -4,30 +4,21 @@
 # Standard library imports
 import argparse
 import sys
-import warnings
-
-# Suppress specific warnings related to Pydantic's V2 configuration changes
-warnings.filterwarnings(
-    "ignore",
-    category=UserWarning,
-    module="pydantic.*",
-    message=".*config keys have changed in V2:.*|.*'fields' config key is removed in V2.*",
-)
 
 # Third-party imports
-from rich.console import Console  # noqa: E402
-from rich.panel import Panel  # noqa: E402
-from rich.prompt import Confirm  # noqa: E402
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Confirm
 
 # Local application imports
-from quantalogic.agent_config import (  # noqa: E402
+from quantalogic.agent_config import (
     MODEL_NAME,
     create_agent,
     create_coding_agent,  # noqa: F401
     create_orchestrator_agent,  # noqa: F401
 )
-from quantalogic.interactive_text_editor import get_multiline_input  # noqa: E402
-from quantalogic.print_event import print_events  # noqa: E402
+from quantalogic.interactive_text_editor import get_multiline_input
+from quantalogic.print_event import console_print_events
 
 main_agent = create_agent(MODEL_NAME)
 
@@ -43,7 +34,7 @@ main_agent.event_emitter.on(
         "memory_compacted",
         "memory_summary",
     ],
-    print_events,
+    console_print_events,
 )
 
 

@@ -30,7 +30,7 @@ from quantalogic.agent_config import (
     create_coding_agent,  # noqa: F401
     create_orchestrator_agent,  # noqa: F401
 )
-from quantalogic.print_event import print_events
+from quantalogic.print_event import console_print_events
 
 # Configure logger
 logger.remove()
@@ -315,7 +315,7 @@ class AgentState:
         """Enhanced event handling with rich console output."""
         try:
             # Print events to server console
-            print_events(event_type, data)
+            console_print_events(event_type, data)
 
             # Log event details
             logger.info(f"Agent Event: {event_type}")
