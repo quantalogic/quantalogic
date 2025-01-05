@@ -35,7 +35,7 @@ class AgentTool(Tool):
     arguments: list[ToolArgument] = Field(default_factory=lambda: [
         ToolArgument(
             name="task",
-            type="string",
+            arg_type="string",
             description="The task to delegate to the specified agent.",
             required=True,
             example="Summarize the latest news.",

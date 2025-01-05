@@ -14,14 +14,14 @@ class WriteFileTool(Tool):
     arguments: list = [
         ToolArgument(
             name="file_path",
-            type="string",
+            arg_type="string",
             description="The path to the file to write. Using an absolute path is recommended.",
             required=True,
             example="/path/to/file.txt",
         ),
         ToolArgument(
             name="content",
-            type="string",
+            arg_type="string",
             description="""
             The content to write to the file. Use CDATA to escape special characters.
             Don't add newlines at the beginning or end of the content.
@@ -31,7 +31,7 @@ class WriteFileTool(Tool):
         ),
         ToolArgument(
             name="append_mode",
-            type="string",
+            arg_type="string",
             description="""Append mode. If true, the content will be appended to the end of the file.
             """,
             required=False,
@@ -39,7 +39,7 @@ class WriteFileTool(Tool):
         ),
         ToolArgument(
             name="overwrite",
-            type="string",
+            arg_type="string",
             description="Overwrite mode. If true, existing files can be overwritten. Defaults to False.",
             required=False,
             example="False",

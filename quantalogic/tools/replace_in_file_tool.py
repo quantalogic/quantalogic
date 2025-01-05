@@ -71,7 +71,7 @@ class ReplaceInFileTool(Tool):
     arguments: list[ToolArgument] = [
         ToolArgument(
             name="path",
-            type="string",
+            arg_type="string",
             description=(
                 "The path of the file to modify (relative to the current working "
                 "directory). Using an absolute path is recommended."
@@ -81,7 +81,7 @@ class ReplaceInFileTool(Tool):
         ),
         ToolArgument(
             name="diff",
-            type="string",
+            arg_type="string",
             description=(
                 "Define one or more SEARCH/REPLACE blocks to specify the exact changes to be made in the code. "
                 "Each block must follow this precise format:\n"

@@ -11,7 +11,7 @@ class TaskCompleteTool(Tool):
     arguments: list = [
         ToolArgument(
             name="answer",
-            type="string",
+            arg_type="string",
             description="The answer to the user. Use interpolation if possible example $var1$.",
             required=True,
             example="The answer to the meaning of life",

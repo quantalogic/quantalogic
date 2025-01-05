@@ -29,21 +29,21 @@ class LLMTool(Tool):
         default=[
             ToolArgument(
                 name="system_prompt",
-                type="string",
+                arg_type="string",
                 description=("The persona or system prompt to guide the language model's behavior. "),
                 required=True,
                 example=("You are an expert in natural language processing and machine learning. "),
             ),
             ToolArgument(
                 name="prompt",
-                type="string",
+                arg_type="string",
                 description=("The question to ask the language model. Use interpolation if possible example $var1$."),
                 required=True,
                 example="What is the meaning of $var1$ ?",
             ),
             ToolArgument(
                 name="temperature",
-                type="string",
+                arg_type="string",
                 description='Sampling temperature between "0.0" and "1.0": "0.0" no creativity, "1.0" full creativity. (float)',
                 required=True,
                 default="0.5",

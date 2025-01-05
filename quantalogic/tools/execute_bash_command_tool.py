@@ -16,21 +16,21 @@ class ExecuteBashCommandTool(Tool):
     arguments: list = [
         ToolArgument(
             name="command",
-            type="string",
+            arg_type="string",
             description="The bash command to execute.",
             required=True,
             example="ls -la",
         ),
         ToolArgument(
             name="working_dir",
-            type="string",
+            arg_type="string",
             description="The working directory where the command will be executed. Defaults to the current directory.",
             required=False,
             example="/path/to/directory",
         ),
         ToolArgument(
             name="timeout",
-            type="int",
+            arg_type="int",
             description="Maximum time in seconds to wait for the command to complete. Defaults to 60 seconds.",
             required=False,
             example="60",

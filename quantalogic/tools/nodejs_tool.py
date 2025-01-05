@@ -44,7 +44,7 @@ class NodeJsTool(Tool):
     arguments: list[ToolArgument] = [
         ToolArgument(
             name="install_commands",
-            type="string",
+            arg_type="string",
             description=(
                 "Commands to install Node.js packages before running the script. "
                 "Use one command per line or separate packages with spaces."
@@ -54,7 +54,7 @@ class NodeJsTool(Tool):
         ),
         ToolArgument(
             name="script",
-            type="string",
+            arg_type="string",
             description=(
                 "The Node.js script to execute. The script must print to the console. "
                 "Use import statements for ESM or require statements for CommonJS."
@@ -64,7 +64,7 @@ class NodeJsTool(Tool):
         ),
         ToolArgument(
             name="version",
-            type="string",
+            arg_type="string",
             description=(
                 "The Node.js version to use in the Docker container. "
                 "For example:  '18', '20', 'lts'."
@@ -75,7 +75,7 @@ class NodeJsTool(Tool):
         ),
         ToolArgument(
             name="host_dir",
-            type="string",
+            arg_type="string",
             description=(
                 "The absolute path on the host machine to mount for file access. "
                 "Provide this path if you want to access files on the host."
@@ -86,7 +86,7 @@ class NodeJsTool(Tool):
         ),
         ToolArgument(
             name="memory_limit",
-            type="string",
+            arg_type="string",
             description=(
                 "Optional memory limit for the Docker container (e.g., '512m', '2g'). "
                 "If not specified, Docker's default memory limit applies."
@@ -97,7 +97,7 @@ class NodeJsTool(Tool):
         ),
         ToolArgument(
             name="environment_vars",
-            type="string",
+            arg_type="string",
             description=(
                 "Environment variables to set inside the Docker container. "
                 "Provide as KEY=VALUE pairs separated by spaces."
@@ -109,7 +109,7 @@ class NodeJsTool(Tool):
         # New Argument for Module Type
         ToolArgument(
             name="module_type",
-            type="string",
+            arg_type="string",
             description=(
                 "The module system to use: 'esm' for ECMAScript Modules or 'commonjs' for CommonJS."
             ),

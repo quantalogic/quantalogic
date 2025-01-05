@@ -14,14 +14,14 @@ class ListDirectoryTool(Tool):
     arguments: list[ToolArgument] = [
         ToolArgument(
             name="directory_path",
-            type="string",
+            arg_type="string",
             description="Absolute or relative path to target directory",
             required=True,
             example="~/documents/projects",
         ),
         ToolArgument(
             name="recursive",
-            type="string",
+            arg_type="string",
             description="Enable recursive traversal (true/false)",
             required=False,
             default="false",
@@ -29,7 +29,7 @@ class ListDirectoryTool(Tool):
         ),
         ToolArgument(
             name="max_depth",
-            type="int",
+            arg_type="int",
             description="Maximum directory traversal depth",
             required=False,
             default="1",
@@ -37,7 +37,7 @@ class ListDirectoryTool(Tool):
         ),
         ToolArgument(
             name="start_line",
-            type="int",
+            arg_type="int",
             description="First line to return in paginated results",
             required=False,
             default="1",
@@ -45,7 +45,7 @@ class ListDirectoryTool(Tool):
         ),
         ToolArgument(
             name="end_line",
-            type="int",
+            arg_type="int",
             description="Last line to return in paginated results",
             required=False,
             default="200",

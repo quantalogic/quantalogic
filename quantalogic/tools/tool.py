@@ -4,7 +4,7 @@ This module provides base classes and data models for creating configurable tool
 with type-validated arguments and execution methods.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -14,7 +14,7 @@ class ToolArgument(BaseModel):
 
     Attributes:
         name: The name of the argument.
-        type: The type of the argument (string or integer).
+        arg_type: The type of the argument (integer, float, boolean).
         description: Optional description of the argument.
         required: Indicates if the argument is mandatory.
         default: Optional default value for the argument.
@@ -22,7 +22,10 @@ class ToolArgument(BaseModel):
     """
 
     name: str = Field(..., description="The name of the argument.")
-    type: str = Field(..., description="The type of the argument (e.g., string or integer).", pattern="^(string|int)$")
+    arg_type: Literal["string", "int", "float", "boolean"] = Field(
+        ...,
+        description="The type of the argument. Must be one of: string, integer, float, boolean."
+    )
     description: str | None = Field(None, description="A brief description of the argument.")
     required: bool = Field(default=False, description="Indicates if the argument is required.")
     default: str | None = Field(None, description="The default value for the argument.")
@@ -119,7 +122,12 @@ class Tool(ToolDefinition):
             A list of validated ToolArgument instances.
         """
         if isinstance(v, list):
-            return [ToolArgument(**arg) if isinstance(arg, dict) else arg for arg in v]
+            return [
+                ToolArgument(**arg) if isinstance(arg, dict)
+                else arg if isinstance(arg, ToolArgument)
+                else ToolArgument(name=str(arg), type=type(arg).__name__)
+                for arg in v
+            ]
         return []
 
     def execute(self, **kwargs) -> str:

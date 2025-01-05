@@ -48,7 +48,7 @@ class PythonTool(Tool):
     arguments: list[ToolArgument] = [
         ToolArgument(
             name="install_commands",
-            type="string",
+            arg_type="string",
             description=(
                 "Commands to install Python packages before running the script. "
                 "Use one command per line or separate packages with spaces."
@@ -58,7 +58,7 @@ class PythonTool(Tool):
         ),
         ToolArgument(
             name="script",
-            type="string",
+            arg_type="string",
             description=(
             "The Python script to execute." 
             "The script must use /usr/src/host_data/ as the working directory."
@@ -69,7 +69,7 @@ class PythonTool(Tool):
         ),
         ToolArgument(
             name="version",
-            type="string",
+            arg_type="string",
             description=(
                 "The Python version to use in the Docker container. "
                 "For example: '3.11', '3.12'."
@@ -80,7 +80,7 @@ class PythonTool(Tool):
         ),
         ToolArgument(
             name="host_dir",
-            type="string",
+            arg_type="string",
             description=(
                 "The absolute path on the host machine to mount for file access. "
                 "Provide this path if you want to access files on the host of the user."
@@ -91,7 +91,7 @@ class PythonTool(Tool):
         ),
         ToolArgument(
             name="memory_limit",
-            type="string",
+            arg_type="string",
             description=(
                 "Optional memory limit for the Docker container (e.g., '512m', '2g'). "
                 "If not specified, Docker's default memory limit applies."
@@ -102,7 +102,7 @@ class PythonTool(Tool):
         ),
         ToolArgument(
             name="environment_vars",
-            type="string",
+            arg_type="string",
             description=(
                 "Environment variables to set inside the Docker container. "
                 "Provide as KEY=VALUE pairs separated by spaces."

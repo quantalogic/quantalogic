@@ -14,14 +14,14 @@ class EditWholeContentTool(Tool):
     arguments: list = [
         ToolArgument(
             name="file_path",
-            type="string",
+            arg_type="string",
             description="The path to the file to edit. Using an absolute path is recommended.",
             required=True,
             example="/path/to/file.txt",
         ),
         ToolArgument(
             name="content",
-            type="string",
+            arg_type="string",
             description="""
             The content to write to the file. Use CDATA to escape special characters.
             Don't add newlines at the beginning or end of the content.

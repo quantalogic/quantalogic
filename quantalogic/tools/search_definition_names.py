@@ -44,21 +44,21 @@ class SearchDefinitionNames(Tool):
     arguments: list = [
         ToolArgument(
             name="directory_path",
-            type="string",
+            arg_type="string",
             description="The path to the directory to search in.",
             required=True,
             example="./path/to",
         ),
         ToolArgument(
             name="language_name",
-            type="string",
+            arg_type="string",
             description="The Tree-sitter language name (python, javascript, typescript, java, scala, go, rust, c, cpp).",
             required=True,
             example="python",
         ),
         ToolArgument(
             name="file_pattern",
-            type="string",
+            arg_type="string",
             description="Optional glob pattern to filter files (default: '*').",
             required=False,
             example="**/*.py",

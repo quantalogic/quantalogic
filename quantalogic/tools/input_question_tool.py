@@ -14,14 +14,14 @@ class InputQuestionTool(Tool):
     arguments: list = [
         ToolArgument(
             name="question",
-            type="string",
+            arg_type="string",
             description="The question to ask the user.",
             required=True,
             example="What is your favorite color?",
         ),
         ToolArgument(
             name="default",
-            type="string",
+            arg_type="string",
             description="Optional default value if no input is provided.",
             required=False,
             example="blue",

@@ -18,7 +18,7 @@ class ReadFileTool(Tool):
     arguments: list = [
         ToolArgument(
             name="file_path",
-            type="string",
+            arg_type="string",
             description="The path to the file or URL to read.",
             required=True,
             example="/path/to/file.txt or https://example.com/data.txt",

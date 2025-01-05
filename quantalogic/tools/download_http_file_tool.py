@@ -13,14 +13,14 @@ class DownloadHttpFileTool(Tool):
     arguments: list = [
         ToolArgument(
             name="url",
-            type="string",
+            arg_type="string",
             description="The URL of the file to download.",
             required=True,
             example="https://example.com/data.txt",
         ),
         ToolArgument(
             name="output_path",
-            type="string",
+            arg_type="string",
             description="The local path where the downloaded file will be saved.",
             required=True,
             example="/path/to/save/data.txt",

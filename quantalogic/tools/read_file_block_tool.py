@@ -20,21 +20,21 @@ class ReadFileBlockTool(Tool):
     arguments: list = [
         ToolArgument(
             name="file_path",
-            type="string",
+            arg_type="string",
             description="The path to the file to read.",
             required=True,
             example="/path/to/file.txt",
         ),
         ToolArgument(
             name="line_start",
-            type="int",
+            arg_type="int",
             description="The starting line number (1-based index).",
             required=True,
             example="10",
         ),
         ToolArgument(
             name="line_end",
-            type="int",
+            arg_type="int",
             description="The ending line number (1-based index).",
             required=True,
             example="200",

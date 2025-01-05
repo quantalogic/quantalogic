@@ -23,33 +23,33 @@ class RipgrepTool(Tool):
     arguments: list = [
         ToolArgument(
             name="cwd",
-            type="string",
+            arg_type="string",
             description="Base path for relative searches",
             required=False,
             default=None,
         ),
         ToolArgument(
             name="directory_path",
-            type="string",
+            arg_type="string",
             description="The directory path to search in.",
             required=True,
         ),
         ToolArgument(
             name="regex_rust_syntax",
-            type="string",
+            arg_type="string",
             description="The regex pattern to search for (Regex must be in Rust syntax).",
             required=True,
         ),
         ToolArgument(
             name="file_pattern",
-            type="string",
+            arg_type="string",
             description="Optional glob pattern to filter files.",
             required=False,
             default="**/*",
         ),
         ToolArgument(
             name="context_lines",
-            type="int",
+            arg_type="string",
             description="Number of context lines to include before and after matches.",
             required=True,
             default="4",
@@ -88,7 +88,7 @@ class RipgrepTool(Tool):
         directory_path: str = ".",
         regex_rust_syntax: str = "search",
         file_pattern: str = "**/*",
-        context_lines: int = 1,
+        context_lines: str = "1",
     ) -> str:
         """Execute the ripgrep search and return formatted results.
 
@@ -97,7 +97,7 @@ class RipgrepTool(Tool):
             directory_path (str): The directory path to search in.
             regex_rust_syntax (str): The regex pattern to search for (Rust syntax).
             file_pattern (str): Optional glob pattern to filter files.
-            context_lines (int): Number of context lines to include before and after matches.
+            context_lines (str): Number of context lines to include before and after matches.
 
         Returns:
             str: Formatted search results with context.
@@ -129,7 +129,7 @@ class RipgrepTool(Tool):
             "--glob",
             file_pattern,  # File pattern to filter files
             "--context",
-            str(context_lines),  # Include context lines before and after matches
+            context_lines,  # Include context lines before and after matches
             directory_path,  # Directory to search in
         ]
 
@@ -353,7 +353,7 @@ class RipgrepTool(Tool):
 if __name__ == "__main__":
     try:
         tool = RipgrepTool()
-        print(tool.execute(directory_path=".", regex="search", file_pattern="**/*.py", context_lines=2))
+        print(tool.execute(directory_path=".", regex="search", file_pattern="**/*.py", context_lines="2"))
     except ValidationError as e:
         logger.error(f"Validation error: {e}")
     except RuntimeError as e:

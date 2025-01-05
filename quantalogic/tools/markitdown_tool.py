@@ -21,14 +21,14 @@ class MarkitdownTool(Tool):
     arguments: list = [
         ToolArgument(
             name="file_path",
-            type="string",
+            arg_type="string",
             description="The path to the file to convert. Can be a local path or URL (http://, https://).",
             required=True,
             example="/path/to/file.txt or https://example.com/file.pdf",
         ),
         ToolArgument(
             name="output_file_path",
-            type="string",
+            arg_type="string",
             description="Path to write the Markdown output to. You can use a temp file.",
             required=False,
             example="/path/to/output.md",

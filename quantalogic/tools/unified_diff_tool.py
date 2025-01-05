@@ -298,14 +298,14 @@ class UnifiedDiffTool(Tool):
     arguments: list[ToolArgument] = [
         ToolArgument(
             name="file_path",
-            type="string",
+            arg_type="string",
             description="The path to the file to patch. Using an absolute path is recommended.",
             required=True,
             example="/path/to/file.txt",
         ),
         ToolArgument(
             name="patch",
-            type="string",
+            arg_type="string",
             description="The unified diff patch content in CDATA format.",
             required=True,
             example="<![CDATA[--- a/file.txt\n+++ b/file.txt\n@@ -1,3 +1,4 @@\n Hello, world!\n+New line!]]>",

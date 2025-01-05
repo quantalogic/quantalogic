@@ -21,19 +21,19 @@ class MockTool(Tool):
             arguments=[
                 ToolArgument(
                     name="input",
-                    type="string",
+                    arg_type="string",
                     description="Input argument",
                     required=True
                 ),
                 ToolArgument(
                     name="output",
-                    type="string", 
+                    arg_type="string", 
                     description="Output argument",
                     required=True
                 ),
                 ToolArgument(
                     name="optional",
-                    type="string",
+                    arg_type="string",
                     description="Optional argument",
                     required=False
                 )
