@@ -16,16 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 class RipgrepTool(Tool):
-    """A tool to search for text patterns in files using ripgrep, supporting regex and file pattern filtering."""
+    """Search files using ripgrep with regex and file filters."""
 
     name: str = "ripgrep_search_tool"
-    description: str = "Search for text patterns in files using ripgrep, supporting regex and file pattern filtering."
+    description: str = "Search files using ripgrep with regex and file filters."
 
     arguments: list = [
         ToolArgument(
             name="cwd",
             type="string",
-            description="The current working directory for relative path calculation.",
+            description="Base path for relative searches",
             required=False,
             default=None,
         ),
@@ -52,7 +52,7 @@ class RipgrepTool(Tool):
             name="context_lines",
             type="int",
             description="Number of context lines to include before and after matches.",
-            required=False,
+            required=True,
             default="4",
         ),
     ]

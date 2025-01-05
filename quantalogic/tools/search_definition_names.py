@@ -445,3 +445,14 @@ if __name__ == "__main__":
         output_format="markdown"
     )
     print(result_markdown)
+
+
+    result_markdown = tool.execute(
+        directory_path=".",
+        language_name="javascript",
+        file_pattern="./quantalogic/server/static/js/quantalogic.js",
+        output_format="markdown"
+    )
+    print(result_markdown)
+    
+

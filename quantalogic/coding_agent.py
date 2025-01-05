@@ -1,6 +1,7 @@
 from quantalogic.agent import Agent
 from quantalogic.tools import (
     EditWholeContentTool,
+    ExecuteBashCommandTool,
     ListDirectoryTool,
     LLMTool,
     ReadFileBlockTool,
@@ -68,6 +69,7 @@ def create_coding_agent(model_name: str) -> Agent:
                 name="software_architect",  # Handles system design and architecture questions
             ),
             ReadFileTool(),
+            ExecuteBashCommandTool(),
         ],
         specific_expertise=specific_expertise,
         get_environment=get_coding_environment,
