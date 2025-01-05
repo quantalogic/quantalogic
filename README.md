@@ -169,6 +169,61 @@ QuantaLogic provides an effective implementation of the ReAct framework with sev
 
 ### Workflow of a ReAct Agent
 
+The following state diagram shows the core workflow of a QuantaLogic agent:
+
+```mermaid
+stateDiagram-v2
+    [*] --> InitializeAgent
+    InitializeAgent --> Idle: Agent Initialized
+
+    state Idle {
+        [*] --> WaitForTask
+        WaitForTask --> SolveTask: Task Received
+    }
+
+    state SolveTask {
+        [*] --> ResetSession
+        ResetSession --> AddSystemPrompt
+        AddSystemPrompt --> PreparePrompt
+        PreparePrompt --> EmitTaskStartEvent
+        EmitTaskStartEvent --> UpdateTokens
+        UpdateTokens --> CompactMemoryIfNeeded
+        CompactMemoryIfNeeded --> GenerateResponse
+        GenerateResponse --> ObserveResponse
+        ObserveResponse --> CheckToolExecution
+        CheckToolExecution --> TaskComplete: Tool Executed (task_complete)
+        CheckToolExecution --> UpdatePrompt: Tool Not Executed
+        UpdatePrompt --> UpdateTokens
+        TaskComplete --> EmitTaskCompleteEvent
+        EmitTaskCompleteEvent --> [*]
+    }
+
+    state CompactMemoryIfNeeded {
+        [*] --> CheckMemoryOccupancy
+        CheckMemoryOccupancy --> CompactMemory: Memory Occupancy > MAX_OCCUPANCY
+        CheckMemoryOccupancy --> [*]: Memory Occupancy <= MAX_OCCUPANCY
+        CompactMemory --> [*]
+    }
+
+    state ObserveResponse {
+        [*] --> ProcessResponse
+        ProcessResponse --> ExecuteTool: Tool Identified
+        ProcessResponse --> UpdateAnswer: No Tool Identified
+        ExecuteTool --> UpdateAnswer
+        UpdateAnswer --> [*]
+    }
+
+    state UpdateSessionMemory {
+        [*] --> AddUserMessage
+        AddUserMessage --> AddAssistantMessage
+        AddAssistantMessage --> EmitSessionAddMessageEvent
+        EmitSessionAddMessageEvent --> [*]
+    }
+
+    Idle --> [*]: Task Completed
+    SolveTask --> Idle: Task Completed
+```
+
 The following sequence diagram illustrates the workflow of a ReAct agent as it processes and solves a task:
 
 ```mermaid
