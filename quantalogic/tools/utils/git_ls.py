@@ -96,7 +96,8 @@ def format_tree(tree: Dict, start: int, end: int) -> str:
 
     header = f"==== Lines: {start}-{end} of {total_lines} ===="
     if is_last_block:
-        header += " [LAST BLOCK]"
+        header = f"==== Lines: {start}-{total_lines} of {total_lines} ===="
+        header += f" [LAST BLOCK] (total_lines: {total_lines})"
     return f"{header}\n{output}\n==== End of Block ===="
 
 
