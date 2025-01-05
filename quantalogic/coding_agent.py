@@ -56,16 +56,16 @@ def create_coding_agent(model_name: str) -> Agent:
             RipgrepTool(),  # Searches code with regex
             SearchDefinitionNames(),  # Finds code definitions
             # Specialized language model tools
-            LLMTool(
-                model_name=model_name,
-                system_prompt="You are a software expert, your role is to answer coding questions.",
-                name="coding_consultant",  # Handles implementation-level coding questions
-            ),
-            LLMTool(
-                model_name=model_name,
-                system_prompt="You are a software architect, your role is to answer software architecture questions.",
-                name="software_architect",  # Handles system design and architecture questions
-            ),
+            #LLMTool(
+            #    model_name=model_name,
+            #    system_prompt="You are a software expert, your role is to answer coding questions.",
+            #    name="coding_consultant",  # Handles implementation-level coding questions
+            #),
+            #LLMTool(
+            #    model_name=model_name,
+            #    system_prompt="You are a software architect, your role is to answer software architecture questions.",
+            #    name="software_architect",  # Handles system design and architecture questions
+            #),
             ReadFileTool(),
         ],
         specific_expertise=specific_expertise,
