@@ -17,7 +17,7 @@ class AgentTool(Tool):
     description: str = Field(
         default=("Executes tasks using a specified agent. "
                  "This tool enables an agent to delegate tasks to another agent."
-                 "A delegate agent doesn't have access to the memory of the main agent."
+                 "A delegate agent doesn't have access to the memory and the conversation of the main agent."
                  "Context must be provided by the main agent."
                  "You must use variable interpolation syntax to use the context of the main agent.")
     )
