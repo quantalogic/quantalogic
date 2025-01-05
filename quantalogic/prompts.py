@@ -38,10 +38,21 @@ Be very concise and precise in the <thinking> block
     * Identify required resources, tools, or information.
     * Anticipate possible roadblocks and outline contingency plans.
   </strategic_approach_if_no_history>
+  <last_observation>
+    <!-- if there is a conversation history -->
+    <variable>
+      <name> ... variable name ... </name>
+      <description> ... concise description ... </description>
+    </variable>
+    <result>
+      ... concise description ...
+      How this result help to the progress of the task or the problem?
+    </result>
+  </last_observation>
   <progess_analysis>
-    * Detail each step completed successfully so far.
-    * Identify and evaluate any blockers or challenges.
-    * Provide potential solutions, and if needed, suggest reevaluating the approach.
+    * Detail each step failed and completed so far.
+    * Identify and evaluate any blockers or challenges to the progress of global task.
+    * Provide potential solutions, and if needed, suggest reevaluating the approach and the plan.
   </progess_analysis>
   <variables>
     * List all variable names and concisely describe their current values.
@@ -71,6 +82,7 @@ Be very concise and precise in the <thinking> block
    - State why a repeat is needed.
    - Adjust parameters if necessary.
    - Consider whether other tools are more appropriate.
+   - Use variable interpolation to pass context to minimize generation of tokens, example: <toolname>$var1$<</toolname>
 
 2. When Tool Calls Fail:
    - Examine the error message carefully.
