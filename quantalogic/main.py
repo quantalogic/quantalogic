@@ -6,10 +6,18 @@ import argparse
 import sys
 import warnings
 
+# Suppress specific warnings related to Pydantic's V2 configuration changes
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module="pydantic.*",
+    message=".*config keys have changed in V2:.*|.*'fields' config key is removed in V2.*",
+)
+
 # Third-party imports
 from rich.console import Console  # noqa: E402
-from rich.panel import Panel
-from rich.prompt import Confirm
+from rich.panel import Panel  # noqa: E402
+from rich.prompt import Confirm  # noqa: E402
 
 # Local application imports
 from quantalogic.agent_config import (  # noqa: E402
@@ -19,19 +27,7 @@ from quantalogic.agent_config import (  # noqa: E402
     create_orchestrator_agent,  # noqa: F401
 )
 from quantalogic.interactive_text_editor import get_multiline_input  # noqa: E402
-from quantalogic.print_event import print_events
-
-# Remove this redundant warning filter
-# warnings.filterwarnings("ignore", message="Valid config keys have changed in V2:*")
-
-
-# Filter out all Pydantic V2 config-related warnings
-warnings.filterwarnings(
-    "ignore",
-    category=UserWarning,
-    module="pydantic.*",
-    message="Valid config keys have changed in V2.*"
-)
+from quantalogic.print_event import print_events  # noqa: E402
 
 main_agent = create_agent(MODEL_NAME)
 
@@ -158,9 +154,9 @@ def main():
             console.print("[yellow]Task submission cancelled. Exiting...[/yellow]")
             sys.exit(0)
 
-    #agent = create_agent(args.model)
+    # agent = create_agent(args.model)
     agent = create_coding_agent(args.model)
-    #agent = create_orchestrator_agent(args.model)
+    # agent = create_orchestrator_agent(args.model)
     result = agent.solve_task(task=task, max_iterations=300)
 
     console.print(

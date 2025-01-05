@@ -17,6 +17,7 @@ from quantalogic.tool_manager import ToolManager
 from quantalogic.tools.task_complete_tool import TaskCompleteTool
 from quantalogic.tools.tool import Tool
 from quantalogic.utils import get_environment
+from quantalogic.utils.ask_user_validation import console_ask_for_user_validation
 from quantalogic.xml_parser import ToleranceXMLParser
 from quantalogic.xml_tool_parser import ToolParser
 
@@ -36,18 +37,6 @@ DEFAULT_MAX_INPUT_TOKENS = 128 * 1024
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 
 
-def default_ask_for_user_validation(question: str = "Do you want to continue?") -> bool:
-    """Prompt the user for validation using Rich.
-
-    Args:
-        question (str): The validation question.
-
-    Returns:
-        bool: User's confirmation.
-    """
-    from rich.prompt import Confirm
-
-    return Confirm.ask(question, default=True)
 
 
 class AgentConfig(BaseModel):
@@ -83,7 +72,7 @@ class Agent(BaseModel):
     event_emitter: EventEmitter = EventEmitter()
     config: AgentConfig
     task_to_solve: str
-    ask_for_user_validation: Callable[[str], bool] = default_ask_for_user_validation
+    ask_for_user_validation: Callable[[str], bool] = console_ask_for_user_validation
     last_tool_call: dict[str, Any] = {}  # Stores the last tool call information
     total_tokens: int = 0  # Total tokens in the conversation
     current_iteration: int = 0
@@ -97,7 +86,7 @@ class Agent(BaseModel):
         model_name: str = "ollama/qwen2.5-coder:14b",
         memory: AgentMemory = AgentMemory(),
         tools: list[Tool] = [TaskCompleteTool()],
-        ask_for_user_validation: Callable[[str], bool] = default_ask_for_user_validation,
+        ask_for_user_validation: Callable[[str], bool] = console_ask_for_user_validation,
         task_to_solve: str = "",
         specific_expertise: str = "General AI assistant with coding and problem-solving capabilities",
         get_environment: Callable[[], str] = get_environment,
