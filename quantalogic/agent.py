@@ -36,8 +36,6 @@ DEFAULT_MAX_INPUT_TOKENS = 128 * 1024
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 
 
-
-
 def default_ask_for_user_validation(question: str = "Do you want to continue?") -> bool:
     """Prompt the user for validation using Rich.
 
@@ -54,12 +52,9 @@ def default_ask_for_user_validation(question: str = "Do you want to continue?") 
 
 class AgentConfig(BaseModel):
     """Configuration settings for the Agent."""
-    
-    model_config = ConfigDict(
-        extra='forbid',
-        frozen=True
-    )
-    
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
     environment_details: str
     tools_markdown: str
     system_prompt: str
@@ -68,11 +63,8 @@ class AgentConfig(BaseModel):
 class ObserveResponseResult(BaseModel):
     """Represents the result of observing the assistant's response."""
 
-    model_config = ConfigDict(
-        extra='forbid',
-        frozen=True
-    )
-    
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
     next_prompt: str
     executed_tool: str | None = None
     answer: str | None = None
@@ -81,11 +73,7 @@ class ObserveResponseResult(BaseModel):
 class Agent(BaseModel):
     """Enhanced QuantaLogic agent implementing ReAct framework."""
 
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        validate_assignment=True,
-        extra='forbid'
-    )
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True, extra="forbid")
 
     specific_expertise: str
     model: GenerativeModel
@@ -98,6 +86,11 @@ class Agent(BaseModel):
     ask_for_user_validation: Callable[[str], bool] = default_ask_for_user_validation
     last_tool_call: dict[str, Any] = {}  # Stores the last tool call information
     total_tokens: int = 0  # Total tokens in the conversation
+    current_iteration: int = 0
+    max_input_tokens: int = DEFAULT_MAX_INPUT_TOKENS
+    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
+    max_iterations: int = 30
+    system_prompt: str = ""
 
     def __init__(
         self,
@@ -122,8 +115,6 @@ class Agent(BaseModel):
             system_prompt_text = system_prompt(
                 tools=tools_markdown, environment=environment, expertise=specific_expertise
             )
-
-            print(system_prompt_text)
 
             config = AgentConfig(
                 environment_details=environment,
@@ -157,145 +148,76 @@ class Agent(BaseModel):
         Returns:
             str: The final response after task completion.
         """
-        self.task_to_solve = task
-        content = ""
-        task_prompt = self._prepare_prompt_task(task)
-
-        self.memory.reset()
-        self.variable_store.reset()
-        self.total_tokens = 0
+        self._reset_session(task_to_solve=task, max_iterations=max_iterations)
 
         # Add system prompt to memory
         self.memory.add(Message(role="system", content=self.config.system_prompt))
 
-        self.event_emitter.emit(
+        self._emit_event(
             "session_start",
             {"system_prompt": self.config.system_prompt, "content": task},
         )
 
-        max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
-        max_input_tokens = self.model.get_model_max_input_tokens() or DEFAULT_MAX_INPUT_TOKENS
+        self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
+        self.max_input_tokens = self.model.get_model_max_input_tokens() or DEFAULT_MAX_INPUT_TOKENS
 
         done = False
-        current_prompt = task_prompt
+        current_prompt = self._prepare_prompt_task(task)
 
-        current_iteration = 1
+        self.current_iteration = 1
 
         # Emit event: Task Solve Start
-        self.event_emitter.emit(
+        self._emit_event(
             "task_solve_start",
-            {"iteration": current_iteration, "initial_prompt": current_prompt, "task": task},
+            {"initial_prompt": current_prompt, "task": task},
         )
 
         answer: str = ""
 
         while not done:
             try:
-                self.total_tokens = self.model.token_counter_with_history(self.memory.memory, prompt=current_prompt)
-                # Emit event: Task Think Start
-                self.event_emitter.emit(
-                    "task_think_start",
-                    {
-                        "iteration": current_iteration,
-                        "total_tokens": self.total_tokens,
-                        "context_occupancy": self._calculate_context_occupancy(),
-                        "max_input_tokens": max_input_tokens,
-                        "max_output_tokens": max_output_tokens,
-                    },
-                )
+                self._update_total_tokens(message_history=self.memory.memory, prompt=current_prompt)
 
-                ratio_occupied = self._calculate_context_occupancy()
-                if (ratio_occupied >= MAX_OCCUPANCY):
-                    self.event_emitter.emit(
-                        "memory_full",
-                        {
-                            "iteration": current_iteration,
-                            "total_tokens": self.total_tokens,
-                            "context_occupancy": self._calculate_context_occupancy(),
-                            "max_input_tokens": max_input_tokens,
-                            "max_output_tokens": max_output_tokens,
-                        },
-                    )
-                    self.memory.compact()
-                    self.total_tokens = self.model.token_counter_with_history(self.memory.memory, current_prompt)
-                    self.event_emitter.emit(
-                        "memory_compacted",
-                        {
-                            "iteration": current_iteration,
-                            "total_tokens": self.total_tokens,
-                            "context_occupancy": self._calculate_context_occupancy(),
-                            "max_input_tokens": max_input_tokens,
-                            "max_output_tokens": max_output_tokens,
-                        },
-                    )
+                # Emit event: Task Think Start after updating total tokens
+                self._emit_event("task_think_start")
 
-                # Generate response from the model
+                self._compact_memory_if_needed(current_prompt)
+
                 result = self.model.generate_with_history(messages_history=self.memory.memory, prompt=current_prompt)
 
                 content = result.response
                 token_usage = result.usage
-
                 self.total_tokens = token_usage.total_tokens
 
                 # Emit event: Task Think End
-                self.event_emitter.emit(
+                self._emit_event(
                     "task_think_end",
                     {
-                        "iteration": current_iteration,
                         "response": content,
-                        "token_usage": token_usage,
-                        "total_tokens": self.total_tokens,
-                        "context_occupancy": self._calculate_context_occupancy(),
-                        "max_input_tokens": max_input_tokens,
-                        "max_output_tokens": max_output_tokens,
                     },
                 )
 
                 # Process the assistant's response
-                result = self._observe_response(result.response, iteration=current_iteration)
+                result = self._observe_response(result.response, iteration=self.current_iteration)
 
                 current_prompt = result.next_prompt
 
                 if result.executed_tool == "task_complete":
-                    self.event_emitter.emit(
+                    self._emit_event(
                         "task_complete",
                         {
-                            "iteration": current_iteration,
                             "response": result.answer,
-                            "total_tokens": self.total_tokens,
-                            "max_input_tokens": max_input_tokens,
-                            "context_occupancy": self._calculate_context_occupancy(),
-                            "max_output_tokens": max_output_tokens,
                         },
                     )
                     answer = result.answer
                     done = True
 
-                self.memory.add(Message(role="user", content=current_prompt))
-                self.memory.add(Message(role="assistant", content=content))
+                self._update_session_memory(current_prompt, content)
 
-                self.event_emitter.emit(
-                    "session_add_message",
-                    {"role": "user", "content": current_prompt},
-                )
-                self.event_emitter.emit(
-                    "session_add_message",
-                    {"role": "assistant", "content": content},
-                )
-
-                current_iteration += 1
-                if current_iteration >= max_iterations:
+                self.current_iteration += 1
+                if self.current_iteration >= self.max_iterations:
                     done = True
-                    self.event_emitter.emit(
-                        "error_max_iterations_reached",
-                        {
-                            "iteration": current_iteration,
-                            "total_tokens": self.total_tokens,
-                            "max_input_tokens": max_input_tokens,
-                            "context_occupancy": self._calculate_context_occupancy(),
-                            "max_output_tokens": max_output_tokens,
-                        },
-                    )
+                    self._emit_event("error_max_iterations_reached")
 
             except Exception as e:
                 logger.error(f"Error during task solving: {str(e)}")
@@ -304,18 +226,54 @@ class Agent(BaseModel):
                 done = True
 
         # Emit event: Task Solve End
-        self.event_emitter.emit(
-            "task_solve_end",
-            {
-                "iteration": current_iteration,
-                "total_tokens": self.total_tokens,
-                "context_occupancy": self._calculate_context_occupancy(),
-                "max_input_tokens": max_input_tokens,
-                "max_output_tokens": max_output_tokens,
-            },
-        )
+        self._emit_event("task_solve_end")
 
         return answer
+
+    def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30):
+        """Reset the agent's session."""
+        self.task_to_solve = task_to_solve
+        self.memory.reset()
+        self.variable_store.reset()
+        self.total_tokens = 0
+        self.current_iteration = 0
+        self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
+        self.max_input_tokens = self.model.get_model_max_input_tokens() or DEFAULT_MAX_INPUT_TOKENS
+        self.max_iterations = max_iterations
+
+    def _update_total_tokens(self, message_history: list[Message], prompt: str) -> None:
+        self.total_tokens = self.model.token_counter_with_history(message_history, prompt)
+
+    def _compact_memory_if_needed(self, current_prompt: str = ""):
+        """Compacts the memory if it exceeds the maximum occupancy."""
+        ratio_occupied = self._calculate_context_occupancy()
+        if ratio_occupied >= MAX_OCCUPANCY:
+            self._emit_event("memory_full")
+            self.memory.compact()
+            self.total_tokens = self.model.token_counter_with_history(self.memory.memory, current_prompt)
+            self._emit_event("memory_compacted")
+
+    def _emit_event(self, event_type: str, data: dict[str, Any] | None = None) -> None:
+        """
+        Emit an event with system context and optional additional data.
+
+        Why: Provides a standardized way to track and log system events
+        with consistent contextual information.
+        """
+        # Use empty dict as default to avoid mutable default argument
+        event_data = {
+            "iteration": self.current_iteration,
+            "total_tokens": self.total_tokens,
+            "context_occupancy": self._calculate_context_occupancy(),
+            "max_input_tokens": self.max_input_tokens,
+            "max_output_tokens": self.max_output_tokens,
+        }
+
+        # Merge additional data if provided
+        if data:
+            event_data.update(data)
+
+        self.event_emitter.emit(event_type, event_data)
 
     def _observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
         """Analyze the assistant's response and determine next steps.
@@ -378,7 +336,6 @@ class Agent(BaseModel):
                             "4. Ensure you're making progress towards the goal"
                         )
 
-                    
                     # Update repeat count
                     current_call["count"] = repeat_count
                 else:
@@ -477,7 +434,7 @@ class Agent(BaseModel):
         # Handle tool validation if required
         if tool.need_validation:
             logger.debug(f"Tool '{tool_name}' requires validation.")
-            self.event_emitter.emit(
+            self._emit_event(
                 "tool_execute_validation_start",
                 {"tool_name": tool_name, "arguments": arguments_with_values},
             )
@@ -490,7 +447,7 @@ class Agent(BaseModel):
             ).join("\n")
             permission_granted = self.ask_for_user_validation(question_validation)
 
-            self.event_emitter.emit(
+            self._emit_event(
                 "tool_execute_validation_end",
                 {"tool_name": tool_name, "arguments": arguments_with_values},
             )
@@ -500,7 +457,7 @@ class Agent(BaseModel):
                 return "", f"Error: execution of tool '{tool_name}' was denied by the user."
 
         # Emit event: Tool Execution Start
-        self.event_emitter.emit(
+        self._emit_event(
             "tool_execution_start",
             {"tool_name": tool_name, "arguments": arguments_with_values},
         )
@@ -518,7 +475,7 @@ class Agent(BaseModel):
             executed_tool = ""
 
         # Emit event: Tool Execution End
-        self.event_emitter.emit(
+        self._emit_event(
             "tool_execution_end",
             {
                 "tool_name": tool_name,
@@ -626,3 +583,24 @@ class Agent(BaseModel):
         memory_copy.append(user_message)
         self.memory.memory = memory_copy
         return summary.response
+
+    def _update_session_memory(self, user_content: str, assistant_content: str) -> None:
+        """
+        Log session messages to memory and emit events.
+
+        Args:
+            user_content (str): The user's content.
+            assistant_content (str): The assistant's content.
+        """
+        self.memory.add(Message(role="user", content=user_content))
+        self._emit_event(
+            "session_add_message",
+            {"role": "user", "content": user_content},
+        )
+
+        self.memory.add(Message(role="assistant", content=assistant_content))
+
+        self._emit_event(
+            "session_add_message",
+            {"role": "assistant", "content": assistant_content},
+        )
