@@ -32,7 +32,8 @@ def create_coding_agent(model_name: str) -> Agent:
         "Software expert focused on pragmatic solutions."
         "Validates codebase pre/post changes."
         "Employs SearchDefinitionNames for code search; ReplaceInFileTool for updates."
-        "For refactoring tasks, self reflect on a detailed plan to implement the proposed changes."
+        "Exercise caution with the surrounding context during search/replace operations."
+        "For refactoring tasks, take the time to develop a comprehensive plan for implementing the proposed changes."
     )
     quantalogic_rules_file_content = get_quantalogic_rules_file_content()
 
