@@ -301,7 +301,7 @@ class DatabaseTool(Tool):
         return "Query results"
 ```
 
-## 🌐 Web Interface
+
 ## 🌐 Web Interface
 
 Features:
