@@ -133,18 +133,6 @@ Interactive mode:
 quantalogic
 ```
 
-### Examples
-
-Basic task execution:
-```bash
-quantalogic --task "Write a Python function to calculate Fibonacci numbers"
-```
-
-Using a task file:
-```bash
-quantalogic --file tasks/example.md --verbose
-```
-
 ### With code
 
 ```python
