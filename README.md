@@ -959,3 +959,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 Copyright 2024 QuantaLogic Contributors
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+
+## Project Growth
+[![Star History Chart](https://api.star-history.com/svg?repos=quantalogic/quantalogic&type=Date)](https://star-history.com/#quantalogic/quantalogic&Date)
+
+Initiated with ❤️ by Raphaël MANSUY. Founder of [Quantalogic](https://www.quantalogic.app). 
