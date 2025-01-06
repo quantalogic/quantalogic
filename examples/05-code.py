@@ -28,7 +28,7 @@ agent = Agent(
         ReadFileTool(),
         ReplaceInFileTool(),
         ReadFileBlockTool(),
-        ListDirectoryTool()
+        ListDirectoryTool(),
     ],
 )
 

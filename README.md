@@ -212,6 +212,21 @@ quantalogic \
     --verbose
 ```
 
+## 📖 Examples
+
+Here are some practical examples to help you get started:
+
+Here is the markdown table based on the provided directory listing:
+
+| Example | Description | File |
+|---------|-------------|------|
+| Simple Agent | A basic example of an agent implementation. | [examples/01-simple-agent.py](examples/01-simple-agent.py) |
+| Agent with Event Monitoring | An example of an agent with event monitoring capabilities. | [examples/02-agent-with-event-monitoring.py](examples/02-agent-with-event-monitoring.py) |
+| Agent with Interpreter | An example of an agent that includes an interpreter. | [examples/03-agent-with-interpreter.py](examples/03-agent-with-interpreter.py) |
+| Agent Summary Task | An example of an agent performing a summary task. | [examples/04-agent-summary-task.py](examples/04-agent-summary-task.py) |
+| Code Example | A general code example. | [examples/05-code.py](examples/05-code.py) |
+
+
 ## 🔨 Key Components
 
 ### Agent System
