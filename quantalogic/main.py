@@ -141,8 +141,9 @@ def cli(ctx: click.Context, version: bool, model_name: str, verbose: bool, mode:
 )
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
 @click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")
+@click.option("--log", type=click.Choice(["info", "debug", "warning"]), default="info", help="Set logging level (info/debug/warning).")
 @click.argument("task", required=False)
-def task(file: Optional[str], model_name: str, verbose: bool, mode: str, task: Optional[str], log: str) -> None:
+def task(file: Optional[str], model_name: str, verbose: bool, mode: str, log: str, task: Optional[str]) -> None:
     """Execute a task with the QuantaLogic AI Assistant."""
     console = Console()
     switch_verbose(verbose, log)
