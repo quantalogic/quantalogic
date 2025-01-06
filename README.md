@@ -115,15 +115,6 @@ quantalogic \
     --verbose
 ```
 
-### Web Interface
-
-```bash
-# Start the server
-python -m quantalogic.server.agent_server
-
-# Access at http://localhost:8000
-```
-
 ## 🔨 Key Components
 
 ### Agent System

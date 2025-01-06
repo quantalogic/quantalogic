@@ -103,15 +103,13 @@ class RipgrepTool(Tool):
             ValueError: If the directory path is invalid.
             RuntimeError: If ripgrep is not found or fails to execute.
         """
-        # Validate the directory path
+        # Validate and normalize the directory path
+        directory_path = str(Path(directory_path).resolve())
         if not os.path.isdir(directory_path):
-            if directory_path == ".":
-                directory_path = os.getcwd()
-            else:
-                raise ValueError(f"Directory not found: {directory_path}")
+            raise ValueError(f"Directory not found: {directory_path}")
 
         # Use current working directory if not specified
-        cwd = cwd or directory_path
+        cwd = str(Path(cwd or directory_path).resolve())
         rg_path = self._find_rg_binary()
         if not rg_path:
             raise RuntimeError("Could not find ripgrep binary.")

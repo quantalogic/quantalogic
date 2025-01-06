@@ -5,7 +5,7 @@ from quantalogic.tools import LLMTool, MarkitdownTool
 
 MODEL_NAME = "gpt-4o-mini"
 
-# Verify API key is set - required for authentication with DeepSeek's API
+# Verify API key is set - required for authentication with OpenAI's API
 # This check ensures the agent won't fail during runtime due to missing credentials
 if not os.environ.get("OPENAI_API_KEY"):
     raise ValueError("OPENAI_API_KEY environment variable is not set")
