@@ -44,7 +44,7 @@ def load_gitignore_spec(path: Path) -> PathSpec:
     """Load .gitignore patterns from directory and all parent directories."""
     ignore_patterns = []
     current = path
-    
+
     # Traverse up the directory tree
     while current != current.parent:  # Stop at root
         gitignore_path = current / ".gitignore"

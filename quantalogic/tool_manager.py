@@ -1,4 +1,5 @@
 """Tool dictionary for the agent."""
+
 from loguru import logger
 from pydantic import BaseModel
 

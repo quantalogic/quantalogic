@@ -1,4 +1,5 @@
 """Utility function to download a file from a given URL and save it to a local path."""
+
 import logging
 from time import sleep
 from typing import Optional
@@ -9,6 +10,7 @@ from requests.exceptions import ConnectionError, HTTPError, RequestException, Ti
 # Configure logging
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
 
 def download_http_file(
     url: str, local_path: str, chunk_size: int = 8192, max_retries: int = 3, timeout: int = 10, delay: int = 2
@@ -40,7 +42,7 @@ def download_http_file(
             content_type = response.headers.get("Content-Type", "unknown")
             logger.info(f"Downloading content with Content-Type: {content_type}")
 
-            with open(local_path, 'wb') as file:
+            with open(local_path, "wb") as file:
                 for chunk in response.iter_content(chunk_size=chunk_size):
                     file.write(chunk)
 

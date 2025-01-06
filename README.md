@@ -823,7 +823,7 @@ pytest tests/unit
 
 ```bash
 # Format code
-black quantalogic tests
+ruff format
 
 # Type checking
 mypy quantalogic

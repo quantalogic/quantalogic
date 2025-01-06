@@ -14,7 +14,7 @@ def test_input_question_tool_initialization():
     assert len(tool.arguments) == 2
 
 
-@patch('rich.prompt.Prompt.ask')
+@patch("rich.prompt.Prompt.ask")
 def test_input_question_tool_execute(mock_prompt_ask):
     """Test the execute method of InputQuestionTool."""
     # Arrange
@@ -30,7 +30,7 @@ def test_input_question_tool_execute(mock_prompt_ask):
     assert result == "Test Answer"
 
 
-@patch('rich.prompt.Prompt.ask')
+@patch("rich.prompt.Prompt.ask")
 def test_input_question_tool_with_default(mock_prompt_ask):
     """Test the execute method with a default value."""
     # Arrange
@@ -51,7 +51,7 @@ def test_input_question_tool_markdown_generation():
     """Test that the tool can generate markdown documentation."""
     tool = InputQuestionTool()
     markdown = tool.to_markdown()
-    
+
     # Assert basic markdown generation
     assert "## input_question" in markdown
     assert "Prompts the user with a question and captures their input" in markdown

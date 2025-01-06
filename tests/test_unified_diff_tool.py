@@ -5,6 +5,7 @@ import shutil
 
 from quantalogic.tools.unified_diff_tool import UnifiedDiffTool, PatchError
 
+
 class TestUnifiedDiffTool(unittest.TestCase):
     def setUp(self):
         """Create a temporary directory for test files."""
@@ -17,8 +18,8 @@ class TestUnifiedDiffTool(unittest.TestCase):
 
     def create_test_file(self, content):
         """Helper method to create a test file."""
-        test_file_path = os.path.join(self.test_dir, 'test_file.txt')
-        with open(test_file_path, 'w', encoding='utf-8') as f:
+        test_file_path = os.path.join(self.test_dir, "test_file.txt")
+        with open(test_file_path, "w", encoding="utf-8") as f:
             f.write(content)
         return test_file_path
 
@@ -30,7 +31,7 @@ class TestUnifiedDiffTool(unittest.TestCase):
         patch = "@@ -1,3 +1,3 @@\n-Hello World\n+Hello Universe\n This is a test.\n Goodbye World\n"
         result = self.tool.execute(test_file_path, patch)
 
-        with open(test_file_path, 'r', encoding='utf-8') as f:
+        with open(test_file_path, "r", encoding="utf-8") as f:
             updated_content = f.read()
 
         self.assertIn("Patch applied successfully", result)
@@ -44,7 +45,7 @@ class TestUnifiedDiffTool(unittest.TestCase):
         patch = "@@ -2,1 +2,2 @@\n This is a test.\n+A new line added.\n"
         result = self.tool.execute(test_file_path, patch)
 
-        with open(test_file_path, 'r', encoding='utf-8') as f:
+        with open(test_file_path, "r", encoding="utf-8") as f:
             updated_content = f.read()
 
         self.assertIn("Patch applied successfully", result)
@@ -58,7 +59,7 @@ class TestUnifiedDiffTool(unittest.TestCase):
         patch = "@@ -1,3 +1,2 @@\n Hello World\n-This is a test.\n Goodbye World\n"
         result = self.tool.execute(test_file_path, patch)
 
-        with open(test_file_path, 'r', encoding='utf-8') as f:
+        with open(test_file_path, "r", encoding="utf-8") as f:
             updated_content = f.read()
 
         self.assertIn("Patch applied successfully", result)
@@ -75,7 +76,7 @@ class TestUnifiedDiffTool(unittest.TestCase):
         )
         result = self.tool.execute(test_file_path, patch)
 
-        with open(test_file_path, 'r', encoding='utf-8') as f:
+        with open(test_file_path, "r", encoding="utf-8") as f:
             updated_content = f.read()
 
         self.assertIn("Patch applied successfully", result)
@@ -95,7 +96,7 @@ class TestUnifiedDiffTool(unittest.TestCase):
 
     def test_non_existent_file(self):
         """Test applying a patch to a non-existent file."""
-        non_existent_file = os.path.join(self.test_dir, 'non_existent.txt')
+        non_existent_file = os.path.join(self.test_dir, "non_existent.txt")
         patch = "@@ -1,1 +1,1 @@\n-Old Line\n+New Line\n"
 
         with self.assertRaises(FileNotFoundError):
@@ -136,7 +137,7 @@ class TestUnifiedDiffTool(unittest.TestCase):
         self.tool.execute(test_file_path, patch)
 
         self.assertTrue(os.path.exists(backup_path))
-        with open(backup_path, 'r', encoding='utf-8') as f:
+        with open(backup_path, "r", encoding="utf-8") as f:
             backup_content = f.read()
         self.assertEqual(backup_content, original_content)
 
@@ -156,7 +157,7 @@ class TestUnifiedDiffTool(unittest.TestCase):
         )
         result = self.tool.execute(test_file_path, patch)
 
-        with open(test_file_path, 'r', encoding='utf-8') as f:
+        with open(test_file_path, "r", encoding="utf-8") as f:
             updated_content = f.read()
 
         self.assertIn("Patch applied successfully", result)
@@ -178,7 +179,7 @@ class TestUnifiedDiffTool(unittest.TestCase):
         )
         result = self.tool.execute(test_file_path, patch)
 
-        with open(test_file_path, 'r', encoding='utf-8') as f:
+        with open(test_file_path, "r", encoding="utf-8") as f:
             updated_content = f.read()
 
         self.assertIn("Patch applied successfully", result)
@@ -189,17 +190,10 @@ class TestUnifiedDiffTool(unittest.TestCase):
         original_content = "Hello World\nThis is a test.\nGoodbye World\n"
         test_file_path = self.create_test_file(original_content)
 
-        patch = (
-            "@@ -1,3 +1,4 @@\n"
-            "-Hello World\n"
-            "+\n"
-            "+Hello Universe\n"
-            " This is a test.\n"
-            " Goodbye World\n"
-        )
+        patch = "@@ -1,3 +1,4 @@\n" "-Hello World\n" "+\n" "+Hello Universe\n" " This is a test.\n" " Goodbye World\n"
         result = self.tool.execute(test_file_path, patch)
 
-        with open(test_file_path, 'r', encoding='utf-8') as f:
+        with open(test_file_path, "r", encoding="utf-8") as f:
             updated_content = f.read()
 
         self.assertIn("Patch applied successfully", result)
@@ -410,7 +404,7 @@ gameLoop()"""
              length_of_snake += 1"""
         result = self.tool.execute(test_file_path, patch)
 
-        with open(test_file_path, 'r', encoding='utf-8') as f:
+        with open(test_file_path, "r", encoding="utf-8") as f:
             updated_content = f.read()
 
         self.assertIn("Patch applied successfully", result)
@@ -425,51 +419,52 @@ gameLoop()"""
     def test_empty_file_additions(self):
         """Test applying a patch to an empty file with only additions."""
         test_file_path = self.create_test_file("")
-        
+
         patch = "@@ -0,0 +1,3 @@\n+First line\n+Second line\n+Third line\n"
         result = self.tool.execute(test_file_path, patch)
-        
-        with open(test_file_path, 'r', encoding='utf-8') as f:
+
+        with open(test_file_path, "r", encoding="utf-8") as f:
             updated_content = f.read()
-            
+
         self.assertIn("Patch applied successfully", result)
         self.assertEqual(updated_content, "First line\nSecond line\nThird line\n")
-        
+
     def test_empty_file_invalid_start(self):
         """Test applying a patch to an empty file with invalid start line."""
         test_file_path = self.create_test_file("")
-        
+
         patch = "@@ -2,0 +2,2 @@\n+Invalid line\n+Should fail\n"
-        
+
         with self.assertRaises(PatchError) as context:
             self.tool.execute(test_file_path, patch)
-            
+
         self.assertIn("Cannot apply hunk to empty file with start line > 1", str(context.exception))
-        
+
     def test_only_additions_patch(self):
         """Test applying a patch that only contains additions."""
         original_content = "First line\nSecond line\n"
         test_file_path = self.create_test_file(original_content)
-        
+
         patch = "@@ -2,0 +2,2 @@\n+New line 1\n+New line 2\n"
         result = self.tool.execute(test_file_path, patch)
-        
-        with open(test_file_path, 'r', encoding='utf-8') as f:
+
+        with open(test_file_path, "r", encoding="utf-8") as f:
             updated_content = f.read()
-            
+
         self.assertIn("Patch applied successfully", result)
         self.assertEqual(updated_content, "First line\nNew line 1\nNew line 2\nSecond line\n")
-        
+
     def test_empty_file_deletion(self):
         """Test that attempting to delete from an empty file raises an error."""
         test_file_path = self.create_test_file("")
-        
+
         patch = "@@ -1,1 +1,0 @@\n-Should not exist\n"
-        
+
         with self.assertRaises(PatchError) as context:
             self.tool.execute(test_file_path, patch)
-            
+
         self.assertIn("Cannot delete from empty file", str(context.exception))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

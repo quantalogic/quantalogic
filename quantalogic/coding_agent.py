@@ -38,12 +38,7 @@ def create_coding_agent(model_name: str) -> Agent:
     quantalogic_rules_file_content = get_quantalogic_rules_file_content()
 
     if quantalogic_rules_file_content:
-        specific_expertise += (
-            "\n\n"
-            "<coding_rules>\n"
-            f"{quantalogic_rules_file_content}"
-            "\n</coding_rules>\n"
-        )
+        specific_expertise += "\n\n" "<coding_rules>\n" f"{quantalogic_rules_file_content}" "\n</coding_rules>\n"
 
     return Agent(
         model_name=model_name,

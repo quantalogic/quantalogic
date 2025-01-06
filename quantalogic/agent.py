@@ -37,8 +37,6 @@ DEFAULT_MAX_INPUT_TOKENS = 128 * 1024
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 
 
-
-
 class AgentConfig(BaseModel):
     """Configuration settings for the Agent."""
 

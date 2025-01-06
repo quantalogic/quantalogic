@@ -28,7 +28,6 @@ from quantalogic.tools import (
 MODEL_NAME = "deepseek/deepseek-chat"
 
 
-
 def create_agent(model_name) -> Agent:
     """Create an agent with the specified model and tools.
 
@@ -54,7 +53,8 @@ def create_agent(model_name) -> Agent:
             DownloadHttpFileTool(),
         ],
     )
-    
+
+
 def create_full_agent(model_name: str) -> Agent:
     """Create an agent with the specified model and many tools.
 

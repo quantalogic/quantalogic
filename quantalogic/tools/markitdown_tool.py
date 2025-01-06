@@ -9,6 +9,7 @@ from quantalogic.utils.download_http_file import download_http_file
 
 MAX_LINES = 2000  # Maximum number of lines to return when no output file is specified
 
+
 class MarkitdownTool(Tool):
     """Tool for converting various file formats to Markdown using the MarkItDown library."""
 

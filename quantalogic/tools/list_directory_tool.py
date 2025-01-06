@@ -111,6 +111,7 @@ class ListDirectoryTool(Tool):
             return all_lines
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             return f"Error: {str(e)} occurred during directory listing. See logs for details."
 

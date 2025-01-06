@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 MIN_RETRIES = 3
 
+
 class Message(BaseModel):
     """Represents a message in a conversation with a specific role and content."""
 
@@ -216,7 +217,7 @@ class GenerativeModel:
             model_info = self.get_model_info()
             if model_info:
                 return model_info.get("max_output_tokens")
-            
+
             # Fallback for unmapped models
             logger.warning(f"No max output tokens found for {self.model}. Using default.")
             return 4096  # A reasonable default for many chat models

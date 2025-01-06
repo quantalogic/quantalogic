@@ -24,8 +24,7 @@ class ToolArguments(BaseModel):
     """
 
     arguments: dict[str, str] = Field(
-        default_factory=dict,
-        description="Dictionary mapping argument names to their values"
+        default_factory=dict, description="Dictionary mapping argument names to their values"
     )
 
 
@@ -85,10 +84,7 @@ class ToolParser:
                     raise ValueError(f"Error extracting XML elements: {error_msg}")
 
             # Create and validate arguments dictionary
-            argument_dict = {
-                arg.name: elements.get(arg.name, "")
-                for arg in self.tool.arguments
-            }
+            argument_dict = {arg.name: elements.get(arg.name, "") for arg in self.tool.arguments}
 
             # Validate using Pydantic model
             validated_args = ToolArguments(arguments=argument_dict)

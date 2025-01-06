@@ -23,8 +23,7 @@ class ToolArgument(BaseModel):
 
     name: str = Field(..., description="The name of the argument.")
     arg_type: Literal["string", "int", "float", "boolean"] = Field(
-        ...,
-        description="The type of the argument. Must be one of: string, integer, float, boolean."
+        ..., description="The type of the argument. Must be one of: string, integer, float, boolean."
     )
     description: str | None = Field(None, description="A brief description of the argument.")
     required: bool = Field(default=False, description="Indicates if the argument is required.")
@@ -123,8 +122,10 @@ class Tool(ToolDefinition):
         """
         if isinstance(v, list):
             return [
-                ToolArgument(**arg) if isinstance(arg, dict)
-                else arg if isinstance(arg, ToolArgument)
+                ToolArgument(**arg)
+                if isinstance(arg, dict)
+                else arg
+                if isinstance(arg, ToolArgument)
                 else ToolArgument(name=str(arg), type=type(arg).__name__)
                 for arg in v
             ]
