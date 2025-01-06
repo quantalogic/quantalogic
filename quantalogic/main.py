@@ -103,15 +103,22 @@ def display_welcome_message(console: Console, model_name: str) -> None:
 
 @click.group(invoke_without_command=True)
 @click.option("--version", is_flag=True, help="Show version information.")
+@click.option(
+    "--model-name",
+    default=MODEL_NAME,
+    help='Specify the model to use (litellm format, e.g. "openrouter/deepseek-chat").',
+)
+@click.option("--verbose", is_flag=True, help="Enable verbose output.")
+@click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")
 @click.pass_context
-def cli(ctx: click.Context, version: bool) -> None:
+def cli(ctx: click.Context, version: bool, model_name: str, verbose: bool, mode: str) -> None:
     """QuantaLogic AI Assistant - A powerful AI tool for various tasks."""
     if version:
         console = Console()
         console.print(f"QuantaLogic version: {get_version()}")
         sys.exit(0)
     if ctx.invoked_subcommand is None:
-        ctx.invoke(task)
+        ctx.invoke(task, model_name=model_name, verbose=verbose, mode=mode)
 
 
 @cli.command()
