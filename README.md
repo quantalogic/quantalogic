@@ -117,9 +117,9 @@ The CLI provides comprehensive error handling:
 
 #### Examples
 
-Basic task execution:
+Basic task execution in interractive mode:
 ```bash
-quantalogic --task "Write a Python function to calculate Fibonacci numbers"
+quantalogic
 ```
 
 Using a task file:
