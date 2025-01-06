@@ -2,7 +2,6 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)]()
 
 QuantaLogic is a  ReAct (Reasoning & Action) framework for building advanced AI agents. 
@@ -10,6 +9,14 @@ QuantaLogic is a  ReAct (Reasoning & Action) framework for building advanced AI 
 It seamlessly integrates large language models (LLMs) with a robust tool system, enabling agents to understand, reason about, and execute complex tasks through natural language interaction.
 
 The `cli` version include coding capabilities comparable to Aider.
+
+
+## Why QuantaLogic?
+
+We created QuantaLogic because we saw a significant gap between the advanced AI models developed by companies like OpenAI, Anthropic, DeepSeek and their practical implementation in everyday business processes. 
+
+> Our mission is to bridge this gap, making the power of generative AI accessible and actionable for businesses of all sizes.
+
 
 ## 🌟 Highlights
 
@@ -251,31 +258,431 @@ sequenceDiagram
 
 ### Tool System
 
-#### Built-in Tools
+The QuantaLogic framework incorporates a well-defined tool system that enhances the functionality of AI agents by enabling them to perform a variety of tasks efficiently. Each tool is designed to address specific needs that arise in the context of complex problem-solving and task execution:
 
-1. **Agent Tools**
-   - `agent_tool.py`: Core component for creating and managing intelligent agents
-     - Features: Agent initialization, task execution, memory management, tool integration
-     - Usage: See [Agent Tool Documentation](#agent-tool-documentation)
+1. **Core Functionality**: Tools such as **AgentTool** and **LLMTool** are fundamental to the agent's operation, allowing it to manage tasks and interact with large language models. The integration of these tools enables the agent to process natural language inputs and execute corresponding actions effectively. **AgentTool** enables the agent to delegate tasks to specialized agents, and **LLMTool** provides the agent to explore a specific area of a latent space using role play.
 
-1. **Code Execution Tools**
-   - `PythonTool`: Execute Python code in Docker
-   - `NodeJsTool`: Run Node.js/TypeScript code
-   - `ElixirTool`: Execute Elixir code
+2. **Code Execution**: Tools like **PythonTool**, **NodeJsTool**, and **ElixirTool** are vital for executing code in different programming languages. This capability allows the agent to handle programming tasks directly, facilitating real-time coding assistance and code evaluation.
 
-2. **File Operation Tools**
-   - `ReadFileTool`: Safe file reading
-   - `WriteFileTool`: File writing with validation
-   - `ReplaceInFileTool`: Smart content replacement, using SEARCH/REPLACE blocks
-   
-3. **Search Tools**
-   - `RipgrepTool`: Fast code search
-   - `SearchDefinitionNames`: Find code definitions using an AST compiler for Javascript, Typescript Python, Java, Rust, C, C+6
+3. **File Operations**: The framework includes tools for file management, such as **ReadFileTool**, **WriteFileTool**, and **ReplaceInFileTool**. These tools are essential for enabling the agent to read from and write to files, as well as update file content dynamically. This functionality supports scenarios where agents need to manipulate data or configuration files as part of the task execution process.
 
-4. **Utility Tools**
-   - `MarkitdownTool`: Document conversion in markdown
-   - `ListDirectoryTool`: Directory listing
-   - `ExecuteBashCommandTool`: Command execution
+4. **Search Capabilities**: Tools like **RipgrepTool** and **SearchDefinitionNames** enhance the agent's ability to search through codebases and identify relevant definitions. This is crucial when dealing with large volumes of code, allowing the agent to quickly locate information necessary for problem-solving.
+
+5. **Utility Functions**: Additional tools such as **DownloadHttpFileTool**, **ListDirectoryTool**, and **ExecuteBashCommandTool** provide broader functionality that supports various tasks, from fetching external resources to executing system commands. These utilities expand the operational scope of agents, allowing them to perform diverse actions beyond simple text processing.
+
+6. **Documentation and Representation**: Tools like **MarkitdownTool** facilitate the generation of documentation, ensuring that output from the agent can be formatted and presented clearly. This is particularly beneficial for creating reports or guides based on the agent's findings and actions.
+
+By integrating these tools into its architecture, QuantaLogic allows agents to perform a wide range of tasks autonomously while ensuring that they have the necessary resources and capabilities to do so effectively. This tool system is fundamental to the agent's ability to reason and act in sophisticated ways, thereby enhancing the overall utility of the framework in complex scenarios.
+
+ 
+
+### Tools Documentation
+
+#### Overview of Tools
+
+| Category               | Tools                                                                                             |
+|-----------------------|---------------------------------------------------------------------------------------------------|
+| Task Automation        | Agent Tool, Task Complete Tool, Input Question Tool, Execute Bash Command Tool                  |
+| Script Execution       | Python Tool, Node.js Tool, Elixir Tool                                                            |
+| File Operations        | Read File Tool, Write File Tool, Edit Whole Content Tool, Replace In File Tool                   |
+| Code Analysis          | Search Definition Names Tool, Ripgrep Tool                                                        |
+| Content Generation      | LLM Tool                                                                                          |
+| Utility and Management  | Download HTTP File Tool, List Directory Tool, Markitdown Tool, Unified Diff Tool                 |
+
+---
+
+#### 1. Agent Tool
+
+The **Agent Tool** enables task delegation to another agent, providing specialized functionality for handling tasks.
+
+##### Parameters
+
+| Parameter    | Type   | Description                                                                         | Example                         |
+|--------------|--------|-------------------------------------------------------------------------------------|---------------------------------|
+| `agent_role` | string | The role of the agent (e.g., expert, assistant)                                   | `expert`                        |
+| `agent`      | Any    | The agent to delegate tasks to                                                     | `Agent` object                  |
+| `task`       | string | The task to delegate to the specified agent.                                       | `Summarize the latest news.`    |
+
+##### Example Usage
+```python
+agent_tool = AgentTool(agent_role="expert", agent=some_agent)
+result = agent_tool.execute(task="Summarize the latest news.")
+print(result)
+```
+
+---
+
+#### 2. Task Complete Tool
+
+The **Task Complete Tool** is used to respond to users after a task has been completed.
+
+##### Parameters
+
+| Parameter | Type   | Description                                     | Example                              |
+|-----------|--------|-------------------------------------------------|--------------------------------------|
+| `answer`  | string | The answer to the user.                         | `"The answer to the meaning of life"`|
+
+##### Example Usage
+```python
+task_tool = TaskCompleteTool()
+response = task_tool.execute(answer="The answer is 42.")
+print(response)
+```
+
+---
+
+#### 3. Input Question Tool
+
+The **Input Question Tool** prompts the user with a question and captures their input.
+
+##### Parameters
+
+| Parameter | Type   | Description                                         | Example                       |
+|-----------|--------|-----------------------------------------------------|-------------------------------|
+| `question`| string | The question to ask the user.                      | `What is your favorite color?`|
+| `default` | string | Optional default value if no input is provided.   | `blue`                        |
+
+##### Example Usage
+```python
+input_tool = InputQuestionTool()
+user_response = input_tool.execute(question="What is your favorite color?", default="blue")
+print("User Response:", user_response)
+```
+
+---
+
+#### 4. Execute Bash Command Tool
+
+The **Execute Bash Command Tool** allows for the execution of bash commands and captures their output.
+
+##### Parameters
+
+| Parameter       | Type    | Description                                                          | Example                   |
+|-----------------|---------|----------------------------------------------------------------------|---------------------------|
+| `command`       | string  | The bash command to execute.                                        | `ls -la`                  |
+| `working_dir`   | string  | The working directory where the command will be executed.           | `/path/to/directory`      |
+| `timeout`       | int     | Maximum time in seconds to wait for the command to complete.       | `60`                      |
+
+##### Example Usage
+```python
+bash_tool = ExecuteBashCommandTool()
+output = bash_tool.execute(command="ls -la")
+print(output)
+```
+
+---
+
+#### 5. Python Tool
+
+The **Python Tool** executes Python scripts in an isolated Docker environment.
+
+##### Parameters
+
+| Parameter         | Type    | Description                                                                        | Example                                    |
+|-------------------|---------|------------------------------------------------------------------------------------|--------------------------------------------|
+| `install_commands` | string  | Commands to install Python packages before running the script.                     | `pip install rich requests`                |
+| `script`           | string  | The Python script to execute.                                                      | `print("Hello, World!")`                   |
+| `version`         | string | The Python version to use in the Docker container.                               | `3.11`                                     |
+| `host_dir`        | string | The absolute path on the host machine to mount for file access.                 | `./demo01/`                                |
+| `memory_limit`    | string | Optional memory limit for the Docker container.                                   | `1g`                                       |
+| `environment_vars`| string | Environment variables to set inside the Docker container.                         | `ENV=production DEBUG=False`                |
+
+#### Example Usage
+```python
+python_tool = PythonTool()
+output = python_tool.execute(
+    install_commands="pip install rich requests",
+    script='print("Hello, World!")',
+    version="3.12",
+    host_dir="./demo01/",
+)
+print("Script Output:", output)
+```
+
+---
+
+### 6. Node.js Tool
+
+The **Node.js Tool** executes Node.js scripts in an isolated Docker environment.
+
+#### Parameters
+
+| Parameter         | Type    | Description                                                                   | Example                                    |
+|-------------------|---------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `install_commands`| string  | Commands to install Node.js packages before running the script.              | `npm install chalk`                         |
+| `script`          | string  | The Node.js script to execute.                                              | `console.log('Hello, World!');`            |
+| `version`         | string  | The Node.js version to use in the Docker container.                         | `20`                                       |
+| `host_dir`        | string  | The absolute path on the host machine to mount for file access.             | `./project/`                               |
+| `memory_limit`    | string  | Optional memory limit for the Docker container.                               | `1g`                                       |
+| `module_type`     | string  | The module system to use: 'esm' for ECMAScript Modules or 'commonjs' for CommonJS. | `esm`                                     |
+
+#### Example Usage
+```python
+node_tool = NodeJsTool()
+output = node_tool.execute(
+    install_commands="npm install chalk",
+    script='console.log("Hello, Node.js World!");',
+    version="20",
+    host_dir="./project/"
+)
+print("Node.js Output:", output)
+```
+
+---
+
+### 7. Elixir Tool
+
+The **Elixir Tool** executes Elixir code in an isolated Docker environment with Mix support.
+
+#### Parameters
+
+| Parameter        | Type    | Description                                                                 | Example                                   |
+|------------------|---------|-----------------------------------------------------------------------------|-------------------------------------------|
+| `mix_commands`   | string  | Mix commands to run before executing the script.                          | `mix deps.get && mix compile`            |
+| `script`         | string  | Elixir code to execute.                                                   | `IO.puts("Hello from Elixir!")`          |
+| `version`        | string  | The Elixir version to use.                                               | `1.15`                                    |
+| `host_dir`       | string  | Host directory to mount.                                                  | `./elixir_project/`                       |
+| `memory_limit`   | string  | Container memory limit.                                                   | `512m`                                    |
+| `environment_vars`| string | Environment variables to set.                                             | `MIX_ENV=prod`                           |
+
+#### Example Usage
+```python
+elixir_tool = ElixirTool()
+output = elixir_tool.execute(script='IO.puts("Hello from Elixir!")')
+print("Elixir Output:", output)
+```
+
+---
+
+### 8. Read File Tool
+
+The **Read File Tool** reads content from a specified file.
+
+#### Parameters
+
+| Parameter    | Type   | Description                                     | Example                              |
+|--------------|--------|-------------------------------------------------|--------------------------------------|
+| `file_path`  | string | The path of the file to read.                  | `/path/to/file.txt`                 |
+
+#### Example Usage
+```python
+read_tool = ReadFileTool()
+content = read_tool.execute(file_path="/path/to/file.txt")
+print("File Content:", content)
+```
+
+---
+
+### 9. Write File Tool
+
+The **Write File Tool** writes content to a specified file.
+
+#### Parameters
+
+| Parameter   | Type   | Description                                     | Example                              |
+|-------------|--------|-------------------------------------------------|--------------------------------------|
+| `file_path` | string | The path of the file to write to.              | `/path/to/file.txt`                 |
+| `content`   | string | The content to write.                           | `Hello, World!`                     |
+
+#### Example Usage
+```python
+write_tool = WriteFileTool()
+result = write_tool.execute(file_path="/path/to/file.txt", content="Hello, World!")
+print(result)
+```
+
+---
+
+### 10. Edit Whole Content Tool
+
+The **Edit Whole Content Tool** replaces the entire content of a specified file.
+
+#### Parameters
+
+| Parameter   | Type   | Description                                     | Example                              |
+|-------------|--------|-------------------------------------------------|--------------------------------------|
+| `file_path` | string | The path to the file to edit.                  | `/path/to/file.txt`                 |
+| `content`   | string | The new content to write to the file.          | `New Content Here!`                 |
+
+#### Example Usage
+```python
+edit_tool = EditWholeContentTool()
+result = edit_tool.execute(file_path="/path/to/file.txt", content="New Content Here!")
+print(result)
+```
+
+---
+
+### 11. Replace In File Tool
+
+The **Replace In File Tool** replaces specific content in a file with new content.
+
+#### Parameters
+
+| Parameter   | Type   | Description                                     | Example                              |
+|-------------|--------|-------------------------------------------------|--------------------------------------|
+| `file_path` | string | The path of the file to edit.                  | `/path/to/file.txt`                 |
+| `search`    | string | The string to search for in the file.          | `Old Content`                        |
+| `replace`   | string | The string to replace the searched content.     | `New Content`                        |
+
+#### Example Usage
+```python
+replace_tool = ReplaceInFileTool()
+result = replace_tool.execute(file_path="/path/to/file.txt", search="Old Content", replace="New Content")
+print(result)
+```
+
+---
+
+### 12. Search Definition Names Tool
+
+The **Search Definition Names Tool** searches for definition names in a directory using Tree-sitter.
+
+#### Parameters
+
+| Parameter      | Type   | Description                                               | Example                       |
+|----------------|--------|-----------------------------------------------------------|-------------------------------|
+| `directory_path`| string | The path to the directory to search in.                  | `./path/to`                  |
+| `language_name`| string  | The Tree-sitter language name (python, js, etc.).      | `python`                     |
+| `file_pattern` | string  | Optional glob pattern to filter files (default: '*').    | `**/*.py`                    |
+
+#### Example Usage
+```python
+search_tool = SearchDefinitionNames()
+results = search_tool.execute(directory_path="./my_project", language_name="python", file_pattern="**/*.py")
+print("Found Definitions:", results)
+```
+
+---
+
+### 13. Ripgrep Tool
+
+The **Ripgrep Tool** searches for text blocks in files using ripgrep.
+
+#### Parameters
+
+| Parameter        | Type    | Description                                                                  | Example                       |
+|------------------|---------|------------------------------------------------------------------------------|-------------------------------|
+| `cwd`            | string  | Base path for relative searches                                             | `.`                           |
+| `directory_path` | string  | The directory path to search in.                                            | `./src`                       |
+| `regex_rust_syntax`| string| The regex pattern to search for (in Rust syntax).                          | `r"\bfunction\b"`            |
+| `file_pattern`   | string  | Optional glob pattern to filter files.                                      | `**/*.js`                    |
+| `context_lines`  | string  | Number of context lines to include before and after matches.                | `2`                           |
+
+#### Example Usage
+```python
+ripgrep_tool = RipgrepTool()
+output = ripgrep_tool.execute(
+    directory_path="./my_project",
+    regex_rust_syntax=r"\bfunction\b",
+    context_lines="2"
+)
+print("Ripgrep Results:", output)
+```
+
+---
+
+### 14. LLM Tool
+
+The **LLM Tool** generates answers using a specified language model.
+
+#### Parameters
+
+| Parameter      | Type    | Description                                                            | Example                                    |
+|----------------|---------|------------------------------------------------------------------------|--------------------------------------------|
+| `system_prompt`| string  | The persona or system prompt to guide the language model's behavior.  | `You are a helpful assistant.`            |
+| `prompt`       | string  | The question to ask the language model.                                 | `What is the meaning of life?`            |
+| `temperature`  | string  | Sampling temperature between 0.0 and 1.0.                             | `0.5`                                     |
+
+#### Example Usage
+```python
+llm_tool = LLMTool(model_name="gpt-4")
+response = llm_tool.execute(
+    system_prompt="You are a knowledgeable assistant.",
+    prompt="What is the meaning of life?",
+    temperature="0.7"
+)
+print("LLM Response:", response)
+```
+
+---
+
+### 15. Download HTTP File Tool
+
+The **Download HTTP File Tool** downloads a file from a specified HTTP URL.
+
+#### Parameters
+
+| Parameter     | Type   | Description                                    | Example                            |
+|---------------|--------|------------------------------------------------|------------------------------------|
+| `url`         | string | The URL of the file to download.              | `http://example.com/file.txt`     |
+| `destination` | string | The path where the file should be saved.      | `/path/to/save/file.txt`          |
+
+#### Example Usage
+```python
+download_tool = DownloadHttpFileTool()
+result = download_tool.execute(url="http://example.com/file.txt", destination="/path/to/save/file.txt")
+print(result)
+```
+
+---
+
+### 16. List Directory Tool
+
+The **List Directory Tool** lists files in a specified directory.
+
+#### Parameters
+
+| Parameter        | Type    | Description                                    | Example                |
+|------------------|---------|------------------------------------------------|------------------------|
+| `directory_path` | string  | The path of the directory to list files from. | `./path/to/directory`  |
+
+#### Example Usage
+```python
+list_tool = ListDirectoryTool()
+result = list_tool.execute(directory_path="./path/to/directory")
+print("Directory Files:", result)
+```
+
+---
+
+### 17. Markitdown Tool
+
+The **Markitdown Tool** processes markdown files, possibly for conversion or rendering.
+
+#### Parameters
+
+| Parameter        | Type    | Description                                    | Example                |
+|------------------|---------|------------------------------------------------|------------------------|
+| `markdown_path`  | string  | The path of the markdown file to process.      | `./path/to/file.md`    |
+
+#### Example Usage
+```python
+markitdown_tool = MarkitdownTool()
+result = markitdown_tool.execute(markdown_path="./path/to/file.md")
+print("Processed Markdown Output:", result)
+```
+
+---
+
+### 18. Unified Diff Tool
+
+The **Unified Diff Tool** generates a unified diff between two texts or files.
+
+#### Parameters
+
+| Parameter    | Type   | Description                                    | Example                |
+|--------------|--------|------------------------------------------------|------------------------|
+| `original`   | string | The original content or file path.            | `old_text.txt`         |
+| `updated`    | string | The updated content or file path.             | `new_text.txt`         |
+
+#### Example Usage
+```python
+diff_tool = UnifiedDiffTool()
+result = diff_tool.execute(original="old_text.txt", updated="new_text.txt")
+print("Unified Diff Output:", result)
+```
+
 
 #### Creating Custom Tools
 
@@ -320,28 +727,6 @@ Features:
 | `/events`          | GET    | SSE endpoint    |
 | `/validate`        | POST   | Task validation |
 
-### New Tools
-
-- `agent_tool.py`
-- `download_http_file_tool.py`
-- `edit_whole_content_tool.py`
-- `elixir_tool.py`
-- `execute_bash_command_tool.py`
-- `input_question_tool.py`
-- `list_directory_tool.py`
-- `llm_tool.py`
-- `markitdown_tool.py`
-- `nodejs_tool.py`
-- `python_tool.py`
-- `read_file_block_tool.py`
-- `read_file_tool.py`
-- `replace_in_file_tool.py`
-- `ripgrep_tool.py`
-- `search_definition_names.py`
-- `task_complete_tool.py`
-- `tool.py`
-- `unified_diff_tool.py`
-- `write_file_tool.py`
 
 ## 📖 Examples
 
