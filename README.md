@@ -125,7 +125,7 @@ quantalogic task --file tasks/example.md --verbose
 
 Selecting agent mode:
 ```bash
-quantalogic --mode interpreter --task "Explain quantum computing"
+quantalogic --mode interpreter task "Explain quantum computing"
 ```
 
 Interactive mode:
@@ -145,10 +145,7 @@ Using a task file:
 quantalogic --file tasks/example.md --verbose
 ```
 
-Selecting agent mode:
-```bash
-quantalogic --mode interpreter --task "Explain quantum computing"
-```
+### With code
 
 ```python
 from quantalogic import Agent
@@ -180,32 +177,6 @@ agent = Agent(model_name="deepseek/deepseek-chat")
 # Execute a sample task
 result = agent.solve_task("Create a Python function that calculates the Fibonacci sequence")
 print(result)
-```
-
-### Command Line Interface
-
-```bash
-# Simple task execution
-quantalogic --task "Write a FastAPI endpoint that handles file uploads"
-```
-
-
-`instruction.md`
-
-```md
-Write a poem
-Translate the poem in English
-Choose 2 French Authors
-And then rewrite the translation with the style of each author
-```
-
-`
-```bash
-# Advanced usage with options
-quantalogic \
-    --model openrouter/deepseek-chat \
-    --execute-file instruction.md \
-    --verbose
 ```
 
 ## 📖 Examples
