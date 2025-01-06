@@ -7,29 +7,37 @@ from typing import Optional
 
 # Third-party imports
 import click
-from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Confirm
+from loguru import logger
 
-from quantalogic.agent import Agent
+# Configure logger
+logger.remove()  # Remove default logger
+
+from rich.console import Console  # noqa: E402
+from rich.panel import Panel  # noqa: E402
+from rich.prompt import Confirm  # noqa: E402
+
+from quantalogic.agent import Agent  # noqa: E402
 
 # Local application imports
-from quantalogic.agent_config import (
+from quantalogic.agent_config import (  # noqa: E402
     MODEL_NAME,
     create_coding_agent,
     create_full_agent,
     create_interpreter_agent,
     create_orchestrator_agent,
 )
-from quantalogic.interactive_text_editor import get_multiline_input
-from quantalogic.print_event import console_print_events
+from quantalogic.interactive_text_editor import get_multiline_input  # noqa: E402
+from quantalogic.print_event import console_print_events  # noqa: E402
+from quantalogic.version import get_version  # noqa: E402
 
 AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic"]
 
 
 def create_agent_for_mode(mode: str, model_name: str) -> Agent:
     """Create an agent based on the specified mode."""
+    logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
     if mode == "code":
+        logger.debug("Creating code agent without basic mode")
         return create_coding_agent(model_name, basic=False)
     if mode == "code-basic":
         return create_coding_agent(model_name, basic=True)
@@ -43,8 +51,27 @@ def create_agent_for_mode(mode: str, model_name: str) -> Agent:
         raise ValueError(f"Unknown agent mode: {mode}")
 
 
-def switch_verbose(verbose_mode: bool) -> None:
-    pass
+def configure_logger(log_level: str) -> None:
+    """Configure the logger with the specified log level and format."""
+    logger.remove()
+    logger.add(sys.stderr, level=log_level.upper(), format="{time} | {level} | {message}")
+    logger.info(f"Log level set to: {log_level}")
+
+
+def set_litellm_verbose(verbose_mode: bool) -> None:
+    """Set the verbosity of the litellm library."""
+    import litellm
+    litellm.set_verbose = verbose_mode
+
+
+def switch_verbose(verbose_mode: bool, log_level: str = "info") -> None:
+    """Switch verbose mode and configure logger and litellm verbosity."""
+    if log_level == "debug":
+        configure_logger("DEBUG")
+    else:
+        configure_logger(log_level)
+
+    set_litellm_verbose(verbose_mode)
 
 
 def get_task_from_file(file_path: str) -> str:
@@ -68,11 +95,6 @@ def display_welcome_message(console: Console, model_name: str) -> None:
             f"[bold cyan]🌟 Welcome to QuantaLogic AI Assistant v{version} ! 🌟[/bold cyan]\n\n"
             "[green]🎯 How to Use:[/green]\n\n"
             "1. [bold]Describe your task[/bold]: Tell the AI what you need help with.\n"
-            '   - Example: "Write a Python function to calculate Fibonacci numbers."\n'
-            '   - Example: "Explain quantum computing in simple terms."\n'
-            '   - Example: "Generate a list of 10 creative project ideas."\n'
-            '   - Example: "Create a project plan for a new AI startup.\n'
-            '   - Example: "Help me debug this Python code."\n\n'
             "2. [bold]Submit your task[/bold]: Press [bold]Enter[/bold] twice to send your request.\n\n"
             "3. [bold]Exit the app[/bold]: Leave the input blank and press [bold]Enter[/bold] twice to close the assistant.\n\n"
             f"[yellow]ℹ️ System Info:[/yellow]\n\n"
@@ -82,29 +104,32 @@ def display_welcome_message(console: Console, model_name: str) -> None:
             "- Be as specific as possible in your task description to get the best results!\n"
             "- Use clear and concise language when describing your task\n"
             "- For coding tasks, include relevant context and requirements\n"
-            "- The AI can handle complex tasks - don't hesitate to ask challenging questions!",
+            "- The coding agent mode can handle complex tasks - don't hesitate to ask challenging questions!",
             title="[bold]Instructions[/bold]",
             border_style="blue",
         )
     )
 
 
-def get_version() -> str:
-    """Get the current version of the package."""
-    return "QuantaLogic version: 1.0.0"
-
-
 @click.group(invoke_without_command=True)
 @click.option("--version", is_flag=True, help="Show version information.")
+@click.option(
+    "--model-name",
+    default=MODEL_NAME,
+    help='Specify the model to use (litellm format, e.g. "openrouter/deepseek-chat").',
+)
+@click.option("--log", type=click.Choice(["info", "debug", "warning"]), default="info", help="Set logging level (info/debug/warning).")
+@click.option("--verbose", is_flag=True, help="Enable verbose output.")
+@click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")
 @click.pass_context
-def cli(ctx: click.Context, version: bool) -> None:
+def cli(ctx: click.Context, version: bool, model_name: str, verbose: bool, mode: str, log: str) -> None:
     """QuantaLogic AI Assistant - A powerful AI tool for various tasks."""
     if version:
         console = Console()
         console.print(f"QuantaLogic version: {get_version()}")
         sys.exit(0)
     if ctx.invoked_subcommand is None:
-        ctx.invoke(task)
+        ctx.invoke(task, model_name=model_name, verbose=verbose, mode=mode, log=log)
 
 
 @cli.command()
@@ -117,10 +142,10 @@ def cli(ctx: click.Context, version: bool) -> None:
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
 @click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")
 @click.argument("task", required=False)
-def task(file: Optional[str], model_name: str, verbose: bool, mode: str, task: Optional[str]) -> None:
+def task(file: Optional[str], model_name: str, verbose: bool, mode: str, task: Optional[str], log: str) -> None:
     """Execute a task with the QuantaLogic AI Assistant."""
     console = Console()
-    switch_verbose(verbose)
+    switch_verbose(verbose, log)
 
     try:
         if file:
@@ -130,8 +155,11 @@ def task(file: Optional[str], model_name: str, verbose: bool, mode: str, task: O
                 task_content = task
             else:
                 display_welcome_message(console, model_name)
+                logger.info("Waiting for user input...")
                 task_content = get_multiline_input(console).strip()
+                logger.info(f"User input received. Task content: {task_content}")
                 if not task_content:
+                    logger.info("No task provided. Exiting...")
                     console.print("[yellow]No task provided. Exiting...[/yellow]")
                     sys.exit(2)
 
@@ -147,23 +175,31 @@ def task(file: Optional[str], model_name: str, verbose: bool, mode: str, task: O
                 console.print("[yellow]Task submission cancelled. Exiting...[/yellow]")
                 sys.exit(0)
 
+        logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
         agent = create_agent_for_mode(mode, model_name)
-        agent.event_emitter.on(
-            [
-                "task_complete",
-                "task_think_start",
-                "task_think_end",
-                "tool_execution_start",
-                "tool_execution_end",
-                "error_max_iterations_reached",
-                "memory_full",
-                "memory_compacted",
-                "memory_summary",
-            ],
-            console_print_events,
-        )
+        logger.debug(f"Created agent for mode: {mode} with model: {model_name}")
 
+        events = [
+            "task_start",
+            "task_think_start",
+            "task_think_end",
+            "task_complete",
+            "tool_execution_start",
+            "tool_execution_end",
+            "error_max_iterations_reached",
+            "memory_full",
+            "memory_compacted",
+            "memory_summary",
+        ]
+        agent.event_emitter.on(
+            event=events,
+            listener=console_print_events,
+        )
+        logger.debug("Registered event handlers for agent events with events: {events}")
+
+        logger.debug(f"Solving task with agent: {task_content}")
         result = agent.solve_task(task=task_content, max_iterations=300)
+        logger.debug(f"Task solved with result: {result}")
 
         console.print(
             Panel.fit(
@@ -173,6 +209,7 @@ def task(file: Optional[str], model_name: str, verbose: bool, mode: str, task: O
 
     except Exception as e:
         console.print(f"[red]{str(e)}[/red]")
+        logger.error(f"Error in task execution: {e}", exc_info=True)
         sys.exit(1)
 
 

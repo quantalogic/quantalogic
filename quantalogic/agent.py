@@ -21,12 +21,6 @@ from quantalogic.utils.ask_user_validation import console_ask_for_user_validatio
 from quantalogic.xml_parser import ToleranceXMLParser
 from quantalogic.xml_tool_parser import ToolParser
 
-# Configure logger based on environment variable
-log_level = os.getenv("LOG_LEVEL", "ERROR")
-logger.remove()
-logger.add(sys.stderr, level=log_level)
-
-
 # Maximum ratio occupancy of the occupied memory
 MAX_OCCUPANCY = 90.0
 
@@ -81,7 +75,7 @@ class Agent(BaseModel):
 
     def __init__(
         self,
-        model_name: str = "ollama/qwen2.5-coder:14b",
+        model_name: str = "",
         memory: AgentMemory = AgentMemory(),
         tools: list[Tool] = [TaskCompleteTool()],
         ask_for_user_validation: Callable[[str], bool] = console_ask_for_user_validation,
@@ -91,17 +85,21 @@ class Agent(BaseModel):
     ):
         """Initialize the agent with model, memory, tools, and configurations."""
         try:
+            logger.debug("Initializing agent...")
             # Add TaskCompleteTool to the tools list if not already present
             if TaskCompleteTool() not in tools:
                 tools.append(TaskCompleteTool())
 
             tool_manager = ToolManager(tools={tool.name: tool for tool in tools})
             environment = get_environment()
+            logger.debug(f"Environment details: {environment}")
             tools_markdown = tool_manager.to_markdown()
+            logger.debug(f"Tools Markdown: {tools_markdown}")
 
             system_prompt_text = system_prompt(
                 tools=tools_markdown, environment=environment, expertise=specific_expertise
             )
+            logger.debug(f"System prompt: {system_prompt_text}")
 
             config = AgentConfig(
                 environment_details=environment,
@@ -109,6 +107,7 @@ class Agent(BaseModel):
                 system_prompt=system_prompt_text,
             )
 
+            logger.debug("Base class init started ...")
             super().__init__(
                 model=GenerativeModel(model=model_name),
                 memory=memory,
@@ -119,7 +118,7 @@ class Agent(BaseModel):
                 task_to_solve=task_to_solve,
                 specific_expertise=specific_expertise,
             )
-            logger.info("Agent initialized successfully.")
+            logger.debug("Agent initialized successfully.")
         except Exception as e:
             logger.error(f"Failed to initialize agent: {str(e)}")
             raise
@@ -135,6 +134,7 @@ class Agent(BaseModel):
         Returns:
             str: The final response after task completion.
         """
+        logger.debug(f"Solving task... {task}")
         self._reset_session(task_to_solve=task, max_iterations=max_iterations)
 
         # Add system prompt to memory
@@ -215,10 +215,13 @@ class Agent(BaseModel):
         # Emit event: Task Solve End
         self._emit_event("task_solve_end")
 
+        logger.debug(f"Task solved: {answer}")
+
         return answer
 
     def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30):
         """Reset the agent's session."""
+        logger.debug("Resetting session...")
         self.task_to_solve = task_to_solve
         self.memory.reset()
         self.variable_store.reset()
