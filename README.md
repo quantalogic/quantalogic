@@ -1,7 +1,7 @@
 # QuantaLogic
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)]()
 
 QuantaLogic is a  ReAct (Reasoning & Action) framework for building advanced AI agents. 
@@ -44,9 +44,8 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Docker (optional for code execution tools)
-- Node.js 18+ (optional, for web interface development)
 
 ### Via pip
 
