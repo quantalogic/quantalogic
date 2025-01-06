@@ -51,17 +51,27 @@ def create_agent_for_mode(mode: str, model_name: str) -> Agent:
         raise ValueError(f"Unknown agent mode: {mode}")
 
 
-def switch_verbose(verbose_mode: bool) -> None:
+def configure_logger(log_level: str) -> None:
+    """Configure the logger with the specified log level and format."""
+    logger.remove()
+    logger.add(sys.stderr, level=log_level.upper(), format="{time} | {level} | {message}")
+    logger.info(f"Log level set to: {log_level}")
+
+
+def set_litellm_verbose(verbose_mode: bool) -> None:
+    """Set the verbosity of the litellm library."""
     import litellm
-
-    if verbose_mode:
-        logger.add(sys.stderr, level="DEBUG", format="{time} | {level} | {message}")
-        logger.info("Verbose mode enabled.")
-    else:
-        logger.info("Verbose mode disabled.")
-        logger.remove()
-
     litellm.set_verbose = verbose_mode
+
+
+def switch_verbose(verbose_mode: bool, log_level: str = "info") -> None:
+    """Switch verbose mode and configure logger and litellm verbosity."""
+    if log_level == "debug":
+        configure_logger("DEBUG")
+    else:
+        configure_logger(log_level)
+
+    set_litellm_verbose(verbose_mode)
 
 
 def get_task_from_file(file_path: str) -> str:
@@ -108,17 +118,18 @@ def display_welcome_message(console: Console, model_name: str) -> None:
     default=MODEL_NAME,
     help='Specify the model to use (litellm format, e.g. "openrouter/deepseek-chat").',
 )
+@click.option("--log", type=click.Choice(["info", "debug", "warning"]), default="info", help="Set logging level (info/debug/warning).")
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
 @click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")
 @click.pass_context
-def cli(ctx: click.Context, version: bool, model_name: str, verbose: bool, mode: str) -> None:
+def cli(ctx: click.Context, version: bool, model_name: str, verbose: bool, mode: str, log: str) -> None:
     """QuantaLogic AI Assistant - A powerful AI tool for various tasks."""
     if version:
         console = Console()
         console.print(f"QuantaLogic version: {get_version()}")
         sys.exit(0)
     if ctx.invoked_subcommand is None:
-        ctx.invoke(task, model_name=model_name, verbose=verbose, mode=mode)
+        ctx.invoke(task, model_name=model_name, verbose=verbose, mode=mode, log=log)
 
 
 @cli.command()
@@ -131,10 +142,10 @@ def cli(ctx: click.Context, version: bool, model_name: str, verbose: bool, mode:
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
 @click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")
 @click.argument("task", required=False)
-def task(file: Optional[str], model_name: str, verbose: bool, mode: str, task: Optional[str]) -> None:
+def task(file: Optional[str], model_name: str, verbose: bool, mode: str, task: Optional[str], log: str) -> None:
     """Execute a task with the QuantaLogic AI Assistant."""
     console = Console()
-    switch_verbose(verbose)
+    switch_verbose(verbose, log)
 
     try:
         if file:
