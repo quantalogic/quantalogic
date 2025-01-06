@@ -104,16 +104,10 @@ task    Execute a task with the QuantaLogic AI Assistant
 
 #### Task Execution
 Tasks can be provided:
-1. Directly via --task parameter
+1. Directly via `task` parameter
 2. Through a file using --file parameter
 3. Interactively via standard input
 
-#### Error Handling
-The CLI provides comprehensive error handling:
-- File not found errors
-- Permission errors
-- Model configuration errors
-- Task validation errors
 
 #### Examples
 
@@ -133,7 +127,7 @@ Interactive mode:
 quantalogic
 ```
 
-### With code
+### Using QuantaLogic With code
 
 ```python
 from quantalogic import Agent
