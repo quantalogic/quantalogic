@@ -117,14 +117,10 @@ The CLI provides comprehensive error handling:
 
 #### Examples
 
-Basic task execution:
-```bash
-quantalogic --task "Write a Python function to calculate Fibonacci numbers"
-```
 
 Using a task file:
 ```bash
-quantalogic --file tasks/example.md --verbose
+quantalogic task --file tasks/example.md --verbose
 ```
 
 Selecting agent mode:
