@@ -17,25 +17,29 @@ from quantalogic.agent import Agent
 from quantalogic.agent_config import (
     MODEL_NAME,
     create_agent,
-    create_coding_agent,  # noqa: F401
-    create_orchestrator_agent,  # noqa: F401
+    create_coding_agent,
+    create_full_agent,
+    create_interpreter_agent,
+    create_orchestrator_agent,
 )
 from quantalogic.interactive_text_editor import get_multiline_input
 from quantalogic.print_event import console_print_events
 
 main_agent = create_agent(MODEL_NAME)
 
-AGENT_MODES = ["code", "search", "full"]
+AGENT_MODES = ["code", "basic", "interpreter", "full"]
 
 
 def create_agent_for_mode(mode: str, model_name: str) -> Agent:
     """Create an agent based on the specified mode."""
     if mode == "code":
         return create_coding_agent(model_name)
-    elif mode == "search":
-        return create_agent(model_name)
+    elif mode == "basic":
+        return create_orchestrator_agent(model_name)
     elif mode == "full":
-        return create_agent(model_name)
+        return create_full_agent(model_name)
+    elif mode == "interpreter":
+        return create_interpreter_agent(model_name)
     else:
         raise ValueError(f"Unknown agent mode: {mode}")
 
@@ -75,9 +79,10 @@ def get_task_from_file(file_path: str) -> str:
 
 def display_welcome_message(console: Console, model_name: str) -> None:
     """Display the welcome message and instructions."""
+    version = get_version()
     console.print(
         Panel.fit(
-            "[bold cyan]🌟 Welcome to QuantaLogic AI Assistant! 🌟[/bold cyan]\n\n"
+            f"[bold cyan]🌟 Welcome to QuantaLogic AI Assistant v{version} ! 🌟[/bold cyan]\n\n"
             "[green]🎯 How to Use:[/green]\n\n"
             "1. [bold]Describe your task[/bold]: Tell the AI what you need help with.\n"
             '   - Example: "Write a Python function to calculate Fibonacci numbers."\n'

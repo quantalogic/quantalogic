@@ -55,6 +55,33 @@ def create_agent(model_name) -> Agent:
     )
 
 
+def create_interpreter_agent(model_name: str) -> Agent:
+    """Create an interpreter agent with the specified model and tools.
+
+    Args:
+        model_name (str): Name of the model to use
+    """
+    return Agent(
+        model_name=model_name,
+        tools=[
+            TaskCompleteTool(),
+            ReadFileTool(),
+            ReadFileBlockTool(),
+            WriteFileTool(),
+            EditWholeContentTool(),
+            InputQuestionTool(),
+            ListDirectoryTool(),
+            ExecuteBashCommandTool(),
+            ReplaceInFileTool(),
+            RipgrepTool(),
+            PythonTool(),
+            NodeJsTool(),
+            SearchDefinitionNames(),
+            DownloadHttpFileTool(),
+        ],
+    )
+
+
 def create_full_agent(model_name: str) -> Agent:
     """Create an agent with the specified model and many tools.
 
