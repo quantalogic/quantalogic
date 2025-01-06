@@ -10,6 +10,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
 
+from quantalogic.agent import Agent
+
 # Local application imports
 from quantalogic.agent_config import (
     MODEL_NAME,
@@ -21,6 +23,22 @@ from quantalogic.interactive_text_editor import get_multiline_input
 from quantalogic.print_event import console_print_events
 
 main_agent = create_agent(MODEL_NAME)
+
+
+AGENT_MODES = ["code", "search", "full"]
+
+
+def create_agent_for_mode(mode: str, model_name: str) -> Agent:
+    """Create an agent based on the specified mode."""
+    if mode == "code":
+        return create_coding_agent(model_name)
+    elif mode == "search":
+        return create_agent(model_name)
+    elif mode == "full":
+        return create_agent(model_name)
+    else:
+        raise ValueError(f"Unknown agent mode: {mode}")
+
 
 main_agent.event_emitter.on(
     [
@@ -51,6 +69,10 @@ def parse_arguments():
         help='specify the model to use (litellm format, e.g. "openrouter/deepseek-chat")',
     )
     return parser.parse_args()
+
+def switch_verbose(verbose_mode: bool) -> None:
+    from litellm import set_verbose
+    set_verbose(verbose_mode)
 
 
 def get_task_from_file(file_path):

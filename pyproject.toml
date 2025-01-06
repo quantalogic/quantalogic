@@ -31,6 +31,7 @@ websocket = "^0.2.1"
 tenacity = "^9.0.0"
 google-auth = "^2.20.0"
 pathspec = "^0.12.1"
+click = "^8.1.8"
 
 [tool.poetry.scripts]
 quantalogic = "quantalogic.main:main"
