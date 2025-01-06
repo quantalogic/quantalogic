@@ -16,7 +16,6 @@ from quantalogic.agent import Agent
 # Local application imports
 from quantalogic.agent_config import (
     MODEL_NAME,
-    create_agent,
     create_coding_agent,
     create_full_agent,
     create_interpreter_agent,
@@ -25,15 +24,15 @@ from quantalogic.agent_config import (
 from quantalogic.interactive_text_editor import get_multiline_input
 from quantalogic.print_event import console_print_events
 
-main_agent = create_agent(MODEL_NAME)
-
-AGENT_MODES = ["code", "basic", "interpreter", "full"]
+AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic"]
 
 
 def create_agent_for_mode(mode: str, model_name: str) -> Agent:
     """Create an agent based on the specified mode."""
     if mode == "code":
-        return create_coding_agent(model_name)
+        return create_coding_agent(model_name, basic=False)
+    if mode == "code-basic":
+        return create_coding_agent(model_name, basic=True)
     elif mode == "basic":
         return create_orchestrator_agent(model_name)
     elif mode == "full":
@@ -42,22 +41,6 @@ def create_agent_for_mode(mode: str, model_name: str) -> Agent:
         return create_interpreter_agent(model_name)
     else:
         raise ValueError(f"Unknown agent mode: {mode}")
-
-
-main_agent.event_emitter.on(
-    [
-        "task_complete",
-        "task_think_start",
-        "task_think_end",
-        "tool_execution_start",
-        "tool_execution_end",
-        "error_max_iterations_reached",
-        "memory_full",
-        "memory_compacted",
-        "memory_summary",
-    ],
-    console_print_events,
-)
 
 
 def switch_verbose(verbose_mode: bool) -> None:
@@ -165,6 +148,21 @@ def task(file: Optional[str], model_name: str, verbose: bool, mode: str, task: O
                 sys.exit(0)
 
         agent = create_agent_for_mode(mode, model_name)
+        agent.event_emitter.on(
+            [
+                "task_complete",
+                "task_think_start",
+                "task_think_end",
+                "tool_execution_start",
+                "tool_execution_end",
+                "error_max_iterations_reached",
+                "memory_full",
+                "memory_compacted",
+                "memory_summary",
+            ],
+            console_print_events,
+        )
+
         result = agent.solve_task(task=task_content, max_iterations=300)
 
         console.print(

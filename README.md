@@ -76,6 +76,85 @@ pipx install quantalogic
 
 ### Basic Usage
 
+## 📖 CLI Reference
+
+The QuantaLogic CLI provides powerful command-line capabilities:
+
+```bash
+quantalogic [OPTIONS] COMMAND [ARGS]...
+```
+
+### Options
+--model-name TEXT       Model to use (default: deepseek/deepseek-chat)
+--verbose               Enable verbose output
+--mode TEXT             Agent mode (code/basic/interpreter/full/code-basic)
+--file PATH             Path to task file
+--version               Show version and exit
+
+### Commands
+task    Execute a task with the QuantaLogic AI Assistant
+
+### Detailed Usage
+
+#### Agent Modes
+- code: Coding-focused agent with basic capabilities
+- basic: General-purpose agent without coding tools
+- interpreter: Interactive code execution agent
+- full: Full-featured agent with all capabilities
+- code-basic: Coding agent with basic reasoning
+
+#### Task Execution
+Tasks can be provided:
+1. Directly via --task parameter
+2. Through a file using --file parameter
+3. Interactively via standard input
+
+#### Error Handling
+The CLI provides comprehensive error handling:
+- File not found errors
+- Permission errors
+- Model configuration errors
+- Task validation errors
+
+#### Examples
+
+Basic task execution:
+```bash
+quantalogic --task "Write a Python function to calculate Fibonacci numbers"
+```
+
+Using a task file:
+```bash
+quantalogic --file tasks/example.md --verbose
+```
+
+Selecting agent mode:
+```bash
+quantalogic --mode interpreter --task "Explain quantum computing"
+```
+
+Interactive mode:
+```bash
+quantalogic
+```
+
+### Examples
+
+Basic task execution:
+```bash
+quantalogic --task "Write a Python function to calculate Fibonacci numbers"
+```
+
+Using a task file:
+```bash
+quantalogic --file tasks/example.md --verbose
+```
+
+Selecting agent mode:
+```bash
+quantalogic --mode interpreter --task "Explain quantum computing"
+```
+
 ```python
 from quantalogic import Agent
 
