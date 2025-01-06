@@ -18,6 +18,7 @@ class MarkitdownTool(Tool):
         "Converts various file formats to Markdown using the MarkItDown library. "
         "Supports both local file paths and URLs (http://, https://). "
         "Supported formats include: PDF, PowerPoint, Word, Excel, HTML"
+        "Don't use the output_file_path argument if you want to return the result in markdown directly"
     )
     arguments: list = [
         ToolArgument(
