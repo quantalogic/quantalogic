@@ -1,11 +1,7 @@
 import os
-from typing import Union
 
 from quantalogic.utils.get_environment import get_environment
 from quantalogic.utils.git_ls import git_ls
-
-
-
 
 
 def get_coding_environment() -> str:
