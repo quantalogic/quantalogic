@@ -41,10 +41,10 @@ class InputQuestionTool(Tool):
         try:
             # Use rich.prompt to create an interactive prompt
             user_input = Prompt.ask(question, default=default)
-            
+
             # Log the input for debugging purposes
             logger.debug(f"User input for question '{question}': {user_input}")
-            
+
             return user_input
         except Exception as e:
             # Log any errors that occur during input

@@ -10,18 +10,19 @@ from quantalogic.tools.tool import Tool, ToolArgument
 
 class LineType(Enum):
     """Enum for different types of lines in a patch."""
-    CONTEXT = ' '
-    ADDITION = '+'
-    DELETION = '-'
+
+    CONTEXT = " "
+    ADDITION = "+"
+    DELETION = "-"
 
     @classmethod
-    def from_line(cls, line: str) -> Optional['LineType']:
+    def from_line(cls, line: str) -> Optional["LineType"]:
         """Get the line type from a patch line."""
-        if line.startswith(' '):
+        if line.startswith(" "):
             return cls.CONTEXT
-        elif line.startswith('+'):
+        elif line.startswith("+"):
             return cls.ADDITION
-        elif line.startswith('-'):
+        elif line.startswith("-"):
             return cls.DELETION
         return None
 
@@ -29,6 +30,7 @@ class LineType(Enum):
 @dataclass
 class PatchLine:
     """Represents a line in a patch with type and content."""
+
     type: LineType
     content: str
     original_line_number: Optional[int] = None
@@ -38,6 +40,7 @@ class PatchLine:
 @dataclass
 class HunkHeader:
     """Represents a hunk header in a patch."""
+
     orig_start: int
     orig_count: int
     new_start: int
@@ -48,6 +51,7 @@ class HunkHeader:
 @dataclass
 class Hunk:
     """Represents a complete hunk in a patch with validation and application logic."""
+
     header: HunkHeader
     lines: List[PatchLine]
 
@@ -69,11 +73,10 @@ class Hunk:
             return 0
 
         if start_line > len(file_lines):
-            raise PatchError("Patch refers to lines beyond file length", {
-                "File length": len(file_lines),
-                "Start line": start_line,
-                "Hunk header": self._format_header()
-            })
+            raise PatchError(
+                "Patch refers to lines beyond file length",
+                {"File length": len(file_lines), "Start line": start_line, "Hunk header": self._format_header()},
+            )
 
         context_lines = [line for line in self.lines if line.type in (LineType.CONTEXT, LineType.DELETION)]
         if not context_lines:  # Only additions, no context to validate
@@ -96,13 +99,18 @@ class Hunk:
                     break
 
             if not found:
-                raise PatchError("Context mismatch", {
-                    "Expected": patch_line.content.rstrip(),
-                    "Found": file_lines[expected_line].rstrip() if expected_line < len(file_lines) else "End of file",
-                    "At line": expected_line + 1,
-                    "Hunk header": self._format_header(),
-                    "Offset": offset
-                })
+                raise PatchError(
+                    "Context mismatch",
+                    {
+                        "Expected": patch_line.content.rstrip(),
+                        "Found": file_lines[expected_line].rstrip()
+                        if expected_line < len(file_lines)
+                        else "End of file",
+                        "At line": expected_line + 1,
+                        "Hunk header": self._format_header(),
+                        "Offset": offset,
+                    },
+                )
 
             file_pos += 1
 
@@ -110,14 +118,16 @@ class Hunk:
 
     def _format_header(self) -> str:
         """Format hunk header for error messages."""
-        header = f"@@ -{self.header.orig_start},{self.header.orig_count} +{self.header.new_start},{self.header.new_count} @@"
+        header = (
+            f"@@ -{self.header.orig_start},{self.header.orig_count} +{self.header.new_start},{self.header.new_count} @@"
+        )
         if self.header.section_header:
             header += f" {self.header.section_header}"
         return header
 
     def apply(self, lines: List[str], start_line: int, offset: int = 0) -> List[str]:
         """Apply this hunk to the given lines."""
-        result = lines[:start_line - 1 + offset]
+        result = lines[: start_line - 1 + offset]
         file_pos = start_line - 1 + offset
 
         for patch_line in self.lines:
@@ -126,7 +136,7 @@ class Hunk:
                     result.append(lines[file_pos])
                 file_pos += 1
             elif patch_line.type == LineType.ADDITION:
-                result.append(patch_line.content.rstrip() + '\n')
+                result.append(patch_line.content.rstrip() + "\n")
             elif patch_line.type == LineType.DELETION:
                 if file_pos < len(lines):
                     file_pos += 1
@@ -137,6 +147,7 @@ class Hunk:
 
 class PatchError(Exception):
     """Custom exception for patch-related errors with context."""
+
     def __init__(self, message: str, context: Optional[Dict] = None):
         self.context = context or {}
         super().__init__(message)
@@ -152,6 +163,7 @@ class PatchError(Exception):
 
 class Patch:
     """Represents a complete patch with enhanced parsing and validation."""
+
     def __init__(self, content: str):
         self.content = content
         self.hunks: List[Hunk] = []
@@ -169,7 +181,7 @@ class Patch:
         if not lines:
             raise PatchError("No lines in patch")
 
-        if self.content.startswith('<![CDATA[') and self.content.endswith(']]>'):
+        if self.content.startswith("<![CDATA[") and self.content.endswith("]]>"):
             self.content = self.content[9:-3]
             lines = self.content.splitlines()
 
@@ -182,12 +194,12 @@ class Patch:
     def _parse_headers(self, lines: List[str]) -> None:
         """Parse patch headers and metadata."""
         for line in lines:
-            if line.startswith('--- '):
-                self.original_filename = line[4:].split('\t')[0].strip()
-            elif line.startswith('+++ '):
-                self.new_filename = line[4:].split('\t')[0].strip()
-            elif ':' in line:  # Possible metadata
-                key, value = line.split(':', 1)
+            if line.startswith("--- "):
+                self.original_filename = line[4:].split("\t")[0].strip()
+            elif line.startswith("+++ "):
+                self.new_filename = line[4:].split("\t")[0].strip()
+            elif ":" in line:  # Possible metadata
+                key, value = line.split(":", 1)
                 self.metadata[key.strip()] = value.strip()
 
     def _parse_hunks(self, lines: List[str]) -> None:
@@ -196,7 +208,7 @@ class Patch:
         in_hunk = False
 
         for line in lines:
-            if line.startswith('@@ '):
+            if line.startswith("@@ "):
                 if current_hunk_lines:
                     self._parse_hunk(current_hunk_lines)
                     current_hunk_lines = []
@@ -204,9 +216,9 @@ class Patch:
 
             if in_hunk:
                 current_hunk_lines.append(line)
-            elif not (line.startswith('--- ') or line.startswith('+++ ') or line.strip() == ''):
-                if ':' in line:
-                    key, value = line.split(':', 1)
+            elif not (line.startswith("--- ") or line.startswith("+++ ") or line.strip() == ""):
+                if ":" in line:
+                    key, value = line.split(":", 1)
                     self.metadata[key.strip()] = value.strip()
 
         if current_hunk_lines:
@@ -214,7 +226,7 @@ class Patch:
 
     def _parse_hunk(self, lines: List[str]) -> None:
         """Parse a single hunk from its lines."""
-        if not lines or not lines[0].startswith('@@ '):
+        if not lines or not lines[0].startswith("@@ "):
             raise PatchError("Invalid hunk format", {"First line": lines[0] if lines else "No lines"})
 
         header = self._parse_hunk_header(lines[0])
@@ -239,14 +251,14 @@ class Patch:
 
     def _parse_hunk_header(self, header_line: str) -> HunkHeader:
         """Parse a hunk header line."""
-        if not header_line.startswith('@@ '):
+        if not header_line.startswith("@@ "):
             raise PatchError("Malformed hunk header", {"Header line": header_line})
 
-        parts = header_line.split('@@')
+        parts = header_line.split("@@")
         if len(parts) < 3:
             raise PatchError("Malformed hunk header", {"Header line": header_line})
 
-        ranges = parts[1].strip().split(' ')
+        ranges = parts[1].strip().split(" ")
         if len(ranges) != 2:
             raise PatchError("Malformed hunk ranges", {"Header line": header_line, "Ranges": ranges})
 
@@ -257,21 +269,19 @@ class Patch:
             orig_start, orig_count = self._parse_range(orig_range)
             new_start, new_count = self._parse_range(new_range)
         except ValueError as e:
-            raise PatchError("Invalid range format", {
-                "Header line": header_line,
-                "Original range": orig_range,
-                "New range": new_range,
-                "Error": str(e)
-            })
+            raise PatchError(
+                "Invalid range format",
+                {"Header line": header_line, "Original range": orig_range, "New range": new_range, "Error": str(e)},
+            )
 
-        section_header = ' '.join(parts[2:]).strip() if len(parts) > 2 else None
+        section_header = " ".join(parts[2:]).strip() if len(parts) > 2 else None
         return HunkHeader(orig_start, orig_count, new_start, new_count, section_header)
 
     def _parse_range(self, range_str: str) -> Tuple[int, int]:
         """Parse a range string (e.g., 'start,length') into start and count."""
         try:
-            if ',' in range_str:
-                start, count = range_str.split(',')
+            if "," in range_str:
+                start, count = range_str.split(",")
                 return int(start), int(count)
             return int(range_str), 1
         except ValueError:
@@ -285,11 +295,12 @@ class Patch:
             offset = hunk.validate(lines, hunk.header.orig_start, lenient, tolerance)
             lines = hunk.apply(lines, hunk.header.orig_start, offset)
 
-        return ''.join(lines)
+        return "".join(lines)
 
 
 class UnifiedDiffTool(Tool):
     """Tool for applying unified diff patches with comprehensive error handling."""
+
     name: str = "unified_diff"
     description: str = "Applies a unified diff patch to update a file."
     need_validation: bool = True
@@ -321,9 +332,11 @@ class UnifiedDiffTool(Tool):
 
         try:
             if os.path.exists(file_path):
-                with open(file_path, encoding='utf-8') as f:
+                with open(file_path, encoding="utf-8") as f:
                     original_content = f.read()
-                    error_context["File preview"] = original_content[:200] + "..." if len(original_content) > 200 else original_content
+                    error_context["File preview"] = (
+                        original_content[:200] + "..." if len(original_content) > 200 else original_content
+                    )
             else:
                 original_content = ""
 
@@ -331,7 +344,7 @@ class UnifiedDiffTool(Tool):
             new_content = patch_obj.apply_to_text(original_content, lenient=self.lenient, tolerance=self.tolerance)
 
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
 
             return "Patch applied successfully"
@@ -346,7 +359,9 @@ if __name__ == "__main__":
     parser.add_argument("--patch-file", help="Path to the patch file")
     parser.add_argument("--patch", help="Patch content as string")
     parser.add_argument("--lenient", action="store_true", help="Enable lenient mode for patch application")
-    parser.add_argument("--tolerance", type=int, default=5, help="Number of lines to search around for context matching")
+    parser.add_argument(
+        "--tolerance", type=int, default=5, help="Number of lines to search around for context matching"
+    )
 
     args = parser.parse_args()
 
@@ -354,7 +369,7 @@ if __name__ == "__main__":
         parser.error("Cannot specify both --patch-file and --patch")
 
     if args.patch_file:
-        with open(args.patch_file, encoding='utf-8') as f:
+        with open(args.patch_file, encoding="utf-8") as f:
             patch_content = f.read()
     elif args.patch:
         patch_content = args.patch

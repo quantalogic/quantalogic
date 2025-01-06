@@ -24,7 +24,7 @@ def test_xml_element_initialization():
         raw="<test>test content</test>",
         start_pos=0,
         end_pos=25,
-        cdata_sections=["cdata content"]
+        cdata_sections=["cdata content"],
     )
     assert element.name == "test"
     assert element.content == "test content"
@@ -35,11 +35,7 @@ def test_xml_element_initialization():
 
     # Test with default cdata_sections
     element_default = XMLElement(
-        name="test",
-        content="test content",
-        raw="<test>test content</test>",
-        start_pos=0,
-        end_pos=25
+        name="test", content="test content", raw="<test>test content</test>", start_pos=0, end_pos=25
     )
     assert element_default.cdata_sections == []
 
@@ -53,7 +49,7 @@ def test_xml_element_validation():
         raw="<test>test content</test>",
         start_pos=0,
         end_pos=25,
-        cdata_sections=["cdata content"]
+        cdata_sections=["cdata content"],
     )
     assert isinstance(element.model_dump(), dict)
 
@@ -64,7 +60,7 @@ def test_xml_element_validation():
             content="test content",
             raw="<test>test content</test>",
             start_pos=0,
-            end_pos=25
+            end_pos=25,
         )
 
     # Test invalid position values
@@ -74,7 +70,7 @@ def test_xml_element_validation():
             content="test content",
             raw="<test>test content</test>",
             start_pos=10,
-            end_pos=5  # Invalid: end_pos <= start_pos
+            end_pos=5,  # Invalid: end_pos <= start_pos
         )
 
 
@@ -85,7 +81,7 @@ def test_extract_and_remove_cdata(parser: ToleranceXMLParser):
     cleaned_content, cdata_sections = parser._extract_and_remove_cdata(content)
 
     # Normalize whitespace for comparison
-    assert re.sub(r'\s+', ' ', cleaned_content).strip() == "Some text more text"
+    assert re.sub(r"\s+", " ", cleaned_content).strip() == "Some text more text"
     assert cdata_sections == ["CDATA content", "Another CDATA"]
 
     # Test without CDATA section
@@ -99,12 +95,12 @@ def test_extract_and_remove_cdata(parser: ToleranceXMLParser):
 def test_extract_elements(parser: ToleranceXMLParser):
     """Test extracting XML-like elements from text."""
     # Test with multiple elements and CDATA
-    text = '''
+    text = """
     <thinking>Some thought</thinking>
     <attempt_reply>First reply</attempt_reply>
     <thinking>Another thought</thinking>
     <attempt_reply><![CDATA[Reply with CDATA]]></attempt_reply>
-    '''
+    """
 
     # Extract all elements
     elements = parser.extract_elements(text)
@@ -126,10 +122,10 @@ def test_extract_elements_with_logging(parser: ToleranceXMLParser, caplog: Any):
     # Ensure we capture loguru output
     logger.remove()
     logger.add(lambda msg: caplog.records.append(msg), level="DEBUG")
-    
-    text = '<element>content</element>'
+
+    text = "<element>content</element>"
     _ = parser.extract_elements(text)
-    
+
     # Check for log messages in stderr output
     debug_messages = [str(record) for record in caplog.records]
     assert any("Extracting elements: all" in msg for msg in debug_messages)
@@ -152,10 +148,10 @@ def test_extract_elements_error_handling(parser: ToleranceXMLParser):
 def test_malformed_xml(parser: ToleranceXMLParser):
     """Test parsing malformed or incomplete XML-like elements."""
     # Test with malformed tags
-    text_malformed = '''
+    text_malformed = """
     <incomplete_tag>Some content</incomplete_tag>
     <another_tag>More content</another_tag>
-    '''
+    """
 
     elements = parser.extract_elements(text_malformed)
     assert len(elements) == 2
@@ -171,7 +167,7 @@ def test_xml_element_attributes():
         raw="<test>test content</test>",
         start_pos=10,
         end_pos=35,
-        cdata_sections=["cdata section"]
+        cdata_sections=["cdata section"],
     )
 
     assert element.name == "test"
@@ -204,12 +200,12 @@ def test_edge_cases(parser: ToleranceXMLParser):
 
 def test_cdata_extraction(parser: ToleranceXMLParser):
     """Test CDATA section extraction."""
-    text_with_cdata = '''
+    text_with_cdata = """
     <element>
         Some text <![CDATA[CDATA content 1]]> more text
         <![CDATA[CDATA content 2]]>
     </element>
-    '''
+    """
 
     elements = parser.extract_elements(text_with_cdata)
     assert len(elements) == 1
@@ -217,21 +213,14 @@ def test_cdata_extraction(parser: ToleranceXMLParser):
     assert elements["element"].strip() == "Some text more text"
 
 
-@pytest.mark.parametrize("test_input,expected", [
-    (
-        '<element>simple</element>',
-        {'element': 'simple'}
-    ),
-    (
-        '<tag><![CDATA[data]]></tag>',
-        {'tag': 'data'}
-    ),
-])
-def test_parametrized_parsing(
-    parser: ToleranceXMLParser,
-    test_input: str,
-    expected: dict[str, str]
-):
+@pytest.mark.parametrize(
+    "test_input,expected",
+    [
+        ("<element>simple</element>", {"element": "simple"}),
+        ("<tag><![CDATA[data]]></tag>", {"tag": "data"}),
+    ],
+)
+def test_parametrized_parsing(parser: ToleranceXMLParser, test_input: str, expected: dict[str, str]):
     """Test various XML parsing scenarios using parametrize."""
     result = parser.extract_elements(test_input)
     assert result == expected

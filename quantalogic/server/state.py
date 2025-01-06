@@ -74,36 +74,36 @@ class AgentState:
 
     def add_client(self, task_id: Optional[str] = None) -> str:
         """Add a new client and return its ID.
-        
+
         Args:
             task_id (Optional[str]): Optional task ID to associate with the client.
-        
+
         Returns:
             str: Unique client ID
         """
         with self.queue_lock:
             self.client_counter += 1
             client_id = f"client_{self.client_counter}"
-            
+
             # Create a client-specific event queue
             self.event_queues[client_id] = Queue()
-            
+
             # If a task_id is provided, create or use an existing task-specific queue and agent
             if task_id:
                 if task_id not in self.task_event_queues:
                     self.task_event_queues[task_id] = Queue()
                 if task_id not in self.agents:
                     self.agents[task_id] = self.create_agent_for_task(task_id)
-            
+
             logger.info(f"New client connected: {client_id} for task: {task_id}")
             return client_id
 
     def create_agent_for_task(self, task_id: str) -> Any:
         """Create and return a new agent for the specified task.
-        
+
         Args:
             task_id (str): The task ID for which to create the agent.
-        
+
         Returns:
             Any: The created agent instance.
         """
@@ -114,10 +114,10 @@ class AgentState:
 
     def get_agent_for_task(self, task_id: str) -> Optional[Any]:
         """Retrieve the agent for the specified task.
-        
+
         Args:
             task_id (str): The task ID for which to retrieve the agent.
-        
+
         Returns:
             Optional[Any]: The agent instance if found, else None.
         """
@@ -138,7 +138,7 @@ class AgentState:
 
     def broadcast_event(self, event_type: str, data: Dict[str, Any]):
         """Broadcast an event to all connected clients or specific task queue.
-        
+
         Args:
             event_type (str): Type of the event.
             data (Dict[str, Any]): Event data.
@@ -157,7 +157,7 @@ class AgentState:
 
             with self.queue_lock:
                 task_id = data.get("task_id")
-                
+
                 # If task_id is provided, send to task-specific queue and use task-specific agent
                 if task_id and task_id in self.task_event_queues:
                     self.task_event_queues[task_id].put(event.model_dump())
@@ -167,33 +167,33 @@ class AgentState:
                         # Placeholder for agent-specific logic
                         pass
                     logger.debug(f"Event sent to task-specific queue: {task_id}")
-                
+
                 # Optionally broadcast to global event queues if needed
                 else:
                     for queue in self.event_queues.values():
                         queue.put(event.model_dump())
                     logger.debug("Event broadcast to all client queues")
-        
+
         except Exception as e:
             logger.error(f"Error broadcasting event: {e}")
             logger.error(traceback.format_exc())
 
     def remove_task_event_queue(self, task_id: str):
         """Remove a task-specific event queue safely.
-        
+
         Args:
             task_id (str): The task ID to remove from event queues.
         """
         with self.queue_lock:
             if task_id in self.task_event_queues:
                 del self.task_event_queues[task_id]
-            
+
             # Additional cleanup for related task resources
             if task_id in self.tasks:
                 del self.tasks[task_id]
-            
+
             if task_id in self.task_queues:
                 del self.task_queues[task_id]
-            
+
             if task_id in self.agents:
                 del self.agents[task_id]

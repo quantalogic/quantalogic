@@ -87,9 +87,7 @@ class EventEmitter:
                 elif isinstance(event, list):
                     events = event
                 else:
-                    raise TypeError(
-                        "Event must be a string, a list of strings, or None."
-                    )
+                    raise TypeError("Event must be a string, a list of strings, or None.")
 
                 for evt in events:
                     if evt == "*":
@@ -118,7 +116,7 @@ class EventEmitter:
 
         for listener in listeners:
             try:
-                listener(event,*args, **kwargs)
+                listener(event, *args, **kwargs)
             except Exception as e:
                 # Log the exception or handle it as needed
                 print(f"Error in listener {listener}: {e}")
@@ -154,9 +152,7 @@ class EventEmitter:
                 listeners.extend(self._listeners[event])
             return listeners
 
-    def has_listener(
-        self, event: str | None, listener: Callable[..., Any]
-    ) -> bool:
+    def has_listener(self, event: str | None, listener: Callable[..., Any]) -> bool:
         """Check if a specific listener is registered for an event.
 
         Parameters:
@@ -176,6 +172,7 @@ class EventEmitter:
 
 
 if __name__ == "__main__":
+
     def on_data_received(data):
         print(f"Data received: {data}")
 
@@ -185,20 +182,20 @@ if __name__ == "__main__":
     emitter = EventEmitter()
 
     # Register specific event listener
-    emitter.on('data', on_data_received)
+    emitter.on("data", on_data_received)
 
     # Register wildcard listener
-    emitter.on('*', on_any_event)
+    emitter.on("*", on_any_event)
 
     # Emit 'data' event
-    emitter.emit('data', 'Sample Data')
+    emitter.emit("data", "Sample Data")
 
     # Output:
     # Event 'data' emitted with data: Sample Data
     # Data received: Sample Data
 
     # Emit 'update' event
-    emitter.emit('update', 'Update Data')
+    emitter.emit("update", "Update Data")
 
     # Output:
     # Event 'update' emitted with data: Update Data
@@ -207,10 +204,10 @@ if __name__ == "__main__":
     def once_listener(data):
         print(f"Once listener received: {data}")
 
-    emitter.once('data', once_listener)
+    emitter.once("data", once_listener)
 
     # Emit 'data' event
-    emitter.emit('data', 'First Call')
+    emitter.emit("data", "First Call")
 
     # Output:
     # Event 'data' emitted with data: First Call
@@ -218,9 +215,9 @@ if __name__ == "__main__":
     # Once listener received: First Call
 
     # Emit 'data' event again
-    emitter.emit('data', 'Second Call')
+    emitter.emit("data", "Second Call")
 
     # Output:
     # Event 'data' emitted with data: Second Call
     # Data received: Second Call
-    # (Once listener is not called again)    
+    # (Once listener is not called again)

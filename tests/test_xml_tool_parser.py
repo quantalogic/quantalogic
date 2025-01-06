@@ -19,25 +19,10 @@ class MockTool(Tool):
             name="mock_tool",
             description="Mock tool for testing",
             arguments=[
-                ToolArgument(
-                    name="input",
-                    arg_type="string",
-                    description="Input argument",
-                    required=True
-                ),
-                ToolArgument(
-                    name="output",
-                    arg_type="string", 
-                    description="Output argument",
-                    required=True
-                ),
-                ToolArgument(
-                    name="optional",
-                    arg_type="string",
-                    description="Optional argument",
-                    required=False
-                )
-            ]
+                ToolArgument(name="input", arg_type="string", description="Input argument", required=True),
+                ToolArgument(name="output", arg_type="string", description="Output argument", required=True),
+                ToolArgument(name="optional", arg_type="string", description="Optional argument", required=False),
+            ],
         )
 
 
@@ -62,7 +47,7 @@ def setup_loguru(caplog: Any):
 
     # Remove any existing handlers
     logger.remove()
-    
+
     # Add a handler that writes to stderr
     logger.add(
         sys.stderr,
@@ -71,14 +56,10 @@ def setup_loguru(caplog: Any):
         backtrace=True,
         diagnose=True,
     )
-    
+
     # Add a handler that writes to caplog
     logger.add(
-        lambda msg: caplog.handler.emit(
-            logging.LogRecord(
-                "loguru", logging.INFO, "", 0, msg, (), None
-            )
-        ),
+        lambda msg: caplog.handler.emit(logging.LogRecord("loguru", logging.INFO, "", 0, msg, (), None)),
         format="{message}",
     )
 
@@ -102,13 +83,13 @@ def test_tool_arguments_model():
 
 def test_tool_parser_successful_parsing(tool_parser: ToolParser):
     """Test successful parsing of XML with all required arguments."""
-    xml = '''
+    xml = """
     <root>
         <input>test input</input>
         <output>test output</output>
         <optional>test optional</optional>
     </root>
-    '''
+    """
     result = tool_parser.parse(xml)
     assert result["input"] == "test input"
     assert result["output"] == "test output"
@@ -117,11 +98,11 @@ def test_tool_parser_successful_parsing(tool_parser: ToolParser):
 
 def test_tool_parser_missing_argument(tool_parser: ToolParser):
     """Test parsing XML with missing required argument."""
-    xml = '''
+    xml = """
     <root>
         <input>test input</input>
     </root>
-    '''
+    """
     with pytest.raises(ValueError) as exc_info:
         tool_parser.parse(xml)
     assert "argument output not found" in str(exc_info.value)
@@ -129,12 +110,12 @@ def test_tool_parser_missing_argument(tool_parser: ToolParser):
 
 def test_tool_parser_custom_arguments(tool_parser: ToolParser):
     """Test parsing XML with custom argument structure."""
-    xml = '''
+    xml = """
     <arguments>
         <input>custom input</input>
         <output>custom output</output>
     </arguments>
-    '''
+    """
     result = tool_parser.parse(xml)
     assert result["input"] == "custom input"
     assert result["output"] == "custom output"
@@ -149,7 +130,7 @@ def test_tool_parser_empty_xml(tool_parser: ToolParser):
 
 def test_tool_parser_whitespace_handling(tool_parser: ToolParser):
     """Test handling of whitespace in XML content."""
-    xml = '''
+    xml = """
     <root>
         <input>
             test input
@@ -158,7 +139,7 @@ def test_tool_parser_whitespace_handling(tool_parser: ToolParser):
             test output
         </output>
     </root>
-    '''
+    """
     result = tool_parser.parse(xml)
     assert result["input"].strip() == "test input"
     assert result["output"].strip() == "test output"
@@ -166,12 +147,12 @@ def test_tool_parser_whitespace_handling(tool_parser: ToolParser):
 
 def test_tool_parser_special_characters(tool_parser: ToolParser):
     """Test handling of special characters in XML content."""
-    xml = '''
+    xml = """
     <root>
         <input>test &amp; input</input>
         <output>test &lt; output &gt;</output>
     </root>
-    '''
+    """
     result = tool_parser.parse(xml)
     assert result["input"] == "test & input"
     assert result["output"] == "test < output >"
@@ -179,12 +160,12 @@ def test_tool_parser_special_characters(tool_parser: ToolParser):
 
 def test_tool_parser_with_cdata(tool_parser: ToolParser):
     """Test parsing XML with CDATA sections."""
-    xml = '''
+    xml = """
     <root>
         <input><![CDATA[test input with <special> chars]]></input>
         <output><![CDATA[test output with & symbols]]></output>
     </root>
-    '''
+    """
     result = tool_parser.parse(xml)
     assert result["input"] == "test input with <special> chars"
     assert result["output"] == "test output with & symbols"
@@ -193,30 +174,28 @@ def test_tool_parser_with_cdata(tool_parser: ToolParser):
 def test_tool_parser_error_logging(tool_parser: ToolParser, caplog: Any):
     """Test error logging during XML parsing."""
     caplog.set_level("ERROR")
-    
+
     with pytest.raises(ValueError):
         tool_parser.parse("<invalid>xml")
-    
+
     # Check if any log record contains the error message
     for record in caplog.records:
         print(f"Log record: {record.message}")
-        
+
     assert any(
-        "Error extracting XML elements" in record.message
-        for record in caplog.records
+        "Error extracting XML elements" in record.message for record in caplog.records
     ), "Expected error message not found in logs"
 
 
-@pytest.mark.parametrize("xml,error_msg", [
-    ("<root></root>", "argument input not found"),
-    ("<root><input>test</input></root>", "argument output not found"),
-    ("invalid xml", "Failed to parse XML"),
-])
-def test_tool_parser_error_cases(
-    tool_parser: ToolParser,
-    xml: str,
-    error_msg: str
-):
+@pytest.mark.parametrize(
+    "xml,error_msg",
+    [
+        ("<root></root>", "argument input not found"),
+        ("<root><input>test</input></root>", "argument output not found"),
+        ("invalid xml", "Failed to parse XML"),
+    ],
+)
+def test_tool_parser_error_cases(tool_parser: ToolParser, xml: str, error_msg: str):
     """Test various error cases in XML parsing."""
     with pytest.raises(ValueError) as exc_info:
         tool_parser.parse(xml)

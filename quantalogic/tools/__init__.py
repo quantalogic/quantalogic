@@ -1,4 +1,5 @@
 """Tools for the QuantaLogic agent."""
+
 from .agent_tool import AgentTool
 from .download_http_file_tool import DownloadHttpFileTool
 from .edit_whole_content_tool import EditWholeContentTool
@@ -41,5 +42,5 @@ __all__ = [
     "SearchDefinitionNames",
     "MarkitdownTool",
     "DownloadHttpFileTool",
-    "EditWholeContentTool"
+    "EditWholeContentTool",
 ]

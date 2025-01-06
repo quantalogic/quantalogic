@@ -1,4 +1,5 @@
 """Tool for searching definition names in a directory using Tree-sitter."""
+
 import logging
 import os
 from pathlib import Path
@@ -21,7 +22,6 @@ from quantalogic.tools.tool import Tool, ToolArgument
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 
 class SearchDefinitionNames(Tool):
@@ -89,11 +89,7 @@ class SearchDefinitionNames(Tool):
             raise ValueError(f"Unsupported language: {language_name}")
 
     def execute(
-        self,
-        directory_path: str,
-        language_name: str,
-        file_pattern: str = "*",
-        output_format: str = "text"
+        self, directory_path: str, language_name: str, file_pattern: str = "*", output_format: str = "text"
     ) -> Union[str, Dict]:
         """Searches for definition names in a directory using Tree-sitter.
 
@@ -125,7 +121,7 @@ class SearchDefinitionNames(Tool):
 
                 if file_path.is_file():
                     try:
-                        with open(file_path, 'rb') as f:
+                        with open(file_path, "rb") as f:
                             source_code = f.read()
 
                         tree = parser.parse(source_code)
@@ -138,10 +134,7 @@ class SearchDefinitionNames(Tool):
                         definitions = self._extract_definitions(root_node, language_name)
 
                         if definitions:
-                            results.append({
-                                'file_path': str(file_path),
-                                'definitions': definitions
-                            })
+                            results.append({"file_path": str(file_path), "definitions": definitions})
 
                     except Exception as e:
                         logger.warning(f"Error processing file {file_path}: {str(e)}")
@@ -157,21 +150,17 @@ class SearchDefinitionNames(Tool):
         """Load .gitignore patterns from directory and all parent directories."""
         from pathspec import PathSpec
         from pathspec.patterns import GitWildMatchPattern
-        
+
         ignore_patterns = []
         current = path.absolute()
-        
+
         # Traverse up the directory tree
         while current != current.parent:  # Stop at root
             gitignore_path = current / ".gitignore"
             if gitignore_path.exists():
                 with open(gitignore_path) as f:
                     # Filter out empty lines and comments
-                    patterns = [
-                        line.strip() 
-                        for line in f.readlines() 
-                        if line.strip() and not line.startswith('#')
-                    ]
+                    patterns = [line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")]
                     ignore_patterns.extend(patterns)
             current = current.parent
 
@@ -188,17 +177,14 @@ class SearchDefinitionNames(Tool):
             Dict: Dictionary containing classes with their methods and variables,
                   and standalone functions.
         """
-        definitions = {
-            'classes': {},
-            'functions': []
-        }
+        definitions = {"classes": {}, "functions": []}
 
         current_class = None
         language_handler = self._get_language_handler(language_name)
 
         def process_node(node):
             nonlocal current_class
-            
+
             # Delegate node processing to language handler
             node_type = language_handler.process_node(
                 node,
@@ -207,13 +193,13 @@ class SearchDefinitionNames(Tool):
                 self._process_method,
                 self._process_function,
                 self._process_class,
-                self._process_class_variable
+                self._process_class_variable,
             )
 
             # Update current_class if processing a class node
-            if node_type == 'class':
+            if node_type == "class":
                 current_class = self._process_class(node)
-            elif node_type == 'end_class':
+            elif node_type == "end_class":
                 current_class = None
 
             # Recursively process child nodes
@@ -225,14 +211,14 @@ class SearchDefinitionNames(Tool):
 
     def _process_function(self, node, definitions):
         """Process a function definition node."""
-        name_node = node.child_by_field_name('name')
-        if name_node and name_node.type == 'identifier':
-            definition_name = name_node.text.decode('utf-8')
+        name_node = node.child_by_field_name("name")
+        if name_node and name_node.type == "identifier":
+            definition_name = name_node.text.decode("utf-8")
             start_line = node.start_point[0] + 1
             end_line = node.end_point[0] + 1
-            
+
             # Extract function signature
-            parameters_node = node.child_by_field_name('parameters')
+            parameters_node = node.child_by_field_name("parameters")
             if parameters_node:
                 signature = f"{definition_name}{parameters_node.text.decode('utf-8')}"
                 definitions.append((signature, start_line, end_line))
@@ -241,36 +227,32 @@ class SearchDefinitionNames(Tool):
 
     def _process_class(self, node) -> tuple:
         """Process a class definition node.
-        
+
         Args:
             node: The class definition node.
-            
+
         Returns:
             tuple: (class_name, start_line, end_line)
         """
-        name_node = node.child_by_field_name('name')
-        if name_node and name_node.type == 'identifier':
-            return (
-                name_node.text.decode('utf-8'),
-                node.start_point[0] + 1,
-                node.end_point[0] + 1
-            )
+        name_node = node.child_by_field_name("name")
+        if name_node and name_node.type == "identifier":
+            return (name_node.text.decode("utf-8"), node.start_point[0] + 1, node.end_point[0] + 1)
         return ("", 0, 0)
 
     def _process_method(self, node, definitions):
         """Process a method definition node."""
-        name_node = node.child_by_field_name('name')
-        if name_node and name_node.type == 'identifier':
-            definition_name = name_node.text.decode('utf-8')
+        name_node = node.child_by_field_name("name")
+        if name_node and name_node.type == "identifier":
+            definition_name = name_node.text.decode("utf-8")
             start_line = node.start_point[0] + 1
             end_line = node.end_point[0] + 1
             definitions.append((definition_name, start_line, end_line))
 
     def _process_class_variable(self, node, definitions):
         """Process a class variable definition node."""
-        name_node = node.child_by_field_name('name')
-        if name_node and name_node.type == 'identifier':
-            definition_name = name_node.text.decode('utf-8')
+        name_node = node.child_by_field_name("name")
+        if name_node and name_node.type == "identifier":
+            definition_name = name_node.text.decode("utf-8")
             line_number = name_node.start_point[0] + 1
             definitions.append((definition_name, line_number))
 
@@ -280,7 +262,7 @@ class SearchDefinitionNames(Tool):
         directory_path: str,
         language_name: str,
         file_pattern: str,
-        output_format: str = "text"
+        output_format: str = "text",
     ) -> Union[str, Dict]:
         """Formats the search results in the specified format.
 
@@ -296,42 +278,39 @@ class SearchDefinitionNames(Tool):
         """
         if output_format == "json":
             formatted_results = {
-                'directory': directory_path,
-                'language': language_name,
-                'file_pattern': file_pattern,
-                'results': []
+                "directory": directory_path,
+                "language": language_name,
+                "file_pattern": file_pattern,
+                "results": [],
             }
 
             for result in results:
                 file_result = {
-                    'file_path': result['file_path'],
-                    'classes': [],
-                    'functions': [{
-                        'name': name,
-                        'start_line': start,
-                        'end_line': end
-                    } for name, start, end in result['definitions']['functions']]
+                    "file_path": result["file_path"],
+                    "classes": [],
+                    "functions": [
+                        {"name": name, "start_line": start, "end_line": end}
+                        for name, start, end in result["definitions"]["functions"]
+                    ],
                 }
 
-                for class_name, class_info in result['definitions']['classes'].items():
+                for class_name, class_info in result["definitions"]["classes"].items():
                     class_data = {
-                        'name': class_name,
-                        'start_line': class_info['line'][0],
-                        'end_line': class_info['line'][1],
-                        'methods': [{
-                            'name': name,
-                            'start_line': start,
-                            'end_line': end
-                        } for name, start, end in class_info['methods']],
-                        'variables': [{
-                            'name': name,
-                            'start_line': start,
-                            'end_line': end
-                        } for name, start, end in class_info['variables']]
+                        "name": class_name,
+                        "start_line": class_info["line"][0],
+                        "end_line": class_info["line"][1],
+                        "methods": [
+                            {"name": name, "start_line": start, "end_line": end}
+                            for name, start, end in class_info["methods"]
+                        ],
+                        "variables": [
+                            {"name": name, "start_line": start, "end_line": end}
+                            for name, start, end in class_info["variables"]
+                        ],
                     }
-                    file_result['classes'].append(class_data)
+                    file_result["classes"].append(class_data)
 
-                formatted_results['results'].append(file_result)
+                formatted_results["results"].append(file_result)
 
             return formatted_results
 
@@ -345,28 +324,27 @@ class SearchDefinitionNames(Tool):
                 markdown += f"## File: {result['file_path']}\n"
 
                 # Add standalone functions
-                if result['definitions']['functions']:
+                if result["definitions"]["functions"]:
                     markdown += "### Functions\n"
-                    for func, start, end in result['definitions']['functions']:
+                    for func, start, end in result["definitions"]["functions"]:
                         markdown += f"- `{func}` (lines {start}-{end})\n"
                     markdown += "\n"
 
                 # Add classes with their methods and variables
-                for class_name, class_info in result['definitions']['classes'].items():
+                for class_name, class_info in result["definitions"]["classes"].items():
                     markdown += f"### Class: {class_name} (lines {class_info['line'][0]}-{class_info['line'][1]})\n"
 
-                    if class_info['methods']:
+                    if class_info["methods"]:
                         markdown += "#### Methods\n"
-                        for method, start, end in class_info['methods']:
+                        for method, start, end in class_info["methods"]:
                             markdown += f"- `{method}` (lines {start}-{end})\n"
 
-                    if class_info['variables']:
+                    if class_info["variables"]:
                         markdown += "#### Variables\n"
-                        for var, start, end in class_info['variables']:
+                        for var, start, end in class_info["variables"]:
                             markdown += f"- `{var}` (lines {start}-{end})\n"
 
                     markdown += "\n"
-
 
             return markdown
 
@@ -382,30 +360,29 @@ class SearchDefinitionNames(Tool):
                 text += f"File: {result['file_path']}\n"
 
                 # Add standalone functions
-                if result['definitions']['functions']:
+                if result["definitions"]["functions"]:
                     text += "Functions:\n"
-                    for func, start, end in result['definitions']['functions']:
+                    for func, start, end in result["definitions"]["functions"]:
                         text += f"  - {func} (lines {start}-{end})\n"
                     text += "\n"
 
                 # Add classes with their methods and variables
-                for class_name, class_info in result['definitions']['classes'].items():
+                for class_name, class_info in result["definitions"]["classes"].items():
                     text += f"Class: {class_name} (lines {class_info['line'][0]}-{class_info['line'][1]})\n"
 
-                    if class_info['methods']:
+                    if class_info["methods"]:
                         text += "  Methods:\n"
-                        for method, start, end in class_info['methods']:
+                        for method, start, end in class_info["methods"]:
                             text += f"    - {method} (lines {start}-{end})\n"
 
-                    if class_info['variables']:
+                    if class_info["variables"]:
                         text += "  Variables:\n"
-                        for var, start, end in class_info['variables']:
+                        for var, start, end in class_info["variables"]:
                             text += f"    - {var} (lines {start}-{end})\n"
 
                     text += "\n"
 
             return text
-
 
 
 if __name__ == "__main__":
@@ -414,45 +391,29 @@ if __name__ == "__main__":
 
     # Example usage with different output formats
     result_text = tool.execute(
-        directory_path="./quantalogic",
-        language_name="python",
-        file_pattern="**/*.py",
-        output_format="text"
+        directory_path="./quantalogic", language_name="python", file_pattern="**/*.py", output_format="text"
     )
-    #print(result_text)
+    # print(result_text)
 
     result_json = tool.execute(
-        directory_path="./quantalogic",
-        language_name="python",
-        file_pattern="**/*.py",
-        output_format="json"
+        directory_path="./quantalogic", language_name="python", file_pattern="**/*.py", output_format="json"
     )
-    #print(result_json)
+    # print(result_json)
 
     result_markdown = tool.execute(
-        directory_path="./quantalogic",
-        language_name="python",
-        file_pattern="**/*.py",
-        output_format="markdown"
+        directory_path="./quantalogic", language_name="python", file_pattern="**/*.py", output_format="markdown"
     )
     print(result_markdown)
 
-
     result_markdown = tool.execute(
-        directory_path=".",
-        language_name="javascript",
-        file_pattern="**/*.js",
-        output_format="markdown"
+        directory_path=".", language_name="javascript", file_pattern="**/*.js", output_format="markdown"
     )
     print(result_markdown)
-
 
     result_markdown = tool.execute(
         directory_path=".",
         language_name="javascript",
         file_pattern="./quantalogic/server/static/js/quantalogic.js",
-        output_format="markdown"
+        output_format="markdown",
     )
     print(result_markdown)
-    
-

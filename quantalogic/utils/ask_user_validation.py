@@ -1,5 +1,3 @@
-
-
 def console_ask_for_user_validation(question: str = "Do you want to continue?") -> bool:
     """Prompt the user for validation using Rich.
 

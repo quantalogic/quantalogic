@@ -1,4 +1,5 @@
 """Utility function to read text content from a given URL and return it as a string."""
+
 import logging
 from time import sleep
 
@@ -90,6 +91,7 @@ def read_http_text_content(
             sleep(sleep_duration)
 
     return None, error_msg
+
 
 if __name__ == "__main__":
     content, error = read_http_text_content("https://www.quantalogic.app")

@@ -1,4 +1,5 @@
 """Tool for reading a file or HTTP content and returning its content."""
+
 from urllib.parse import urlparse
 
 from quantalogic.tools.tool import Tool, ToolArgument
@@ -7,14 +8,17 @@ from quantalogic.utils.read_http_text_content import read_http_text_content
 
 MAX_LINES = 3000
 
+
 class ReadFileTool(Tool):
     """Tool for reading a file or HTTP content and returning its content."""
 
     name: str = "read_file_tool"
-    description: str = (f"Reads a local file or HTTP content and returns its content." 
-            f"Cut to {MAX_LINES} first lines.\n" 
-            "Don't use on HTML files and large files."
-            "Prefer to use read file block tool to don't fill the memory.")
+    description: str = (
+        f"Reads a local file or HTTP content and returns its content."
+        f"Cut to {MAX_LINES} first lines.\n"
+        "Don't use on HTML files and large files."
+        "Prefer to use read file block tool to don't fill the memory."
+    )
     arguments: list = [
         ToolArgument(
             name="file_path",

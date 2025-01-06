@@ -1,4 +1,5 @@
 """Tool to execute Elixir code in an isolated Docker environment with Mix project support."""
+
 import logging
 import os
 import subprocess
@@ -9,6 +10,7 @@ from quantalogic.tools.tool import Tool, ToolArgument
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 class ElixirTool(Tool):
     """Tool to execute Elixir code in an isolated Docker environment with Mix project support."""
@@ -23,18 +25,15 @@ class ElixirTool(Tool):
         "- Environment variable support\n"
         "- Host directory mounting\n"
         "- Memory limit configuration\n\n"
-        
         "EXECUTION ENVIRONMENT:\n"
         "- Runs in an isolated Docker container\n"
         "- Uses official Elixir Docker images\n"
         "- Supports Mix package manager\n"
         "- Full access to standard library\n\n"
-        
         "ACCEPTED OUTPUT METHODS:\n"
         "- IO.puts/1, IO.write/1\n"
         "- Logger module\n"
         "- File operations when host_dir mounted\n\n"
-        
         "EXAMPLE:\n"
         'defmodule Example do\n  def hello, do: IO.puts("Hello from Elixir!")\nend\n\nExample.hello()'
     )
@@ -49,7 +48,7 @@ class ElixirTool(Tool):
         ),
         ToolArgument(
             name="script",
-            arg_type="string", 
+            arg_type="string",
             description="Elixir code to execute",
             required=True,
             example='IO.puts("Hello!")',
@@ -99,9 +98,7 @@ class ElixirTool(Tool):
         """Validate Elixir version is supported."""
         valid_versions = ["1.14", "1.15", "1.16"]
         if version not in valid_versions:
-            raise ValueError(
-                f"Unsupported Elixir version '{version}'. Valid versions: {', '.join(valid_versions)}"
-            )
+            raise ValueError(f"Unsupported Elixir version '{version}'. Valid versions: {', '.join(valid_versions)}")
 
     def write_script(self, script_path: str, script: str) -> None:
         """Write Elixir script to file."""
@@ -109,7 +106,7 @@ class ElixirTool(Tool):
             raise ValueError("Script content cannot be empty")
 
         # Always wrap in ElixirScript module
-        wrapped_script = r'''
+        wrapped_script = r"""
 defmodule ElixirScript do
   def main do
     try do
@@ -125,7 +122,7 @@ end
 
 # Execute the main function
 ElixirScript.main()
-''' % script.strip()
+""" % script.strip()
 
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(wrapped_script.strip())
@@ -143,7 +140,7 @@ ElixirScript.main()
         # Validate inputs
         self.check_docker()
         self.validate_version(version)
-        
+
         docker_image = f"elixir:{version}-slim"
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -172,20 +169,11 @@ ElixirScript.main()
                         cmd.extend(["-e", pair])
 
             # Add image and command to run the script directly
-            cmd.extend([
-                docker_image,
-                "elixir",
-                "script.exs"
-            ])
+            cmd.extend([docker_image, "elixir", "script.exs"])
 
             # Execute
             try:
-                result = subprocess.run(
-                    cmd,
-                    check=True,
-                    capture_output=True,
-                    text=True
-                )
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
                 output = result.stdout
                 if result.stderr:
                     output = f"{output}\nErrors:\n{result.stderr}"
@@ -200,15 +188,15 @@ def main():
     tool = ElixirTool()
 
     print("\nExample 1: Simple Output")
-    simple_script = r'''
+    simple_script = r"""
     IO.puts("Starting simple output test...")
     IO.puts("Hello from Elixir!")
     IO.puts("Simple output test completed.")
-    '''
+    """
     print(tool.execute(script=simple_script))
 
     print("\nExample 2: Basic Module")
-    module_script = r'''
+    module_script = r"""
     IO.puts("Starting calculator module test...")
     
     defmodule Calculator do
@@ -223,11 +211,11 @@ def main():
     IO.puts("\nTesting Calculator.add(5, 3):")
     result = Calculator.add(5, 3)
     IO.puts("Calculator test completed. Final result: #{result}")
-    '''
+    """
     print(tool.execute(script=module_script))
 
     print("\nExample 3: Binary Encoding")
-    json_script = r'''
+    json_script = r"""
     IO.puts("Starting binary encoding test...")
     
     IO.puts("Ensuring applications are started...")
@@ -244,8 +232,9 @@ def main():
     IO.puts("Encoded result: #{encoded}")
     
     IO.puts("\nBinary encoding test completed.")
-    '''
+    """
     print(tool.execute(script=json_script))
+
 
 if __name__ == "__main__":
     main()

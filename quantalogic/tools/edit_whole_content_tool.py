@@ -66,5 +66,5 @@ class EditWholeContentTool(Tool):
 
 
 if __name__ == "__main__":
-    tool =EditWholeContentTool()
+    tool = EditWholeContentTool()
     print(tool.to_markdown())

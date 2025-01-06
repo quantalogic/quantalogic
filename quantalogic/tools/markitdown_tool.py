@@ -9,6 +9,7 @@ from quantalogic.utils.download_http_file import download_http_file
 
 MAX_LINES = 2000  # Maximum number of lines to return when no output file is specified
 
+
 class MarkitdownTool(Tool):
     """Tool for converting various file formats to Markdown using the MarkItDown library."""
 
@@ -17,6 +18,7 @@ class MarkitdownTool(Tool):
         "Converts various file formats to Markdown using the MarkItDown library. "
         "Supports both local file paths and URLs (http://, https://). "
         "Supported formats include: PDF, PowerPoint, Word, Excel, HTML"
+        "Don't use the output_file_path argument if you want to return the result in markdown directly"
     )
     arguments: list = [
         ToolArgument(

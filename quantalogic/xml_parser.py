@@ -34,9 +34,7 @@ class XMLElement(BaseModel):
     raw: str = Field(..., description="The complete raw string representation")
     start_pos: int = Field(..., description="Starting character position", ge=0)
     end_pos: int = Field(..., description="Ending character position", gt=0)
-    cdata_sections: list[str] = Field(
-        default_factory=list, description="List of CDATA sections within the element"
-    )
+    cdata_sections: list[str] = Field(default_factory=list, description="List of CDATA sections within the element")
 
     @model_validator(mode="after")
     def validate_positions(self) -> Self:
@@ -62,9 +60,7 @@ class ToleranceXMLParser:
         self.cdata_pattern = re.compile(r"<!\[CDATA\[(.*?)]]>", re.DOTALL)
         logger.debug("Initialized ToleranceXMLParser with regex patterns")
 
-    def _extract_and_remove_cdata(
-        self: Self, content: str, preserve_cdata: bool = False
-    ) -> tuple[str, list[str]]:
+    def _extract_and_remove_cdata(self: Self, content: str, preserve_cdata: bool = False) -> tuple[str, list[str]]:
         """Extract CDATA sections from content.
 
         Args:
@@ -113,9 +109,7 @@ class ToleranceXMLParser:
         name_map = {"o": "output", "i": "input", "opt": "optional"}
         return name_map.get(name.strip(), name.strip())
 
-    def _extract_element_content(
-        self: Self, text: str, preserve_cdata: bool = False
-    ) -> dict[str, str]:
+    def _extract_element_content(self: Self, text: str, preserve_cdata: bool = False) -> dict[str, str]:
         """Extract content from nested XML elements.
 
         Args:
@@ -136,14 +130,12 @@ class ToleranceXMLParser:
             name = self._map_element_name(name)
 
             # Extract and handle CDATA sections
-            content, cdata_sections = self._extract_and_remove_cdata(
-                content, preserve_cdata
-            )
+            content, cdata_sections = self._extract_and_remove_cdata(content, preserve_cdata)
 
             # Clean and normalize content
             content = self._clean_content(content)
 
-            # If the content is empty but we have CDATA sections and we're 
+            # If the content is empty but we have CDATA sections and we're
             # not preserving them
             if not content.strip() and cdata_sections and not preserve_cdata:
                 content = cdata_sections[0]
@@ -190,11 +182,7 @@ class ToleranceXMLParser:
 
             # Filter elements if specific names were requested
             if element_names is not None:
-                elements = {
-                    name: content
-                    for name, content in elements.items()
-                    if name in element_names
-                }
+                elements = {name: content for name, content in elements.items() if name in element_names}
 
             logger.debug(f"Successfully extracted {len(elements)} elements")
             return elements
@@ -233,9 +221,7 @@ class ToleranceXMLParser:
 
             for match in pattern.finditer(text):
                 content = match.group(1)
-                cleaned_content, cdata_sections = self._extract_and_remove_cdata(
-                    content
-                )
+                cleaned_content, cdata_sections = self._extract_and_remove_cdata(content)
                 cleaned_content = self._clean_content(cleaned_content)
 
                 element = XMLElement(

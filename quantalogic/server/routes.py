@@ -23,7 +23,7 @@ async def submit_validation_response(validation_id: str, response: UserValidatio
     """Submit a validation response."""
     if validation_id not in agent_state.validation_responses:
         raise HTTPException(status_code=404, detail="Validation request not found")
-    
+
     response_queue = agent_state.validation_responses[validation_id]
     await response_queue.put(response.response)
     return {"status": "success"}
@@ -32,7 +32,7 @@ async def submit_validation_response(validation_id: str, response: UserValidatio
 async def event_stream(request: Request, task_id: Optional[str] = None):
     """SSE endpoint for streaming agent events."""
     client_id = agent_state.add_client(task_id)
-    
+
     try:
         # Determine the appropriate queue based on task_id
         if task_id:
@@ -65,13 +65,13 @@ async def event_stream(request: Request, task_id: Optional[str] = None):
                     agent_state.remove_task_event_queue(task_id)
 
         return StreamingResponse(
-            generate(), 
+            generate(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "Content-Type": "text/event-stream",
-            }
+            },
         )
     except Exception as e:
         logger.error(f"Event stream initialization error: {e}")
@@ -81,10 +81,7 @@ async def event_stream(request: Request, task_id: Optional[str] = None):
 
 async def get_index(request: Request):
     """Serve the main application page."""
-    return templates.TemplateResponse(
-        "index.html",
-        {"request": request, "title": "QuantaLogic"}
-    )
+    return templates.TemplateResponse("index.html", {"request": request, "title": "QuantaLogic"})
 
 
 async def submit_task(request: TaskSubmission):
@@ -94,7 +91,7 @@ async def submit_task(request: TaskSubmission):
         "status": "pending",
         "created_at": datetime.now().isoformat(),
         "task": request.task,
-        "model_name": request.model_name
+        "model_name": request.model_name,
     }
     return {"task_id": task_id}
 
@@ -103,7 +100,7 @@ async def get_task_status(task_id: str):
     """Get the status of a specific task."""
     if task_id not in agent_state.tasks:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     task_data = agent_state.tasks[task_id]
     return TaskStatus(**task_data)
 
@@ -114,12 +111,7 @@ async def list_tasks(status: Optional[str] = None, limit: int = 10, offset: int 
     for task_id, task_data in agent_state.tasks.items():
         if status is None or task_data["status"] == status:
             tasks.append({"task_id": task_id, **task_data})
-    
+
     # Apply pagination
-    paginated_tasks = tasks[offset:offset + limit]
-    return {
-        "tasks": paginated_tasks,
-        "total": len(tasks),
-        "limit": limit,
-        "offset": offset
-    }
+    paginated_tasks = tasks[offset : offset + limit]
+    return {"tasks": paginated_tasks, "total": len(tasks), "limit": limit, "offset": offset}

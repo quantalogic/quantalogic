@@ -104,11 +104,7 @@ def handle_replace_command(lines, args, console, history_manager):
         console.print("[red]Invalid replace command. Usage: replace <search_str> <replace_str>[/red]")
 
 
-commands = {
-    "edit": handle_edit_command,
-    "delete": handle_delete_command,
-    "replace": handle_replace_command
-}
+commands = {"edit": handle_edit_command, "delete": handle_delete_command, "replace": handle_replace_command}
 
 
 def handle_command(line, lines, console, session, history_manager):
@@ -144,12 +140,17 @@ def get_multiline_input(console: Console) -> str:
     Returns:
         str: The multiline input provided by the user.
     """
-    console.print(Panel("Enter your task. Press [bold]Enter[/bold] twice to submit.\n"
-                        "Available commands:\n"
-                        "  edit <line_number> - Edit a specific line\n"
-                        "  delete <line_number> - Delete a specific line\n"
-                        "  replace <search_str> <replace_str> - Replace text in all lines",
-                        title="Multi-line Input", border_style="blue"))
+    console.print(
+        Panel(
+            "Enter your task. Press [bold]Enter[/bold] twice to submit.\n"
+            "Available commands:\n"
+            "  edit <line_number> - Edit a specific line\n"
+            "  delete <line_number> - Delete a specific line\n"
+            "  replace <search_str> <replace_str> - Replace text in all lines",
+            title="Multi-line Input",
+            border_style="blue",
+        )
+    )
 
     lines = []
     history_manager = InputHistoryManager()
@@ -158,14 +159,12 @@ def get_multiline_input(console: Console) -> str:
 
     bindings = KeyBindings()
 
-    @bindings.add('c-z')
+    @bindings.add("c-z")
     def _(event):
         if history_manager.undo(lines):
             console.print("[bold]Undo successful.[/bold]")
 
-    session = PromptSession(history=InMemoryHistory(),
-                           auto_suggest=AutoSuggestFromHistory(),
-                           key_bindings=bindings)
+    session = PromptSession(history=InMemoryHistory(), auto_suggest=AutoSuggestFromHistory(), key_bindings=bindings)
 
     try:
         while True:

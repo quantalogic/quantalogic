@@ -1,4 +1,5 @@
 """Memory for the agent."""
+
 from pydantic import BaseModel
 
 
@@ -30,7 +31,7 @@ class AgentMemory:
 
     def compact(self, n: int = 2):
         """Compact the memory to keep only essential messages.
-        
+
         This method keeps:
         - The system message (if present)
         - First two pairs of user-assistant messages
