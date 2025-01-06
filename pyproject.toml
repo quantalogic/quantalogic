@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic"
-version = "0.2.0"
+version = "0.2.5"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
@@ -32,6 +32,7 @@ tenacity = "^9.0.0"
 google-auth = "^2.20.0"
 pathspec = "^0.12.1"
 click = "^8.1.8"
+toml = "^0.10.2"
 
 [tool.poetry.scripts]
 quantalogic = "quantalogic.main:cli"
