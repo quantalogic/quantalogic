@@ -117,14 +117,10 @@ The CLI provides comprehensive error handling:
 
 #### Examples
 
-Basic task execution in interractive mode:
-```bash
-quantalogic
-```
 
 Using a task file:
 ```bash
-quantalogic --file tasks/example.md --verbose
+quantalogic task --file tasks/example.md --verbose
 ```
 
 Selecting agent mode:
