@@ -9,6 +9,7 @@ from quantalogic.agent_config import MODEL_NAME
 
 class EventMessage(BaseModel):
     """Event message model for SSE."""
+
     id: str
     event: str
     task_id: Optional[str] = None
@@ -20,6 +21,7 @@ class EventMessage(BaseModel):
 
 class UserValidationRequest(BaseModel):
     """Request model for user validation."""
+
     question: str
     validation_id: str | None = None
 
@@ -28,6 +30,7 @@ class UserValidationRequest(BaseModel):
 
 class UserValidationResponse(BaseModel):
     """Response model for user validation."""
+
     response: bool
 
     model_config = {"extra": "forbid"}
@@ -35,6 +38,7 @@ class UserValidationResponse(BaseModel):
 
 class TaskSubmission(BaseModel):
     """Request model for task submission."""
+
     task: str
     model_name: Optional[str] = MODEL_NAME
     max_iterations: Optional[int] = 30
@@ -44,6 +48,7 @@ class TaskSubmission(BaseModel):
 
 class TaskStatus(BaseModel):
     """Task status response model."""
+
     task_id: str
     status: str  # "pending", "running", "completed", "failed"
     created_at: str

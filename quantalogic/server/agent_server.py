@@ -187,16 +187,16 @@ class AgentState:
                 # Prevent multiple agents for the same client-task combination
                 if task_id in self.active_agents[client_id]:
                     raise ValueError(f"An agent already exists for client {client_id} and task {task_id}")
-                
+
                 # Create a specific queue for this client-task combination
                 self.event_queues[client_id][task_id] = Queue()
                 self.active_agents[client_id][task_id] = {
-                    'created_at': datetime.utcnow().isoformat(),
-                    'status': 'active'
+                    "created_at": datetime.utcnow().isoformat(),
+                    "status": "active",
                 }
             else:
                 # Global client queue
-                self.event_queues[client_id] = {'global': Queue()}
+                self.event_queues[client_id] = {"global": Queue()}
 
             return client_id
 
@@ -207,29 +207,27 @@ class AgentState:
                 if task_id and task_id in self.event_queues[client_id]:
                     # Remove specific task queue for this client
                     del self.event_queues[client_id][task_id]
-                    
+
                     # Remove active agent for this client-task
                     if client_id in self.active_agents and task_id in self.active_agents[client_id]:
                         del self.active_agents[client_id][task_id]
                 else:
                     # Remove entire client entry
                     del self.event_queues[client_id]
-                    
+
                     # Remove all active agents for this client
                     if client_id in self.active_agents:
                         del self.active_agents[client_id]
 
-    def broadcast_event(self, event_type: str, data: Dict[str, Any], task_id: Optional[str] = None, client_id: Optional[str] = None):
+    def broadcast_event(
+        self, event_type: str, data: Dict[str, Any], task_id: Optional[str] = None, client_id: Optional[str] = None
+    ):
         """Broadcast an event to specific client-task queues or globally.
 
         Allows optional filtering by client_id and task_id to prevent event leakage.
         """
         event = EventMessage(
-            id=str(uuid.uuid4()),
-            event=event_type,
-            task_id=task_id,
-            data=data,
-            timestamp=datetime.utcnow().isoformat()
+            id=str(uuid.uuid4()), event=event_type, task_id=task_id, data=data, timestamp=datetime.utcnow().isoformat()
         )
 
         with self.queue_lock:
@@ -241,9 +239,9 @@ class AgentState:
                 if task_id and task_id in client_queues:
                     # Send to specific task queue
                     client_queues[task_id].put(event)
-                elif not task_id and 'global' in client_queues:
+                elif not task_id and "global" in client_queues:
                     # Send to global queue if no task specified
-                    client_queues['global'].put(event)
+                    client_queues["global"].put(event)
 
     def initialize_agent_with_sse_validation(self, model_name: str = MODEL_NAME):
         """Initialize agent with SSE-based user validation."""
@@ -542,11 +540,11 @@ async def event_stream(request: Request, task_id: Optional[str] = None) -> Strea
                         event = agent_state.event_queues[client_id][task_id].get_nowait()
                     else:
                         # Fall back to global queue if no task_id
-                        event = agent_state.event_queues[client_id]['global'].get_nowait()
-                    
+                        event = agent_state.event_queues[client_id]["global"].get_nowait()
+
                     # Yield the event
                     yield f"event: {event.event}\ndata: {json.dumps(event.dict())}\n\n"
-                
+
                 except Empty:
                     # Send keepalive to maintain connection
                     yield ": keepalive\n\n"

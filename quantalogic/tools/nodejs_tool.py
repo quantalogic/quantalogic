@@ -1,4 +1,5 @@
 """Tool to execute Node.js scripts in an isolated Docker environment."""
+
 import json
 import logging
 import os
@@ -21,13 +22,11 @@ class NodeJsTool(Tool):
         "1. Only Node.js code that produces text output via console.log() statements is accepted\n"
         "2. No GUI, no plots, no visualizations - strictly console/terminal output\n"
         "3. No file operations or external resources unless explicitly authorized\n\n"
-        
         "EXECUTION ENVIRONMENT:\n"
         "- Runs in an isolated Docker container\n"
         "- Node.js version can be specified (default: Node.js LTS)\n"
         "- Required packages can be installed via npm\n"
         "- Standard Node.js modules are available\n\n"
-        
         "ACCEPTED OUTPUT METHODS:\n"
         "✓ console.log()\n"
         "✓ console.info()\n"
@@ -35,7 +34,6 @@ class NodeJsTool(Tool):
         "✗ No browser-based output\n"
         "✗ No external file generation\n"
         "✗ No web servers or network services\n\n"
-        
         "EXAMPLE:\n"
         "console.log('Hello, World!')  # ✓ Valid\n"
         "window.alert()                # ✗ Invalid\n"
@@ -65,10 +63,7 @@ class NodeJsTool(Tool):
         ToolArgument(
             name="version",
             arg_type="string",
-            description=(
-                "The Node.js version to use in the Docker container. "
-                "For example:  '18', '20', 'lts'."
-            ),
+            description=("The Node.js version to use in the Docker container. " "For example:  '18', '20', 'lts'."),
             required=True,
             default="lts",
             example="20",
@@ -110,9 +105,7 @@ class NodeJsTool(Tool):
         ToolArgument(
             name="module_type",
             arg_type="string",
-            description=(
-                "The module system to use: 'esm' for ECMAScript Modules or 'commonjs' for CommonJS."
-            ),
+            description=("The module system to use: 'esm' for ECMAScript Modules or 'commonjs' for CommonJS."),
             required=True,
             default="esm",
             example="commonjs",
@@ -194,10 +187,7 @@ class NodeJsTool(Tool):
         """
         valid_versions = ["16", "18", "20", "lts"]
         if version not in valid_versions:
-            error_msg = (
-                f"Unsupported Node.js version '{version}'. "
-                f"Supported versions: {', '.join(valid_versions)}."
-            )
+            error_msg = f"Unsupported Node.js version '{version}'. " f"Supported versions: {', '.join(valid_versions)}."
             logger.error(error_msg)
             raise ValueError(error_msg)
         logger.debug(f"Node.js version '{version}' is supported.")
@@ -214,8 +204,7 @@ class NodeJsTool(Tool):
         valid_module_types = ["esm", "commonjs"]
         if module_type not in valid_module_types:
             error_msg = (
-                f"Unsupported module type '{module_type}'. "
-                f"Supported types: {', '.join(valid_module_types)}."
+                f"Unsupported module type '{module_type}'. " f"Supported types: {', '.join(valid_module_types)}."
             )
             logger.error(error_msg)
             raise ValueError(error_msg)
@@ -229,7 +218,10 @@ class NodeJsTool(Tool):
         """
         try:
             subprocess.run(
-                ["docker", "--version"], check=True, capture_output=True, text=True,
+                ["docker", "--version"],
+                check=True,
+                capture_output=True,
+                text=True,
             )
             logger.debug("Docker is installed and available.")
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
@@ -258,7 +250,9 @@ class NodeJsTool(Tool):
             if not any(script.lstrip().startswith(keyword) for keyword in ("import ", "export ")):
                 logger.warning("ESM module type selected, but the script does not contain import/export statements.")
         elif module_type == "commonjs":
-            if "require(" not in script and not any(script.lstrip().startswith(keyword) for keyword in ("const ", "let ", "var ")):
+            if "require(" not in script and not any(
+                script.lstrip().startswith(keyword) for keyword in ("const ", "let ", "var ")
+            ):
                 logger.warning("CommonJS module type selected, but the script does not contain require statements.")
 
         with open(path, "w", encoding="utf-8") as script_file:
@@ -277,7 +271,7 @@ class NodeJsTool(Tool):
             "version": "1.0.0",
             "description": "Temporary Node.js script",
             "main": f"script.{ 'mjs' if module_type == 'esm' else 'cjs' }",
-            "type": "module" if module_type == "esm" else "commonjs"
+            "type": "module" if module_type == "esm" else "commonjs",
         }
 
         # For CommonJS, it's usually optional to set 'type', but in Node.js, 'type' defaults to CommonJS
@@ -375,12 +369,12 @@ class NodeJsTool(Tool):
         """
         env_vars = {}
         for pair in env_vars_str.split():
-            if '=' not in pair:
+            if "=" not in pair:
                 error_msg = f"Invalid environment variable format: '{pair}'. Expected 'KEY=VALUE'."
                 logger.error(error_msg)
                 raise ValueError(error_msg)
 
-            key, value = pair.split('=', 1)
+            key, value = pair.split("=", 1)
             env_vars[key] = value
         logger.debug(f"Parsed environment variables: {env_vars}")
         return env_vars
@@ -415,9 +409,13 @@ class NodeJsTool(Tool):
             RuntimeError: If executing the Docker command fails.
         """
         docker_run_cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{temp_dir}:/usr/src/app",
-            "-w", "/usr/src/app",
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{temp_dir}:/usr/src/app",
+            "-w",
+            "/usr/src/app",
         ]
 
         if host_dir:
@@ -476,21 +474,21 @@ if __name__ == "__main__":
     # Example usage of NodeJsTool
     tool = NodeJsTool()
     install_commands = "npm install chalk"
-    
+
     # Example ESM script
     esm_script = """\
 import chalk from 'chalk';
 console.log(chalk.blue('Hello, ESM World!'));
 console.log('This is a Node.js interpreter tool using ESM.');
     """
-    
+
     # Example CommonJS script
     commonjs_script = """\
 const chalk = require('chalk');
 console.log(chalk.green('Hello, CommonJS World!'));
 console.log('This is a Node.js interpreter tool using CommonJS.');
     """
-    
+
     version = "20"
     host_directory = None
     memory_limit = "1g"

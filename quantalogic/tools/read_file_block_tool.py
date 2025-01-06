@@ -1,4 +1,5 @@
 """Tool for reading a block of lines from a file."""
+
 import os
 
 from pydantic import field_validator
@@ -6,6 +7,7 @@ from pydantic import field_validator
 from quantalogic.tools.tool import Tool, ToolArgument
 
 MAX_LINES = 200
+
 
 class ReadFileBlockTool(Tool):
     """Tool for reading a block of lines from a file."""
@@ -81,7 +83,7 @@ class ReadFileBlockTool(Tool):
             # Validate and convert line numbers
             line_start = int(line_start)
             line_end = int(line_end)
-            
+
             if line_start <= 0 or line_end <= 0:
                 raise ValueError("Line numbers must be positive integers")
             if line_start > line_end:
@@ -98,7 +100,7 @@ class ReadFileBlockTool(Tool):
                 raise PermissionError(f"Permission denied reading file: {file_path}")
 
             # Read file with explicit encoding and error handling
-            with open(file_path, encoding='utf-8', errors='strict') as f:
+            with open(file_path, encoding="utf-8", errors="strict") as f:
                 lines = f.readlines()
 
             # Validate line numbers against file length
@@ -107,7 +109,7 @@ class ReadFileBlockTool(Tool):
 
             # Calculate actual end line respecting MAX_LINES and file bounds
             actual_end = min(line_end, line_start + MAX_LINES - 1, len(lines))
-            
+
             # Extract the block of lines
             block = lines[line_start - 1 : actual_end]
 
@@ -120,7 +122,7 @@ class ReadFileBlockTool(Tool):
                 f"==== Lines: {line_start}-{actual_end} of {len(lines)} ====",
                 "==== Content ====",
                 "".join(block).rstrip(),
-                "==== End of Block ====" + (" [LAST BLOCK SUCCESSFULLY READ]" if is_last_block else "")
+                "==== End of Block ====" + (" [LAST BLOCK SUCCESSFULLY READ]" if is_last_block else ""),
             ]
 
             return "\n".join(result)

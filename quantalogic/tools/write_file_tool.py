@@ -82,7 +82,9 @@ class WriteFileTool(Tool):
 
         # Check if file already exists and not in append mode and not in overwrite mode
         if os.path.exists(file_path) and not append_mode_bool and not overwrite_bool:
-            raise FileExistsError(f"File {file_path} already exists. Set append_mode=True to append or overwrite=True to overwrite.")
+            raise FileExistsError(
+                f"File {file_path} already exists. Set append_mode=True to append or overwrite=True to overwrite."
+            )
 
         with open(file_path, mode, encoding="utf-8") as f:
             f.write(content)

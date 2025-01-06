@@ -2,10 +2,11 @@
 """Main module for the QuantaLogic agent."""
 
 # Standard library imports
-import argparse
 import sys
+from typing import Optional
 
 # Third-party imports
+import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
@@ -15,67 +16,38 @@ from quantalogic.agent import Agent
 # Local application imports
 from quantalogic.agent_config import (
     MODEL_NAME,
-    create_agent,
-    create_coding_agent,  # noqa: F401
-    create_orchestrator_agent,  # noqa: F401
+    create_coding_agent,
+    create_full_agent,
+    create_interpreter_agent,
+    create_orchestrator_agent,
 )
 from quantalogic.interactive_text_editor import get_multiline_input
 from quantalogic.print_event import console_print_events
 
-main_agent = create_agent(MODEL_NAME)
-
-
-AGENT_MODES = ["code", "search", "full"]
+AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic"]
 
 
 def create_agent_for_mode(mode: str, model_name: str) -> Agent:
     """Create an agent based on the specified mode."""
     if mode == "code":
-        return create_coding_agent(model_name)
-    elif mode == "search":
-        return create_agent(model_name)
+        return create_coding_agent(model_name, basic=False)
+    if mode == "code-basic":
+        return create_coding_agent(model_name, basic=True)
+    elif mode == "basic":
+        return create_orchestrator_agent(model_name)
     elif mode == "full":
-        return create_agent(model_name)
+        return create_full_agent(model_name)
+    elif mode == "interpreter":
+        return create_interpreter_agent(model_name)
     else:
         raise ValueError(f"Unknown agent mode: {mode}")
 
 
-main_agent.event_emitter.on(
-    [
-        "task_complete",
-        "task_think_start",
-        "task_think_end",
-        "tool_execution_start",
-        "tool_execution_end",
-        "error_max_iterations_reached",
-        "memory_full",
-        "memory_compacted",
-        "memory_summary",
-    ],
-    console_print_events,
-)
-
-
-def parse_arguments():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="QuantaLogic AI Assistant")
-    parser.add_argument("--version", action="store_true", help="show version information")
-    parser.add_argument("--execute-file", type=str, help="execute task from file")
-    parser.add_argument("--verbose", action="store_true", help="enable verbose output")
-    parser.add_argument(
-        "--model",
-        type=str,
-        default=MODEL_NAME,
-        help='specify the model to use (litellm format, e.g. "openrouter/deepseek-chat")',
-    )
-    return parser.parse_args()
-
 def switch_verbose(verbose_mode: bool) -> None:
-    from litellm import set_verbose
-    set_verbose(verbose_mode)
+    pass
 
 
-def get_task_from_file(file_path):
+def get_task_from_file(file_path: str) -> str:
     """Get task content from specified file."""
     try:
         with open(file_path, encoding="utf-8") as f:
@@ -88,27 +60,12 @@ def get_task_from_file(file_path):
         raise Exception(f"Unexpected error reading file: {e}")
 
 
-def get_task_from_args(args):
-    """Extract task from command line arguments."""
-    task_args = []
-    i = 1
-    while i < len(sys.argv):
-        if sys.argv[i] in ["--version", "--execute-file", "--verbose", "--model"]:
-            i += 2 if sys.argv[i] in ["--execute-file", "--model"] else 1
-        else:
-            task_args.append(sys.argv[i])
-            i += 1
-    # Return empty string if only --model is provided
-    if not task_args and any(arg in sys.argv for arg in ["--model"]):
-        return ""
-    return " ".join(task_args)
-
-
-def display_welcome_message(console, model_name):
+def display_welcome_message(console: Console, model_name: str) -> None:
     """Display the welcome message and instructions."""
+    version = get_version()
     console.print(
         Panel.fit(
-            "[bold cyan]🌟 Welcome to QuantaLogic AI Assistant! 🌟[/bold cyan]\n\n"
+            f"[bold cyan]🌟 Welcome to QuantaLogic AI Assistant v{version} ! 🌟[/bold cyan]\n\n"
             "[green]🎯 How to Use:[/green]\n\n"
             "1. [bold]Describe your task[/bold]: Tell the AI what you need help with.\n"
             '   - Example: "Write a Python function to calculate Fibonacci numbers."\n'
@@ -132,54 +89,96 @@ def display_welcome_message(console, model_name):
     )
 
 
-def main():
-    """Main entry point for the QuantaLogic AI Assistant."""
-    console = Console()
-    args = parse_arguments()
+def get_version() -> str:
+    """Get the current version of the package."""
+    return "QuantaLogic version: 1.0.0"
 
-    if args.version:
+
+@click.group(invoke_without_command=True)
+@click.option("--version", is_flag=True, help="Show version information.")
+@click.pass_context
+def cli(ctx: click.Context, version: bool) -> None:
+    """QuantaLogic AI Assistant - A powerful AI tool for various tasks."""
+    if version:
+        console = Console()
         console.print(f"QuantaLogic version: {get_version()}")
         sys.exit(0)
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(task)
+
+
+@cli.command()
+@click.option("--file", type=click.Path(exists=True), help="Path to task file.")
+@click.option(
+    "--model-name",
+    default=MODEL_NAME,
+    help='Specify the model to use (litellm format, e.g. "openrouter/deepseek-chat").',
+)
+@click.option("--verbose", is_flag=True, help="Enable verbose output.")
+@click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")
+@click.argument("task", required=False)
+def task(file: Optional[str], model_name: str, verbose: bool, mode: str, task: Optional[str]) -> None:
+    """Execute a task with the QuantaLogic AI Assistant."""
+    console = Console()
+    switch_verbose(verbose)
 
     try:
-        if args.execute_file:
-            task = get_task_from_file(args.execute_file)
+        if file:
+            task_content = get_task_from_file(file)
         else:
-            task = get_task_from_args(args)
-            if not task:  # If no task is provided in arguments, go to interactive mode
-                display_welcome_message(console, args.model)
-                task = get_multiline_input(console).strip()
-                if not task:
+            if task:
+                task_content = task
+            else:
+                display_welcome_message(console, model_name)
+                task_content = get_multiline_input(console).strip()
+                if not task_content:
                     console.print("[yellow]No task provided. Exiting...[/yellow]")
                     sys.exit(2)
+
+        if model_name != MODEL_NAME:
+            console.print(
+                Panel.fit(
+                    f"[bold]Task to be submitted:[/bold]\n{task_content}",
+                    title="[bold]Task Preview[/bold]",
+                    border_style="blue",
+                )
+            )
+            if not Confirm.ask("[bold]Are you sure you want to submit this task?[/bold]"):
+                console.print("[yellow]Task submission cancelled. Exiting...[/yellow]")
+                sys.exit(0)
+
+        agent = create_agent_for_mode(mode, model_name)
+        agent.event_emitter.on(
+            [
+                "task_complete",
+                "task_think_start",
+                "task_think_end",
+                "tool_execution_start",
+                "tool_execution_end",
+                "error_max_iterations_reached",
+                "memory_full",
+                "memory_compacted",
+                "memory_summary",
+            ],
+            console_print_events,
+        )
+
+        result = agent.solve_task(task=task_content, max_iterations=300)
+
+        console.print(
+            Panel.fit(
+                f"[bold]Task Result:[/bold]\n{result}", title="[bold]Execution Output[/bold]", border_style="green"
+            )
+        )
+
     except Exception as e:
         console.print(f"[red]{str(e)}[/red]")
         sys.exit(1)
 
-    # Bypass task preview and confirmation if --model is provided
-    if not args.model == MODEL_NAME:
-        console.print(
-            Panel.fit(
-                f"[bold]Task to be submitted:[/bold]\n{task}", title="[bold]Task Preview[/bold]", border_style="blue"
-            )
-        )
-        if not Confirm.ask("[bold]Are you sure you want to submit this task?[/bold]"):
-            console.print("[yellow]Task submission cancelled. Exiting...[/yellow]")
-            sys.exit(0)
 
-    # agent = create_agent(args.model)
-    agent = create_coding_agent(args.model)
-    # agent = create_orchestrator_agent(args.model)
-    result = agent.solve_task(task=task, max_iterations=300)
-
-    console.print(
-        Panel.fit(f"[bold]Task Result:[/bold]\n{result}", title="[bold]Execution Output[/bold]", border_style="green")
-    )
-
-
-def get_version():
-    """Get the current version of the package."""
-    return "QuantaLogic version: 1.0.0"
+def main():
+    """Entry point for the quantalogic CLI."""
+    cli()
 
 
 if __name__ == "__main__":

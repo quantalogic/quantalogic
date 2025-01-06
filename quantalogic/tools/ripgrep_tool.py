@@ -14,6 +14,7 @@ from quantalogic.tools.tool import Tool, ToolArgument
 
 MAX_LINE_LENGTH = 120  # Maximum length for each line before truncation
 
+
 class RipgrepTool(Tool):
     """Search files using ripgrep with regex and file filters."""
 
@@ -62,21 +63,17 @@ class RipgrepTool(Tool):
         """Load .gitignore patterns from directory and all parent directories."""
         from pathspec import PathSpec
         from pathspec.patterns import GitWildMatchPattern
-        
+
         ignore_patterns = []
         current = path.absolute()
-        
+
         # Traverse up the directory tree
         while current != current.parent:  # Stop at root
             gitignore_path = current / ".gitignore"
             if gitignore_path.exists():
                 with open(gitignore_path) as f:
                     # Filter out empty lines and comments
-                    patterns = [
-                        line.strip() 
-                        for line in f.readlines() 
-                        if line.strip() and not line.startswith('#')
-                    ]
+                    patterns = [line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")]
                     ignore_patterns.extend(patterns)
             current = current.parent
 
@@ -106,15 +103,13 @@ class RipgrepTool(Tool):
             ValueError: If the directory path is invalid.
             RuntimeError: If ripgrep is not found or fails to execute.
         """
-        # Validate the directory path
+        # Validate and normalize the directory path
+        directory_path = str(Path(directory_path).resolve())
         if not os.path.isdir(directory_path):
-            if directory_path == ".":
-                directory_path = os.getcwd()
-            else:
-                raise ValueError(f"Directory not found: {directory_path}")
+            raise ValueError(f"Directory not found: {directory_path}")
 
         # Use current working directory if not specified
-        cwd = cwd or directory_path
+        cwd = str(Path(cwd or directory_path).resolve())
         rg_path = self._find_rg_binary()
         if not rg_path:
             raise RuntimeError("Could not find ripgrep binary.")
@@ -135,8 +130,7 @@ class RipgrepTool(Tool):
 
         # Find files matching the pattern
         files = list(Path(directory_path).rglob(file_pattern))
-        filtered_files = [str(f) for f in files 
-                         if f.is_file() and not gitignore_spec.match_file(f)]
+        filtered_files = [str(f) for f in files if f.is_file() and not gitignore_spec.match_file(f)]
 
         if not filtered_files:
             return "No files matching the pattern (after .gitignore filtering)"
@@ -300,7 +294,6 @@ class RipgrepTool(Tool):
         """
         if not results:
             return "No results found."
-
 
         formatted_output = []
         grouped_results: Dict[str, List[Dict[str, Any]]] = {}

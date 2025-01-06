@@ -1,4 +1,5 @@
 """Tool to execute Python scripts in an isolated Docker environment."""
+
 import logging
 import os
 import subprocess
@@ -8,6 +9,7 @@ from quantalogic.tools.tool import Tool, ToolArgument
 
 # Configure logging for the module
 logger = logging.getLogger(__name__)
+
 
 class PythonTool(Tool):
     """Tool to execute Python scripts in an isolated Docker environment."""
@@ -19,7 +21,6 @@ class PythonTool(Tool):
         "1. Only Python code that produces text output via print() statements is accepted\n"
         "2. No GUI, no plots, no visualizations - strictly console/terminal output\n"
         "3. No file operations or external resources unless explicitly authorized\n\n"
-        
         "EXECUTION ENVIRONMENT:\n"
         "- Runs in an isolated Docker container\n"
         "- Python version can be specified (default: Python 3.x)\n"
@@ -32,18 +33,16 @@ class PythonTool(Tool):
         "  - The memory limit can be configured for the Docker container\n"
         "- Network access\n"
         "  - The Docker container has full network access\n\n"
-        
         "ACCEPTED OUTPUT METHODS:\n"
         "✓ print()\n"
         "✓ sys.stdout.write()\n"
         "✗ No matplotlib, tkinter, or other GUI libraries\n"
         "✗ No external file generation\n"
         "✗ No web servers or network services\n\n"
-        
         "EXAMPLE:\n"
         "print('Hello, World!')  # ✓ Valid\n"
         "plt.show()             # ✗ Invalid\n"
-        )
+    )
     need_validation: bool = True
     arguments: list[ToolArgument] = [
         ToolArgument(
@@ -60,20 +59,18 @@ class PythonTool(Tool):
             name="script",
             arg_type="string",
             description=(
-            "The Python script to execute." 
-            "The script must use /usr/src/host_data/ as the working directory."
-            "Host data is the directory provided in the host_dir argument."
-            "The script must produce text output via print() statements."),
+                "The Python script to execute."
+                "The script must use /usr/src/host_data/ as the working directory."
+                "Host data is the directory provided in the host_dir argument."
+                "The script must produce text output via print() statements."
+            ),
             required=True,
             example='print("Hello, World!")\nprint("This is a Python interpreter tool.")',
         ),
         ToolArgument(
             name="version",
             arg_type="string",
-            description=(
-                "The Python version to use in the Docker container. "
-                "For example: '3.11', '3.12'."
-            ),
+            description=("The Python version to use in the Docker container. " "For example: '3.11', '3.12'."),
             required=True,
             default="3.11",
             example="3.11",
@@ -181,10 +178,7 @@ class PythonTool(Tool):
         """
         valid_versions = ["3.8", "3.9", "3.10", "3.11", "3.12"]
         if version not in valid_versions:
-            error_msg = (
-                f"Unsupported Python version '{version}'. "
-                f"Supported versions: {', '.join(valid_versions)}."
-            )
+            error_msg = f"Unsupported Python version '{version}'. " f"Supported versions: {', '.join(valid_versions)}."
             logger.error(error_msg)
             raise ValueError(error_msg)
         logger.debug(f"Python version '{version}' is supported.")
@@ -197,7 +191,10 @@ class PythonTool(Tool):
         """
         try:
             subprocess.run(
-                ["docker", "--version"], check=True, capture_output=True, text=True,
+                ["docker", "--version"],
+                check=True,
+                capture_output=True,
+                text=True,
             )
             logger.debug("Docker is installed and available.")
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
@@ -243,7 +240,9 @@ class PythonTool(Tool):
                     packages.update(parts)
 
             if packages:
-                install_command = "uv venv && source .venv/bin/activate && uv pip install --upgrade pip " + " ".join(packages)
+                install_command = "uv venv && source .venv/bin/activate && uv pip install --upgrade pip " + " ".join(
+                    packages
+                )
                 logger.debug(f"Prepared pip install command: {install_command}")
                 return install_command
 
@@ -262,7 +261,10 @@ class PythonTool(Tool):
         try:
             logger.info(f"Pulling Docker image: {docker_image}")
             subprocess.run(
-                ["docker", "pull", docker_image], check=True, capture_output=True, text=True,
+                ["docker", "pull", docker_image],
+                check=True,
+                capture_output=True,
+                text=True,
             )
             logger.info(f"Successfully pulled Docker image '{docker_image}'.")
         except subprocess.CalledProcessError as e:
@@ -281,7 +283,10 @@ class PythonTool(Tool):
         """
         try:
             result = subprocess.run(
-                ["docker", "images", "-q", docker_image], check=True, capture_output=True, text=True,
+                ["docker", "images", "-q", docker_image],
+                check=True,
+                capture_output=True,
+                text=True,
             )
             is_present = bool(result.stdout.strip())
             logger.debug(f"Docker image '{docker_image}' present locally: {is_present}")
@@ -316,9 +321,13 @@ class PythonTool(Tool):
             RuntimeError: If executing the Docker command fails.
         """
         docker_run_cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{temp_dir}:/usr/src/app",  # Mount temporary directory for scripts
-            "-w", "/usr/src/app",
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{temp_dir}:/usr/src/app",  # Mount temporary directory for scripts
+            "-w",
+            "/usr/src/app",
         ]
 
         # Handle optional host directory mounting
@@ -329,8 +338,6 @@ class PythonTool(Tool):
                 raise ValueError(error_msg)
             docker_run_cmd += ["-v", f"{os.path.abspath(host_dir)}:/usr/src/host_data"]
             docker_run_cmd += ["-v", f"{os.path.abspath(host_dir)}:{os.path.abspath(host_dir)}"]
-            
-
 
         # Apply memory limit if specified
         if memory_limit:
@@ -361,11 +368,15 @@ class PythonTool(Tool):
         logger.info(f"Executing Docker command: {' '.join(docker_run_cmd)}")
         try:
             result = subprocess.run(
-                docker_run_cmd, check=True, capture_output=True, text=True, timeout=300,
+                docker_run_cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=300,
             )
             logger.debug("Docker command executed successfully.")
             result = result.stdout.strip()
-            if(result == ""):
+            if result == "":
                 result = "Script executed successfully."
             return result
         except subprocess.CalledProcessError as e:
@@ -396,15 +407,16 @@ class PythonTool(Tool):
         """
         env_vars = {}
         for pair in env_vars_str.split():
-            if '=' not in pair:
+            if "=" not in pair:
                 error_msg = f"Invalid environment variable format: '{pair}'. Expected 'KEY=VALUE'."
                 logger.error(error_msg)
                 raise ValueError(error_msg)
 
-            key, value = pair.split('=', 1)
+            key, value = pair.split("=", 1)
             env_vars[key] = value
         logger.debug(f"Parsed environment variables: {env_vars}")
         return env_vars
+
 
 if __name__ == "__main__":
     # Example usage of PythonTool

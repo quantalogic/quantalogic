@@ -1,4 +1,5 @@
 """Print events with rich formatting."""
+
 from rich import box
 from rich.console import Console
 from rich.panel import Panel

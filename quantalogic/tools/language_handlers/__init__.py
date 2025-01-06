@@ -1,4 +1,3 @@
-
 from .c_handler import CLanguageHandler
 from .cpp_handler import CppLanguageHandler
 from .go_handler import GoLanguageHandler
@@ -10,13 +9,13 @@ from .scala_handler import ScalaLanguageHandler
 from .typescript_handler import TypeScriptLanguageHandler
 
 __all__ = [
-    'CLanguageHandler',
-    'CppLanguageHandler',
-    'GoLanguageHandler',
-    'JavaLanguageHandler',
-    'JavaScriptLanguageHandler',
-    'PythonLanguageHandler',
-    'RustLanguageHandler',
-    'ScalaLanguageHandler',
-    'TypeScriptLanguageHandler'
+    "CLanguageHandler",
+    "CppLanguageHandler",
+    "GoLanguageHandler",
+    "JavaLanguageHandler",
+    "JavaScriptLanguageHandler",
+    "PythonLanguageHandler",
+    "RustLanguageHandler",
+    "ScalaLanguageHandler",
+    "TypeScriptLanguageHandler",
 ]
