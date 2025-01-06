@@ -178,3 +178,5 @@ cython_debug/
 # Temporary development notes
 TODO.md
 NOTES.md
+
+.tasks/
