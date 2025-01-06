@@ -13,7 +13,7 @@ The `cli` version include coding capabilities comparable to Aider.
 
 ## Why QuantaLogic?
 
-We created (QuantaLogic)[https://www.quantalogic.app] because we saw a significant gap between the advanced AI models developed by companies like OpenAI, Anthropic, DeepSeek and their practical implementation in everyday business processes. 
+We created [QuantaLogic](https://www.quantalogic.app) because we saw a significant gap between the advanced AI models developed by companies like OpenAI, Anthropic, DeepSeek and their practical implementation in everyday business processes. 
 
 > Our mission is to bridge this gap, making the power of generative AI accessible and actionable for businesses of all sizes.
 
