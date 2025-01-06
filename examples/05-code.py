@@ -32,19 +32,26 @@ agent = Agent(
     ],
 )
 
-# Set up event monitoring to track agent's lifecycle
-# This helps in debugging and understanding the agent's behavior
+# Configure comprehensive event monitoring system
+# Tracks all agent activities including:
+# - Tool execution
+# - File operations
+# - Task progress
+# Essential for debugging and performance optimization
 agent.event_emitter.on(
     "*",
     console_print_events,
 )
 
 
+# Execute a complex file operation task demonstrating:
+# - Directory traversal
+# - File content analysis
+# - Comment updates
+# - Integration of multiple tools
 result = agent.solve_task("""
 
-1. Find all class definitions in quantalogic/tools/quantalogic/tools/language_handlers/*.py
-2. Analyze inheritance patterns
-3. Generate class diagram using mermaid diagram
-4. Write the result in ./demo/report.md
+1. Update all the files at the first level of the ./examples directory
+2. Update the comments of each file to make it more relevant and informative: focus on why
 
 """)

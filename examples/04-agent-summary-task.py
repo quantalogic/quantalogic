@@ -10,7 +10,10 @@ MODEL_NAME = "gpt-4o-mini"
 if not os.environ.get("OPENAI_API_KEY"):
     raise ValueError("OPENAI_API_KEY environment variable is not set")
 
-# Initialize agent with DeepSeek model and Python tool
+# Initialize agent with OpenAI model and integrated tools
+# Tools include:
+# - MarkitdownTool: For web content parsing and analysis
+# - LLMTool: For language model operations and reasoning
 agent = Agent(
     model_name=MODEL_NAME,
     tools=[
@@ -19,14 +22,22 @@ agent = Agent(
     ],
 )
 
-# Set up event monitoring to track agent's lifecycle
-# This helps in debugging and understanding the agent's behavior
+# Configure comprehensive event monitoring system
+# Tracks all agent activities including:
+# - Web content processing
+# - Article selection logic
+# - Summary generation
+# Essential for debugging and performance optimization
 agent.event_emitter.on(
     "*",
     console_print_events,
 )
 
-# Execute a complex multi-step task demonstrating the agent's capabilities
+# Execute a complex AI news analysis task demonstrating:
+# - Web content processing with MarkitdownTool
+# - Article impact assessment
+# - Multi-document summarization
+# - Integration of multiple tools
 result = agent.solve_task("""
 
     1. Read the latest news about AI https://arxiv.org/search/cs?query=artificial+intelligence+survey&searchtype=all&abstracts=show&order=-announced_date_first&size=25 

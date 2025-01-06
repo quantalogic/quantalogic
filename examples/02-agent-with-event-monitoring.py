@@ -37,8 +37,12 @@ agent.event_emitter.on(
     console_print_events,
 )
 
-# Execute a complex multi-step task demonstrating the agent's capabilities
-# The task includes creative writing, translation, and style adaptation
+# Execute a multi-step task showcasing agent's capabilities
+# Demonstrates:
+# 1. Creative content generation
+# 2. Language translation
+# 3. Style adaptation
+# 4. Multi-step reasoning and execution
 result = agent.solve_task(
     "1. Write a poem in English about a dog. "
     "2. Translate the poem into French. "

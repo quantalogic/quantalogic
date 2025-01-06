@@ -7,18 +7,25 @@ from quantalogic import Agent
 if not os.environ.get("DEEPSEEK_API_KEY"):
     raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
 
-# For openai model use gpt-4o or gpt-4o-mini
-# And set OPENAI_API_KEY
+# OpenAI model options (gpt-4o or gpt-4o-mini)
+# Requires OPENAI_API_KEY environment variable
+# Used when preferring OpenAI's models over DeepSeek
 
-# For bedrock model use bedrock/amazon.nova-pro-v1:0
-# And set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+# AWS Bedrock model configuration (bedrock/amazon.nova-pro-v1:0)
+# Requires AWS credentials for Amazon's AI service
+# Alternative option for enterprise-grade AI models
 
-# For mistral model use mistral/mistral-large-2411
-# And set MISTRAL_API_KEY
+# Mistral AI model configuration (mistral/mistral-large-2411)
+# Requires MISTRAL_API_KEY for Mistral's open-source models
+# Good choice for open-source AI model integration
 
-# Initialize agent with default configuration
+# Initialize the AI agent with default configuration
+# Using DeepSeek as the primary model for this example
+# Configuration can be customized for different use cases
 agent = Agent(model_name="deepseek/deepseek-chat")
 
-# Execute a task
+# Execute a sample task to demonstrate agent capabilities
+# This example creates a Fibonacci sequence function
+# Shows how the agent can generate code solutions
 result = agent.solve_task("Create a Python function that calculates the Fibonacci sequence")
 print(result)

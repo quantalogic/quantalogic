@@ -13,13 +13,20 @@ if not os.environ.get("DEEPSEEK_API_KEY"):
 # Initialize agent with DeepSeek model and Python tool
 agent = Agent(model_name="deepseek/deepseek-chat", tools=[PythonTool()])
 
-# Set up event monitoring to track agent's lifecycle
-# This helps in debugging and understanding the agent's behavior
+# Configure comprehensive event monitoring system
+# Tracks all agent activities including:
+# - Code execution steps
+# - Tool interactions
+# - Error conditions
+# Essential for debugging and performance optimization
 agent.event_emitter.on(
     "*",
     console_print_events,
 )
 
-# Execute a complex multi-step task demonstrating the agent's capabilities
+# Execute a precision mathematics task demonstrating:
+# - High-precision calculations
+# - PythonTool integration
+# - Real-time monitoring capabilities
 result = agent.solve_task("1. Calculate PI with 10000 decimal places.")
 print(result)
