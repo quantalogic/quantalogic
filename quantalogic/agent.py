@@ -64,6 +64,7 @@ class Agent(BaseModel):
     event_emitter: EventEmitter = EventEmitter()
     config: AgentConfig
     task_to_solve: str
+    task_to_solve_summary: str = ""
     ask_for_user_validation: Callable[[str], bool] = console_ask_for_user_validation
     last_tool_call: dict[str, Any] = {}  # Stores the last tool call information
     total_tokens: int = 0  # Total tokens in the conversation
@@ -137,6 +138,9 @@ class Agent(BaseModel):
         logger.debug(f"Solving task... {task}")
         self._reset_session(task_to_solve=task, max_iterations=max_iterations)
 
+        # Generate task summary
+        self.task_to_solve_summary = self._generate_task_summary(task)
+
         # Add system prompt to memory
         self.memory.add(Message(role="system", content=self.config.system_prompt))
 
@@ -166,7 +170,7 @@ class Agent(BaseModel):
                 self._update_total_tokens(message_history=self.memory.memory, prompt=current_prompt)
 
                 # Emit event: Task Think Start after updating total tokens
-                self._emit_event("task_think_start")
+                self._emit_event("task_think_start", {"prompt": current_prompt})
 
                 self._compact_memory_if_needed(current_prompt)
 
@@ -443,6 +447,10 @@ class Agent(BaseModel):
             "You must analyze this answer and evaluate what to do next to solve the task.\n"
             "If the step failed, take a step back and rethink your approach.\n"
             "\n"
+            "--- Task to solve summary ---\n"
+            "\n"
+            f"{self.task_to_solve_summary}"
+            "\n"
             "--- Format ---\n"
             "\n"
             "You MUST respond with exactly two XML blocks formatted in markdown:\n"
@@ -546,6 +554,7 @@ class Agent(BaseModel):
             "\n### Tools:\n"
             "-----------------------------\n"
             f"{self._get_tools_names_prompt()}\n"
+            "\n"
             "### Variables:\n"
             "-----------------------------\n"
             f"{self._get_variable_prompt()}\n"
@@ -574,7 +583,7 @@ class Agent(BaseModel):
             "\n"
             "Available variables:\n"
             "\n"
-            f"{', '.join(self.variable_store.keys())}\n"
+            f"{', '.join(self.variable_store.keys())}\n" if len(self.variable_store.keys()) > 0 else "None\n"
         )
         return prompt_use_variables
 
@@ -619,6 +628,28 @@ class Agent(BaseModel):
         self.memory.memory = memory_copy
         return summary.response
 
+    def _generate_task_summary(self, content: str) -> str:
+        """Generate a concise summary of the given content using the generative model.
+        
+        Args:
+            content (str): The content to summarize
+            
+        Returns:
+            str: Generated summary
+        """
+        try:
+            prompt = (
+                "Rewrite this task in a precise, dense, and concise manner:\n"
+                f"{content}\n"
+                "Summary should be 2-3 sentences maximum. No extra comments should be added.\n"
+            )
+            result = self.model.generate(prompt=prompt)
+            logger.debug(f"Generated summary: {result.response}")
+            return result.response
+        except Exception as e:
+            logger.error(f"Error generating summary: {str(e)}")
+            return f"Summary generation failed: {str(e)}"
+
     def _update_session_memory(self, user_content: str, assistant_content: str) -> None:
         """
         Log session messages to memory and emit events.
@@ -639,3 +670,5 @@ class Agent(BaseModel):
             "session_add_message",
             {"role": "assistant", "content": assistant_content},
         )
+        
+

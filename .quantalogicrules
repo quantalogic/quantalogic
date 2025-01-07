@@ -52,3 +52,11 @@ REMEMBER
 • Code for humans
 • Complexity kills
 • Requirements drive changes
+
+
+Conventions:
+- Use snake_case for variable names
+- Use camelCase for class names
+- Use snake_case for function names
+- Use snake_case for module names
+- Use snake_case for file names

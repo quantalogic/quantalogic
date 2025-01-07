@@ -86,8 +86,10 @@ Usage: quantalogic [OPTIONS] COMMAND [ARGS]...
 
 Options:
   --version                       Show version information.
-  --model-name TEXT               Specify the model to use (litellm format,
+  --model-name TEXT               Specify the text model to use (litellm format,
                                   e.g. "openrouter/deepseek-chat").
+  --vision-model-name TEXT        Specify the vision model to use (litellm format,
+                                  e.g. "openrouter/A/gpt-4o-mini").
   --log [info|debug|warning]      Set logging level (info/debug/warning).
   --verbose                       Enable verbose output.
   --mode [code|basic|interpreter|full|code-basic]
@@ -348,7 +350,7 @@ By integrating these tools into its architecture, QuantaLogic allows agents to p
 | Script Execution       | Python Tool, Node.js Tool, Elixir Tool                                                            |
 | File Operations        | Read File Tool, Write File Tool, Edit Whole Content Tool, Replace In File Tool                   |
 | Code Analysis          | Search Definition Names Tool, Ripgrep Tool                                                        |
-| Content Generation      | LLM Tool                                                                                          |
+| Content Generation      | LLM Tool, LLMVisionTool                                                                           |
 | Utility and Management  | Download HTTP File Tool, List Directory Tool, Markitdown Tool, Unified Diff Tool                 |
 
 ---
@@ -644,7 +646,30 @@ print("Ripgrep Results:", output)
 
 ---
 
-### 14. LLM Tool
+#### 14. LLMVisionTool
+
+The **LLMVisionTool** enables processing of visual inputs using vision-language models.
+
+##### Parameters
+
+| Parameter      | Type    | Description                                                            | Example                                    |
+|----------------|---------|------------------------------------------------------------------------|--------------------------------------------|
+| `image_path`   | string  | Path to the image file to process                                      | `./path/to/image.png`                      |
+| `prompt`       | string  | The question or instruction for the vision model                       | `Describe the contents of this image`      |
+| `temperature`  | float   | Sampling temperature between 0.0 and 1.0                              | `0.7`                                      |
+
+##### Example Usage
+```python
+vision_tool = LLMVisionTool()
+response = vision_tool.execute(
+    image_path="./path/to/image.png",
+    prompt="Describe the contents of this image",
+    temperature=0.7
+)
+print("Vision Model Response:", response)
+```
+
+#### 15. LLM Tool
 
 The **LLM Tool** generates answers using a specified language model.
 
@@ -669,7 +694,7 @@ print("LLM Response:", response)
 
 ---
 
-### 15. Download HTTP File Tool
+### 16. Download HTTP File Tool
 
 The **Download HTTP File Tool** downloads a file from a specified HTTP URL.
 
@@ -689,7 +714,7 @@ print(result)
 
 ---
 
-### 16. List Directory Tool
+### 17. List Directory Tool
 
 The **List Directory Tool** lists files in a specified directory.
 
@@ -708,7 +733,7 @@ print("Directory Files:", result)
 
 ---
 
-### 17. Markitdown Tool
+### 18. Markitdown Tool
 
 The **Markitdown Tool** processes markdown files, possibly for conversion or rendering.
 
@@ -723,26 +748,6 @@ The **Markitdown Tool** processes markdown files, possibly for conversion or ren
 markitdown_tool = MarkitdownTool()
 result = markitdown_tool.execute(markdown_path="./path/to/file.md")
 print("Processed Markdown Output:", result)
-```
-
----
-
-### 18. Unified Diff Tool
-
-The **Unified Diff Tool** generates a unified diff between two texts or files.
-
-#### Parameters
-
-| Parameter    | Type   | Description                                    | Example                |
-|--------------|--------|------------------------------------------------|------------------------|
-| `original`   | string | The original content or file path.            | `old_text.txt`         |
-| `updated`    | string | The updated content or file path.             | `new_text.txt`         |
-
-#### Example Usage
-```python
-diff_tool = UnifiedDiffTool()
-result = diff_tool.execute(original="old_text.txt", updated="new_text.txt")
-print("Unified Diff Output:", result)
 ```
 
 

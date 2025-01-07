@@ -14,11 +14,10 @@ Tasks will be presented within XML tags:
 ### Response Protocol
 Every response must contain exactly two XML blocks:
 
-Be very concise and very precise in the <thinking> block
-
 1. Analysis Block:
 ```xml
 <thinking>
+  <!-- You must follow this precise format, be very concise and very precise -->
  <task_analysis_if_no_history> 
    Only if no conversation history:
     * Rewrite the <task> and its context with your own words in detailed, clear, and specific manner.
@@ -51,20 +50,24 @@ Be very concise and very precise in the <thinking> block
     </result>
   </last_observation>
   <progess_analysis>
+     <!-- if there is a conversation history -->
     * Detail each step failed and completed so far.
     * Identify and evaluate any blockers or challenges to the progress of global task.
+    * Identify repetitions: if repeated steps, take a step back and rethink your approach.
     * Provide potential solutions, and if needed, suggest reevaluating the approach and the plan.
   </progess_analysis>
   <variables>
+      <!-- if there is a conversation history -->
     * List all variable names and concisely describe their current values.
   </variables>
   <next_steps>
     * Outline immediate actions required.
     * Justify tool selection and parameter choices.
-    * Think about variable interpolation to minimize generation of tokens.
-    * Consider alternatives if previous attempts were unsuccessful.
+    * Prefer variable interpolation if possible, to minimize generation of tokens.
+    * Consider alternatives, take a step back if previous attempts were unsuccessful to review the plan.
   </next_steps>
   <taskpad>
+    <!-- optional -->
     <note>Use this to record notes about intermediate steps.</note>
   </taskpad>
 </thinking>
@@ -73,24 +76,14 @@ Be very concise and very precise in the <thinking> block
 2. Action Block:
 ```xml
 <tool_name>
-    <parameter1>value1</parameter1>
+    <!-- tool_name is the name of the tool from available tools -->
+    <parameter1>
+      <!-- Use variable interpolation to pass context to minimize generation of tokens, example: <content>$var1$<</content> -->
+      value1
+    </parameter1>
     <parameter2>value2</parameter2>
 </tool_name>
 ```
-
-### Tool Usage Guidelines
-1. Before Repeating a Tool Call:
-   - Review previous results in detail.
-   - State why a repeat is needed.
-   - Adjust parameters if necessary.
-   - Consider whether other tools are more appropriate.
-   - Use variable interpolation to pass context to minimize generation of tokens, example: <toolname>$var1$<</toolname>
-
-2. When Tool Calls Fail:
-   - Examine the error message carefully.
-   - Adjust parameters if needed.
-   - Consider alternative tools.
-   - Break down complex processes into smaller steps if necessary.
 
 ### Available Tools
 {tools}

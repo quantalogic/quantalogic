@@ -5,6 +5,7 @@ from quantalogic.tools import (
     InputQuestionTool,
     ListDirectoryTool,
     LLMTool,
+    LLMVisionTool,
     ReadFileBlockTool,
     ReadFileTool,
     ReplaceInFileTool,
@@ -17,11 +18,12 @@ from quantalogic.utils import get_coding_environment
 from quantalogic.utils.get_quantalogic_rules_content import get_quantalogic_rules_file_content
 
 
-def create_coding_agent(model_name: str, basic: bool = False) -> Agent:
+def create_coding_agent(model_name: str,vision_model_name: str | None = None, basic: bool = False) -> Agent:
     """Creates and configures a coding agent with a comprehensive set of tools.
 
     Args:
         model_name (str): Name of the language model to use for the agent's core capabilities
+        vision_model_name (str | None): Name of the vision model to use for the agent's core capabilities
         basic (bool, optional): If True, the agent will be configured with a basic set of tools.
 
     Returns:
@@ -58,6 +60,9 @@ def create_coding_agent(model_name: str, basic: bool = False) -> Agent:
         ExecuteBashCommandTool(),
         InputQuestionTool(),
     ]
+
+    if vision_model_name:
+        tools.append(LLMVisionTool(model_name=vision_model_name))
 
     if not basic:
         tools.append(
