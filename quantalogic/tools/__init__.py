@@ -8,6 +8,7 @@ from .execute_bash_command_tool import ExecuteBashCommandTool
 from .input_question_tool import InputQuestionTool
 from .list_directory_tool import ListDirectoryTool
 from .llm_tool import LLMTool
+from .llm_vision_tool import LLMVisionTool
 from .markitdown_tool import MarkitdownTool
 from .nodejs_tool import NodeJsTool
 from .python_tool import PythonTool
@@ -30,6 +31,7 @@ __all__ = [
     "InputQuestionTool",
     "ListDirectoryTool",
     "LLMTool",
+    "LLMVisionTool",
     "ExecuteBashCommandTool",
     "PythonTool",
     "ElixirTool",
