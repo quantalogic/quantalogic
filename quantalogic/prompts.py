@@ -14,17 +14,18 @@ Tasks will be presented within XML tags:
 ### Response Protocol
 Every response must contain exactly two XML blocks:
 
-Be very concise and precise in the <thinking> block
+Be very concise and very precise in the <thinking> block
 
 1. Analysis Block:
 ```xml
 <thinking>
  <task_analysis_if_no_history> 
    Only if no conversation history:
-    * Restate the main objective of the <task> and its context
+    * Rewrite the <task> and its context with your own words in detailed, clear, and specific manner.
     * If not previously defined, clarify detailed criteria for task completion.
     * Identify key components, constraints, and potential challenges.
-    * Break down complex tasks into concrete sub-tasks.
+    * Decompose into Sub-Tasks: Break the <task> down into smaller, manageable sub-tasks if necessary.
+    * Each sub-task should have a clear objective, specific deliverables, and be sequenced logically to facilitate step-by-step progress tracking. 
   </task_analysis_if_no_history>
   <success_criteria_if_no_history>
      If no conversation history: 
