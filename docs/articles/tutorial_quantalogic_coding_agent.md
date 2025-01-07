@@ -215,17 +215,7 @@ result = agent.solve_task("""
 3. **Save the Code**: The `WriteFileTool` saves the generated code to the `demo01/` directory.
 4. **Verify the Output**: The `ReadFileTool` and `ListDirectoryTool` verify the output.
 
-```mermaid
-flowchart TD
-    A[Receive Task] --> B[Understand Requirements]
-    B --> C[Generate Code]
-    C --> D[Test Code]
-    D --> E{Passes Tests?}
-    E -->|Yes| F[Deliver Code]
-    E -->|No| G[Debug and Refactor]
-    G --> C
-    F --> H[Task Completed]
-```
+
 
 **Explanation:**
 - The coding agent starts by **Receiving a Task**.
