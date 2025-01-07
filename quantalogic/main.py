@@ -54,7 +54,11 @@ def create_agent_for_mode(mode: str, model_name: str) -> Agent:
 def configure_logger(log_level: str) -> None:
     """Configure the logger with the specified log level and format."""
     logger.remove()
-    logger.add(sys.stderr, level=log_level.upper(), format="{time} | {level} | {message}")
+    logger.add(
+        sys.stderr,
+        level=log_level.upper(),
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{process}</cyan> | <magenta>{file}:{line}</magenta> | {message}"
+    )
     logger.info(f"Log level set to: {log_level}")
 
 
