@@ -33,20 +33,20 @@ from quantalogic.version import get_version  # noqa: E402
 AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic"]
 
 
-def create_agent_for_mode(mode: str, model_name: str) -> Agent:
+def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | None) -> Agent:
     """Create an agent based on the specified mode."""
     logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
     if mode == "code":
         logger.debug("Creating code agent without basic mode")
-        return create_coding_agent(model_name, basic=False)
+        return create_coding_agent(model_name, vision_model_name, basic=False)
     if mode == "code-basic":
-        return create_coding_agent(model_name, basic=True)
+        return create_coding_agent(model_name, vision_model_name, basic=True)
     elif mode == "basic":
-        return create_orchestrator_agent(model_name)
+        return create_orchestrator_agent(model_name, vision_model_name)
     elif mode == "full":
-        return create_full_agent(model_name)
+        return create_full_agent(model_name, vision_model_name)
     elif mode == "interpreter":
-        return create_interpreter_agent(model_name)
+        return create_interpreter_agent(model_name, vision_model_name)
     else:
         raise ValueError(f"Unknown agent mode: {mode}")
 
@@ -57,7 +57,7 @@ def configure_logger(log_level: str) -> None:
     logger.add(
         sys.stderr,
         level=log_level.upper(),
-        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{process}</cyan> | <magenta>{file}:{line}</magenta> | {message}"
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{process}</cyan> | <magenta>{file}:{line}</magenta> | {message}",
     )
     logger.info(f"Log level set to: {log_level}")
 
@@ -65,6 +65,7 @@ def configure_logger(log_level: str) -> None:
 def set_litellm_verbose(verbose_mode: bool) -> None:
     """Set the verbosity of the litellm library."""
     import litellm
+
     litellm.set_verbose = verbose_mode
 
 
@@ -91,7 +92,7 @@ def get_task_from_file(file_path: str) -> str:
         raise Exception(f"Unexpected error reading file: {e}")
 
 
-def display_welcome_message(console: Console, model_name: str) -> None:
+def display_welcome_message(console: Console, model_name: str, vision_model_name: str | None) -> None:
     """Display the welcome message and instructions."""
     version = get_version()
     console.print(
@@ -102,8 +103,9 @@ def display_welcome_message(console: Console, model_name: str) -> None:
             "2. [bold]Submit your task[/bold]: Press [bold]Enter[/bold] twice to send your request.\n\n"
             "3. [bold]Exit the app[/bold]: Leave the input blank and press [bold]Enter[/bold] twice to close the assistant.\n\n"
             f"[yellow] 🤖 System Info:[/yellow]\n\n"
-            f"- Version: {get_version()}\n"
-            f"- Model: {model_name}\n\n"
+            "\n"
+            f"- Model: {model_name}\n"
+            f"- Vision Model: {vision_model_name}\n\n"
             "[bold magenta]💡 Pro Tips:[/bold magenta]\n\n"
             "- Be as specific as possible in your task description to get the best results!\n"
             "- Use clear and concise language when describing your task\n"
@@ -122,18 +124,38 @@ def display_welcome_message(console: Console, model_name: str) -> None:
     default=MODEL_NAME,
     help='Specify the model to use (litellm format, e.g. "openrouter/deepseek-chat").',
 )
-@click.option("--log", type=click.Choice(["info", "debug", "warning"]), default="info", help="Set logging level (info/debug/warning).")
+@click.option(
+    "--log",
+    type=click.Choice(["info", "debug", "warning"]),
+    default="info",
+    help="Set logging level (info/debug/warning).",
+)
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
 @click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")
+@click.option(
+    "--vision-model-name",
+    default=None,
+    help='Specify the vision model to use (litellm format, e.g. "openrouter/A/gpt-4o-mini").',
+)
 @click.pass_context
-def cli(ctx: click.Context, version: bool, model_name: str, verbose: bool, mode: str, log: str) -> None:
+def cli(
+    ctx: click.Context,
+    version: bool,
+    model_name: str,
+    verbose: bool,
+    mode: str,
+    log: str,
+    vision_model_name: str | None,
+) -> None:
     """QuantaLogic AI Assistant - A powerful AI tool for various tasks."""
     if version:
         console = Console()
         console.print(f"QuantaLogic version: {get_version()}")
         sys.exit(0)
     if ctx.invoked_subcommand is None:
-        ctx.invoke(task, model_name=model_name, verbose=verbose, mode=mode, log=log)
+        ctx.invoke(
+            task, model_name=model_name, verbose=verbose, mode=mode, log=log, vision_model_name=vision_model_name
+        )
 
 
 @cli.command()
@@ -145,9 +167,27 @@ def cli(ctx: click.Context, version: bool, model_name: str, verbose: bool, mode:
 )
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
 @click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")
-@click.option("--log", type=click.Choice(["info", "debug", "warning"]), default="info", help="Set logging level (info/debug/warning).")
+@click.option(
+    "--log",
+    type=click.Choice(["info", "debug", "warning"]),
+    default="info",
+    help="Set logging level (info/debug/warning).",
+)
+@click.option(
+    "--vision-model-name",
+    default=None,
+    help='Specify the vision model to use (litellm format, e.g. "openrouter/openai/gpt-4o-mini").',
+)
 @click.argument("task", required=False)
-def task(file: Optional[str], model_name: str, verbose: bool, mode: str, log: str, task: Optional[str]) -> None:
+def task(
+    file: Optional[str],
+    model_name: str,
+    verbose: bool,
+    mode: str,
+    log: str,
+    vision_model_name: str | None,
+    task: Optional[str],
+) -> None:
     """Execute a task with the QuantaLogic AI Assistant."""
     console = Console()
     switch_verbose(verbose, log)
@@ -159,7 +199,7 @@ def task(file: Optional[str], model_name: str, verbose: bool, mode: str, log: st
             if task:
                 task_content = task
             else:
-                display_welcome_message(console, model_name)
+                display_welcome_message(console, model_name, vision_model_name)
                 logger.info("Waiting for user input...")
                 task_content = get_multiline_input(console).strip()
                 logger.info(f"User input received. Task content: {task_content}")
@@ -181,7 +221,7 @@ def task(file: Optional[str], model_name: str, verbose: bool, mode: str, log: st
                 sys.exit(0)
 
         logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
-        agent = create_agent_for_mode(mode, model_name)
+        agent = create_agent_for_mode(mode, model_name, vision_model_name=vision_model_name)
         logger.debug(f"Created agent for mode: {mode} with model: {model_name}")
 
         events = [
