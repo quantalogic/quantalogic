@@ -80,15 +80,23 @@ pipx install quantalogic
 The QuantaLogic CLI provides powerful command-line capabilities:
 
 ```bash
-quantalogic [OPTIONS] COMMAND [ARGS]...
-```
+Usage: quantalogic [OPTIONS] COMMAND [ARGS]...
 
-### Options
---model-name TEXT       Model to use (default: deepseek/deepseek-chat)
---verbose               Enable verbose output
---mode TEXT             Agent mode (code/basic/interpreter/full/code-basic)
---file PATH             Path to task file
---version               Show version and exit
+  QuantaLogic AI Assistant - A powerful AI tool for various tasks.
+
+Options:
+  --version                       Show version information.
+  --model-name TEXT               Specify the model to use (litellm format,
+                                  e.g. "openrouter/deepseek-chat").
+  --log [info|debug|warning]      Set logging level (info/debug/warning).
+  --verbose                       Enable verbose output.
+  --mode [code|basic|interpreter|full|code-basic]
+                                  Agent mode (code/search/full).
+  --help                          Show this message and exit.
+
+Commands:
+  task  Execute a task with the QuantaLogic AI Assistant.
+```
 
 ### Commands
 task    Execute a task with the QuantaLogic AI Assistant
@@ -103,7 +111,9 @@ task    Execute a task with the QuantaLogic AI Assistant
 - code-basic: Coding agent with basic reasoning
 
 #### Task Execution
+
 Tasks can be provided:
+
 1. Directly via `task` parameter
 2. Through a file using --file parameter
 3. Interactively via standard input
