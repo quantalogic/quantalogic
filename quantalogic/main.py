@@ -101,7 +101,7 @@ def display_welcome_message(console: Console, model_name: str) -> None:
             "1. [bold]Describe your task[/bold]: Tell the AI what you need help with.\n"
             "2. [bold]Submit your task[/bold]: Press [bold]Enter[/bold] twice to send your request.\n\n"
             "3. [bold]Exit the app[/bold]: Leave the input blank and press [bold]Enter[/bold] twice to close the assistant.\n\n"
-            f"[yellow]ℹ️ System Info:[/yellow]\n\n"
+            f"[yellow] 🤖 System Info:[/yellow]\n\n"
             f"- Version: {get_version()}\n"
             f"- Model: {model_name}\n\n"
             "[bold magenta]💡 Pro Tips:[/bold magenta]\n\n"
