@@ -80,6 +80,7 @@ class GenerativeModel:
             temperature: Sampling temperature between 0 and 1.
                 Defaults to 0.7.
         """
+        logger.debug(f"Initializing GenerativeModel with model={model}, temperature={temperature}")
         self.model = model
         self.temperature = temperature
 
@@ -177,9 +178,12 @@ class GenerativeModel:
             }
 
             logger.error("LLM Generation Error: {}", error_details)
+            logger.debug(f"Error details: {error_details}")
+            logger.debug(f"Model: {self.model}, Temperature: {self.temperature}")
 
             # Handle authentication and permission errors
             if isinstance(e, self.AUTH_EXCEPTIONS):
+                logger.debug("Authentication error occurred")
                 raise openai.AuthenticationError(
                     f"Authentication failed with provider {error_details['provider']}"
                 ) from e
@@ -220,8 +224,11 @@ class GenerativeModel:
 
     def token_counter(self, messages: list[Message]) -> int:
         """Count the number of tokens in a list of messages."""
+        logger.debug(f"Counting tokens for {len(messages)} messages using model {self.model}")
         litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages]
-        return token_counter(model=self.model, messages=litellm_messages)
+        token_count = token_counter(model=self.model, messages=litellm_messages)
+        logger.debug(f"Token count: {token_count}")
+        return token_count
 
     def token_counter_with_history(self, messages_history: list[Message], prompt: str) -> int:
         """Count the number of tokens in a list of messages and a prompt."""
@@ -231,12 +238,18 @@ class GenerativeModel:
 
     def get_model_info(self) -> dict | None:
         """Get information about the model."""
+        logger.debug(f"Retrieving model info for {self.model}")
         model_info = get_model_info(self.model)
 
         if not model_info:
-            # Search without prefix "openrouter/"
+            logger.debug("Model info not found, trying without openrouter/ prefix")
             model_info = get_model_info(self.model.replace("openrouter/", ""))
 
+        if model_info:
+            logger.debug(f"Model info retrieved: {model_info.keys()}")
+        else:
+            logger.debug("No model info available")
+            
         return model_info
 
     def get_model_max_input_tokens(self) -> int:
