@@ -17,11 +17,11 @@ class LLMTool(Tool):
     description: str = Field(
         default=(
             "Generates answers to questions using a specified language model. "
-            "Note: This tool operates in isolation and does not have access to: "
+            "Note: This tool operates in total isolation and does not have access to: "
             " - Memory: All context must be explicitly provided in the prompt. "
             " - File system."
             " - Variables: Any required variables should be interpolated into the prompt (e.g., $var1$). "
-            " - Other tools: It cannot invoke or interact with other tools. "
+            " - No access to Tools, URL, file, or other external resources. "
             "Ensure all necessary information is included directly in your prompt."
         )
     )
