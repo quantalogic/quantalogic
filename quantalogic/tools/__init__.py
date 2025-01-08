@@ -17,12 +17,16 @@ from .read_file_tool import ReadFileTool
 from .replace_in_file_tool import ReplaceInFileTool
 from .ripgrep_tool import RipgrepTool
 from .search_definition_names import SearchDefinitionNames
+from .serpapi_search_tool import SerpApiSearchTool
 from .task_complete_tool import TaskCompleteTool
 from .tool import Tool, ToolArgument
 from .unified_diff_tool import UnifiedDiffTool
+from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
 
 __all__ = [
+    "WikipediaSearchTool",
+    "SerpApiSearchTool",
     "Tool",
     "ToolArgument",
     "TaskCompleteTool",

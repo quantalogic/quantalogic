@@ -92,7 +92,7 @@ Options:
                                   e.g. "openrouter/A/gpt-4o-mini").
   --log [info|debug|warning]      Set logging level (info/debug/warning).
   --verbose                       Enable verbose output.
-  --mode [code|basic|interpreter|full|code-basic]
+  --mode [code|basic|interpreter|full|code-basic|search]
                                   Agent mode (code/search/full).
   --help                          Show this message and exit.
 
@@ -102,6 +102,8 @@ Commands:
 
 ### Commands
 task    Execute a task with the QuantaLogic AI Assistant
+
+
 
 ### Detailed Usage
 
@@ -342,16 +344,19 @@ By integrating these tools into its architecture, QuantaLogic allows agents to p
 
 ### Tools Documentation
 
+
+
 #### Overview of Tools
 
 | Category               | Tools                                                                                             |
 |-----------------------|---------------------------------------------------------------------------------------------------|
-| Task Automation        | Agent Tool, Task Complete Tool, Input Question Tool, Execute Bash Command Tool                  |
-| Script Execution       | Python Tool, Node.js Tool, Elixir Tool                                                            |
-| File Operations        | Read File Tool, Write File Tool, Edit Whole Content Tool, Replace In File Tool                   |
-| Code Analysis          | Search Definition Names Tool, Ripgrep Tool                                                        |
-| Content Generation      | LLM Tool, LLMVisionTool                                                                           |
-| Utility and Management  | Download HTTP File Tool, List Directory Tool, Markitdown Tool, Unified Diff Tool                 |
+| 1. Search Tools        | 1.1 SerpAPI Search Tool, 1.2 Wikipedia Search Tool                                               |
+| 2. Task Automation     | Agent Tool, Task Complete Tool, Input Question Tool, Execute Bash Command Tool                  |
+| 3. Script Execution    | Python Tool, Node.js Tool, Elixir Tool                                                            |
+| 4. File Operations     | Read File Tool, Write File Tool, Edit Whole Content Tool, Replace In File Tool                   |
+| 5. Code Analysis       | Search Definition Names Tool, Ripgrep Tool                                                        |
+| 6. Content Generation  | LLM Tool, LLMVisionTool                                                                           |
+| 7. Utility & Management| Download HTTP File Tool, List Directory Tool, Markitdown Tool, Unified Diff Tool                 |
 
 ---
 
@@ -750,6 +755,51 @@ result = markitdown_tool.execute(markdown_path="./path/to/file.md")
 print("Processed Markdown Output:", result)
 ```
 
+---
+
+### 19. SerpAPI Search Tool
+
+The **SerpAPI Search Tool** allows agents to perform web searches using the SerpAPI service.
+
+##### Parameters
+| Parameter | Type   | Description                     | Example                     |
+|-----------|--------|---------------------------------|-----------------------------|
+| query     | string | The search query to execute     | "latest AI research papers" |
+| location  | string | Geographic location for results | "United States"             |
+| num       | int    | Number of results to return     | 5                           |
+
+##### Example Usage
+```python
+from quantalogic.tools import SerpAPISearchTool
+
+search_tool = SerpAPISearchTool()
+results = search_tool.execute(query="latest AI research", location="United States", num=5)
+print(results)
+```
+
+---
+
+### 20. Wikipedia Search Tool
+
+The **Wikipedia Search Tool** enables agents to search and retrieve information from Wikipedia.
+
+##### Parameters
+
+| Parameter | Type   | Description                     | Example                     |
+|-----------|--------|---------------------------------|-----------------------------|
+| query     | string | The search query to execute     | "Artificial Intelligence"   |
+| lang      | string | Language code for results       | "en"                        |
+| sentences | int    | Number of summary sentences     | 3                           |
+
+##### Example Usage
+```python
+from quantalogic.tools import WikipediaSearchTool
+
+wiki_tool = WikipediaSearchTool()
+results = wiki_tool.execute(query="Artificial Intelligence", lang="en", sentences=3)
+print(results)
+```
+```
 
 #### Creating Custom Tools
 
