@@ -1,12 +1,14 @@
 """Print events with rich formatting."""
 
+from typing import Any
+
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.tree import Tree
 
 
-def console_print_events(event: str, data: dict[str, any] = None):
+def console_print_events(event: str, data: dict[str, Any] | None = None):
     """Print events with rich formatting.
 
     Args:
