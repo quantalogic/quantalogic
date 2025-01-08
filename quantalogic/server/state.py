@@ -35,7 +35,7 @@ class ServerState:
     async def initiate_shutdown(self, force: bool = False):
         """Initiate the shutdown process."""
         if not self.is_shutting_down or force:
-            logger.info("Initiating server shutdown...")
+            logger.debug("Initiating server shutdown...")
             self.is_shutting_down = True
             self.force_exit = force
             self.shutdown_initiated.set()
@@ -48,7 +48,7 @@ class ServerState:
         """Handle interrupt signal."""
         self.interrupt_count += 1
         if self.interrupt_count == 1:
-            logger.info("Graceful shutdown initiated (press Ctrl+C again to force)")
+            logger.debug("Graceful shutdown initiated (press Ctrl+C again to force)")
             asyncio.create_task(self.initiate_shutdown(force=False))
         else:
             logger.warning("Forced shutdown initiated...")
@@ -95,7 +95,7 @@ class AgentState:
                 if task_id not in self.agents:
                     self.agents[task_id] = self.create_agent_for_task(task_id)
 
-            logger.info(f"New client connected: {client_id} for task: {task_id}")
+            logger.debug(f"New client connected: {client_id} for task: {task_id}")
             return client_id
 
     def create_agent_for_task(self, task_id: str) -> Any:
@@ -109,7 +109,7 @@ class AgentState:
         """
         # Placeholder for agent creation logic
         agent = ...  # Replace with actual agent creation logic
-        logger.info(f"Agent created for task: {task_id}")
+        logger.debug(f"Agent created for task: {task_id}")
         return agent
 
     def get_agent_for_task(self, task_id: str) -> Optional[Any]:
@@ -128,7 +128,7 @@ class AgentState:
         with self.queue_lock:
             if client_id in self.event_queues:
                 del self.event_queues[client_id]
-                logger.info(f"Client disconnected: {client_id}")
+                logger.debug(f"Client disconnected: {client_id}")
 
     def _format_data_for_client(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Format data for client consumption."""

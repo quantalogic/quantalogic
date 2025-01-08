@@ -47,7 +47,7 @@ VALIDATION_TIMEOUT = 30.0  # seconds
 
 def handle_sigterm(signum, frame):
     """Handle SIGTERM signal."""
-    logger.info("Received SIGTERM signal")
+    logger.debug("Received SIGTERM signal")
     raise SystemExit(0)
 
 
@@ -74,7 +74,7 @@ class ServerState:
     async def initiate_shutdown(self, force: bool = False):
         """Initiate the shutdown process."""
         if not self.is_shutting_down or force:
-            logger.info("Initiating server shutdown...")
+            logger.debug("Initiating server shutdown...")
             self.is_shutting_down = True
             self.force_exit = force
             self.shutdown_initiated.set()
@@ -88,7 +88,7 @@ class ServerState:
         """Handle interrupt signal."""
         self.interrupt_count += 1
         if self.interrupt_count == 1:
-            logger.info("Graceful shutdown initiated (press Ctrl+C again to force)")
+            logger.debug("Graceful shutdown initiated (press Ctrl+C again to force)")
             asyncio.create_task(self.initiate_shutdown(force=False))
         else:
             logger.warning("Forced shutdown initiated...")
@@ -277,7 +277,7 @@ class AgentState:
             # Override ask_for_user_validation with SSE-based method
             self.agent.ask_for_user_validation = self.sse_ask_for_user_validation
 
-            logger.info(f"Agent initialized with model: {model_name}")
+            logger.debug(f"Agent initialized with model: {model_name}")
         except Exception as e:
             logger.error(f"Failed to initialize agent: {e}", exc_info=True)
             raise
@@ -316,7 +316,7 @@ class AgentState:
             console_print_events(event_type, data)
 
             # Log event details
-            logger.info(f"Agent Event: {event_type}")
+            logger.debug(f"Agent Event: {event_type}")
             logger.debug(f"Event Data: {data}")
 
             # Broadcast to clients
@@ -334,7 +334,7 @@ class AgentState:
     async def cleanup(self):
         """Clean up resources during shutdown."""
         try:
-            logger.info("Cleaning up resources...")
+            logger.debug("Cleaning up resources...")
             if server_state.force_exit:
                 logger.warning("Forced cleanup - skipping graceful shutdown")
                 return
@@ -349,7 +349,7 @@ class AgentState:
                     self.validation_responses.clear()
                 # Clear agent
                 self.agent = None
-                logger.info("Cleanup completed")
+                logger.debug("Cleanup completed")
         except TimeoutError:
             logger.warning(f"Cleanup timed out after {SHUTDOWN_TIMEOUT} seconds")
         except Exception as e:
@@ -429,7 +429,7 @@ class AgentState:
         with self.queue_lock:
             if task_id in self.task_queues:
                 del self.task_queues[task_id]
-                logger.info(f"Removed event queue for task_id: {task_id}")
+                logger.debug(f"Removed event queue for task_id: {task_id}")
 
 
 # Initialize global states
@@ -448,11 +448,11 @@ async def lifespan(app: FastAPI):
             loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(handle_shutdown(s)))
         yield
     finally:
-        logger.info("Shutting down server gracefully...")
+        logger.debug("Shutting down server gracefully...")
         await server_state.initiate_shutdown()
         await agent_state.cleanup()
         server_state.shutdown_complete.set()
-        logger.info("Server shutdown complete")
+        logger.debug("Server shutdown complete")
 
 
 async def handle_shutdown(sig):
@@ -527,7 +527,7 @@ async def event_stream(request: Request, task_id: Optional[str] = None) -> Strea
     async def event_generator() -> AsyncGenerator[str, None]:
         # Ensure unique client-task combination
         client_id = agent_state.add_client(task_id)
-        logger.info(f"Client {client_id} subscribed to {'task_id: ' + task_id if task_id else 'all events'}")
+        logger.debug(f"Client {client_id} subscribed to {'task_id: ' + task_id if task_id else 'all events'}")
 
         try:
             while not server_state.is_shutting_down:
@@ -557,7 +557,7 @@ async def event_stream(request: Request, task_id: Optional[str] = None) -> Strea
         finally:
             # Clean up the client's event queue
             agent_state.remove_client(client_id, task_id)
-            logger.info(f"Client {client_id} {'unsubscribed from task_id: ' + task_id if task_id else 'disconnected'}")
+            logger.debug(f"Client {client_id} {'unsubscribed from task_id: ' + task_id if task_id else 'disconnected'}")
 
     return StreamingResponse(
         event_generator(),
@@ -629,5 +629,5 @@ if __name__ == "__main__":
     try:
         server.run()
     except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt")
+        logger.debug("Received keyboard interrupt")
         sys.exit(1)

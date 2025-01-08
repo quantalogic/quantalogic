@@ -59,7 +59,7 @@ def configure_logger(log_level: str) -> None:
         level=log_level.upper(),
         format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{process}</cyan> | <magenta>{file}:{line}</magenta> | {message}",
     )
-    logger.info(f"Log level set to: {log_level}")
+    logger.debug(f"Log level set to: {log_level}")
 
 
 def set_litellm_verbose(verbose_mode: bool) -> None:
@@ -200,9 +200,9 @@ def task(
                 task_content = task
             else:
                 display_welcome_message(console, model_name, vision_model_name)
-                logger.info("Waiting for user input...")
+                logger.debug("Waiting for user input...")
                 task_content = get_multiline_input(console).strip()
-                logger.info(f"User input received. Task content: {task_content}")
+                logger.debug(f"User input received. Task content: {task_content}")
                 if not task_content:
                     logger.info("No task provided. Exiting...")
                     console.print("[yellow]No task provided. Exiting...[/yellow]")

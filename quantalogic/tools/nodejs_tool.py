@@ -342,14 +342,14 @@ class NodeJsTool(Tool):
             RuntimeError: If pulling the Docker image fails.
         """
         try:
-            logger.info(f"Pulling Docker image: {docker_image}")
+            logger.debug(f"Pulling Docker image: {docker_image}")
             subprocess.run(
-                ["docker", "pull", docker_image],
+            ["docker", "pull", docker_image],
                 check=True,
                 capture_output=True,
                 text=True,
             )
-            logger.info(f"Successfully pulled Docker image '{docker_image}'.")
+            logger.debug(f"Successfully pulled Docker image '{docker_image}'.")
         except subprocess.CalledProcessError as e:
             error_msg = f"Failed to pull Docker image '{docker_image}': {e.stderr.strip()}"
             logger.error(error_msg)

@@ -35,18 +35,18 @@ def download_http_file(
 
     for attempt in range(max_retries):
         try:
-            logger.info(f"Attempt {attempt + 1} of {max_retries} to download {url}")
+            logger.debug(f"Attempt {attempt + 1} of {max_retries} to download {url}")
             response = requests.get(url, headers=headers, stream=True, timeout=timeout)
             response.raise_for_status()
 
             content_type = response.headers.get("Content-Type", "unknown")
-            logger.info(f"Downloading content with Content-Type: {content_type}")
+            logger.debug(f"Downloading content with Content-Type: {content_type}")
 
             with open(local_path, "wb") as file:
                 for chunk in response.iter_content(chunk_size=chunk_size):
                     file.write(chunk)
 
-            logger.info(f"File successfully downloaded and saved to {local_path}")
+            logger.debug(f"File successfully downloaded and saved to {local_path}")
             return local_path
 
         except HTTPError as http_err:
@@ -70,7 +70,7 @@ def download_http_file(
 
         if attempt < max_retries - 1:
             sleep_duration = delay * (2**attempt)  # Exponential backoff
-            logger.info(f"Retrying in {sleep_duration} seconds...")
+            logger.debug(f"Retrying in {sleep_duration} seconds...")
             sleep(sleep_duration)
 
     logger.error("Max retries reached. Download failed.")
