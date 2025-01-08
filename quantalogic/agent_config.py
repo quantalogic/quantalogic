@@ -107,7 +107,7 @@ def create_full_agent(model_name: str, vision_model_name: str | None) -> Agent:
         Agent: An agent with the specified model and tools
 
     """
-    tools=[
+    tools = [
         TaskCompleteTool(),
         ReadFileTool(),
         ReadFileBlockTool(),

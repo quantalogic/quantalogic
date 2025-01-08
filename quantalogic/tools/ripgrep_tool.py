@@ -136,7 +136,7 @@ class RipgrepTool(Tool):
             return "No files matching the pattern (after .gitignore filtering)"
 
         try:
-            logger.info(f"Executing ripgrep with args: {args}")
+            logger.debug(f"Executing ripgrep with args: {args}")
             # Add filtered files to ripgrep command
             args.extend(filtered_files)
             output = subprocess.check_output([rg_path] + args, text=True, cwd=cwd)
@@ -194,7 +194,7 @@ class RipgrepTool(Tool):
         for path in system_paths + node_paths:
             full_path = Path(__file__).parent.parent / path if str(path).startswith("node_modules") else path
             if full_path.exists():
-                logger.info(f"Found ripgrep at: {full_path}")
+                logger.debug(f"Found ripgrep at: {full_path}")
                 return str(full_path)
 
         # Check system PATH using which/where
@@ -202,7 +202,7 @@ class RipgrepTool(Tool):
             command = "where" if os.name == "nt" else "which"
             rg_path = subprocess.check_output([command, bin_name], text=True).strip()
             if rg_path:
-                logger.info(f"Found ripgrep in PATH at: {rg_path}")
+                logger.debug(f"Found ripgrep in PATH at: {rg_path}")
                 return rg_path
         except subprocess.CalledProcessError:
             logger.debug("Ripgrep not found in system PATH")

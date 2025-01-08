@@ -45,7 +45,7 @@ def read_http_text_content(
 
     for attempt in range(retries):
         try:
-            logger.info(f"Attempt {attempt + 1} of {retries} to fetch {url}")
+            logger.debug(f"Attempt {attempt + 1} of {retries} to fetch {url}")
             response = requests.get(url, headers=headers, timeout=timeout)
             response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
 
@@ -87,7 +87,7 @@ def read_http_text_content(
 
         if attempt < retries - 1:
             sleep_duration = delay * (2**attempt)  # Exponential backoff
-            logger.info(f"Retrying in {sleep_duration} seconds...")
+            logger.debug(f"Retrying in {sleep_duration} seconds...")
             sleep(sleep_duration)
 
     return None, error_msg

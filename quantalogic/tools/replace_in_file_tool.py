@@ -204,7 +204,7 @@ class ReplaceInFileTool(Tool):
                 if not block.search:
                     if block.replace:
                         content += f"\n{block.replace}"
-                        logger.info(f"Block {idx}: Appended content")
+                        logger.debug(f"Block {idx}: Appended content")
                     continue
 
                 match_found = False
@@ -218,7 +218,7 @@ class ReplaceInFileTool(Tool):
                             content = f"{content[:start]}{content[end:]}"
                         changes.append((start, start + len(block.replace) if block.replace else start))
                         match_found = True
-                        logger.info(f"Block {idx}: Exact match {'replaced' if block.replace else 'deleted'}")
+                        logger.debug(f"Block {idx}: Exact match {'replaced' if block.replace else 'deleted'}")
 
                 if not match_found:
                     similarity, matched_str = self.find_similar_match(block.search, content)
@@ -232,7 +232,7 @@ class ReplaceInFileTool(Tool):
                             else:
                                 content = f"{content[:start]}{content[end:]}"
                             changes.append((start, start + len(block.replace) if block.replace else start))
-                            logger.info(
+                            logger.debug(
                                 f"Block {idx}: Similar match (similarity={similarity:.1%}) "
                                 f"{'replaced' if block.replace else 'deleted'}"
                             )

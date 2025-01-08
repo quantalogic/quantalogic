@@ -107,7 +107,9 @@ class GenerativeModel:
     )
 
     # Retry on specific retriable exceptions
-    def generate_with_history(self, messages_history: list[Message], prompt: str, image_url: str | None = None) -> ResponseStats:
+    def generate_with_history(
+        self, messages_history: list[Message], prompt: str, image_url: str | None = None
+    ) -> ResponseStats:
         """Generate a response with conversation history and optional image.
 
         Generates a response based on previous conversation messages,
@@ -128,20 +130,17 @@ class GenerativeModel:
             Exception: For other unexpected errors.
         """
         messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages_history]
-        
+
         if image_url:
-            messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": str(prompt)},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": image_url
-                        }
-                    }
-                ]
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": str(prompt)},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                }
+            )
         else:
             messages.append({"role": "user", "content": str(prompt)})
 
@@ -249,7 +248,7 @@ class GenerativeModel:
             logger.debug(f"Model info retrieved: {model_info.keys()}")
         else:
             logger.debug("No model info available")
-            
+
         return model_info
 
     def get_model_max_input_tokens(self) -> int:

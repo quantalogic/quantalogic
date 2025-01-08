@@ -43,6 +43,7 @@ class WriteFileTool(Tool):
             description="Overwrite mode. If true, existing files can be overwritten. Defaults to False.",
             required=False,
             example="False",
+            default="False",
         ),
     ]
 

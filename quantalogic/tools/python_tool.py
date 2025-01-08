@@ -266,7 +266,7 @@ class PythonTool(Tool):
                 capture_output=True,
                 text=True,
             )
-            logger.info(f"Successfully pulled Docker image '{docker_image}'.")
+            logger.debug(f"Successfully pulled Docker image '{docker_image}'.")
         except subprocess.CalledProcessError as e:
             error_msg = f"Failed to pull Docker image '{docker_image}': {e.stderr.strip()}"
             logger.error(error_msg)
@@ -365,7 +365,7 @@ class PythonTool(Tool):
             docker_run_cmd += ["bash", "-c", venv_and_run]
             logger.debug("Added script execution command to Docker run command.")
 
-        logger.info(f"Executing Docker command: {' '.join(docker_run_cmd)}")
+        logger.debug(f"Executing Docker command: {' '.join(docker_run_cmd)}")
         try:
             result = subprocess.run(
                 docker_run_cmd,

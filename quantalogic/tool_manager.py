@@ -18,18 +18,18 @@ class ToolManager(BaseModel):
 
     def add(self, tool: Tool):
         """Add a tool to the tool dictionary."""
-        logger.info(f"Adding tool: {tool.name} to tool dictionary")
+        logger.debug(f"Adding tool: {tool.name} to tool dictionary")
         self.tools[tool.name] = tool
 
     def add_list(self, tools: list[Tool]):
         """Add a list of tools to the tool dictionary."""
-        logger.info(f"Adding {len(tools)} tools to tool dictionary")
+        logger.debug(f"Adding {len(tools)} tools to tool dictionary")
         for tool in tools:
             self.add(tool)
 
     def remove(self, tool_name: str) -> bool:
         """Remove a tool from the tool dictionary."""
-        logger.info(f"Removing tool: {tool_name} from tool dictionary")
+        logger.debug(f"Removing tool: {tool_name} from tool dictionary")
         del self.tools[tool_name]
         return True
 
@@ -45,7 +45,7 @@ class ToolManager(BaseModel):
 
     def execute(self, tool_name: str, **kwargs) -> str:
         """Execute a tool from the tool dictionary."""
-        logger.info(f"Executing tool: {tool_name} with arguments: {kwargs}")
+        logger.debug(f"Executing tool: {tool_name} with arguments: {kwargs}")
         try:
             result = self.tools[tool_name].execute(**kwargs)
             logger.debug(f"Tool {tool_name} execution completed successfully")

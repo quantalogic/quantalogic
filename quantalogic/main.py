@@ -2,12 +2,16 @@
 """Main module for the QuantaLogic agent."""
 
 # Standard library imports
+import random
 import sys
 from typing import Optional
 
 # Third-party imports
 import click
 from loguru import logger
+
+from quantalogic.utils.check_version import check_if_is_latest_version
+from quantalogic.version import get_version
 
 # Configure logger
 logger.remove()  # Remove default logger
@@ -50,6 +54,30 @@ def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | N
     else:
         raise ValueError(f"Unknown agent mode: {mode}")
 
+def check_new_version():
+    # Randomly check for updates (1 in 10 chance)
+    if random.randint(1, 10) == 1:
+        try:
+            current_version = get_version()
+            has_new_version, latest_version = check_if_is_latest_version()
+
+            if has_new_version:
+                console = Console()
+                console.print(
+                    Panel.fit(
+                        f"[yellow]⚠️  Update Available![/yellow]\n\n"
+                        f"Current version: [bold]{current_version}[/bold]\n"
+                        f"Latest version: [bold]{latest_version}[/bold]\n\n"
+                        "To update, run:\n"
+                        "[bold]pip install --upgrade quantalogic[/bold]\n"
+                        "or if using pipx:\n"
+                        "[bold]pipx upgrade quantalogic[/bold]",
+                        title="[bold]Update Available[/bold]",
+                        border_style="yellow",
+                    )
+                )
+        except Exception:
+            return
 
 def configure_logger(log_level: str) -> None:
     """Configure the logger with the specified log level and format."""
@@ -59,7 +87,7 @@ def configure_logger(log_level: str) -> None:
         level=log_level.upper(),
         format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{process}</cyan> | <magenta>{file}:{line}</magenta> | {message}",
     )
-    logger.info(f"Log level set to: {log_level}")
+    logger.debug(f"Log level set to: {log_level}")
 
 
 def set_litellm_verbose(verbose_mode: bool) -> None:
@@ -192,17 +220,20 @@ def task(
     console = Console()
     switch_verbose(verbose, log)
 
+
     try:
         if file:
             task_content = get_task_from_file(file)
         else:
             if task:
+                check_new_version()
                 task_content = task
             else:
                 display_welcome_message(console, model_name, vision_model_name)
-                logger.info("Waiting for user input...")
+                check_new_version()
+                logger.debug("Waiting for user input...")
                 task_content = get_multiline_input(console).strip()
-                logger.info(f"User input received. Task content: {task_content}")
+                logger.debug(f"User input received. Task content: {task_content}")
                 if not task_content:
                     logger.info("No task provided. Exiting...")
                     console.print("[yellow]No task provided. Exiting...[/yellow]")
@@ -216,9 +247,17 @@ def task(
                     border_style="blue",
                 )
             )
-            if not Confirm.ask("[bold]Are you sure you want to submit this task?[/bold]"):
-                console.print("[yellow]Task submission cancelled. Exiting...[/yellow]")
-                sys.exit(0)
+        if not Confirm.ask("[bold]Are you sure you want to submit this task?[/bold]"):
+            console.print("[yellow]Task submission cancelled. Exiting...[/yellow]")
+            sys.exit(0)
+
+        console.print(
+            Panel.fit(
+                "[green]✓ Task successfully submitted! Processing...[/green]",
+                title="[bold]Status[/bold]",
+                border_style="green",
+            )
+        )
 
         logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
         agent = create_agent_for_mode(mode, model_name, vision_model_name=vision_model_name)
@@ -259,7 +298,7 @@ def task(
 
 
 def main():
-    """Entry point for the quantalogic CLI."""
+    """Main Entry point"""
     cli()
 
 

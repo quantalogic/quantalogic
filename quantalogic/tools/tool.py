@@ -25,10 +25,10 @@ class ToolArgument(BaseModel):
     arg_type: Literal["string", "int", "float", "boolean"] = Field(
         ..., description="The type of the argument. Must be one of: string, integer, float, boolean."
     )
-    description: str | None = Field(None, description="A brief description of the argument.")
+    description: str | None = Field(default=None, description="A brief description of the argument.")
     required: bool = Field(default=False, description="Indicates if the argument is required.")
-    default: str | None = Field(None, description="The default value for the argument.")
-    example: str | None = Field(None, description="An example value to illustrate the argument's usage.")
+    default: str | None = Field(default=None, description="The default value for the argument. This parameter is required.")
+    example: str | None = Field(default=None, description="An example value to illustrate the argument's usage.")
     need_validation: bool = Field(default=False, description="Indicates if the argument needs validation.")
 
 
