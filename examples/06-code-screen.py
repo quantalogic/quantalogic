@@ -38,7 +38,7 @@ agent = Agent(
         ReadFileBlockTool(),
         ListDirectoryTool(),
         LLMVisionTool(model_name=VISION_MODEL_NAME),
-        LLMTool(model_name=MODEL_NAME,name="product_manager"),
+        LLMTool(model_name=MODEL_NAME, name="product_manager"),
     ],
 )
 
@@ -90,5 +90,4 @@ result = agent.solve_task("""
 
 
            Check the work done and update if necessary.
-        """
-)
+        """)

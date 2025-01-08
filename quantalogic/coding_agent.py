@@ -18,7 +18,7 @@ from quantalogic.utils import get_coding_environment
 from quantalogic.utils.get_quantalogic_rules_content import get_quantalogic_rules_file_content
 
 
-def create_coding_agent(model_name: str,vision_model_name: str | None = None, basic: bool = False) -> Agent:
+def create_coding_agent(model_name: str, vision_model_name: str | None = None, basic: bool = False) -> Agent:
     """Creates and configures a coding agent with a comprehensive set of tools.
 
     Args:

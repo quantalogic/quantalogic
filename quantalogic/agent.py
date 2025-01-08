@@ -1,7 +1,5 @@
 """Enhanced QuantaLogic agent implementing the ReAct framework."""
 
-import os
-import sys
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -583,7 +581,9 @@ class Agent(BaseModel):
             "\n"
             "Available variables:\n"
             "\n"
-            f"{', '.join(self.variable_store.keys())}\n" if len(self.variable_store.keys()) > 0 else "None\n"
+            f"{', '.join(self.variable_store.keys())}\n"
+            if len(self.variable_store.keys()) > 0
+            else "None\n"
         )
         return prompt_use_variables
 
@@ -630,10 +630,10 @@ class Agent(BaseModel):
 
     def _generate_task_summary(self, content: str) -> str:
         """Generate a concise summary of the given content using the generative model.
-        
+
         Args:
             content (str): The content to summarize
-            
+
         Returns:
             str: Generated summary
         """
@@ -670,5 +670,3 @@ class Agent(BaseModel):
             "session_add_message",
             {"role": "assistant", "content": assistant_content},
         )
-        
-

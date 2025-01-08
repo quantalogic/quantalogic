@@ -49,7 +49,7 @@ class AgentTool(Tool):
     )
 
     @model_validator(mode="before")
-    def validate_agent(cls, values: dict[str, Any]) -> dict[str, Any]:
+    def validate_agent(cls, values: dict[str, Any]) -> dict[str, Any]:  # noqa: N805
         """Validate the provided agent and its role."""
         agent = values.get("agent")
         # Lazy import to avoid circular dependency

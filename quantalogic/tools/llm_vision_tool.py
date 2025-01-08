@@ -8,7 +8,7 @@ from pydantic import ConfigDict, Field
 from quantalogic.generative_model import GenerativeModel, Message
 from quantalogic.tools.tool import Tool, ToolArgument
 
-#DEFAULT_MODEL_NAME = "ollama/llama3.2-vision"
+# DEFAULT_MODEL_NAME = "ollama/llama3.2-vision"
 DEFAULT_MODEL_NAME = "openrouter/openai/gpt-4o-mini"
 
 
@@ -67,13 +67,7 @@ class LLMVisionTool(Tool):
             self.generative_model = GenerativeModel(model=self.model_name)
             logging.debug(f"Initialized LLMVisionTool with model: {self.model_name}")
 
-    def execute(
-        self,
-        system_prompt: str,
-        prompt: str,
-        image_url: str,
-        temperature: str = "0.7"
-    ) -> str:
+    def execute(self, system_prompt: str, prompt: str, image_url: str, temperature: str = "0.7") -> str:
         """Execute the tool to analyze an image and generate a response.
 
         Args:
@@ -112,9 +106,7 @@ class LLMVisionTool(Tool):
 
         try:
             response_stats = self.generative_model.generate_with_history(
-                messages_history=messages_history,
-                prompt=prompt,
-                image_url=image_url
+                messages_history=messages_history, prompt=prompt, image_url=image_url
             )
             response = response_stats.response.strip()
             logging.info(f"Generated response: {response}")
@@ -131,10 +123,5 @@ if __name__ == "__main__":
     question = "What is shown in this image? Describe it with details."
     image_url = "https://fastly.picsum.photos/id/767/200/300.jpg?hmac=j5YA1cRw-jS6fK3Mx2ooPwl2_TS3RSyLmFmiM9TqLC4"
     temperature = "0.7"
-    answer = tool.execute(
-        system_prompt=system_prompt,
-        prompt=question,
-        image_url=image_url,
-        temperature=temperature
-    )
+    answer = tool.execute(system_prompt=system_prompt, prompt=question, image_url=image_url, temperature=temperature)
     print(answer)

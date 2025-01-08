@@ -122,7 +122,7 @@ end
 
 # Execute the main function
 ElixirScript.main()
-""" % script.strip()
+""" % script.strip()  # noqa: UP031
 
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(wrapped_script.strip())

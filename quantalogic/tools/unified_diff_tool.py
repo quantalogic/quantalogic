@@ -153,6 +153,7 @@ class PatchError(Exception):
         super().__init__(message)
 
     def __str__(self):
+        """Override the default exception string to include context."""
         msg = [super().__str__()]
         if self.context:
             for key, value in self.context.items():

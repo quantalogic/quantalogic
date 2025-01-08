@@ -344,7 +344,7 @@ class NodeJsTool(Tool):
         try:
             logger.debug(f"Pulling Docker image: {docker_image}")
             subprocess.run(
-            ["docker", "pull", docker_image],
+                ["docker", "pull", docker_image],
                 check=True,
                 capture_output=True,
                 text=True,
