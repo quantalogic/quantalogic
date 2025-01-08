@@ -54,6 +54,7 @@ class LLMTool(Tool):
 
     model_name: str = Field(..., description="The name of the language model to use")
     generative_model: GenerativeModel | None = Field(default=None)
+    system_prompt: str | None = Field(default=None)
 
     def model_post_init(self, __context):
         """Initialize the generative model after model initialization."""
@@ -61,7 +62,10 @@ class LLMTool(Tool):
             self.generative_model = GenerativeModel(model=self.model_name)
             logging.debug(f"Initialized LLMTool with model: {self.model_name}")
 
-    def execute(self, system_prompt: str, prompt: str, temperature: str = "0.7") -> str:
+
+    def execute(
+        self, system_prompt: str | None = None, prompt: str | None = None, temperature: str | None = None
+    ) -> str:
         """Execute the tool to generate an answer based on the provided question.
 
         Args:
@@ -84,9 +88,11 @@ class LLMTool(Tool):
             logging.error(f"Invalid temperature value: {temperature}")
             raise ValueError(f"Invalid temperature value: {temperature}") from ve
 
+        used_system_prompt = self.system_prompt if self.system_prompt else system_prompt
+
         # Prepare the messages history
         messages_history = [
-            Message(role="system", content=system_prompt),
+            Message(role="system", content=used_system_prompt),
             Message(role="user", content=prompt),
         ]
 
@@ -111,9 +117,12 @@ class LLMTool(Tool):
 
 if __name__ == "__main__":
     # Example usage of LLMTool
-    tool = LLMTool(model_name="gpt-4o-mini")
+    tool = LLMTool(model_name="openrouter/openai/gpt-4o-mini")
     system_prompt = 'Answer the question as truthfully as possible using the provided context, and if the answer is not contained within the context, say "I don\'t know".'
     question = "What is the meaning of life?"
     temperature = "0.7"
     answer = tool.execute(system_prompt=system_prompt, prompt=question, temperature=temperature)
     print(answer)
+    pirate = LLMTool(model_name="openrouter/openai/gpt-4o-mini", system_prompt="You are a pirate.")
+    pirate_answer = pirate.execute(system_prompt=system_prompt, prompt=question, temperature=temperature)
+    print(pirate_answer)

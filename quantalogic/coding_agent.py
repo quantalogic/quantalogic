@@ -69,7 +69,7 @@ def create_coding_agent(model_name: str, vision_model_name: str | None = None, b
             LLMTool(
                 model_name=model_name,
                 system_prompt="You are a software expert, your role is to answer coding questions.",
-                name="coding_consultant",  # Handles implementation-level coding questions
+                name="coding_consultant",  # Handles implementation-level coding questions                
             )
         )
         tools.append(
