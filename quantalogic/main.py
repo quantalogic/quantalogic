@@ -32,9 +32,9 @@ from quantalogic.agent_config import (  # noqa: E402
 )
 from quantalogic.interactive_text_editor import get_multiline_input  # noqa: E402
 from quantalogic.print_event import console_print_events  # noqa: E402
-from quantalogic.search_agent import create_search_agent
+from quantalogic.search_agent import create_search_agent  # noqa: E402
 
-AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic","search"]
+AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic","search","search-full"]
 
 
 def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | None) -> Agent:
@@ -53,6 +53,8 @@ def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | N
         return create_interpreter_agent(model_name, vision_model_name)
     elif mode == "search":
         return create_search_agent(model_name)
+    if mode == "search-full":
+        return create_search_agent(model_name,mode_full=True)
     else:
         raise ValueError(f"Unknown agent mode: {mode}")
 
