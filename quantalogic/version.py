@@ -1,5 +1,5 @@
-VERSION = "0.2.10"
+import importlib.metadata
 
 
 def get_version() -> str:
-    return VERSION
+    return importlib.metadata.version("quantalogic")
