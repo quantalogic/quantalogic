@@ -216,9 +216,15 @@ def task(
                     border_style="blue",
                 )
             )
-            if not Confirm.ask("[bold]Are you sure you want to submit this task?[/bold]"):
-                console.print("[yellow]Task submission cancelled. Exiting...[/yellow]")
-                sys.exit(0)
+        if not Confirm.ask("[bold]Are you sure you want to submit this task?[/bold]"):
+            console.print("[yellow]Task submission cancelled. Exiting...[/yellow]")
+            sys.exit(0)
+
+        console.print(Panel.fit(
+            "[green]✓ Task successfully submitted! Processing...[/green]",
+            title="[bold]Status[/bold]",
+            border_style="green"
+        ))
 
         logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
         agent = create_agent_for_mode(mode, model_name, vision_model_name=vision_model_name)
