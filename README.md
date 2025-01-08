@@ -113,6 +113,7 @@ task    Execute a task with the QuantaLogic AI Assistant
 - interpreter: Interactive code execution agent
 - full: Full-featured agent with all capabilities
 - code-basic: Coding agent with basic reasoning
+- search: Web search agent with Wikipedia, DuckDuckGo and SERPApi integration
 
 #### Task Execution
 
