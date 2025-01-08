@@ -5,7 +5,7 @@ from packaging import version
 from quantalogic.version import get_version
 
 
-def check_latest() -> (bool,str|None):
+def check_if_is_latest_version() -> (bool,str|None):
     """Check if the current version is the latest version on PyPI.
     
     Returns:
@@ -16,14 +16,14 @@ def check_latest() -> (bool,str|None):
         response = requests.get("https://pypi.org/pypi/quantalogic/json", timeout=5)
         response.raise_for_status()
         latest_version = response.json()["info"]["version"]
-        return version.parse(current_version) >= version.parse(latest_version), latest_version
+        return version.parse(current_version) <= version.parse(latest_version), latest_version
     except (requests.RequestException, KeyError):
         return False, None
 
 
 def main():
     """Test the version checking functionality."""
-    is_latest, latest_version = check_latest()
+    is_latest, latest_version = check_if_is_latest_version()
     if is_latest:
         print("✅ You're running the latest version")
     elif latest_version:
