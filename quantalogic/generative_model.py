@@ -1,5 +1,7 @@
 """Generative model module for AI-powered text generation."""
 
+import functools
+
 import openai
 from litellm import completion, exceptions, get_max_tokens, get_model_info, token_counter
 from loguru import logger
@@ -83,6 +85,7 @@ class GenerativeModel:
         logger.debug(f"Initializing GenerativeModel with model={model}, temperature={temperature}")
         self.model = model
         self.temperature = temperature
+        self._get_model_info_cached = functools.lru_cache(maxsize=32)(self._get_model_info_impl)
 
     # Define retriable exceptions based on LiteLLM's exception mapping
     RETRIABLE_EXCEPTIONS = (
@@ -235,16 +238,16 @@ class GenerativeModel:
         litellm_messages.append({"role": "user", "content": str(prompt)})
         return token_counter(model=self.model, messages=litellm_messages)
 
-    def get_model_info(self) -> dict:
+    def _get_model_info_impl(self, model_name: str) -> dict:
         """Get information about the model with prefix fallback logic.
         
         Attempts to find model info by progressively removing provider prefixes.
         Raises ValueError if no valid model configuration is found.
+        Results are cached to improve performance.
         
         Example:
             openrouter/openai/gpt-4o-mini → openai/gpt-4o-mini → gpt-4o-mini
         """
-        model_name = self.model
         original_model = model_name
         
         while True:
@@ -266,6 +269,15 @@ class GenerativeModel:
         error_msg = f"Could not find model info for {original_model} after trying: {self.model} → {model_name}"
         logger.error(error_msg)
         raise ValueError(error_msg)
+
+    def get_model_info(self, model_name: str = None) -> dict:
+        """Get cached information about the model.
+        
+        If no model name is provided, uses the current model.
+        """
+        if model_name is None:
+            model_name = self.model
+        return self._get_model_info_cached(model_name)
 
     def get_model_max_input_tokens(self) -> int:
         """Get the maximum number of input tokens for the model."""

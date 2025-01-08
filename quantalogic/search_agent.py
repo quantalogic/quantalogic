@@ -1,16 +1,26 @@
 from quantalogic.agent import Agent
-from quantalogic.tools import InputQuestionTool, SerpApiSearchTool, TaskCompleteTool, WikipediaSearchTool, ReadFileBlockTool,ReadFileTool, MarkitdownTool, RipgrepTool
+from quantalogic.tools import (
+    InputQuestionTool,
+    SerpApiSearchTool,
+    DuckDuckGoSearchTool,
+    TaskCompleteTool,
+    WikipediaSearchTool,
+    ReadFileBlockTool,
+    ReadFileTool,
+    MarkitdownTool,
+    RipgrepTool
+)
 
 
 def create_search_agent(model_name: str) -> Agent:
-    """Creates and configures a search agent with web and knowledge search tools.
+    """Creates and configures a search agent with web, knowledge, and privacy-focused search tools.
 
     Args:
         model_name (str): Name of the language model to use for the agent's core capabilities
 
     Returns:
         Agent: A fully configured search agent instance with:
-            - Web search capabilities (SerpAPI)
+            - Web search capabilities (SerpAPI, DuckDuckGo)
             - Knowledge search capabilities (Wikipedia)
             - Basic interaction tools
     """
@@ -22,6 +32,7 @@ def create_search_agent(model_name: str) -> Agent:
     tools = [
         # Search tools
         SerpApiSearchTool(),  # Web search capabilities
+        DuckDuckGoSearchTool(),  # Privacy-focused web search
         WikipediaSearchTool(),  # Knowledge search capabilities
         # Basic interaction tools
         TaskCompleteTool(),  # Marks task completion
