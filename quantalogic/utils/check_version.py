@@ -16,7 +16,8 @@ def check_if_is_latest_version() -> (bool,str|None):
         response = requests.get("https://pypi.org/pypi/quantalogic/json", timeout=5)
         response.raise_for_status()
         latest_version = response.json()["info"]["version"]
-        return version.parse(current_version) < version.parse(latest_version), latest_version
+        has_new_version = version.parse(current_version) < version.parse(latest_version)
+        return has_new_version, latest_version
     except (requests.RequestException, KeyError):
         return False, None
 

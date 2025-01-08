@@ -32,7 +32,6 @@ from quantalogic.agent_config import (  # noqa: E402
 )
 from quantalogic.interactive_text_editor import get_multiline_input  # noqa: E402
 from quantalogic.print_event import console_print_events  # noqa: E402
-
 from quantalogic.search_agent import create_search_agent
 
 AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic","search"]
