@@ -47,50 +47,53 @@ class MarkitdownTool(Tool):
         Returns:
             str: The Markdown content or a success message.
         """
-        # Handle tilde expansion for local paths
-        if file_path.startswith("~"):
-            file_path = os.path.expanduser(file_path)
-
-        # Handle URL paths
-        if file_path.startswith(("http://", "https://")):
-            try:
-                # Create a temporary file
-                with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                    temp_path = temp_file.name
-                    # Download the file from URL
-                    download_http_file(file_path, temp_path)
-                    # Use the temporary file path for conversion
-                    file_path = temp_path
-                    is_temp_file = True
-            except Exception as e:
-                return f"Error downloading file from URL: {str(e)}"
-        else:
-            is_temp_file = False
-
         try:
-            from markitdown import MarkItDown
+            # Handle URL paths first
+            if file_path.startswith(("http://", "https://")):
+                try:
+                    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                        temp_path = temp_file.name
+                        download_http_file(file_path, temp_path)
+                        file_path = temp_path
+                        is_temp_file = True
+                except Exception as e:
+                    return f"Error downloading file from URL: {str(e)}"
+            else:
+                is_temp_file = False
+                # Handle local paths
+                if file_path.startswith("~"):
+                    file_path = os.path.expanduser(file_path)
+                if not os.path.isabs(file_path):
+                    file_path = os.path.abspath(file_path)
+                
+                # Verify file exists
+                if not os.path.exists(file_path):
+                    return f"Error: File not found at path: {file_path}"
 
+            from markitdown import MarkItDown
             md = MarkItDown()
             result = md.convert(file_path)
 
             if output_file_path:
+                # Ensure output directory exists
+                output_dir = os.path.dirname(output_file_path)
+                if output_dir and not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+                    
                 with open(output_file_path, "w", encoding="utf-8") as f:
                     f.write(result.text_content)
-                output_message = f"Markdown content successfully written to {output_file_path}"
-            else:
-                # Truncate content if it exceeds MAX_LINES
-                lines = result.text_content.splitlines()
-                if len(lines) > MAX_LINES:
-                    truncated_content = "\n".join(lines[:MAX_LINES])
-                    output_message = f"Markdown content truncated to {MAX_LINES} lines:\n{truncated_content}"
-                else:
-                    output_message = result.text_content
+                return f"Markdown content successfully written to {output_file_path}"
+            
+            # Handle content truncation
+            lines = result.text_content.splitlines()
+            if len(lines) > MAX_LINES:
+                truncated_content = "\n".join(lines[:MAX_LINES])
+                return f"Markdown content truncated to {MAX_LINES} lines:\n{truncated_content}"
+            return result.text_content
 
-            return output_message
         except Exception as e:
             return f"Error converting file to Markdown: {str(e)}"
         finally:
-            # Clean up temporary file if it was created
             if is_temp_file and os.path.exists(file_path):
                 os.remove(file_path)
 

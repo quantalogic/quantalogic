@@ -24,6 +24,8 @@ from quantalogic.tools import (
     SearchDefinitionNames,
     TaskCompleteTool,
     WriteFileTool,
+    DuckDuckGoSearchTool,
+    WikipediaSearchTool,
 )
 
 MODEL_NAME = "deepseek/deepseek-chat"
@@ -124,6 +126,8 @@ def create_full_agent(model_name: str, vision_model_name: str | None) -> Agent:
         MarkitdownTool(),
         LLMTool(model_name=model_name),
         DownloadHttpFileTool(),
+        WikipediaSearchTool(),
+        DuckDuckGoSearchTool(),
     ]
 
     if vision_model_name:
