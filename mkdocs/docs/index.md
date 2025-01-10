@@ -305,7 +305,7 @@ graph TD
 ## Ready to Start?
 
 - Read the [Core Concepts](core-concepts.md)
-- Follow our [Tutorials](tutorials/basic-agent.md)
+- Follow our Tutorials
 - Check out the [API Reference](api/agent.md)
 - Learn [Best Practices](best-practices/agent-design.md)
 
