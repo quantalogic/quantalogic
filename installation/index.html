@@ -256,7 +256,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../tutorials/basic-agent/" class="md-tabs__link">
+        <a href="../tutorials/basic-agent.md" class="md-tabs__link">
           
   
     
@@ -711,15 +711,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      Next Steps
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -856,7 +847,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorials/basic-agent/" class="md-nav__link">
+      <a href="../tutorials/basic-agent.md" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -877,7 +868,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorials/event-monitoring/" class="md-nav__link">
+      <a href="../tutorials/event-monitoring.md" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -898,7 +889,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorials/code-generation/" class="md-nav__link">
+      <a href="../tutorials/code-generation.md" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -919,7 +910,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorials/task-automation/" class="md-nav__link">
+      <a href="../tutorials/task-automation.md" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1538,8 +1529,6 @@
 <h2 id="system-requirements">System Requirements</h2>
 <ul>
 <li>Python 3.12 or later</li>
-<li>2GB RAM minimum (4GB recommended)</li>
-<li>500MB free disk space</li>
 </ul>
 <h2 id="quick-install-recommended">Quick Install (Recommended)</h2>
 <div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>quantalogic
@@ -1625,30 +1614,15 @@
 <h2 id="verify-installation">Verify Installation</h2>
 <p>Run these commands to verify your setup:</p>
 <div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-6-1">1</a></span>
-<span class="normal"><a href="#__codelineno-6-2">2</a></span>
-<span class="normal"><a href="#__codelineno-6-3">3</a></span>
-<span class="normal"><a href="#__codelineno-6-4">4</a></span>
-<span class="normal"><a href="#__codelineno-6-5">5</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1"></a><span class="c1"># Check version</span>
+<span class="normal"><a href="#__codelineno-6-2">2</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1"></a><span class="c1"># Check version</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2"></a>quantalogic<span class="w"> </span>--version
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3"></a>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4"></a><span class="c1"># Run a test</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5"></a>quantalogic<span class="w"> </span>verify
 </span></code></pre></div></td></tr></table></div>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <h3 id="common-issues">Common Issues</h3>
 <ol>
-<li>
-<p><strong>Python Version Error</strong>
+<li><strong>Python Version Error</strong>
    <div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-7-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1"></a>python<span class="w"> </span>--version<span class="w">  </span><span class="c1"># Should be 3.12 or later</span>
-</span></code></pre></div></td></tr></table></div></p>
-</li>
-<li>
-<p><strong>Missing Dependencies</strong>
-   <div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-8-1">1</a></span>
-<span class="normal"><a href="#__codelineno-8-2">2</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1"></a>pip<span class="w"> </span>install<span class="w"> </span>--upgrade<span class="w"> </span>pip
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2"></a>pip<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.txt
-</span></code></pre></div></td></tr></table></div></p>
-</li>
+</span></code></pre></div></td></tr></table></div></li>
 </ol>
 <h3 id="error-messages">Error Messages</h3>
 <table>
@@ -1673,13 +1647,6 @@
 </tr>
 </tbody>
 </table>
-<h2 id="next-steps">Next Steps</h2>
-<ul>
-<li>Follow the <a href="../quickstart.md">Quickstart Guide</a></li>
-<li>Try <a href="../examples/index.md">Example Projects</a></li>
-<li>Join our <a href="https://discord.gg/quantalogic">Discord Community</a></li>
-</ul>
-<p>Need help? <a href="https://github.com/quantalogic/quantalogic/issues">Open an issue</a> on GitHub.</p>
 
 
 
