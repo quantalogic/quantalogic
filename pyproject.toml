@@ -45,6 +45,7 @@ mkdocs-macros-plugin = "^1.0.4"
 mkdocstrings = "^0.24.0"
 mkdocstrings-python = "^1.7.0"
 pymdown-extensions = "^10.3.1"
+llmlingua = "^0.2.2"
 
 [tool.poetry.scripts]
 quantalogic = "quantalogic.main:cli"

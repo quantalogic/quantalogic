@@ -8,6 +8,18 @@ from rich.panel import Panel
 from rich.tree import Tree
 
 
+def console_print_token(event: str, data: Any | None = None):
+    """Print a token with rich formatting.
+    
+    Args:
+        event (str): The event name (e.g., 'stream_chunk')
+        data (Any | None): The token data to print
+    """
+    if data is not None:
+        console = Console(soft_wrap=True)
+        console.print(data, end="", markup=False)
+
+
 def console_print_events(event: str, data: dict[str, Any] | None = None):
     """Print events with rich formatting.
 
