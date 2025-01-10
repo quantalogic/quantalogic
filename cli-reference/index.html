@@ -12,13 +12,9 @@
         <meta name="author" content="QuantaLogic Team">
       
       
-        <link rel="canonical" href="https://www.quantalogic.app/installation/">
+        <link rel="canonical" href="https://www.quantalogic.app/cli-reference/">
       
       
-        <link rel="prev" href="..">
-      
-      
-        <link rel="next" href="../quickstart/">
       
       
       <link rel="icon" href="../assets/logo-rect.svg">
@@ -26,7 +22,7 @@
     
     
       
-        <title>Installation - QuantaLogic ReAct Agent</title>
+        <title>Command Line Interface (CLI) - QuantaLogic ReAct Agent</title>
       
     
     
@@ -80,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#installation" class="md-skip">
+        <a href="#command-line-interface-cli" class="md-skip">
           Skip to content
         </a>
       
@@ -113,7 +109,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Installation
+              Command Line Interface (CLI)
             
           </span>
         </div>
@@ -230,13 +226,11 @@
         
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../installation/" class="md-tabs__link">
           
   
     
@@ -441,10 +435,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -459,22 +451,19 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
         
           
-          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
             
   
   <span class="md-ellipsis">
@@ -485,7 +474,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             Getting Started
@@ -496,30 +485,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    Installation
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -528,194 +497,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
-    <span class="md-ellipsis">
-      Prerequisites
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Prerequisites">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#required" class="md-nav__link">
-    <span class="md-ellipsis">
-      Required
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#optional-but-recommended" class="md-nav__link">
-    <span class="md-ellipsis">
-      Optional but Recommended
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#installation-methods" class="md-nav__link">
-    <span class="md-ellipsis">
-      Installation Methods
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Installation Methods">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-via-pip-recommended" class="md-nav__link">
-    <span class="md-ellipsis">
-      1. Via pip (Recommended)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-from-source-development" class="md-nav__link">
-    <span class="md-ellipsis">
-      2. From Source (Development)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-using-pipx-isolated" class="md-nav__link">
-    <span class="md-ellipsis">
-      3. Using pipx (Isolated)
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      Configuration
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Configuration">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-api-keys" class="md-nav__link">
-    <span class="md-ellipsis">
-      1. API Keys
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-docker-setup-optional" class="md-nav__link">
-    <span class="md-ellipsis">
-      2. Docker Setup (Optional)
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#verification" class="md-nav__link">
-    <span class="md-ellipsis">
-      Verification
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
-    <span class="md-ellipsis">
-      Troubleshooting
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Troubleshooting">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#common-issues" class="md-nav__link">
-    <span class="md-ellipsis">
-      Common Issues
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#getting-help" class="md-nav__link">
-    <span class="md-ellipsis">
-      Getting Help
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      Next Steps
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#development-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      Development Setup
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1505,173 +1286,91 @@
                   
 
 
-<h1 id="installation">Installation</h1>
-<p>This guide will help you install QuantaLogic and set up your development environment.</p>
-<h2 id="prerequisites">Prerequisites</h2>
-<h3 id="required">Required</h3>
+<h1 id="command-line-interface-cli">Command Line Interface (CLI)</h1>
+<p>The QuantaLogic CLI provides powerful command-line capabilities for running AI agents directly from your terminal.</p>
+<h2 id="basic-usage">Basic Usage</h2>
+<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1"></a>quantalogic<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>COMMAND<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>...
+</span></code></pre></div></td></tr></table></div>
+<h2 id="global-options">Global Options</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--version</code></td>
+<td>Show version information</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>--model-name</code></td>
+<td>Specify the text model (litellm format)</td>
+<td><code>openrouter/deepseek-chat</code></td>
+</tr>
+<tr>
+<td><code>--vision-model-name</code></td>
+<td>Specify the vision model (litellm format)</td>
+<td><code>openrouter/A/gpt-4o-mini</code></td>
+</tr>
+<tr>
+<td><code>--log</code></td>
+<td>Set logging level (info/debug/warning)</td>
+<td><code>info</code></td>
+</tr>
+<tr>
+<td><code>--verbose</code></td>
+<td>Enable verbose output</td>
+<td><code>False</code></td>
+</tr>
+<tr>
+<td><code>--max-iterations</code></td>
+<td>Maximum iterations for task solving</td>
+<td><code>30</code></td>
+</tr>
+<tr>
+<td><code>--mode</code></td>
+<td>Agent mode</td>
+<td><code>code</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="available-modes">Available Modes</h3>
 <ul>
-<li>Python 3.12 or later</li>
-<li>pip (Python package installer)</li>
-<li>Git (for source installation)</li>
+<li><code>code</code>: Full coding capabilities</li>
+<li><code>basic</code>: Simple task execution</li>
+<li><code>interpreter</code>: Interactive REPL mode</li>
+<li><code>full</code>: All features enabled</li>
+<li><code>code-basic</code>: Basic coding features</li>
+<li><code>search</code>: Web search capabilities</li>
+<li><code>search-full</code>: Enhanced search features</li>
 </ul>
-<h3 id="optional-but-recommended">Optional but Recommended</h3>
+<h2 id="examples">Examples</h2>
+<h3 id="basic-code-generation">Basic Code Generation</h3>
+<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-1-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1"></a>quantalogic<span class="w"> </span>--mode<span class="w"> </span>code<span class="w"> </span><span class="s2">&quot;Create a Python function that calculates factorial&quot;</span>
+</span></code></pre></div></td></tr></table></div>
+<h3 id="using-a-specific-model">Using a Specific Model</h3>
+<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-2-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1"></a>quantalogic<span class="w"> </span>--model-name<span class="w"> </span><span class="s2">&quot;openai/gpt-4&quot;</span><span class="w"> </span>--mode<span class="w"> </span>full<span class="w"> </span><span class="s2">&quot;Analyze this dataset&quot;</span>
+</span></code></pre></div></td></tr></table></div>
+<h3 id="debug-mode-with-verbose-logging">Debug Mode with Verbose Logging</h3>
+<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-3-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1"></a>quantalogic<span class="w"> </span>--log<span class="w"> </span>debug<span class="w"> </span>--verbose<span class="w"> </span>--mode<span class="w"> </span>code<span class="w"> </span><span class="s2">&quot;Debug this Python script&quot;</span>
+</span></code></pre></div></td></tr></table></div>
+<h2 id="best-practices">Best Practices</h2>
+<ol>
+<li><strong>Start Simple</strong>: Begin with <code>--mode basic</code> for simple tasks</li>
+<li><strong>Debug Issues</strong>: Use <code>--log debug</code> when troubleshooting</li>
+<li><strong>Model Selection</strong>: Choose models based on task complexity</li>
+<li><strong>Iteration Control</strong>: Adjust <code>--max-iterations</code> for complex tasks</li>
+</ol>
+<h2 id="security-notes">Security Notes</h2>
 <ul>
-<li>Docker (for secure code execution)</li>
-<li>Poetry (for development)</li>
-<li>pipx (for isolated installations)</li>
+<li>API keys should be set via environment variables (litellm will use env vars by default)</li>
+<li>Code execution is sandboxed by default</li>
+<li>Review generated code before execution</li>
 </ul>
-<h2 id="installation-methods">Installation Methods</h2>
-<h3 id="1-via-pip-recommended">1. Via pip (Recommended)</h3>
-<p>The simplest way to install QuantaLogic:</p>
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>quantalogic
-</span></code></pre></div></td></tr></table></div>
-<p>For a specific version:
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-1-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="nv">quantalogic</span><span class="o">==</span><span class="m">1</span>.0.0
-</span></code></pre></div></td></tr></table></div></p>
-<h3 id="2-from-source-development">2. From Source (Development)</h3>
-<p>Clone and install from the repository:</p>
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-2-1"> 1</a></span>
-<span class="normal"><a href="#__codelineno-2-2"> 2</a></span>
-<span class="normal"><a href="#__codelineno-2-3"> 3</a></span>
-<span class="normal"><a href="#__codelineno-2-4"> 4</a></span>
-<span class="normal"><a href="#__codelineno-2-5"> 5</a></span>
-<span class="normal"><a href="#__codelineno-2-6"> 6</a></span>
-<span class="normal"><a href="#__codelineno-2-7"> 7</a></span>
-<span class="normal"><a href="#__codelineno-2-8"> 8</a></span>
-<span class="normal"><a href="#__codelineno-2-9"> 9</a></span>
-<span class="normal"><a href="#__codelineno-2-10">10</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1"></a><span class="c1"># Clone the repository</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/quantalogic/quantalogic.git
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3"></a><span class="nb">cd</span><span class="w"> </span>quantalogic
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4"></a>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5"></a><span class="c1"># Create and activate virtual environment</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6"></a>python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7"></a><span class="nb">source</span><span class="w"> </span>.venv/bin/activate<span class="w">  </span><span class="c1"># On Windows: .venv\Scripts\activate</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8"></a>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9"></a><span class="c1"># Install dependencies with Poetry</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10"></a>poetry<span class="w"> </span>install
-</span></code></pre></div></td></tr></table></div>
-<h3 id="3-using-pipx-isolated">3. Using pipx (Isolated)</h3>
-<p>Install in an isolated environment:</p>
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-3-1">1</a></span>
-<span class="normal"><a href="#__codelineno-3-2">2</a></span>
-<span class="normal"><a href="#__codelineno-3-3">3</a></span>
-<span class="normal"><a href="#__codelineno-3-4">4</a></span>
-<span class="normal"><a href="#__codelineno-3-5">5</a></span>
-<span class="normal"><a href="#__codelineno-3-6">6</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1"></a><span class="c1"># Install pipx if you haven&#39;t already</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--user<span class="w"> </span>pipx
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3"></a>pipx<span class="w"> </span>ensurepath
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4"></a>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5"></a><span class="c1"># Install QuantaLogic</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6"></a>pipx<span class="w"> </span>install<span class="w"> </span>quantalogic
-</span></code></pre></div></td></tr></table></div>
-<h2 id="configuration">Configuration</h2>
-<h3 id="1-api-keys">1. API Keys</h3>
-<p>Set up your LLM provider API keys:</p>
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-4-1">1</a></span>
-<span class="normal"><a href="#__codelineno-4-2">2</a></span>
-<span class="normal"><a href="#__codelineno-4-3">3</a></span>
-<span class="normal"><a href="#__codelineno-4-4">4</a></span>
-<span class="normal"><a href="#__codelineno-4-5">5</a></span>
-<span class="normal"><a href="#__codelineno-4-6">6</a></span>
-<span class="normal"><a href="#__codelineno-4-7">7</a></span>
-<span class="normal"><a href="#__codelineno-4-8">8</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1"></a><span class="c1"># DeepSeek (default)</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">DEEPSEEK_API_KEY</span><span class="o">=</span><span class="s2">&quot;your-api-key&quot;</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3"></a>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4"></a><span class="c1"># OpenAI (optional)</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your-api-key&quot;</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6"></a>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7"></a><span class="c1"># Anthropic (optional)</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span><span class="s2">&quot;your-api-key&quot;</span>
-</span></code></pre></div></td></tr></table></div>
-<div class="admonition tip">
-<p class="admonition-title">API Keys</p>
-<p>Store API keys in your environment or use a secure key management system.</p>
-</div>
-<h3 id="2-docker-setup-optional">2. Docker Setup (Optional)</h3>
-<p>If you plan to use code execution tools:</p>
-<ol>
-<li>Install Docker from <a href="https://www.docker.com/get-started">docker.com</a></li>
-<li>Verify installation:
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-5-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1"></a>docker<span class="w"> </span>--version
-</span></code></pre></div></td></tr></table></div></li>
-</ol>
-<h2 id="verification">Verification</h2>
-<p>Verify your installation:</p>
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-6-1">1</a></span>
-<span class="normal"><a href="#__codelineno-6-2">2</a></span>
-<span class="normal"><a href="#__codelineno-6-3">3</a></span>
-<span class="normal"><a href="#__codelineno-6-4">4</a></span>
-<span class="normal"><a href="#__codelineno-6-5">5</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1"></a><span class="c1"># Check version</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2"></a>quantalogic<span class="w"> </span>--version
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3"></a>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4"></a><span class="c1"># Run a simple test</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5"></a>quantalogic<span class="w"> </span>--mode<span class="w"> </span>basic<span class="w"> </span><span class="s2">&quot;Hello, World!&quot;</span>
-</span></code></pre></div></td></tr></table></div>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<h3 id="common-issues">Common Issues</h3>
-<ol>
-<li>
-<p><strong>Python Version Error</strong>
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-7-1">1</a></span>
-<span class="normal"><a href="#__codelineno-7-2">2</a></span>
-<span class="normal"><a href="#__codelineno-7-3">3</a></span>
-<span class="normal"><a href="#__codelineno-7-4">4</a></span>
-<span class="normal"><a href="#__codelineno-7-5">5</a></span>
-<span class="normal"><a href="#__codelineno-7-6">6</a></span>
-<span class="normal"><a href="#__codelineno-7-7">7</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1"></a><span class="c1"># Check Python version</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2"></a>python<span class="w"> </span>--version
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3"></a>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4"></a><span class="c1"># If needed, upgrade Python</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5"></a><span class="c1"># On macOS/Linux:</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6"></a>brew<span class="w"> </span>install<span class="w"> </span>python@3.12<span class="w">  </span><span class="c1"># or your package manager</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7"></a><span class="c1"># On Windows: Download from python.org</span>
-</span></code></pre></div></td></tr></table></div></p>
-</li>
-<li>
-<p><strong>Virtual Environment Issues</strong>
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-8-1">1</a></span>
-<span class="normal"><a href="#__codelineno-8-2">2</a></span>
-<span class="normal"><a href="#__codelineno-8-3">3</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1"></a><span class="c1"># Remove and recreate venv</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2"></a>rm<span class="w"> </span>-rf<span class="w"> </span>.venv
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3"></a>python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv
-</span></code></pre></div></td></tr></table></div></p>
-</li>
-<li>
-<p><strong>Docker Permission Error</strong>
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-9-1">1</a></span>
-<span class="normal"><a href="#__codelineno-9-2">2</a></span>
-<span class="normal"><a href="#__codelineno-9-3">3</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1"></a><span class="c1"># Add user to docker group</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2"></a>sudo<span class="w"> </span>usermod<span class="w"> </span>-aG<span class="w"> </span>docker<span class="w"> </span><span class="nv">$USER</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3"></a><span class="c1"># Log out and back in</span>
-</span></code></pre></div></td></tr></table></div></p>
-</li>
-</ol>
-<h3 id="getting-help">Getting Help</h3>
-<p>If you encounter issues:</p>
-<ol>
-<li>Check our <a href="../troubleshooting/">Troubleshooting Guide</a></li>
-<li>Search <a href="https://github.com/quantalogic/quantalogic/issues">GitHub Issues</a></li>
-<li>Join our <a href="https://discord.gg/quantalogic">Community Discord</a></li>
-</ol>
-<h2 id="next-steps">Next Steps</h2>
-<ul>
-<li>Follow the <a href="../quickstart/">Quick Start Guide</a> to create your first agent</li>
-<li>Learn about <a href="../core-concepts/">Core Concepts</a></li>
-<li>Try our <a href="../examples/simple-agent/">Examples</a></li>
-<li>Read the <a href="../cli/">CLI Reference</a></li>
-</ul>
-<h2 id="development-setup">Development Setup</h2>
-<p>For contributors:</p>
-<ol>
-<li>Fork the repository</li>
-<li>Install development dependencies:
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-10-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1"></a>poetry<span class="w"> </span>install<span class="w"> </span>--with<span class="w"> </span>dev
-</span></code></pre></div></td></tr></table></div></li>
-<li>Set up pre-commit hooks:
-<div class="language-bash highlight"><table class="highlighttable"><tr><th colspan="2" class="filename"><span class="filename">Bash</span></th></tr><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-11-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1"></a>pre-commit<span class="w"> </span>install
-</span></code></pre></div></td></tr></table></div></li>
-</ol>
-<p>See our <a href="../dev/contributing/">Contributing Guide</a> for more details.</p>
 
 
 
@@ -1734,44 +1433,6 @@
       
         <footer class="md-footer">
   
-    
-      
-      <nav class="md-footer__inner md-grid" aria-label="Footer" >
-        
-          
-          <a href=".." class="md-footer__link md-footer__link--prev" aria-label="Previous: Home">
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
-            </div>
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Previous
-              </span>
-              <div class="md-ellipsis">
-                Home
-              </div>
-            </div>
-          </a>
-        
-        
-          
-          <a href="../quickstart/" class="md-footer__link md-footer__link--next" aria-label="Next: Quick Start">
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Next
-              </span>
-              <div class="md-ellipsis">
-                Quick Start
-              </div>
-            </div>
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
-            </div>
-          </a>
-        
-      </nav>
     
   
   <div class="md-footer-meta md-typeset">
