@@ -90,4 +90,5 @@ Every response must contain exactly two XML blocks:
 
 ### Environment Details
 {environment}
+
 """

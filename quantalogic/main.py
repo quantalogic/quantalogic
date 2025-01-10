@@ -34,7 +34,7 @@ from quantalogic.interactive_text_editor import get_multiline_input  # noqa: E40
 from quantalogic.print_event import console_print_events  # noqa: E402
 from quantalogic.search_agent import create_search_agent  # noqa: E402
 
-AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic","search","search-full"]
+AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic", "search", "search-full"]
 
 
 def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | None) -> Agent:
@@ -54,9 +54,10 @@ def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | N
     elif mode == "search":
         return create_search_agent(model_name)
     if mode == "search-full":
-        return create_search_agent(model_name,mode_full=True)
+        return create_search_agent(model_name, mode_full=True)
     else:
         raise ValueError(f"Unknown agent mode: {mode}")
+
 
 def check_new_version():
     # Randomly check for updates (1 in 10 chance)
@@ -82,6 +83,7 @@ def check_new_version():
                 )
         except Exception:
             return
+
 
 def configure_logger(log_level: str) -> None:
     """Configure the logger with the specified log level and format."""
@@ -124,7 +126,9 @@ def get_task_from_file(file_path: str) -> str:
         raise Exception(f"Unexpected error reading file: {e}")
 
 
-def display_welcome_message(console: Console, model_name: str, vision_model_name: str | None) -> None:
+def display_welcome_message(
+    console: Console, model_name: str, vision_model_name: str | None, max_iterations: int = 50
+) -> None:
     """Display the welcome message and instructions."""
     version = get_version()
     console.print(
@@ -137,7 +141,8 @@ def display_welcome_message(console: Console, model_name: str, vision_model_name
             f"[yellow] 🤖 System Info:[/yellow]\n\n"
             "\n"
             f"- Model: {model_name}\n"
-            f"- Vision Model: {vision_model_name}\n\n"
+            f"- Vision Model: {vision_model_name}\n"
+            f"- Max Iterations: {max_iterations}\n\n"
             "[bold magenta]💡 Pro Tips:[/bold magenta]\n\n"
             "- Be as specific as possible in your task description to get the best results!\n"
             "- Use clear and concise language when describing your task\n"
@@ -169,6 +174,12 @@ def display_welcome_message(console: Console, model_name: str, vision_model_name
     default=None,
     help='Specify the vision model to use (litellm format, e.g. "openrouter/A/gpt-4o-mini").',
 )
+@click.option(
+    "--max-iterations",
+    type=int,
+    default=30,
+    help="Maximum number of iterations for task solving (default: 30).",
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -178,6 +189,7 @@ def cli(
     mode: str,
     log: str,
     vision_model_name: str | None,
+    max_iterations: int,
 ) -> None:
     """QuantaLogic AI Assistant - A powerful AI tool for various tasks."""
     if version:
@@ -186,7 +198,13 @@ def cli(
         sys.exit(0)
     if ctx.invoked_subcommand is None:
         ctx.invoke(
-            task, model_name=model_name, verbose=verbose, mode=mode, log=log, vision_model_name=vision_model_name
+            task,
+            model_name=model_name,
+            verbose=verbose,
+            mode=mode,
+            log=log,
+            vision_model_name=vision_model_name,
+            max_iterations=max_iterations,
         )
 
 
@@ -210,6 +228,12 @@ def cli(
     default=None,
     help='Specify the vision model to use (litellm format, e.g. "openrouter/openai/gpt-4o-mini").',
 )
+@click.option(
+    "--max-iterations",
+    type=int,
+    default=30,
+    help="Maximum number of iterations for task solving (default: 30).",
+)
 @click.argument("task", required=False)
 def task(
     file: Optional[str],
@@ -219,11 +243,11 @@ def task(
     log: str,
     vision_model_name: str | None,
     task: Optional[str],
+    max_iterations: int,
 ) -> None:
     """Execute a task with the QuantaLogic AI Assistant."""
     console = Console()
     switch_verbose(verbose, log)
-
 
     try:
         if file:
@@ -233,7 +257,7 @@ def task(
                 check_new_version()
                 task_content = task
             else:
-                display_welcome_message(console, model_name, vision_model_name)
+                display_welcome_message(console, model_name, vision_model_name, max_iterations=max_iterations)
                 check_new_version()
                 logger.debug("Waiting for user input...")
                 task_content = get_multiline_input(console).strip()
@@ -243,14 +267,13 @@ def task(
                     console.print("[yellow]No task provided. Exiting...[/yellow]")
                     sys.exit(2)
 
-        if model_name != MODEL_NAME:
-            console.print(
-                Panel.fit(
-                    f"[bold]Task to be submitted:[/bold]\n{task_content}",
-                    title="[bold]Task Preview[/bold]",
-                    border_style="blue",
-                )
+        console.print(
+            Panel.fit(
+                f"[bold]Task to be submitted:[/bold]\n{task_content}",
+                title="[bold]Task Preview[/bold]",
+                border_style="blue",
             )
+        )
         if not Confirm.ask("[bold]Are you sure you want to submit this task?[/bold]"):
             console.print("[yellow]Task submission cancelled. Exiting...[/yellow]")
             sys.exit(0)
@@ -286,8 +309,10 @@ def task(
         logger.debug("Registered event handlers for agent events with events: {events}")
 
         logger.debug(f"Solving task with agent: {task_content}")
-        result = agent.solve_task(task=task_content, max_iterations=300)
-        logger.debug(f"Task solved with result: {result}")
+        if max_iterations < 1:
+            raise ValueError("max_iterations must be greater than 0")
+        result = agent.solve_task(task=task_content, max_iterations=max_iterations)
+        logger.debug(f"Task solved with result: {result} using {max_iterations} iterations")
 
         console.print(
             Panel.fit(

@@ -406,7 +406,7 @@ class Agent(BaseModel):
 
         formatted_response = (
             "\n"
-            f"--- Observations for iteration {iteration} ---\n"
+            f"--- Observations for iteration {iteration} / max {self.max_iterations} ---\n"
             "\n"
             f"\n --- Tool execution result stored in variable ${variable_name}$ --- \n"
             "\n"
@@ -428,7 +428,7 @@ class Agent(BaseModel):
         # Format the response message
         formatted_response = (
             "\n"
-            f"--- Observations for iteration {iteration} ---\n"
+            f"--- Observations for iteration {iteration} / max {self.max_iterations} ---\n"
             "\n"
             f"\n --- Tool execution result stored in variable ${variable_name}$ --- \n"
             "\n"
@@ -440,7 +440,7 @@ class Agent(BaseModel):
             "\n"
             f"--- Variables --- \n"
             "\n"
-            f"{self._get_variable_prompt()}"
+            f"{self._get_variable_prompt()}\n"
             "\n"
             "You must analyze this answer and evaluate what to do next to solve the task.\n"
             "If the step failed, take a step back and rethink your approach.\n"
