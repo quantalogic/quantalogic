@@ -13,7 +13,7 @@ quantalogic [OPTIONS] COMMAND [ARGS]...
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--version` | Show version information | - |
-| `--model-name` | Specify the text model (litellm format) | `openrouter/deepseek-chat` |
+| `--model-name` | Specify the text model (litellm format) | `openrouter/deepseek/deepseek-chat` |
 | `--vision-model-name` | Specify the vision model (litellm format) | `openrouter/A/gpt-4o-mini` |
 | `--log` | Set logging level (info/debug/warning) | `info` |
 | `--verbose` | Enable verbose output | `False` |

@@ -22,7 +22,7 @@ print(result)
 quantalogic task "Create a Python script to analyze stock market trends"
 
 # Specify model and mode
-quantalogic --model-name "openrouter/deepseek-chat" \
+quantalogic --model-name "openrouter/deepseek/deepseek-chat" \
             --mode code \
             task "Develop a web scraping utility"
 ```
@@ -31,7 +31,7 @@ quantalogic --model-name "openrouter/deepseek-chat" \
 
 | Option | Description | Example |
 |--------|-------------|---------|
-| `--model-name` | Specify LLM (LiteLLM format) | `openrouter/deepseek-chat` |
+| `--model-name` | Specify LLM (LiteLLM format) | `openrouter/deepseek/deepseek-chat` |
 | `--mode` | Agent operation mode | `code`, `search`, `full` |
 | `--max-iterations` | Task solving iterations | `30` (default) |
 | `--verbose` | Enable detailed output | |

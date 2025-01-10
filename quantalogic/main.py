@@ -159,7 +159,7 @@ def display_welcome_message(
 @click.option(
     "--model-name",
     default=MODEL_NAME,
-    help='Specify the model to use (litellm format, e.g. "openrouter/deepseek-chat").',
+    help='Specify the model to use (litellm format, e.g. "openrouter/deepseek/deepseek-chat").',
 )
 @click.option(
     "--log",
@@ -213,7 +213,7 @@ def cli(
 @click.option(
     "--model-name",
     default=MODEL_NAME,
-    help='Specify the model to use (litellm format, e.g. "openrouter/deepseek-chat").',
+    help='Specify the model to use (litellm format, e.g. "openrouter/deepseek/deepseek-chat").',
 )
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
 @click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")

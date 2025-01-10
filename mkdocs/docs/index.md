@@ -100,7 +100,7 @@ quantalogic/
 quantalogic task "Create a function to validate email addresses"
 
 # Run with specific model and mode
-quantalogic task --model-name "openrouter/deepseek-chat" \
+quantalogic task --model-name "openrouter/deepseek/deepseek-chat" \
                  --mode interpreter \
                  --verbose \
                  "Explain quantum computing"

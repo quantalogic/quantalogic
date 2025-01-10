@@ -10,7 +10,7 @@ quantalogic [OPTIONS] COMMAND [ARGS]...
 
 | Option | Description | Example |
 |--------|-------------|---------|
-| `--model-name` | Specify LLM model | `openrouter/deepseek-chat` |
+| `--model-name` | Specify LLM model | `openrouter/deepseek/deepseek-chat` |
 | `--mode` | Agent operation mode | `code`, `search`, `full` |
 | `--max-iterations` | Task solving iterations | `30` (default) |
 | `--verbose` | Enable detailed output | |

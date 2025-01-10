@@ -90,9 +90,9 @@ Usage: quantalogic [OPTIONS] COMMAND [ARGS]...
 Options:
   --version                       Show version information.
   --model-name TEXT               Specify the text model to use (litellm format,
-                                  e.g. "openrouter/deepseek-chat").
+                                  e.g. "openrouter/deepseek/deepseek-chat").
   --vision-model-name TEXT        Specify the vision model to use (litellm format,
-                                  e.g. "openrouter/A/gpt-4o-mini").
+                                  e.g. "openrouter/openai/gpt-4o-mini").
   --log [info|debug|warning]      Set logging level (info/debug/warning).
   --verbose                       Enable verbose output.
   --max-iterations INTEGER        Maximum iterations for task solving (default: 30).
@@ -213,7 +213,7 @@ from quantalogic.tools import PythonTool, ReadFileTool
 
 # Create agent with specific tools
 agent = Agent(
-    model_name="openrouter/deepseek-chat",
+    model_name="openrouter/deepseek/deepseek-chat",
     tools=[
         PythonTool(),
         ReadFileTool()
@@ -814,7 +814,7 @@ from quantalogic import Agent
 from quantalogic.tools import MarkitdownTool, ReadFileTool
 
 agent = Agent(
-    model_name="openrouter/deepseek-chat",
+    model_name="openrouter/deepseek/deepseek-chat",
     tools=[MarkitdownTool(), ReadFileTool()]
 )
 
