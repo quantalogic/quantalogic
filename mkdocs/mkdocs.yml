@@ -101,9 +101,6 @@ nav:
     - CLI Reference: cli-reference.md
   - Tutorials:
     - Basic Agent: tutorials/basic-agent.md
-    - Event Monitoring: tutorials/event-monitoring.md
-    - Code Generation: tutorials/code-generation.md
-    - Task Automation: tutorials/task-automation.md
   - Examples:
     - Simple Agent: examples/simple-agent.md
     - Event Monitoring: examples/event-monitoring.md

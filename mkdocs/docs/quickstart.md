@@ -47,6 +47,3 @@ quantalogic task "Write a Flask API for a todo list app"
 ```bash
 quantalogic --mode search task "Research latest AI trends in healthcare"
 ```
-
-## Next Steps
-- Learn more in the [CLI documentation](cli.md)

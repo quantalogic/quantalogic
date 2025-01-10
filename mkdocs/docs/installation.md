@@ -5,8 +5,6 @@ This guide will help you get QuantaLogic up and running quickly. Choose the inst
 ## System Requirements
 
 - Python 3.12 or later
-- 2GB RAM minimum (4GB recommended)
-- 500MB free disk space
 
 ## Quick Install (Recommended)
 
@@ -94,8 +92,6 @@ Run these commands to verify your setup:
 # Check version
 quantalogic --version
 
-# Run a test
-quantalogic verify
 ```
 
 ## Troubleshooting
@@ -107,11 +103,7 @@ quantalogic verify
    python --version  # Should be 3.12 or later
    ```
 
-2. **Missing Dependencies**
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
+
 
 ### Error Messages
 
@@ -121,10 +113,3 @@ quantalogic verify
 | `ImportError` | Check Python version (3.12+) |
 | `API key not found` | Set environment variables |
 
-## Next Steps
-
-- Follow the [Quickstart Guide](../quickstart.md)
-- Try [Example Projects](../examples/index.md)
-- Join our [Discord Community](https://discord.gg/quantalogic)
-
-Need help? [Open an issue](https://github.com/quantalogic/quantalogic/issues) on GitHub.

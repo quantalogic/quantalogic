@@ -289,12 +289,7 @@ print(response)
 - Handle errors explicitly in your tools
 - Keep tool functions focused and small
 
-### Next Steps
 
-- Explore [Advanced Features](./advanced/index.md)
-- Check out [Example Projects](./examples/index.md)
-- Learn about [Tool Development](./api/tools.md)
-- Join our [Community](./community/index.md)
 
 ## Architecture Overview
 
