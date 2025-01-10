@@ -1,0 +1,61 @@
+site_name: QuantaLogic ReAct Agent
+site_description: Advanced AI Agent Framework for Reasoning and Action
+site_author: QuantaLogic Team
+site_url: https://www.quantalogic.app
+
+theme:
+  name: material
+  logo: assets/q-logo-square.svg
+  favicon: assets/logo-rect.svg
+  palette:
+    - scheme: default
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.path
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.annotate
+    - content.code.copy
+
+plugins:
+  - search
+  - mermaid2
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Quick Start: quickstart.md
+  - Components:
+    - ReAct Framework: components/react.md
+    - LLM Support: components/llm.md
+    - Tool System: components/tools.md
+  - CLI Reference: cli.md
+  - Development:
+    - Contributing: dev/contributing.md
+    - Setup: dev/setup.md
+  - License: license.md

@@ -39,6 +39,7 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 - [Development](#-development)
 - [Contributing](#-contributing)
 - [License](#-license)
+- [Documentation Development](#-documentation-development)
 
 ## 📦 Installation
 
@@ -803,30 +804,43 @@ print(results)
 ```
 ```
 
-#### Creating Custom Tools
+## 📚 Documentation Development
 
-```python
-from quantalogic.tools import Tool, ToolArgument
+### Prerequisites
+- Python 3.12+
+- Poetry
+- mkdocs
 
-class DatabaseTool(Tool):
-    name: str = "database_tool"
-    description: str = "Execute database operations"
-    need_validation: bool = True
-    
-    arguments: list[ToolArgument] = [
-        ToolArgument(
-            name="query",
-            arg_type="string",
-            description="SQL query to execute",
-            required=True
-        )
-    ]
-    
-    def execute(self, query: str) -> str:
-        # Tool implementation
-        return "Query results"
+### Setup Development Environment
+```bash
+# Clone the repository
+git clone https://github.com/quantalogic/quantalogic.git
+cd quantalogic
+
+# Install dependencies including dev tools
+poetry install --with dev
 ```
 
+### Building Documentation
+```bash
+# Serve documentation locally
+poetry run docs-serve
+
+# Build static documentation site
+poetry run docs-build
+
+# Deploy documentation to GitHub Pages
+poetry run docs-deploy
+```
+
+### Documentation Dependencies
+The documentation is built using:
+- MkDocs
+- Material for MkDocs
+- Mermaid diagrams
+- Syntax highlighting
+
+Explore the documentation at `http://localhost:8000` when running `poetry run docs-serve`.
 
 ## 🌐 Web Interface
 
@@ -1031,3 +1045,5 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for detai
 [![Star History Chart](https://api.star-history.com/svg?repos=quantalogic/quantalogic&type=Date)](https://star-history.com/#quantalogic/quantalogic&Date)
 
 Initiated with ❤️ by Raphaël MANSUY. Founder of [Quantalogic](https://www.quantalogic.app). 
+
+```
