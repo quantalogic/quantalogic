@@ -1,7 +1,5 @@
 # QuantaLogic: ReAct AI Agent Framework
 
-![QuantaLogic Logo](assets/logo-rect.svg){ width="200" }
-
 ## What is QuantaLogic?
 
 QuantaLogic is a Python framework that helps you build smart AI agents that can think and act. Imagine having a helpful assistant that not only understands what you want but can actually do it - that's what QuantaLogic enables.
