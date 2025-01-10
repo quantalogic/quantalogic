@@ -8,13 +8,15 @@ theme:
   logo: assets/q-logo-square.svg
   favicon: assets/logo-rect.svg
   palette:
-    - scheme: default
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
       primary: blue
       accent: indigo
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
-    - scheme: slate
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
       primary: blue
       accent: indigo
       toggle:
@@ -25,17 +27,27 @@ theme:
     - navigation.sections
     - navigation.path
     - navigation.top
+    - navigation.tracking
     - search.suggest
     - search.highlight
+    - search.share
     - content.code.annotate
     - content.code.copy
+    - content.tooltips
 
 plugins:
   - search
   - mermaid2
+  - social
+  - tags
 
 markdown_extensions:
-  - pymdownx.highlight
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -45,17 +57,47 @@ markdown_extensions:
   - pymdownx.details
   - attr_list
   - md_in_html
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 nav:
   - Home: index.md
-  - Installation: installation.md
-  - Quick Start: quickstart.md
+  - Getting Started:
+    - Installation: installation.md
+    - Quick Start: quickstart.md
+    - Core Concepts: core-concepts.md
+  - Tutorials:
+    - Basic Agent: tutorials/basic-agent.md
+    - Event Monitoring: tutorials/event-monitoring.md
+    - Code Generation: tutorials/code-generation.md
+    - Task Automation: tutorials/task-automation.md
   - Components:
     - ReAct Framework: components/react.md
     - LLM Support: components/llm.md
     - Tool System: components/tools.md
+    - Memory Management: components/memory.md
+  - Examples:
+    - Simple Agent: examples/simple-agent.md
+    - Event Monitoring: examples/event-monitoring.md
+    - Code Generation: examples/code-generation.md
+    - Task Automation: examples/task-automation.md
+  - API Reference:
+    - Agent: api/agent.md
+    - Tools: api/tools.md
+    - Events: api/events.md
+    - Memory: api/memory.md
+  - Best Practices:
+    - Agent Design: best-practices/agent-design.md
+    - Tool Development: best-practices/tool-development.md
+    - Error Handling: best-practices/error-handling.md
   - CLI Reference: cli.md
   - Development:
     - Contributing: dev/contributing.md
     - Setup: dev/setup.md
+    - Architecture: dev/architecture.md
+  - Troubleshooting: troubleshooting.md
   - License: license.md
