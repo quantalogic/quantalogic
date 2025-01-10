@@ -10,6 +10,8 @@ It seamlessly integrates large language models (LLMs) with a robust tool system,
 
 The `cli` version include coding capabilities comparable to Aider.
 
+[📖 Documentation](https://quantalogic.github.io/quantalogic/)
+
 
 ## Why QuantaLogic?
 
