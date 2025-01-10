@@ -24,34 +24,37 @@ def add(self, message: Message) -> None:
     """Add a message to memory.
     
     Args:
-        message: Message to store
+        message (Message): The message to add to memory.
     """
 ```
 
 #### reset
 ```python
 def reset(self) -> None:
-    """Clear all memory."""
+    """Reset the agent memory."""
 ```
 
 #### compact
 ```python
 def compact(self, n: int = 2) -> None:
-    """Optimize memory by keeping essential messages.
+    """Compact the memory to keep only essential messages.
     
-    Keeps:
-    - System message (if present)
-    - First two user-assistant pairs
-    - Last n pairs (default: 2)
+    This method keeps:
+    - The system message (if present)
+    - First two pairs of user-assistant messages
+    - Last n pairs of user-assistant messages (default: 2)
     
     Args:
-        n: Number of recent pairs to keep
+        n (int): Number of last message pairs to keep. Defaults to 2.
     """
 ```
 
 ### Usage Example
 
 ```python
+from quantalogic import AgentMemory
+from quantalogic.types import Message
+
 # Create memory instance
 memory = AgentMemory()
 
@@ -86,167 +89,87 @@ variables = VariableMemory()
 #### add
 ```python
 def add(self, value: str) -> str:
-    """Store a value and return its key.
+    """Add a value to the variable memory.
     
     Args:
-        value: Value to store
+        value (str): The value to add to memory.
         
     Returns:
-        str: Generated key (e.g., 'var1')
+        str: The key associated with the added value (e.g., 'var1').
+    """
+```
+
+#### get
+```python
+def get(self, key: str, default: str | None = None) -> str | None:
+    """Get a value from the variable memory.
+    
+    Args:
+        key (str): The key to retrieve.
+        default (str | None, optional): Default value if key not found.
+        
+    Returns:
+        str | None: The value associated with the key, or default if not found.
     """
 ```
 
 #### pop
 ```python
 def pop(self, key: str, default: str | None = None) -> str | None:
-    """Remove and return a value.
+    """Remove and return a value for a key.
     
     Args:
-        key: Variable key
-        default: Default if key not found
+        key (str): The key to remove.
+        default (str | None, optional): Default value if key not found.
         
     Returns:
-        str | None: Value or default
+        str | None: The value associated with the key, or default if not found.
+    """
+```
+
+#### update
+```python
+def update(self, other: dict[str, str] | None = None, **kwargs) -> None:
+    """Update the memory with key-value pairs.
+    
+    Args:
+        other (dict[str, str] | None, optional): Dictionary to update from.
+        **kwargs: Additional key-value pairs to update.
     """
 ```
 
 #### reset
 ```python
 def reset(self) -> None:
-    """Clear all variables."""
+    """Reset the variable memory."""
 ```
 
 ### Usage Example
 
 ```python
-# Create variable store
+# Create variable memory
 variables = VariableMemory()
 
 # Store values
 key1 = variables.add("Hello World")  # Returns 'var1'
 key2 = variables.add("Python")       # Returns 'var2'
 
-# Retrieve and remove
-value = variables.pop('var1')  # Returns 'Hello World'
-default_value = variables.pop('unknown', 'Not Found')
+# Access values
+value1 = variables.get(key1)         # Returns 'Hello World'
+value2 = variables.get(key2)         # Returns 'Python'
+missing = variables.get('var3', '')   # Returns ''
+
+# Update values
+variables.update({'var1': 'Updated'}, var2='New Value')
+
+# Remove values
+old_value = variables.pop(key1)      # Returns 'Updated'
 
 # Clear all variables
 variables.reset()
 ```
 
-## Memory Management Best Practices
-
-### 1. Regular Optimization
-```python
-# Monitor memory size
-if len(agent.memory.memory) > 100:
-    # Keep important context
-    agent.memory.compact(n=3)
-```
-
-### 2. Context Preservation
-```python
-# Save critical context before reset
-important_context = agent.memory.memory[-2:]
-agent.memory.reset()
-for msg in important_context:
-    agent.memory.add(msg)
-```
-
-### 3. Variable Lifecycle
-```python
-# Use variables for temporary storage
-file_key = agent.variable_store.add(file_content)
-try:
-    # Process file
-    process_file(file_content)
-finally:
-    # Clean up
-    agent.variable_store.pop(file_key)
-```
-
-### 4. Memory Events
-```python
-# Monitor memory operations
-agent.event_emitter.on(
-    [
-        "memory_full",
-        "memory_compacted",
-        "memory_summary"
-    ],
-    handle_memory_event
-)
-```
-
-## Integration with Agent
-
-### 1. Basic Setup
-```python
-from quantalogic import Agent, AgentMemory
-
-agent = Agent(
-    model_name="your-model",
-    memory=AgentMemory()
-)
-```
-
-### 2. Custom Memory Management
-```python
-class CustomMemory(AgentMemory):
-    def compact(self, n: int = 2):
-        """Custom memory optimization."""
-        # Your optimization logic
-        pass
-
-agent = Agent(memory=CustomMemory())
-```
-
-### 3. Memory-Aware Tools
-```python
-class MemoryAwareTool(Tool):
-    def execute(self, **kwargs):
-        # Access agent memory
-        memory = self.agent.memory
-        # Use memory content
-        return process_with_context(memory)
-```
-
-## Memory Events
-
-### Event Types
-
-1. **memory_full**
-   - Triggered when memory reaches capacity
-   - Suggests compaction needed
-
-2. **memory_compacted**
-   - Fired after successful compaction
-   - Includes optimization details
-
-3. **memory_summary**
-   - Provides memory state overview
-   - Useful for monitoring
-
-### Handling Events
-```python
-def memory_handler(event):
-    event_type = event["type"]
-    if event_type == "memory_full":
-        logger.warning("Memory full, compacting...")
-        agent.memory.compact()
-    elif event_type == "memory_compacted":
-        logger.info("Memory optimized")
-    elif event_type == "memory_summary":
-        logger.info(f"Memory state: {event['data']}")
-
-agent.event_emitter.on(
-    ["memory_full", "memory_compacted", "memory_summary"],
-    memory_handler
-)
-```
-
 ## Next Steps
 
-- Learn about [Event System](events.md)
+- Learn about [Agent API](agent.md)
 - Explore [Tool Development](../best-practices/tool-development.md)
-- Check [Agent API](agent.md)

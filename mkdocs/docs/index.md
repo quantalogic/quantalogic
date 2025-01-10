@@ -56,20 +56,74 @@ Using the ReAct (Reasoning & Action) pattern, our agents:
 - Optimizes decision making
 - Preserves important task information
 
+## Project Structure
+
+The QuantaLogic framework is organized into the following structure:
+
+```
+quantalogic/
+├── quantalogic/          # Main package directory
+│   ├── tools/           # Built-in tool implementations
+│   │   ├── python_tool.py
+│   │   ├── nodejs_tool.py
+│   │   ├── llm_tool.py
+│   │   └── ...
+│   ├── agent.py         # Core Agent implementation
+│   └── server/          # Server components
+├── examples/            # Usage examples
+├── tests/              # Test suite
+├── docs/               # Documentation
+├── mkdocs/             # MkDocs documentation site
+├── pyproject.toml      # Project configuration
+└── poetry.lock         # Dependency lock file
+```
+
+### Key Components
+
+- **Agent**: Core reasoning and execution engine
+- **Tools**: Specialized modules for different tasks
+  - Python execution
+  - Node.js execution
+  - LLM interactions
+  - File operations
+  - Search capabilities
+- **Server**: Web interface and API
+- **Examples**: Ready-to-use code samples
+- **Tests**: Comprehensive test suite
+
 ## 🚀 Quick Examples
 
 ### 🖥️ Using the CLI
 
 ```bash
-# Execute a task
-quantalogic task "Create a function to validate email addresses" --mode code
+# Execute a task with default settings (code mode)
+quantalogic task "Create a function to validate email addresses"
 
 # Run with specific model and mode
-quantalogic --model-name "openrouter/deepseek-chat" --mode interpreter task "Explain quantum computing"
+quantalogic task --model-name "openrouter/deepseek-chat" \
+                 --mode interpreter \
+                 --verbose \
+                 "Explain quantum computing"
 
-# Run from a task file
-quantalogic task --file tasks/example.md --verbose
+# Run from a task file with custom settings
+quantalogic task --file tasks/example.md \
+                 --mode full \
+                 --log debug \
+                 --max-iterations 50
+
+# Use vision capabilities
+quantalogic task --vision-model-name "openrouter/openai/gpt-4o-mini" \
+                 "Analyze this image and explain what you see"
 ```
+
+Available modes:
+- `code`: Coding-focused agent (default)
+- `basic`: General-purpose agent
+- `interpreter`: Interactive code execution
+- `full`: Full-featured agent
+- `code-basic`: Basic coding agent
+- `search`: Web search capabilities
+- `search-full`: Full search capabilities
 
 ### 🐍 Python SDK Examples
 
@@ -93,13 +147,42 @@ result = agent.solve_task(
 print(result)
 ```
 
-#### 🔧 Available Agent Modes
-- 💻 `code`: Coding-focused agent with basic capabilities
-- 🔄 `basic`: General-purpose agent without coding tools
-- 🖲️ `interpreter`: Interactive code execution agent
-- ⭐ `full`: Full-featured agent with all capabilities
-- 📝 `code-basic`: Coding agent with basic reasoning
-- 🔍 `search`: Web search agent with Wikipedia, DuckDuckGo and SERPApi integration
+#### Event Monitoring
+```python
+from quantalogic import Agent, console_print_events
+from quantalogic.tools import LLMTool
+
+# Initialize agent with LLM tool
+agent = Agent(
+    model_name="deepseek/deepseek-chat",
+    tools=[LLMTool(model_name="deepseek/deepseek-chat")]
+)
+
+# Configure event monitoring
+agent.event_emitter.on(
+    [
+        "task_complete",
+        "task_think_start",
+        "task_think_end",
+        "tool_execution_start",
+        "tool_execution_end",
+        "error_max_iterations_reached",
+        "memory_full",
+        "memory_compacted",
+        "memory_summary",
+    ],
+    console_print_events,
+)
+
+# Execute a complex task
+result = agent.solve_task(
+    "1. Write a poem in English about a dog. "
+    "2. Translate the poem into French. "
+    "3. Choose 2 French authors. "
+    "4. Rewrite the translated poem in their styles."
+)
+print(result)
+```
 
 ## ✨ Key Features
 
@@ -129,20 +212,43 @@ pip install quantalogic
 Here's a minimal example to create your first QuantaLogic agent:
 
 ```python
-from quantalogic import Agent, Tool
+from quantalogic import Agent
+from quantalogic.tools import Tool, ToolArgument
+from pydantic import Field, BaseModel
 
-# Create a simple tool
-@Tool.register
-def greet(name: str) -> str:
-    """Greet someone by name"""
-    return f"Hello, {name}!"
+# Create a custom tool
+class GreetingTool(Tool):
+    # Required tool configuration
+    name: str = Field(default="greeting_tool")
+    description: str = Field(default="Greets someone by name")
+    need_validation: bool = False  # Set to True if the tool needs user validation
+    
+    # Define tool arguments
+    arguments: list[ToolArgument] = [
+        ToolArgument(
+            name="name",
+            arg_type="string",
+            description="The name of the person to greet",
+            required=True,
+            example="Alice"
+        )
+    ]
+    
+    def execute(self, name: str) -> str:
+        """Execute the tool's main functionality"""
+        return f"Hello, {name}!"
 
-# Initialize the agent
-agent = Agent()
+# Initialize the agent with configuration
+agent = Agent(
+    model_name="deepseek/deepseek-chat",  # Required: specify the LLM
+    tools=[GreetingTool()],  # Add your custom tools
+    specific_expertise="An AI assistant that greets people",  # Optional: specify expertise
+    ask_for_user_validation=lambda x: True,  # Optional: custom validation function
+)
 
 # Let the agent use the tool
-response = agent.run("Greet someone named Alice")
-print(response)  # Output: Hello, Alice!
+response = agent.solve_task("Greet someone named Alice")
+print(response)
 ```
 
 ### Key Steps to Build an Agent
@@ -154,23 +260,25 @@ print(response)  # Output: Hello, Alice!
    ```
 
 2. **Create Your Tools**
-   - Define what your agent can do
-   - Use the `@Tool.register` decorator
+   - Inherit from the `Tool` base class
+   - Define tool properties (name, description, arguments)
+   - Implement the `execute` method
    - Add clear docstrings and type hints
 
 3. **Initialize the Agent**
    ```python
    from quantalogic import Agent
+   from quantalogic.tools import PythonTool
    
    agent = Agent(
-       model="gpt-4",  # Or any supported LLM
-       memory_size=10   # Number of previous interactions to remember
+       model_name="deepseek/deepseek-chat",  # Required: specify the LLM
+       tools=[PythonTool()]  # Add your tools
    )
    ```
 
 4. **Run Your Agent**
    ```python
-   result = agent.run("Your instruction here")
+   result = agent.solve_task("Your instruction here")
    ```
 
 ### Best Practices
