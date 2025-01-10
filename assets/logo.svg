@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="200" height="200" fill="#2196F3" rx="40" ry="40"/>
+  <text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white" font-size="80" font-family="Arial, sans-serif">Q</text>
+  <circle cx="100" cy="100" r="70" stroke="white" stroke-width="4" fill="none"/>
+</svg>
