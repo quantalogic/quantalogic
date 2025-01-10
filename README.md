@@ -92,7 +92,8 @@ Options:
                                   e.g. "openrouter/A/gpt-4o-mini").
   --log [info|debug|warning]      Set logging level (info/debug/warning).
   --verbose                       Enable verbose output.
-  --mode [code|basic|interpreter|full|code-basic|search]
+  --max-iterations INTEGER        Maximum iterations for task solving (default: 30).
+  --mode [code|basic|interpreter|full|code-basic|search|search-full]
                                   Agent mode (code/search/full).
   --help                          Show this message and exit.
 
