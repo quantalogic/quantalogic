@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)]()
+[![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)](https://quantalogic.github.io/quantalogic/)
 
 QuantaLogic is a  ReAct (Reasoning & Action) framework for building advanced AI agents. 
 
@@ -804,161 +804,7 @@ print(results)
 ```
 ```
 
-## 📚 Documentation Development
-
-### Prerequisites
-- Python 3.12+
-- Poetry
-- mkdocs
-
-### Setup Development Environment
-```bash
-# Clone the repository
-git clone https://github.com/quantalogic/quantalogic.git
-cd quantalogic
-
-# Install dependencies including dev tools
-poetry install --with dev
 ```
-
-### Building Documentation
-```bash
-# Serve documentation locally
-poetry run docs-serve
-
-# Build static documentation site
-poetry run docs-build
-
-# Deploy documentation to GitHub Pages
-poetry run docs-deploy
-```
-
-### Documentation Dependencies
-The documentation is built using:
-- MkDocs
-- Material for MkDocs
-- Mermaid diagrams
-- Syntax highlighting
-
-Explore the documentation at `http://localhost:8000` when running `poetry run docs-serve`.
-
-## 🌐 Web Interface
-
-Features:
-- Real-time event visualization
-- Task submission and monitoring
-- Interactive validation dialogs
-- Model selection
-- Event filtering and search
-
-### API Endpoints
-
-| Endpoint           | Method | Description     |
-| ------------------ | ------ | --------------- |
-| `/tasks`           | POST   | Submit tasks    |
-| `/tasks/{task_id}` | GET    | Task status     |
-| `/events`          | GET    | SSE endpoint    |
-| `/validate`        | POST   | Task validation |
-
-
-## 📖 Examples
-
-### Python Tool Integration Example
-
-```python
-import os
-
-from quantalogic import Agent, console_print_events
-from quantalogic.tools import (
-    PythonTool,
-)
-
-# Verify API key is set - required for authentication with DeepSeek's API
-# This check ensures the agent won't fail during runtime due to missing credentials
-if not os.environ.get("DEEPSEEK_API_KEY"):
-    raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
-
-# Initialize agent with DeepSeek model and Python tool
-agent = Agent(model_name="deepseek/deepseek-chat", tools=[PythonTool()])
-
-# Configure comprehensive event monitoring system
-# Tracks all agent activities including:
-# - Code execution steps
-# - Tool interactions
-# - Error conditions
-# Essential for debugging and performance optimization
-agent.event_emitter.on(
-    "*",
-    console_print_events,
-)
-
-# Execute a precision mathematics task demonstrating:
-# - High-precision calculations
-# - PythonTool integration
-# - Real-time monitoring capabilities
-result = agent.solve_task("1. Calculate PI with 10000 decimal places.")
-print(result)
-```
-
-### Agent with Event Monitoring
-
-```python
-import os
-
-from quantalogic import Agent, console_print_events
-from quantalogic.tools import (
-    LLMTool,
-)
-
-# Verify API key is set - required for authentication with DeepSeek's API
-# This check ensures the agent won't fail during runtime due to missing credentials
-if not os.environ.get("DEEPSEEK_API_KEY"):
-    raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
-
-# Initialize agent with DeepSeek model and LLM tool
-# The LLM tool serves dual purpose:
-# 1. As a reasoning engine for the agent's cognitive processes
-# 2. As a latent space explorer, enabling the agent to:
-#    - Discover novel solution paths
-#    - Generate creative combinations of concepts
-#    - Explore alternative reasoning strategies
-# Using the same model ensures consistent behavior across both roles
-agent = Agent(model_name="deepseek/deepseek-chat", tools=[LLMTool(model_name="deepseek/deepseek-chat")])
-
-# Set up event monitoring to track agent's lifecycle
-# This helps in debugging and understanding the agent's behavior
-agent.event_emitter.on(
-    [
-        "task_complete",
-        "task_think_start",
-        "task_think_end",
-        "tool_execution_start",
-        "tool_execution_end",
-        "error_max_iterations_reached",
-        "memory_full",
-        "memory_compacted",
-        "memory_summary",
-    ],
-    console_print_events,
-)
-
-# Execute a multi-step task showcasing agent's capabilities
-# Demonstrates:
-# 1. Creative content generation
-# 2. Language translation
-# 3. Style adaptation
-# 4. Multi-step reasoning and execution
-result = agent.solve_task(
-    "1. Write a poem in English about a dog. "
-    "2. Translate the poem into French. "
-    "3. Choose 2 French authors"
-    "4. Rewrite the translated poem with the style of the chosen authors. "
-)
-print(result)
-```
-
-
-
 ### Project Documentation
 
 ```python
@@ -1045,5 +891,3 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for detai
 [![Star History Chart](https://api.star-history.com/svg?repos=quantalogic/quantalogic&type=Date)](https://star-history.com/#quantalogic/quantalogic&Date)
 
 Initiated with ❤️ by Raphaël MANSUY. Founder of [Quantalogic](https://www.quantalogic.app). 
-
-```
