@@ -1,0 +1,48 @@
+# MkDocs build output
+site/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.env/
+.venv/
+
+# IDE-specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.bak
+
+# Logs
+*.log
+
+# macOS specific files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Mkdocs specific
+.cache/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# Backup files
+*~
+
+# Dependency directories
+node_modules/
+
+# Jupyter Notebook
+.ipynb_checkpoints

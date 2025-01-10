@@ -1,0 +1,126 @@
+site_name: QuantaLogic ReAct Agent
+site_description: Advanced AI Agent Framework for Reasoning and Action
+site_author: QuantaLogic Team
+site_url: https://www.quantalogic.app
+
+theme:
+  name: material
+  logo: assets/q-logo-square.svg
+  favicon: assets/logo-rect.svg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.path
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.annotate
+    - content.code.copy
+    - content.tooltips
+    - toc.follow
+    - toc.integrate
+
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+  - mermaid2
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: date
+  - tags:
+      tags_file: tags.md
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            show_source: true
+            show_root_heading: true
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      auto_title: true
+      linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - footnotes
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+  - abbr
+  - meta
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: installation.md
+    - Quick Start: quickstart.md
+    - Core Concepts: core-concepts.md
+    - CLI Reference: cli.md
+  - Tutorials:
+    - Basic Agent: tutorials/basic-agent.md
+    - Event Monitoring: tutorials/event-monitoring.md
+    - Code Generation: tutorials/code-generation.md
+    - Task Automation: tutorials/task-automation.md
+  - Examples:
+    - Simple Agent: examples/simple-agent.md
+    - Event Monitoring: examples/event-monitoring.md
+    - Code Generation: examples/code-generation.md
+    - Task Automation: examples/task-automation.md
+  - API Reference:
+    - Agent: api/agent.md
+    - Tools: api/tools.md
+    - Events: api/events.md
+    - Memory: api/memory.md
+  - Best Practices:
+    - Agent Design: best-practices/agent-design.md
+    - Tool Development: best-practices/tool-development.md
+    - Error Handling: best-practices/error-handling.md
+  - Development:
+    - Contributing: dev/contributing.md
+    - Setup: dev/setup.md
+    - Architecture: dev/architecture.md
+  - Troubleshooting: troubleshooting.md
+  - License: license.md
