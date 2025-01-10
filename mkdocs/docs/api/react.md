@@ -35,5 +35,5 @@ function MyAgentApp() {
 - Leverage React hooks for state management
 
 ## Next Steps
-- Explore [Tool Development](/best-practices/tool-development)
-- Learn about [Agent API](/api/agent)
+- Explore [Tool Development](../best-practices/tool-development.md)
+- Learn about [Agent API](agent.md)

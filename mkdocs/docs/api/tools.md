@@ -305,4 +305,4 @@ result = bash_tool.execute(
 ## Next Steps
 
 - Learn about [Tool Development](../best-practices/tool-development.md)
-- Check [Memory Management](../memory.md)
+- Explore [Memory Tools](./memory.md)

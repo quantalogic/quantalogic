@@ -118,10 +118,75 @@ print(result)
 
 ## Getting Started
 
-1. [Install QuantaLogic](installation.md) with pip or your favorite package manager
-2. Follow our [Quick Start Guide](quickstart.md) to create your first agent
-3. Explore [Examples](examples/simple-agent.md) to see what's possible
-4. Join our community to share and learn
+### Quick Install
+
+```bash
+pip install quantalogic
+```
+
+### Basic Example
+
+Here's a minimal example to create your first QuantaLogic agent:
+
+```python
+from quantalogic import Agent, Tool
+
+# Create a simple tool
+@Tool.register
+def greet(name: str) -> str:
+    """Greet someone by name"""
+    return f"Hello, {name}!"
+
+# Initialize the agent
+agent = Agent()
+
+# Let the agent use the tool
+response = agent.run("Greet someone named Alice")
+print(response)  # Output: Hello, Alice!
+```
+
+### Key Steps to Build an Agent
+
+1. **Install Dependencies**
+   ```bash
+   pip install quantalogic
+   python -m quantalogic verify  # Check installation
+   ```
+
+2. **Create Your Tools**
+   - Define what your agent can do
+   - Use the `@Tool.register` decorator
+   - Add clear docstrings and type hints
+
+3. **Initialize the Agent**
+   ```python
+   from quantalogic import Agent
+   
+   agent = Agent(
+       model="gpt-4",  # Or any supported LLM
+       memory_size=10   # Number of previous interactions to remember
+   )
+   ```
+
+4. **Run Your Agent**
+   ```python
+   result = agent.run("Your instruction here")
+   ```
+
+### Best Practices
+
+- Start simple, add complexity as needed
+- Test tools individually before using with agent
+- Use descriptive names for tools and parameters
+- Handle errors explicitly in your tools
+- Keep tool functions focused and small
+
+### Next Steps
+
+- Explore [Advanced Features](./advanced/index.md)
+- Check out [Example Projects](./examples/index.md)
+- Learn about [Tool Development](./api/tools.md)
+- Join our [Community](./community/index.md)
 
 ## Architecture Overview
 

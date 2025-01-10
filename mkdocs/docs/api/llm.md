@@ -30,5 +30,5 @@ agent = LLMAgent(model='gpt-4')
 - Monitor token usage
 
 ## Next Steps
-- Explore [Agent API](/api/agent)
-- Learn about [Tool Development](/best-practices/tool-development)
+- Explore [Agent API](agent.md)
+- Learn about [Tool Development](../best-practices/tool-development.md)

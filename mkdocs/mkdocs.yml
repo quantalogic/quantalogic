@@ -98,7 +98,7 @@ nav:
     - Installation: installation.md
     - Quick Start: quickstart.md
     - Core Concepts: core-concepts.md
-    - CLI Reference: cli.md
+    - CLI Reference: cli-reference.md
   - Tutorials:
     - Basic Agent: tutorials/basic-agent.md
     - Event Monitoring: tutorials/event-monitoring.md
@@ -122,5 +122,6 @@ nav:
     - Contributing: dev/contributing.md
     - Setup: dev/setup.md
     - Architecture: dev/architecture.md
+  - Tags: tags.md
   - Troubleshooting: troubleshooting.md
   - License: license.md

@@ -1,57 +1,50 @@
-# Installation
+# Installation Guide
 
-This guide will help you install QuantaLogic and set up your development environment.
+This guide will help you get QuantaLogic up and running quickly. Choose the installation method that best suits your needs.
 
-## Prerequisites
+## System Requirements
 
-### Required
 - Python 3.12 or later
-- pip (Python package installer)
-- Git (for source installation)
+- 2GB RAM minimum (4GB recommended)
+- 500MB free disk space
 
-### Optional but Recommended
-- Docker (for secure code execution)
-- Poetry (for development)
-- pipx (for isolated installations)
-
-## Installation Methods
-
-### 1. Via pip (Recommended)
-
-The simplest way to install QuantaLogic:
+## Quick Install (Recommended)
 
 ```bash
 pip install quantalogic
 ```
 
-For a specific version:
-```bash
-pip install quantalogic==1.0.0
-```
+That's it! Skip to [Verify Installation](#verify-installation) to confirm everything works.
 
-### 2. From Source (Development)
+## Detailed Installation Options
 
-Clone and install from the repository:
+### Option 1: Using pip (Simple)
 
 ```bash
-# Clone the repository
-git clone https://github.com/quantalogic/quantalogic.git
-cd quantalogic
-
-# Create and activate virtual environment
+# Create a virtual environment (recommended)
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install dependencies with Poetry
+# Install QuantaLogic
+pip install quantalogic
+```
+
+### Option 2: Using Poetry (Development)
+
+```bash
+# Install Poetry if you haven't already
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Clone and install
+git clone https://github.com/quantalogic/quantalogic.git
+cd quantalogic
 poetry install
 ```
 
-### 3. Using pipx (Isolated)
-
-Install in an isolated environment:
+### Option 3: Using pipx (Isolated)
 
 ```bash
-# Install pipx if you haven't already
+# Install pipx
 python -m pip install --user pipx
 pipx ensurepath
 
@@ -59,46 +52,50 @@ pipx ensurepath
 pipx install quantalogic
 ```
 
-## Configuration
+## Required Configuration
 
-### 1. API Keys
+### 1. LLM API Keys
 
-Set up your LLM provider API keys:
+Choose at least one LLM provider and set its API key:
 
 ```bash
-# DeepSeek (default)
+# DeepSeek (Recommended)
 export DEEPSEEK_API_KEY="your-api-key"
 
-# OpenAI (optional)
+# Or OpenAI
 export OPENAI_API_KEY="your-api-key"
 
-# Anthropic (optional)
+# Or Anthropic
 export ANTHROPIC_API_KEY="your-api-key"
 ```
 
-!!! tip "API Keys"
-    Store API keys in your environment or use a secure key management system.
+!!! tip "Secure Key Storage"
+    Never commit API keys to version control. Consider using:
+    - Environment variables
+    - `.env` files (add to .gitignore)
+    - Your OS's keychain
 
-### 2. Docker Setup (Optional)
+## Optional Components
 
-If you plan to use code execution tools:
+### Docker Setup (For Code Execution)
 
 1. Install Docker from [docker.com](https://www.docker.com/get-started)
-2. Verify installation:
-```bash
-docker --version
-```
+2. Start the Docker daemon
+3. Verify with:
+   ```bash
+   docker run hello-world
+   ```
 
-## Verification
+## Verify Installation
 
-Verify your installation:
+Run these commands to verify your setup:
 
 ```bash
 # Check version
 quantalogic --version
 
-# Run a simple test
-quantalogic --mode basic "Hello, World!"
+# Run a test
+quantalogic verify
 ```
 
 ## Troubleshooting
@@ -106,57 +103,28 @@ quantalogic --mode basic "Hello, World!"
 ### Common Issues
 
 1. **Python Version Error**
-```bash
-# Check Python version
-python --version
+   ```bash
+   python --version  # Should be 3.12 or later
+   ```
 
-# If needed, upgrade Python
-# On macOS/Linux:
-brew install python@3.12  # or your package manager
-# On Windows: Download from python.org
-```
+2. **Missing Dependencies**
+   ```bash
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
 
-2. **Virtual Environment Issues**
-```bash
-# Remove and recreate venv
-rm -rf .venv
-python -m venv .venv
-```
+### Error Messages
 
-3. **Docker Permission Error**
-```bash
-# Add user to docker group
-sudo usermod -aG docker $USER
-# Log out and back in
-```
-
-### Getting Help
-
-If you encounter issues:
-
-1. Check our [Troubleshooting Guide](troubleshooting.md)
-2. Search [GitHub Issues](https://github.com/quantalogic/quantalogic/issues)
-3. Join our [Community Discord](https://discord.gg/quantalogic)
+| Error | Solution |
+|-------|----------|
+| `ModuleNotFoundError` | Re-run `pip install quantalogic` |
+| `ImportError` | Check Python version (3.12+) |
+| `API key not found` | Set environment variables |
 
 ## Next Steps
 
-- Follow the [Quick Start Guide](quickstart.md) to create your first agent
-- Learn about [Core Concepts](core-concepts.md)
-- Try our [Examples](examples/simple-agent.md)
-- Read the [CLI Reference](cli.md)
+- Follow the [Quickstart Guide](../quickstart.md)
+- Try [Example Projects](../examples/index.md)
+- Join our [Discord Community](https://discord.gg/quantalogic)
 
-## Development Setup
-
-For contributors:
-
-1. Fork the repository
-2. Install development dependencies:
-```bash
-poetry install --with dev
-```
-3. Set up pre-commit hooks:
-```bash
-pre-commit install
-```
-
-See our [Contributing Guide](dev/contributing.md) for more details.
+Need help? [Open an issue](https://github.com/quantalogic/quantalogic/issues) on GitHub.

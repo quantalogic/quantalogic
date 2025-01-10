@@ -49,4 +49,4 @@ quantalogic --mode search task "Research latest AI trends in healthcare"
 ```
 
 ## Next Steps
-- [CLI Reference](/cli)
+- Learn more in the [CLI documentation](cli.md)
