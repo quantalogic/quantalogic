@@ -37,150 +37,124 @@ agent = Agent(
 )
 ```
 
-## Common Code Operations
+## Quick Start
 
-### 1. Analyzing Code Structure
+Here's a simple example of generating code:
 
 ```python
-# Find all Python class definitions
+from quantalogic import Agent
+
+# Initialize agent with DeepSeek model
+agent = Agent(model_name="deepseek/deepseek-chat")
+
+# Generate a Fibonacci function
 result = agent.solve_task(
-    "Find all class definitions in the src directory"
+    "Create a Python function that calculates the Fibonacci sequence"
+)
+print(result)
+```
+
+## Advanced Usage with Event Monitoring
+
+For more complex tasks, you can monitor the agent's thinking process:
+
+```python
+from quantalogic import Agent, console_print_events
+from quantalogic.tools import LLMTool
+
+# Initialize agent with event monitoring
+agent = Agent(
+    model_name="deepseek/deepseek-chat",
+    tools=[LLMTool(model_name="deepseek/deepseek-chat")]
 )
 
-# Search for specific patterns
+# Set up event monitoring
+agent.event_emitter.on(
+    [
+        "task_complete",
+        "task_think_start",
+        "task_think_end",
+        "tool_execution_start",
+        "tool_execution_end",
+    ],
+    console_print_events,
+)
+
+# Execute a multi-step task
 result = agent.solve_task(
-    "Find all API endpoint definitions in our codebase"
+    "1. Write a function to validate email addresses\n"
+    "2. Add comprehensive error handling\n"
+    "3. Include type hints and docstrings"
 )
 ```
 
-### 2. Code Generation
+## Code Analysis Tools
+
+QuantaLogic provides tools for code analysis and manipulation:
 
 ```python
-# Generate new code
-result = agent.solve_task("""
-Create a Python class that implements:
-1. A REST API client
-2. Automatic retry logic
-3. Rate limiting
-4. Error handling
-""")
+from quantalogic.tools import (
+    ListDirectoryTool,     # List files and directories
+    ReadFileTool,          # Read file contents
+    RipgrepTool,           # Search code patterns
+    WriteFileTool,         # Create new files
+)
 ```
 
-### 3. Code Modification
+### Common Use Cases
 
+1. **Code Search**
 ```python
-# Update existing code
-result = agent.solve_task("""
-1. Find all TODO comments in the codebase
-2. Analyze each TODO
-3. Implement the missing functionality
-4. Update the comments
-""")
+# Search for specific patterns in code
+result = agent.solve_task(
+    "Find all function definitions that handle file operations"
+)
 ```
 
-### 4. Documentation Updates
-
+2. **Code Generation with Tests**
 ```python
-# Improve code documentation
-result = agent.solve_task("""
-1. Update all the files in ./examples directory
-2. Make comments more informative
-3. Focus on explaining WHY not WHAT
-""")
+# Generate code with test cases
+result = agent.solve_task(
+    "Create a date validation function with unit tests"
+)
+```
+
+3. **Code Refactoring**
+```python
+# Improve code structure
+result = agent.solve_task(
+    "Refactor this function to follow SOLID principles:\n"
+    "[paste your code here]"
+)
 ```
 
 ## Best Practices
 
-### 1. Code Analysis
-- Start with understanding existing code
-- Use search tools to find relevant sections
-- Analyze dependencies before making changes
+1. **Start Simple**
+   - Begin with basic tasks
+   - Add complexity gradually
+   - Test generated code thoroughly
 
-### 2. Code Generation
-- Specify requirements clearly
-- Include error handling requirements
-- Ask for tests when needed
-- Request documentation
+2. **Use Event Monitoring**
+   - Track agent's thinking process
+   - Debug complex operations
+   - Understand decision patterns
 
-### 3. Code Modification
-- Back up files before changes
-- Test changes incrementally
-- Maintain consistent style
-- Update related documentation
+3. **Handle Errors**
+   - Always validate generated code
+   - Include error handling
+   - Test edge cases
 
-## Example: Complex Code Task
-
-Here's a complete example that demonstrates various code operations:
-
-```python
-import os
-from quantalogic import Agent, console_print_events
-from quantalogic.tools import (
-    ListDirectoryTool,
-    ReadFileBlockTool,
-    ReadFileTool,
-    ReplaceInFileTool,
-    RipgrepTool,
-    SearchDefinitionNames,
-    WriteFileTool,
-)
-
-# Set up agent
-agent = Agent(
-    model_name="deepseek/deepseek-chat",
-    tools=[
-        SearchDefinitionNames(),
-        RipgrepTool(),
-        WriteFileTool(),
-        ReadFileTool(),
-        ReplaceInFileTool(),
-        ReadFileBlockTool(),
-        ListDirectoryTool(),
-    ],
-)
-
-# Enable event monitoring
-agent.event_emitter.on("*", console_print_events)
-
-# Execute complex task
-result = agent.solve_task("""
-1. Analyze all Python files in ./src
-2. Find functions without type hints
-3. Add appropriate type hints
-4. Update function documentation
-5. Generate test cases
-""")
-```
-
-## Tool Reference
-
-### SearchDefinitionNames
-- Finds class and function definitions
-- Supports multiple languages
-- Returns location and signature
-
-### RipgrepTool
-- Fast code search
-- Supports regex patterns
-- Handles large codebases
-
-### WriteFileTool
-- Creates new files
-- Supports multiple file types
-- Handles directories
-
-### ReadFileTool
-- Reads entire files
-- Supports various encodings
-- Error handling included
-
-### ReplaceInFileTool
-- Makes targeted replacements
-- Preserves file formatting
-- Backup support
+4. **Documentation**
+   - Request clear docstrings
+   - Include usage examples
+   - Document assumptions
 
 ## Next Steps
 
-- Learn about [Task Automation](task-automation.md)
-- Explore [Best Practices](../best-practices/tool-development.md)
-- Check [API Reference](../api/tools.md)
+- Try the examples in your own projects
+- Experiment with different prompts
+- Combine multiple operations
+- Share your feedback and improvements
+
+Remember: The agent works best with clear, specific instructions. Break down complex tasks into smaller steps for better results.

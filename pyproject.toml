@@ -38,6 +38,13 @@ google-search-results = "^2.4.2"
 serpapi = "^0.1.5"
 duckduckgo-search = "^7.2.1"
 mkdocs-material = {extras = ["imaging"], version = "^9.5.49"}
+mkdocs-mermaid2-plugin = "^1.1.1"
+mkdocs-minify-plugin = "^0.7.1"
+mkdocs-git-revision-date-localized-plugin = "^1.2.0"
+mkdocs-macros-plugin = "^1.0.4"
+mkdocstrings = "^0.24.0"
+mkdocstrings-python = "^1.7.0"
+pymdown-extensions = "^10.3.1"
 
 [tool.poetry.scripts]
 quantalogic = "quantalogic.main:cli"
@@ -53,12 +60,15 @@ litellm = "^1.55.9"
 ollama = "^0.4.4"
 mkdocs = "^1.6.0"
 mkdocs-material = "^9.5.0"
-mkdocs-mermaid2-plugin = "^1.2.1"
-pymdown-extensions = "^10.5"
-pygments = "^2.17.2"
 
 [tool.poetry.group.docs.dependencies]
-# Intentionally left empty to avoid duplicates
+mkdocs-material = {extras = ["imaging"], version = "^9.5.49"}
+mkdocs-mermaid2-plugin = "^1.1.1"
+mkdocs-git-revision-date-localized-plugin = "^1.2.0"
+mkdocs-macros-plugin = "^1.0.4"
+mkdocstrings = "^0.24.0"
+mkdocstrings-python = "^1.7.0"
+pymdown-extensions = "^10.3.1"
 
 [build-system]
 requires = ["poetry-core"]

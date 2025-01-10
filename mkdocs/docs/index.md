@@ -7,10 +7,25 @@
 QuantaLogic is a Python framework that helps you build smart AI agents that can think and act. Imagine having a helpful assistant that not only understands what you want but can actually do it - that's what QuantaLogic enables.
 
 Using the ReAct (Reasoning & Action) pattern, our agents:
-1. **Understand** your instructions in plain language
-2. **Think** about the best way to solve your problem
-3. **Act** by using tools and writing code
-4. **Learn** from the results to improve future actions
+
+1. 🧠 **Understand**
+   - Process your instructions in plain language
+   - Analyze context and requirements
+   
+2. 💭 **Think**
+   - Plan the best approach
+   - Break down complex problems
+   - Consider different solutions
+   
+3. ⚡ **Act**
+   - Execute planned actions
+   - Use specialized tools
+   - Write and modify code
+   
+4. 📚 **Learn**
+   - Analyze results
+   - Adapt strategies
+   - Improve future actions
 
 ## Why Choose QuantaLogic?
 
@@ -21,26 +36,85 @@ Using the ReAct (Reasoning & Action) pattern, our agents:
 - **See What's Happening**: Real-time monitoring of your agent's thoughts and actions
 - **Memory That Matters**: Intelligent context management for better results
 
-## Quick Example
+## Core Concepts
 
+### The Agent
+- Understands natural language instructions
+- Plans and executes complex tasks
+- Uses specialized tools effectively
+- Learns and adapts from results
+
+### The Tool System
+- Secure sandboxed execution
+- Code generation and execution
+- File and data manipulation
+- Information search and analysis
+
+### Memory Management
+- Maintains conversation context
+- Tracks actions and results
+- Optimizes decision making
+- Preserves important task information
+
+## 🚀 Quick Examples
+
+### 🖥️ Using the CLI
+
+```bash
+# Execute a task
+quantalogic task "Create a function to validate email addresses" --mode code
+
+# Run with specific model and mode
+quantalogic --model-name "openrouter/deepseek-chat" --mode interpreter task "Explain quantum computing"
+
+# Run from a task file
+quantalogic task --file tasks/example.md --verbose
+```
+
+### 🐍 Python SDK Examples
+
+#### Basic Usage
 ```python
 from quantalogic import Agent
 
-# Create an agent with your preferred LLM
+# Initialize agent with environment check
+import os
+
+if not os.environ.get("DEEPSEEK_API_KEY"):
+    raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
+
+# Create agent with specific model
 agent = Agent(model_name="deepseek/deepseek-chat")
 
-# Let it solve a task
+# Execute a task
 result = agent.solve_task(
-    "Create a Python function that generates the Fibonacci sequence"
+    "Create a Python function that calculates the Fibonacci sequence"
 )
+print(result)
 ```
 
-## Real-World Use Cases
+#### 🔧 Available Agent Modes
+- 💻 `code`: Coding-focused agent with basic capabilities
+- 🔄 `basic`: General-purpose agent without coding tools
+- 🖲️ `interpreter`: Interactive code execution agent
+- ⭐ `full`: Full-featured agent with all capabilities
+- 📝 `code-basic`: Coding agent with basic reasoning
+- 🔍 `search`: Web search agent with Wikipedia, DuckDuckGo and SERPApi integration
 
-- **Code Generation**: Write, refactor, and debug code
-- **Data Analysis**: Process and analyze data with natural language commands
-- **Task Automation**: Automate repetitive tasks with intelligent workflows
-- **Information Retrieval**: Search and summarize information from various sources
+## ✨ Key Features
+
+- 🌐 **Universal LLM Support**: Integration with OpenAI, Anthropic, LM Studio, Bedrock, Ollama, DeepSeek V3, via LiteLLM
+- 🔒 **Secure Tool System**: Docker-based code execution and file manipulation tools
+- 📊 **Real-time Monitoring**: Web interface with SSE-based event visualization
+- 🧠 **Memory Management**: Intelligent context handling and optimization
+- 🏢 **Enterprise Ready**: Comprehensive logging, error handling, and validation system
+
+## 💡 Real-World Use Cases
+
+- 💻 **Code Generation**: Write, refactor, and debug code
+- 📊 **Data Analysis**: Process and analyze data with natural language commands
+- 🤖 **Task Automation**: Automate repetitive tasks with intelligent workflows
+- 🔍 **Information Retrieval**: Search and summarize information from various sources
 
 ## Getting Started
 

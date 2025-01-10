@@ -165,6 +165,5 @@ print(result)
 
 ## Next Steps
 
-- Learn about [Memory Management](../components/memory.md)
 - Explore [Tool Development](../best-practices/tool-development.md)
 - Try [Task Automation](task-automation.md)

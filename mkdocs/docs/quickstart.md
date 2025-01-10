@@ -49,5 +49,4 @@ quantalogic --mode search task "Research latest AI trends in healthcare"
 ```
 
 ## Next Steps
-- [Components Overview](/components/react)
 - [CLI Reference](/cli)

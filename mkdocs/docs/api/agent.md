@@ -257,5 +257,5 @@ except MaxIterationsError:
 ## Next Steps
 
 - Learn about [Tool Development](../best-practices/tool-development.md)
-- Explore [Memory Management](../components/memory.md)
-- Check [Event System](../components/events.md)
+- Explore Memory Management
+- Check Event System

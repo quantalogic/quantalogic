@@ -305,5 +305,4 @@ result = bash_tool.execute(
 ## Next Steps
 
 - Learn about [Tool Development](../best-practices/tool-development.md)
-- Explore [Event System](../components/events.md)
-- Check [Memory Management](../components/memory.md)
+- Check [Memory Management](../memory.md)

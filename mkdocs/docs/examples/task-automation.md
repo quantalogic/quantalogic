@@ -1,191 +1,138 @@
 # Task Automation
 
-Learn how to use QuantaLogic for automating complex tasks like web scraping, content analysis, and data processing.
+Learn how to use QuantaLogic to automate complex tasks by combining AI reasoning with practical actions.
 
-## Task Automation Tools
+## Basic Task Automation
 
-QuantaLogic provides specialized tools for automation:
+Start with a simple task:
 
 ```python
-from quantalogic.tools import (
-    LLMTool,         # Language model operations
-    MarkitdownTool,  # Web content processing
-    # ... other tools
+from quantalogic import Agent
+
+# Initialize the agent
+agent = Agent(model_name="deepseek/deepseek-chat")
+
+# Execute a simple task
+result = agent.solve_task(
+    "Analyze this Python file and list potential improvements"
 )
 ```
 
-## Setting Up Automation Agent
+## Multi-Step Tasks
 
-Create an agent with automation tools:
-
-```python
-agent = Agent(
-    model_name="gpt-4o-mini",  # Or your preferred model
-    tools=[
-        MarkitdownTool(),
-        LLMTool(model_name="gpt-4o-mini"),
-    ],
-)
-```
-
-## Common Automation Tasks
-
-### 1. Web Content Analysis
+Handle complex operations by breaking them down:
 
 ```python
-# Analyze latest AI research
-result = agent.solve_task("""
-1. Read AI papers from arXiv
-2. Select top 5 impactful articles
-3. Summarize key findings
-""")
-```
-
-### 2. Data Processing
-
-```python
-# Process and analyze data
-result = agent.solve_task("""
-1. Read CSV files in data directory
-2. Clean and normalize data
-3. Generate insights report
-""")
-```
-
-### 3. Content Generation
-
-```python
-# Generate content based on research
-result = agent.solve_task("""
-1. Research topic X
-2. Analyze key trends
-3. Write comprehensive report
-""")
-```
-
-## Example: AI Research Analysis
-
-Here's a complete example that automates AI research analysis:
-
-```python
-import os
+# Initialize agent with event monitoring
 from quantalogic import Agent, console_print_events
-from quantalogic.tools import LLMTool, MarkitdownTool
 
-# Set up agent
-agent = Agent(
-    model_name="gpt-4o-mini",
-    tools=[
-        MarkitdownTool(),
-        LLMTool(model_name="gpt-4o-mini"),
+agent = Agent(model_name="deepseek/deepseek-chat")
+agent.event_emitter.on(
+    [
+        "task_complete",
+        "task_think_start",
+        "task_think_end",
     ],
+    console_print_events,
 )
 
-# Enable event monitoring
-agent.event_emitter.on("*", console_print_events)
+# Execute multi-step task
+result = agent.solve_task(
+    "1. Write a poem in English about a dog\n"
+    "2. Translate the poem into French\n"
+    "3. Choose 2 French authors\n"
+    "4. Rewrite the translated poem in their styles"
+)
+```
 
-# Execute research task
-result = agent.solve_task("""
-1. Read the latest AI research from:
-   https://arxiv.org/search/cs?query=artificial+intelligence+survey
-   &searchtype=all&abstracts=show&order=-announced_date_first&size=25
+## Data Processing Tasks
 
-2. Select top 5 articles based on:
-   - Impact on AI field
-   - Novel approaches
-   - Practical applications
+Automate data analysis and transformation:
 
-3. For each article provide:
-   - Key findings
-   - Methodology
-   - Potential applications
-""")
+```python
+from quantalogic import Agent
+from quantalogic.tools import LLMTool
+
+# Initialize agent with LLM tool
+agent = Agent(
+    model_name="deepseek/deepseek-chat",
+    tools=[LLMTool(model_name="deepseek/deepseek-chat")]
+)
+
+# Process and summarize data
+result = agent.solve_task(
+    "1. Read the CSV file\n"
+    "2. Analyze the trends\n"
+    "3. Generate a summary report"
+)
 ```
 
 ## Best Practices
 
-### 1. Task Definition
-- Be specific about requirements
-- Break complex tasks into steps
-- Define clear success criteria
+1. **Task Structure**
+   - Break complex tasks into steps
+   - Use clear, specific instructions
+   - Include validation steps
 
-### 2. Tool Selection
-- Choose appropriate tools for each task
-- Combine tools for complex operations
-- Monitor tool performance
+2. **Error Handling**
+   - Plan for failures
+   - Add retry logic
+   - Validate results
 
-### 3. Error Handling
-- Plan for network issues
-- Handle rate limits
-- Implement retries
+3. **Performance**
+   - Monitor execution time
+   - Optimize resource usage
+   - Cache when appropriate
 
-### 4. Performance Optimization
-- Cache frequently accessed data
-- Use batch processing when possible
-- Monitor memory usage
+4. **Maintenance**
+   - Document automation flows
+   - Log important events
+   - Review and update regularly
 
-## Tool Reference
+## Common Use Cases
 
-### MarkitdownTool
-- Processes web content
-- Handles various formats
-- Extracts structured data
+1. **Code Management**
+   ```python
+   result = agent.solve_task(
+       "1. Find all TODO comments\n"
+       "2. Prioritize by importance\n"
+       "3. Create implementation plan"
+   )
+   ```
 
-### LLMTool
-- Natural language processing
-- Content generation
-- Text analysis
+2. **Documentation**
+   ```python
+   result = agent.solve_task(
+       "1. Review code changes\n"
+       "2. Update documentation\n"
+       "3. Generate changelog"
+   )
+   ```
 
-## Example Use Cases
+3. **Testing**
+   ```python
+   result = agent.solve_task(
+       "1. Analyze test coverage\n"
+       "2. Identify gaps\n"
+       "3. Generate missing tests"
+   )
+   ```
 
-### 1. Research Assistant
-```python
-result = agent.solve_task("""
-1. Research quantum computing advances
-2. Analyze implementation challenges
-3. Summarize practical applications
-""")
-```
+## Tips for Success
 
-### 2. Data Analyst
-```python
-result = agent.solve_task("""
-1. Analyze sales data
-2. Identify trends
-3. Generate visualization code
-4. Create summary report
-""")
-```
+1. **Start Small**
+   - Begin with simple tasks
+   - Add complexity gradually
+   - Test thoroughly
 
-### 3. Content Curator
-```python
-result = agent.solve_task("""
-1. Monitor tech news sources
-2. Select relevant articles
-3. Generate summaries
-4. Create newsletter
-""")
-```
+2. **Monitor Progress**
+   - Use event monitoring
+   - Track completion rates
+   - Analyze failures
 
-## Monitoring and Debugging
+3. **Iterate and Improve**
+   - Gather feedback
+   - Refine prompts
+   - Optimize workflows
 
-Enable comprehensive monitoring:
-
-```python
-agent.event_emitter.on(
-    [
-        "task_start",
-        "web_request",
-        "content_processing",
-        "analysis_complete",
-        "error",
-    ],
-    console_print_events,
-)
-```
-
-## Next Steps
-
-- Explore [Memory Management](../components/memory.md)
-- Learn about [Tool Development](../best-practices/tool-development.md)
-- Read the [API Reference](../api/tools.md)
+Remember: Automation should make tasks easier and more reliable. If a task becomes too complex, break it down into smaller, manageable pieces.
