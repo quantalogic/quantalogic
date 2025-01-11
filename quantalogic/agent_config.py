@@ -60,7 +60,7 @@ def create_agent(model_name: str, vision_model_name: str | None) -> Agent:
     ]
 
     if vision_model_name:
-        tools.append(LLMVisionTool(model_name=vision_model_name))
+        tools.append(LLMVisionTool(model_name=vision_model_name, on_token=console_print_token))
 
     return Agent(
         model_name=model_name,
@@ -132,7 +132,7 @@ def create_full_agent(model_name: str, vision_model_name: str | None) -> Agent:
     ]
 
     if vision_model_name:
-        tools.append(LLMVisionTool(model_name=vision_model_name))
+        tools.append(LLMVisionTool(model_name=vision_model_name,on_token=console_print_token))
 
     return Agent(
         model_name=model_name,
@@ -166,7 +166,7 @@ def create_orchestrator_agent(model_name: str, vision_model_name: str | None = N
     ]
 
     if vision_model_name:
-        tools.append(LLMVisionTool(model_name=vision_model_name))
+        tools.append(LLMVisionTool(model_name=vision_model_name, on_token=console_print_token))
 
     return Agent(
         model_name=model_name,

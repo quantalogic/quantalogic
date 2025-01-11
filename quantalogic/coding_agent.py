@@ -65,7 +65,7 @@ def create_coding_agent(model_name: str, vision_model_name: str | None = None, b
     ]
 
     if vision_model_name:
-        tools.append(LLMVisionTool(model_name=vision_model_name))
+        tools.append(LLMVisionTool(model_name=vision_model_name, on_token=console_print_token))
 
     if not basic:
         tools.append(
