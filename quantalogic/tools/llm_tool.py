@@ -1,9 +1,11 @@
 """LLM Tool for generating answers to questions using a language model."""
 
-import logging
+from typing import Callable
 
+from loguru import logger
 from pydantic import ConfigDict, Field
 
+from quantalogic.console_print_token import console_print_token
 from quantalogic.generative_model import GenerativeModel, Message
 from quantalogic.tools.tool import Tool, ToolArgument
 
@@ -55,12 +57,30 @@ class LLMTool(Tool):
     model_name: str = Field(..., description="The name of the language model to use")
     generative_model: GenerativeModel | None = Field(default=None)
     system_prompt: str | None = Field(default=None)
+    on_token: Callable | None = Field(default=None, exclude=True)
+
+
+    def __init__(self, model_name: str, system_prompt: str | None = None, on_token: Callable | None = None):
+        # Use dict to pass validated data to parent constructor
+        super().__init__(**{
+            'model_name': model_name, 
+            'system_prompt': system_prompt, 
+            'on_token': on_token
+        })
+        
+        # Initialize the generative model
+        self.model_post_init(None)   
 
     def model_post_init(self, __context):
         """Initialize the generative model after model initialization."""
         if self.generative_model is None:
             self.generative_model = GenerativeModel(model=self.model_name)
-            logging.debug(f"Initialized LLMTool with model: {self.model_name}")
+            logger.debug(f"Initialized LLMTool with model: {self.model_name}")
+
+        # Only set up event listener if on_token is provided
+        if self.on_token is not None:
+            logger.debug(f"Setting up event listener for LLMTool with model: {self.model_name}")
+            self.generative_model.event_emitter.on("stream_chunk", self.on_token)
 
 
     def execute(
@@ -85,7 +105,7 @@ class LLMTool(Tool):
             if not (0.0 <= temp <= 1.0):
                 raise ValueError("Temperature must be between 0 and 1.")
         except ValueError as ve:
-            logging.error(f"Invalid temperature value: {temperature}")
+            logger.error(f"Invalid temperature value: {temperature}")
             raise ValueError(f"Invalid temperature value: {temperature}") from ve
 
         used_system_prompt = self.system_prompt if self.system_prompt else system_prompt
@@ -96,20 +116,29 @@ class LLMTool(Tool):
             Message(role="user", content=prompt),
         ]
 
+        is_streaming = self.on_token is not None
+
         # Set the model's temperature
         if self.generative_model:
             self.generative_model.temperature = temp
 
             # Generate the response using the generative model
             try:
-                response_stats = self.generative_model.generate_with_history(
-                    messages_history=messages_history, prompt=""
+                result = self.generative_model.generate_with_history(
+                    messages_history=messages_history, prompt=prompt, streaming=is_streaming
                 )
-                response = response_stats.response.strip()
-                logging.info(f"Generated response: {response}")
+                
+                if is_streaming:
+                    response = ""
+                    for chunk in result:
+                        response += chunk
+                else:
+                    response = result.response
+                    
+                logger.debug(f"Generated response: {response}")
                 return response
             except Exception as e:
-                logging.error(f"Error generating response: {e}")
+                logger.error(f"Error generating response: {e}")
                 raise Exception(f"Error generating response: {e}") from e
         else:
             raise ValueError("Generative model not initialized")
@@ -123,6 +152,7 @@ if __name__ == "__main__":
     temperature = "0.7"
     answer = tool.execute(system_prompt=system_prompt, prompt=question, temperature=temperature)
     print(answer)
-    pirate = LLMTool(model_name="openrouter/openai/gpt-4o-mini", system_prompt="You are a pirate.")
+    pirate = LLMTool(model_name="openrouter/openai/gpt-4o-mini", system_prompt="You are a pirate.",on_token=console_print_token)
     pirate_answer = pirate.execute(system_prompt=system_prompt, prompt=question, temperature=temperature)
-    print(pirate_answer)
+    print("\n")
+    print(f"Anwser: {pirate_answer}")
