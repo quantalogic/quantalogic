@@ -1,5 +1,3 @@
-"""Print events with rich formatting."""
-
 from typing import Any
 
 from rich import box

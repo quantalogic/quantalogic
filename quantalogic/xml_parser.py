@@ -7,6 +7,7 @@ with support for handling malformed XML and CDATA sections.
 import html
 import re
 from collections import defaultdict
+from functools import lru_cache
 from typing import Self
 
 from loguru import logger
@@ -51,14 +52,37 @@ class ToleranceXMLParser:
     edge cases such as incomplete tags and CDATA sections.
     """
 
+    # Default mappings for element name normalization
+    DEFAULT_NAME_MAP = {
+        "o": "output",
+        "i": "input",
+        "opt": "optional"
+    }
+
     def __init__(self: Self) -> None:
         """Initialize the parser with regex patterns for matching XML-like elements."""
-        # Pattern for matching individual XML elements, including malformed tags
-        # Modified to be more lenient with content and preserve exact formatting
-        self.element_pattern = re.compile(r"<([^/>]+?)>(.*?)(?:</\1>|<\1>)", re.DOTALL)
+        # Pattern for matching individual XML elements with better whitespace handling
+        self.element_pattern = re.compile(
+            r"<\s*([^/>]+?)\s*>(.*?)(?:</\s*\1\s*>|<\s*\1\s*>)",
+            re.DOTALL
+        )
         # Pattern for matching CDATA sections
         self.cdata_pattern = re.compile(r"<!\[CDATA\[(.*?)]]>", re.DOTALL)
         logger.debug("Initialized ToleranceXMLParser with regex patterns")
+
+    def _validate_input(self, text: str) -> None:
+        """Validate input text before processing.
+        
+        Args:
+            text: Input text to validate.
+            
+        Raises:
+            ValueError: If input text is invalid.
+        """
+        if not text or not isinstance(text, str):
+            raise ValueError("Input text must be a non-empty string")
+        if len(text.strip()) == 0:
+            raise ValueError("Input text cannot be whitespace only")
 
     def _extract_and_remove_cdata(self: Self, content: str, preserve_cdata: bool = False) -> tuple[str, list[str]]:
         """Extract CDATA sections from content.
@@ -96,6 +120,7 @@ class ToleranceXMLParser:
         # Only unescape HTML entities, preserve everything else exactly as is
         return html.unescape(content)
 
+    @lru_cache(maxsize=128)
     def _map_element_name(self: Self, name: str) -> str:
         """Map element names to their canonical form.
 
@@ -105,9 +130,82 @@ class ToleranceXMLParser:
         Returns:
             Canonical element name.
         """
-        # Map common element name variations
-        name_map = {"o": "output", "i": "input", "opt": "optional"}
-        return name_map.get(name.strip(), name.strip())
+        return self.DEFAULT_NAME_MAP.get(name.strip(), name.strip())
+
+    def _build_element_pattern(self, element_name: str) -> re.Pattern[str]:
+        """Build regex pattern for finding specific XML elements.
+        
+        Args:
+            element_name: Name of the element to match.
+            
+        Returns:
+            Compiled regex pattern for matching the element.
+        """
+        non_cdata = r"(?:(?!<!\[CDATA\[|]]>).)*?"
+        cdata_section = r"(?:<!\[CDATA\[.*?]]>)?"
+        content_pattern = f"({non_cdata}{cdata_section}{non_cdata})"
+        closing_pattern = "(?:</\1>|<\1>)"
+        
+        return re.compile(
+            f"<{element_name}>{content_pattern}{closing_pattern}",
+            re.DOTALL
+        )
+
+    def _find_all_elements(self, text: str) -> list[tuple[str, str]]:
+        """Find all XML elements in text.
+        
+        Args:
+            text: Input text to search.
+            
+        Returns:
+            List of tuples containing element names and their content.
+        """
+        return [(match.group(1), match.group(2) or "") 
+                for match in self.element_pattern.finditer(text)]
+
+    def _process_element_content(self, content: str, preserve_cdata: bool) -> str:
+        """Process content of a single element.
+        
+        Args:
+            content: Raw element content.
+            preserve_cdata: Whether to preserve CDATA sections.
+            
+        Returns:
+            Processed content string.
+        """
+        content, cdata_sections = self._extract_and_remove_cdata(content, preserve_cdata)
+        content = self._clean_content(content)
+        
+        # If content is empty but we have CDATA sections and we're not preserving them
+        if not content.strip() and cdata_sections and not preserve_cdata:
+            return cdata_sections[0]
+        return content
+
+    def _process_elements(
+        self, 
+        elements: list[tuple[str, str]], 
+        preserve_cdata: bool
+    ) -> dict[str, str]:
+        """Process found elements and handle CDATA sections.
+        
+        Args:
+            elements: List of element name and content tuples.
+            preserve_cdata: Whether to preserve CDATA sections.
+            
+        Returns:
+            Dictionary mapping element names to their processed content.
+        """
+        result: dict[str, str] = defaultdict(str)
+        for name, content in elements:
+            name = self._map_element_name(name)
+            result[name] = self._process_element_content(content, preserve_cdata)
+            
+            # Handle nested elements
+            nested_elements = self._find_all_elements(content)
+            nested_results = self._process_elements(nested_elements, preserve_cdata)
+            result.update(nested_results)
+            
+        return dict(result)
 
     def _extract_element_content(self: Self, text: str, preserve_cdata: bool = False) -> dict[str, str]:
         """Extract content from nested XML elements.
@@ -119,35 +217,8 @@ class ToleranceXMLParser:
         Returns:
             Dictionary mapping element names to their content values.
         """
-        elements: dict[str, str] = defaultdict(str)
-
-        # Process each match
-        for match in self.element_pattern.finditer(text):
-            name = match.group(1)
-            content = match.group(2) or ""
-
-            # Map element name to canonical form
-            name = self._map_element_name(name)
-
-            # Extract and handle CDATA sections
-            content, cdata_sections = self._extract_and_remove_cdata(content, preserve_cdata)
-
-            # Clean and normalize content
-            content = self._clean_content(content)
-
-            # If the content is empty but we have CDATA sections and we're
-            # not preserving them
-            if not content.strip() and cdata_sections and not preserve_cdata:
-                content = cdata_sections[0]
-
-            # Store the element content
-            elements[name] = content
-
-            # Extract nested elements from the content
-            nested_elements = self._extract_element_content(content, preserve_cdata)
-            elements.update(nested_elements)
-
-        return dict(elements)  # Convert defaultdict to regular dict
+        elements = self._find_all_elements(text)
+        return self._process_elements(elements, preserve_cdata)
 
     def extract_elements(
         self: Self,
@@ -172,9 +243,7 @@ class ToleranceXMLParser:
             ValueError: If the input text is invalid or contains malformed XML.
         """
         try:
-            if not text or not isinstance(text, str):
-                raise ValueError("Input text must be a non-empty string")
-
+            self._validate_input(text)
             logger.debug(f"Extracting elements: {element_names or 'all'}")
 
             # Extract all elements and their content
@@ -206,18 +275,9 @@ class ToleranceXMLParser:
             ValueError: If the input text is invalid or contains malformed XML.
         """
         try:
-            if not text or not isinstance(text, str):
-                raise ValueError("Input text must be a non-empty string")
-
+            self._validate_input(text)
             elements: list[XMLElement] = []
-            pattern = re.compile(
-                f"<{element_name}>"
-                r"((?:(?!<!\[CDATA\[|]]>).)*?"
-                r"(?:<!\[CDATA\[.*?]]>)?"
-                r"(?:(?!<!\[CDATA\[|]]>).)*?)"
-                f"(?:</\1>|<\1>)",
-                re.DOTALL,
-            )
+            pattern = self._build_element_pattern(element_name)
 
             for match in pattern.finditer(text):
                 content = match.group(1)

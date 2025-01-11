@@ -1,138 +1,190 @@
-# Task Automation
+# Task Automation with AI
 
-Learn how to use QuantaLogic to automate complex tasks by combining AI reasoning with practical actions.
+Learn how to automate complex tasks using QuantaLogic's intelligent agent system, combining multiple tools and reasoning capabilities.
 
-## Basic Task Automation
+## Overview
 
-Start with a simple task:
+Task automation enables your agent to:
+- Process web content
+- Analyze and summarize information
+- Integrate multiple tools
+- Perform multi-step reasoning tasks
+
+## Prerequisites
+
+- Python 3.12 or later
+- QuantaLogic library installed
+- OpenAI API key (or alternative LLM provider)
+
+## Setting Up Task Automation Tools
 
 ```python
+import os
 from quantalogic import Agent
+from quantalogic.console_print_events import console_print_events
+from quantalogic.console_print_token import console_print_token
+from quantalogic.tools import (
+    LLMTool, 
+    MarkitdownTool
+)
 
-# Initialize the agent
-agent = Agent(model_name="deepseek/deepseek-chat")
+# Set API key
+os.environ["OPENAI_API_KEY"] = "your-openai-key"
 
-# Execute a simple task
-result = agent.solve_task(
-    "Analyze this Python file and list potential improvements"
+# Define model and tools
+MODEL_NAME = "gpt-4o-mini"
+agent = Agent(
+    model_name=MODEL_NAME,
+    tools=[
+        MarkitdownTool(),
+        LLMTool(
+            model_name=MODEL_NAME, 
+            on_token=console_print_token
+        ),
+    ],
 )
 ```
 
-## Multi-Step Tasks
+## Available Automation Tools
 
-Handle complex operations by breaking them down:
+| Tool | Description |
+|------|-------------|
+| `MarkitdownTool` | Read and process web content |
+| `LLMTool` | Perform advanced reasoning tasks |
+
+## Example Tasks
+
+### 1. Web Content Analysis
 
 ```python
-# Initialize agent with event monitoring
-from quantalogic import Agent, console_print_events
+# Analyze and summarize latest AI research
+result = agent.solve_task(
+    """
+    1. Read the latest news about AI from arxiv.org
+    2. Select the top 5 articles based on impact
+    3. Summarize key points of each article
+    """,
+    streaming=True
+)
+print(result)
+```
 
-agent = Agent(model_name="deepseek/deepseek-chat")
+### 2. Multi-Step Research Task
+
+```python
+# Comprehensive research task
+result = agent.solve_task(
+    """
+    1. Research emerging AI technologies
+    2. Compare different machine learning approaches
+    3. Create a summary report with pros and cons
+    """,
+    streaming=True
+)
+print(result)
+```
+
+### 3. Content Summarization
+
+```python
+# Summarize complex documents
+result = agent.solve_task(
+    """
+    1. Read a long research paper
+    2. Extract key findings
+    3. Write an executive summary
+    """,
+    streaming=True
+)
+print(result)
+```
+
+## Event Monitoring
+
+Track task execution and debug complex workflows:
+
+```python
+# Configure event listeners
 agent.event_emitter.on(
-    [
+    event=[
         "task_complete",
         "task_think_start",
         "task_think_end",
+        "tool_execution_start",
+        "tool_execution_end",
     ],
-    console_print_events,
+    listener=console_print_events
 )
 
-# Execute multi-step task
-result = agent.solve_task(
-    "1. Write a poem in English about a dog\n"
-    "2. Translate the poem into French\n"
-    "3. Choose 2 French authors\n"
-    "4. Rewrite the translated poem in their styles"
-)
-```
-
-## Data Processing Tasks
-
-Automate data analysis and transformation:
-
-```python
-from quantalogic import Agent
-from quantalogic.tools import LLMTool
-
-# Initialize agent with LLM tool
-agent = Agent(
-    model_name="deepseek/deepseek-chat",
-    tools=[LLMTool(model_name="deepseek/deepseek-chat")]
-)
-
-# Process and summarize data
-result = agent.solve_task(
-    "1. Read the CSV file\n"
-    "2. Analyze the trends\n"
-    "3. Generate a summary report"
+# Optional token streaming
+agent.event_emitter.on(
+    event=["stream_chunk"],
+    listener=console_print_token
 )
 ```
 
 ## Best Practices
 
-1. **Task Structure**
-   - Break complex tasks into steps
-   - Use clear, specific instructions
-   - Include validation steps
+- Break complex tasks into clear steps
+- Use streaming for long-running tasks
+- Leverage multiple tools
+- Monitor task execution
+- Validate results
 
-2. **Error Handling**
-   - Plan for failures
-   - Add retry logic
-   - Validate results
+!!! tip "Intelligent Automation"
+    Combine tools creatively to solve complex, multi-step tasks.
 
-3. **Performance**
-   - Monitor execution time
-   - Optimize resource usage
-   - Cache when appropriate
+## Complete Code Example
 
-4. **Maintenance**
-   - Document automation flows
-   - Log important events
-   - Review and update regularly
+```python
+import os
+from quantalogic import Agent
+from quantalogic.console_print_events import console_print_events
+from quantalogic.console_print_token import console_print_token
+from quantalogic.tools import (
+    LLMTool, 
+    MarkitdownTool
+)
 
-## Common Use Cases
+# Set API key
+os.environ["OPENAI_API_KEY"] = "your-openai-key"
 
-1. **Code Management**
-   ```python
-   result = agent.solve_task(
-       "1. Find all TODO comments\n"
-       "2. Prioritize by importance\n"
-       "3. Create implementation plan"
-   )
-   ```
+# Initialize agent with task automation tools
+MODEL_NAME = "gpt-4o-mini"
+agent = Agent(
+    model_name=MODEL_NAME,
+    tools=[
+        MarkitdownTool(),
+        LLMTool(
+            model_name=MODEL_NAME, 
+            on_token=console_print_token
+        ),
+    ],
+)
 
-2. **Documentation**
-   ```python
-   result = agent.solve_task(
-       "1. Review code changes\n"
-       "2. Update documentation\n"
-       "3. Generate changelog"
-   )
-   ```
+# Configure event monitoring
+agent.event_emitter.on(
+    event=[
+        "task_complete",
+        "task_think_start",
+        "task_think_end",
+        "tool_execution_start",
+        "tool_execution_end",
+    ],
+    listener=console_print_events
+)
 
-3. **Testing**
-   ```python
-   result = agent.solve_task(
-       "1. Analyze test coverage\n"
-       "2. Identify gaps\n"
-       "3. Generate missing tests"
-   )
-   ```
+# Execute a complex task
+result = agent.solve_task(
+    """
+    1. Read the latest news about AI from arxiv.org
+    2. Select the top 5 articles based on impact
+    3. Summarize key points of each article
+    """,
+    streaming=True
+)
+print(result)
+```
 
-## Tips for Success
-
-1. **Start Small**
-   - Begin with simple tasks
-   - Add complexity gradually
-   - Test thoroughly
-
-2. **Monitor Progress**
-   - Use event monitoring
-   - Track completion rates
-   - Analyze failures
-
-3. **Iterate and Improve**
-   - Gather feedback
-   - Refine prompts
-   - Optimize workflows
-
-Remember: Automation should make tasks easier and more reliable. If a task becomes too complex, break it down into smaller, manageable pieces.
+!!! warning "Task Complexity"
+    Start with simple tasks and gradually increase complexity.

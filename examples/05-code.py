@@ -1,6 +1,8 @@
 import os
 
-from quantalogic import Agent, console_print_events
+from quantalogic import Agent
+from quantalogic.console_print_events import console_print_events
+from quantalogic.console_print_token import console_print_token
 from quantalogic.tools import (
     ListDirectoryTool,
     ReadFileBlockTool,
@@ -39,9 +41,18 @@ agent = Agent(
 # - Task progress
 # Essential for debugging and performance optimization
 agent.event_emitter.on(
-    "*",
+    [
+        "task_complete",
+        "task_think_start",
+        "task_think_end",
+        "tool_execution_start",
+        "tool_execution_end",
+        "error_max_iterations_reached",
+    ],
     console_print_events,
 )
+
+agent.event_emitter.on(event=["stream_chunk"], listener=console_print_token)
 
 
 # Execute a complex file operation task demonstrating:
@@ -49,9 +60,12 @@ agent.event_emitter.on(
 # - File content analysis
 # - Comment updates
 # - Integration of multiple tools
-result = agent.solve_task("""
+result = agent.solve_task(
+    """
 
 1. Update all the files at the first level of the ./examples directory
 2. Update the comments of each file to make it more relevant and informative: focus on why
 
-""")
+""",
+    streaming=True,
+)

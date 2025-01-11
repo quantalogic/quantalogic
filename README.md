@@ -84,20 +84,16 @@ The QuantaLogic CLI provides powerful command-line capabilities:
 
 ```bash
 Usage: quantalogic [OPTIONS] COMMAND [ARGS]...
-
   QuantaLogic AI Assistant - A powerful AI tool for various tasks.
 
 Options:
   --version                       Show version information.
-  --model-name TEXT               Specify the text model to use (litellm format,
-                                  e.g. "openrouter/deepseek/deepseek-chat").
-  --vision-model-name TEXT        Specify the vision model to use (litellm format,
-                                  e.g. "openrouter/openai/gpt-4o-mini").
-  --log [info|debug|warning]      Set logging level (info/debug/warning).
+  --model-name TEXT               Specify the model (litellm format, e.g., "openrouter/deepseek/deepseek-chat").
+  --log [info|debug|warning]      Set logging level.
   --verbose                       Enable verbose output.
+  --mode [code|basic|interpreter|full|code-basic|search|search-full]  Agent mode.
+  --vision-model-name TEXT        Specify the vision model (litellm format, e.g., "openrouter/A/gpt-4o-mini").
   --max-iterations INTEGER        Maximum iterations for task solving (default: 30).
-  --mode [code|basic|interpreter|full|code-basic|search|search-full]
-                                  Agent mode (code/search/full).
   --help                          Show this message and exit.
 
 Commands:
@@ -106,6 +102,19 @@ Commands:
 
 ### Commands
 task    Execute a task with the QuantaLogic AI Assistant
+
+**Usage:** `quantalogic task [OPTIONS] [TASK]`  
+**Description:** Execute a task with the QuantaLogic AI Assistant.  
+**Options:**  
+- `--file PATH`: Path to task file.  
+- `--model-name TEXT`: Specify the model (litellm format, e.g., `openrouter/deepseek/deepseek-chat`).  
+- `--verbose`: Enable verbose output.  
+- `--mode [code|basic|interpreter|full|code-basic|search|search-full]`: Agent mode.  
+- `--log [info|debug|warning]`: Set logging level.  
+- `--vision-model-name TEXT`: Specify the vision model (litellm format).  
+- `--max-iterations INTEGER`: Maximum iterations for task solving (default: 30).  
+- `--no-stream`: Disable streaming output (default: enabled).  
+- `--help`: Show this message and exit.
 
 
 

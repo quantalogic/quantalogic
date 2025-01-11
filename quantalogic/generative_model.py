@@ -7,9 +7,12 @@ from litellm import completion, exceptions, get_max_tokens, get_model_info, toke
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
+from quantalogic.event_emitter import EventEmitter  # Importing the EventEmitter class
+
 MIN_RETRIES = 1
 
 
+# Define the Message class for conversation handling
 class Message(BaseModel):
     """Represents a message in a conversation with a specific role and content."""
 
@@ -70,21 +73,22 @@ class GenerativeModel:
         self,
         model: str = "ollama/qwen2.5-coder:14b",
         temperature: float = 0.7,
+        event_emitter: EventEmitter = None,  # EventEmitter instance
     ) -> None:
         """Initialize a generative model with configurable parameters.
 
-        Configure the generative model with specified model,
-        temperature, and maximum token settings.
-
         Args:
-            model: Model identifier.
-                Defaults to "ollama/qwen2.5-coder:14b".
-            temperature: Sampling temperature between 0 and 1.
-                Defaults to 0.7.
+            model: Model identifier. Defaults to "ollama/qwen2.5-coder:14b".
+            temperature: Temperature parameter for controlling randomness in generation. 
+                        Higher values (e.g. 0.8) make output more random, lower values (e.g. 0.2) 
+                        make it more deterministic. Defaults to 0.7.
+            event_emitter: Optional event emitter instance for handling asynchronous events 
+                          and callbacks during text generation. Defaults to None.
         """
         logger.debug(f"Initializing GenerativeModel with model={model}, temperature={temperature}")
         self.model = model
         self.temperature = temperature
+        self.event_emitter = event_emitter or EventEmitter()  # Initialize event emitter
         self._get_model_info_cached = functools.lru_cache(maxsize=32)(self._get_model_info_impl)
 
     # Define retriable exceptions based on LiteLLM's exception mapping
@@ -109,28 +113,20 @@ class GenerativeModel:
         exceptions.PermissionDeniedError,
     )
 
-    # Retry on specific retriable exceptions
+    # Generate a response with conversation history and optional streaming
     def generate_with_history(
-        self, messages_history: list[Message], prompt: str, image_url: str | None = None
+        self, messages_history: list[Message], prompt: str, image_url: str | None = None, streaming: bool = False
     ) -> ResponseStats:
         """Generate a response with conversation history and optional image.
-
-        Generates a response based on previous conversation messages,
-        a new user prompt, and an optional image URL.
 
         Args:
             messages_history: Previous conversation messages.
             prompt: Current user prompt.
             image_url: Optional image URL for visual queries.
+            streaming: Whether to stream the response.
 
         Returns:
-            Detailed response statistics.
-
-        Raises:
-            openai.AuthenticationError: If authentication fails.
-            openai.InvalidRequestError: If the request is invalid (e.g., context length exceeded).
-            openai.APIError: For content policy violations or other API errors.
-            Exception: For other unexpected errors.
+            Detailed response statistics or a generator in streaming mode.
         """
         messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages_history]
 
@@ -146,6 +142,10 @@ class GenerativeModel:
             )
         else:
             messages.append({"role": "user", "content": str(prompt)})
+
+        if streaming:
+            self.event_emitter.emit("stream_start")  # Emit stream start event
+            return self._stream_response(messages)  # Return generator
 
         try:
             logger.debug(f"Generating response for prompt: {prompt}")
@@ -171,54 +171,68 @@ class GenerativeModel:
             )
 
         except Exception as e:
-            error_details = {
-                "error_type": type(e).__name__,
-                "message": str(e),
-                "model": self.model,
-                "provider": getattr(e, "llm_provider", "unknown"),
-                "status_code": getattr(e, "status_code", None),
-            }
+            self._handle_generation_exception(e)
 
-            logger.error("LLM Generation Error: {}", error_details)
-            logger.debug(f"Error details: {error_details}")
-            logger.debug(f"Model: {self.model}, Temperature: {self.temperature}")
+    def _stream_response(self, messages):
+        """Private method to handle streaming responses."""
+        try:
+            for chunk in completion(
+                temperature=self.temperature,
+                model=self.model,
+                messages=messages,
+                num_retries=MIN_RETRIES,
+                stream=True,  # Enable streaming
+            ):
+                if chunk.choices[0].delta.content is not None:
+                    self.event_emitter.emit("stream_chunk", chunk.choices[0].delta.content)
+                    yield chunk.choices[0].delta.content  # Yield each chunk of content
 
-            # Handle authentication and permission errors
-            if isinstance(e, self.AUTH_EXCEPTIONS):
-                logger.debug("Authentication error occurred")
-                raise openai.AuthenticationError(
-                    f"Authentication failed with provider {error_details['provider']}"
-                ) from e
+            self.event_emitter.emit("stream_end")  # Emit stream end event
+        except Exception as e:
+            logger.error(f"Streaming error: {str(e)}")
+            raise
 
-            # Handle context window errors
-            if isinstance(e, self.CONTEXT_EXCEPTIONS):
-                raise openai.InvalidRequestError(f"Context window exceeded or invalid request: {str(e)}") from e
-
-            # Handle content policy violations
-            if isinstance(e, self.POLICY_EXCEPTIONS):
-                raise openai.APIError(f"Content policy violation: {str(e)}") from e
-
-            # For other exceptions, preserve the original error type if it's from OpenAI
-            if isinstance(e, openai.OpenAIError):
-                raise
-
-            # Wrap unknown errors in APIError
-            raise openai.APIError(f"Unexpected error during generation: {str(e)}") from e
-
-    def generate(self, prompt: str, image_url: str | None = None) -> ResponseStats:
+    def generate(self, prompt: str, image_url: str | None = None, streaming: bool = False) -> ResponseStats:
         """Generate a response without conversation history.
-
-        Generates a response for a single user prompt without
-        any previous conversation context.
 
         Args:
             prompt: User prompt.
             image_url: Optional image URL for visual queries.
+            streaming: Whether to stream the response.
 
         Returns:
-            Detailed response statistics.
+            Detailed response statistics or a generator in streaming mode.
         """
-        return self.generate_with_history([], prompt, image_url)
+        return self.generate_with_history([], prompt, image_url, streaming)
+
+    def _handle_generation_exception(self, e):
+        """Handle exceptions during generation."""
+        error_details = {
+            "error_type": type(e).__name__,
+            "message": str(e),
+            "model": self.model,
+            "provider": getattr(e, "llm_provider", "unknown"),
+            "status_code": getattr(e, "status_code", None),
+        }
+
+        logger.error("LLM Generation Error: {}", error_details)
+        logger.debug(f"Error details: {error_details}")
+        logger.debug(f"Model: {self.model}, Temperature: {self.temperature}")
+
+        if isinstance(e, self.AUTH_EXCEPTIONS):
+            logger.debug("Authentication error occurred")
+            raise openai.AuthenticationError(f"Authentication failed with provider {error_details['provider']}") from e
+
+        if isinstance(e, self.CONTEXT_EXCEPTIONS):
+            raise openai.InvalidRequestError(f"Context window exceeded or invalid request: {str(e)}") from e
+
+        if isinstance(e, self.POLICY_EXCEPTIONS):
+            raise openai.APIError(f"Content policy violation: {str(e)}") from e
+
+        if isinstance(e, openai.OpenAIError):
+            raise
+
+        raise openai.APIError(f"Unexpected error during generation: {str(e)}") from e
 
     def get_max_tokens(self) -> int:
         """Get the maximum number of tokens that can be generated by the model."""
@@ -239,17 +253,9 @@ class GenerativeModel:
         return token_counter(model=self.model, messages=litellm_messages)
 
     def _get_model_info_impl(self, model_name: str) -> dict:
-        """Get information about the model with prefix fallback logic.
-        
-        Attempts to find model info by progressively removing provider prefixes.
-        Raises ValueError if no valid model configuration is found.
-        Results are cached to improve performance.
-        
-        Example:
-            openrouter/openai/gpt-4o-mini → openai/gpt-4o-mini → gpt-4o-mini
-        """
+        """Get information about the model with prefix fallback logic."""
         original_model = model_name
-        
+
         while True:
             try:
                 logger.debug(f"Attempting to retrieve model info for: {model_name}")
@@ -259,22 +265,19 @@ class GenerativeModel:
                     return model_info
             except Exception:
                 pass
-                
+
             # Try removing one prefix level
-            parts = model_name.split('/')
+            parts = model_name.split("/")
             if len(parts) <= 1:
                 break
-            model_name = '/'.join(parts[1:])
-            
+            model_name = "/".join(parts[1:])
+
         error_msg = f"Could not find model info for {original_model} after trying: {self.model} → {model_name}"
         logger.error(error_msg)
         raise ValueError(error_msg)
 
     def get_model_info(self, model_name: str = None) -> dict:
-        """Get cached information about the model.
-        
-        If no model name is provided, uses the current model.
-        """
+        """Get cached information about the model."""
         if model_name is None:
             model_name = self.model
         return self._get_model_info_cached(model_name)
