@@ -1,6 +1,8 @@
 import os
 
-from quantalogic import Agent, console_print_events
+from quantalogic import Agent
+from quantalogic.console_print_events import console_print_events
+from quantalogic.console_print_token import console_print_token
 from quantalogic.tools import (
     ListDirectoryTool,
     LLMTool,
@@ -23,9 +25,6 @@ VISION_MODEL_NAME = "openrouter/openai/gpt-4o-mini"
 if not os.environ.get("DEEPSEEK_API_KEY"):
     raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
 
-if not os.environ.get("OPENAI_API_KEY"):
-    raise ValueError("OPENAI_API_KEY environment variable is not set")
-
 
 agent = Agent(
     model_name=MODEL_NAME,
@@ -38,7 +37,7 @@ agent = Agent(
         ReadFileBlockTool(),
         ListDirectoryTool(),
         LLMVisionTool(model_name=VISION_MODEL_NAME),
-        LLMTool(model_name=MODEL_NAME, name="product_manager"),
+        LLMTool(model_name=MODEL_NAME, name="product_manager", on_token=console_print_token),
     ],
 )
 
@@ -48,9 +47,18 @@ agent = Agent(
 # 2. Enables real-time progress tracking
 # 3. Allows for future analytics integration
 agent.event_emitter.on(
-    "*",
+    [
+        "task_complete",
+        "task_think_start",
+        "task_think_end",
+        "tool_execution_start",
+        "tool_execution_end",
+        "error_max_iterations_reached",
+    ],
     console_print_events,
 )
+
+agent.event_emitter.on(event=["stream_chunk"], listener=console_print_token)
 
 
 # Example task demonstrating full agent capabilities:
@@ -58,7 +66,8 @@ agent.event_emitter.on(
 # 2. Frontend code generation
 # 3. File system operations
 # This showcases the agent's ability to handle complex, multi-step workflows
-result = agent.solve_task("""
+result = agent.solve_task(
+    """
 
         Your task is to create a functional screen code for a user interface.
 
@@ -90,4 +99,6 @@ result = agent.solve_task("""
 
 
            Check the work done and update if necessary.
-        """)
+        """,
+    streaming=True,
+)

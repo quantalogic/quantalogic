@@ -8,7 +8,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
 from quantalogic.event_emitter import EventEmitter
-from quantalogic.generative_model import GenerativeModel
+from quantalogic.generative_model import GenerativeModel, ResponseStats, TokenUsage
 from quantalogic.memory import AgentMemory, Message, VariableMemory
 from quantalogic.prompts import system_prompt
 from quantalogic.tool_manager import ToolManager
@@ -85,6 +85,9 @@ class Agent(BaseModel):
         """Initialize the agent with model, memory, tools, and configurations."""
         try:
             logger.debug("Initializing agent...")
+            # Create event emitter first
+            event_emitter = EventEmitter()
+
             # Add TaskCompleteTool to the tools list if not already present
             if TaskCompleteTool() not in tools:
                 tools.append(TaskCompleteTool())
@@ -108,7 +111,7 @@ class Agent(BaseModel):
 
             logger.debug("Base class init started ...")
             super().__init__(
-                model=GenerativeModel(model=model_name),
+                model=GenerativeModel(model=model_name, event_emitter=event_emitter),
                 memory=memory,
                 variable_store=VariableMemory(),
                 tools=tool_manager,
@@ -116,19 +119,21 @@ class Agent(BaseModel):
                 ask_for_user_validation=ask_for_user_validation,
                 task_to_solve=task_to_solve,
                 specific_expertise=specific_expertise,
+                event_emitter=event_emitter,
             )
             logger.debug("Agent initialized successfully.")
         except Exception as e:
             logger.error(f"Failed to initialize agent: {str(e)}")
             raise
 
-    def solve_task(self, task: str, max_iterations: int = 30) -> str:
+    def solve_task(self, task: str, max_iterations: int = 30, streaming: bool = False) -> str:
         """Solve the given task using the ReAct framework.
 
         Args:
             task (str): The task description.
             max_iterations (int, optional): Maximum number of iterations to attempt solving the task.
                 Defaults to 30 to prevent infinite loops and ensure timely task completion.
+            streaming (bool, optional): Whether to use streaming mode for generating responses.
 
         Returns:
             str: The final response after task completion.
@@ -172,11 +177,34 @@ class Agent(BaseModel):
 
                 self._compact_memory_if_needed(current_prompt)
 
-                result = self.model.generate_with_history(messages_history=self.memory.memory, prompt=current_prompt)
+                if streaming:
+                    # For streaming, collect the response chunks
+                    content = ""
+                    for chunk in self.model.generate_with_history(
+                        messages_history=self.memory.memory, prompt=current_prompt, streaming=True
+                    ):
+                        content += chunk
+
+                    # Create a response object similar to non-streaming mode
+                    result = ResponseStats(
+                        response=content,
+                        usage=TokenUsage(
+                            prompt_tokens=0,  # We don't have token counts in streaming mode
+                            completion_tokens=0,
+                            total_tokens=0,
+                        ),
+                        model=self.model.model,
+                        finish_reason="stop",
+                    )
+                else:
+                    result = self.model.generate_with_history(
+                        messages_history=self.memory.memory, prompt=current_prompt, streaming=False
+                    )
 
                 content = result.response
-                token_usage = result.usage
-                self.total_tokens = token_usage.total_tokens
+                if not streaming:  # Only update tokens for non-streaming mode
+                    token_usage = result.usage
+                    self.total_tokens = token_usage.total_tokens
 
                 # Emit event: Task Think End
                 self._emit_event(
@@ -187,7 +215,7 @@ class Agent(BaseModel):
                 )
 
                 # Process the assistant's response
-                result = self._observe_response(result.response, iteration=self.current_iteration)
+                result = self._observe_response(content, iteration=self.current_iteration)
 
                 current_prompt = result.next_prompt
 
@@ -292,9 +320,10 @@ class Agent(BaseModel):
                 is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
 
                 if is_repeated_call:
-                    return self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                    executed_tool, response = self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                else:
+                    executed_tool, response = self._execute_tool(tool_name, tool, arguments_with_values)
 
-                executed_tool, response = self._execute_tool(tool_name, tool, arguments_with_values)
                 if not executed_tool:
                     return self._handle_tool_execution_failure(response)
 
@@ -427,34 +456,26 @@ class Agent(BaseModel):
 
         # Format the response message
         formatted_response = (
-            "\n"
-            f"--- Observations for iteration {iteration} / max {self.max_iterations} ---\n"
-            "\n"
-            f"\n --- Tool execution result stored in variable ${variable_name}$ --- \n"
-            "\n"
-            f"<{variable_name}>\n{response_display}\n</{variable_name}>\n" + "\n"
-            "\n"
-            f"--- Tools --- \n"
-            "\n"
-            f"{self._get_tools_names_prompt()}"
-            "\n"
-            f"--- Variables --- \n"
-            "\n"
-            f"{self._get_variable_prompt()}\n"
-            "\n"
-            "You must analyze this answer and evaluate what to do next to solve the task.\n"
-            "If the step failed, take a step back and rethink your approach.\n"
-            "\n"
-            "--- Task to solve summary ---\n"
-            "\n"
-            f"{self.task_to_solve_summary}"
-            "\n"
+            f"\n--- Observations for iteration {iteration} / max {self.max_iterations} ---\n"
+            f"\n--- Tool execution result in ${variable_name}$ ---\n"
+            f"<{variable_name}>\n{response_display}\n</{variable_name}>\n\n"
+            f"--- Tools ---\n{self._get_tools_names_prompt()}\n"
+            f"--- Variables ---\n{self._get_variable_prompt()}\n"
+            "Analyze this response to determine the next steps. If the step failed, reconsider your approach.\n"
+            f"--- Task to solve summary ---\n{self.task_to_solve_summary}\n"
             "--- Format ---\n"
-            "\n"
-            "You MUST respond with exactly two XML blocks formatted in markdown:\n"
-            "\n"
-            " - One <thinking> block detailing your analysis,\n"
-            " - One <tool_name> block specifying the chosen tool and its arguments, as outlined in the system prompt.\n"
+            "Respond only with two XML blocks in markdown as specified in system prompt.\n"
+            "No extra comments must be added.\n"
+            "```xml\n"
+            "<thinking>\n"
+            "...\n"
+            "</thinking>\n"
+            "```\n"
+            "```xml\n"
+            "< ...tool_name... >\n"
+            "...\n"
+            "</ ...tool_name... >\n"
+            "```"
         )
 
         return formatted_response

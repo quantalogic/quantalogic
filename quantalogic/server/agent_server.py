@@ -30,7 +30,7 @@ from quantalogic.agent_config import (
     create_coding_agent,  # noqa: F401
     create_orchestrator_agent,  # noqa: F401
 )
-from quantalogic.print_event import console_print_events
+from quantalogic.console_print_events import console_print_events
 
 # Configure logger
 logger.remove()
@@ -246,7 +246,7 @@ class AgentState:
     def initialize_agent_with_sse_validation(self, model_name: str = MODEL_NAME):
         """Initialize agent with SSE-based user validation."""
         try:
-            self.agent = create_agent(model_name)
+            self.agent = create_agent(model_name, None)
 
             # Comprehensive list of agent events to track
             agent_events = [

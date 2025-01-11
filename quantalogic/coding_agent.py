@@ -1,4 +1,5 @@
 from quantalogic.agent import Agent
+from quantalogic.console_print_token import console_print_token
 from quantalogic.tools import (
     DuckDuckGoSearchTool,
     EditWholeContentTool,
@@ -19,13 +20,14 @@ from quantalogic.utils import get_coding_environment
 from quantalogic.utils.get_quantalogic_rules_content import get_quantalogic_rules_file_content
 
 
-def create_coding_agent(model_name: str, vision_model_name: str | None = None, basic: bool = False) -> Agent:
+def create_coding_agent(model_name: str, vision_model_name: str | None = None, basic: bool = False,no_stream: bool = False) -> Agent:
     """Creates and configures a coding agent with a comprehensive set of tools.
 
     Args:
         model_name (str): Name of the language model to use for the agent's core capabilities
         vision_model_name (str | None): Name of the vision model to use for the agent's core capabilities
         basic (bool, optional): If True, the agent will be configured with a basic set of tools.
+        no_stream (bool, optional): If True, the agent will not stream results.
 
     Returns:
         Agent: A fully configured coding agent instance with:
@@ -64,7 +66,7 @@ def create_coding_agent(model_name: str, vision_model_name: str | None = None, b
     ]
 
     if vision_model_name:
-        tools.append(LLMVisionTool(model_name=vision_model_name))
+        tools.append(LLMVisionTool(model_name=vision_model_name, on_token=console_print_token if not no_stream else None))
 
     if not basic:
         tools.append(
@@ -72,6 +74,7 @@ def create_coding_agent(model_name: str, vision_model_name: str | None = None, b
                 model_name=model_name,
                 system_prompt="You are a software expert, your role is to answer coding questions.",
                 name="coding_consultant",  # Handles implementation-level coding questions
+                on_token=console_print_token if not no_stream else None,
             )
         )
         tools.append(
@@ -79,6 +82,7 @@ def create_coding_agent(model_name: str, vision_model_name: str | None = None, b
                 model_name=model_name,
                 system_prompt="You are a software architect, your role is to answer software architecture questions.",
                 name="software_architect",  # Handles system design and architecture questions
+                on_token=console_print_token if not no_stream else None,
             )
         )
 

@@ -1,3 +1,4 @@
+---
 site_name: QuantaLogic ReAct Agent
 site_description: Advanced AI Agent Framework for Reasoning and Action
 site_author: QuantaLogic Team
@@ -95,30 +96,29 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting Started:
-    - Installation: installation.md
-    - Quick Start: quickstart.md
-    - Core Concepts: core-concepts.md
-    - CLI Reference: cli-reference.md
-  - Tutorials:
-    - Basic Agent: tutorials/basic-agent.md
+      - Installation: installation.md
+      - Quick Start: quickstart.md
+      - Core Concepts: core-concepts.md
+      - CLI Reference: cli-reference.md
+  - Tutorials: []
   - Examples:
-    - Simple Agent: examples/simple-agent.md
-    - Event Monitoring: examples/event-monitoring.md
-    - Code Generation: examples/code-generation.md
-    - Task Automation: examples/task-automation.md
+      - Simple Agent: examples/simple-agent.md
+      - Event Monitoring: examples/event-monitoring.md
+      - Code Generation: examples/code-generation.md
+      - Task Automation: examples/task-automation.md
   - API Reference:
-    - Agent: api/agent.md
-    - Tools: api/tools.md
-    - Events: api/events.md
-    - Memory: api/memory.md
+      - Agent: api/agent.md
+      - Tools: api/tools.md
+      - Events: api/events.md
+      - Memory: api/memory.md
   - Best Practices:
-    - Agent Design: best-practices/agent-design.md
-    - Tool Development: best-practices/tool-development.md
-    - Error Handling: best-practices/error-handling.md
+      - Agent Design: best-practices/agent-design.md
+      - Tool Development: best-practices/tool-development.md
+      - Error Handling: best-practices/error-handling.md
   - Development:
-    - Contributing: dev/contributing.md
-    - Setup: dev/setup.md
-    - Architecture: dev/architecture.md
+      - Contributing: dev/contributing.md
+      - Setup: dev/setup.md
+      - Architecture: dev/architecture.md
   - Tags: tags.md
   - Troubleshooting: troubleshooting.md
   - License: license.md

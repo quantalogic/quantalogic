@@ -10,15 +10,20 @@ from typing import Optional
 import click
 from loguru import logger
 
+from quantalogic.console_print_events import console_print_events
+from quantalogic.console_print_token import console_print_token
 from quantalogic.utils.check_version import check_if_is_latest_version
 from quantalogic.version import get_version
 
 # Configure logger
 logger.remove()  # Remove default logger
 
+from threading import Lock  # noqa: E402
+
 from rich.console import Console  # noqa: E402
 from rich.panel import Panel  # noqa: E402
 from rich.prompt import Confirm  # noqa: E402
+from rich.spinner import Spinner  # noqa: E402
 
 from quantalogic.agent import Agent  # noqa: E402
 
@@ -31,30 +36,31 @@ from quantalogic.agent_config import (  # noqa: E402
     create_orchestrator_agent,
 )
 from quantalogic.interactive_text_editor import get_multiline_input  # noqa: E402
-from quantalogic.print_event import console_print_events  # noqa: E402
 from quantalogic.search_agent import create_search_agent  # noqa: E402
 
 AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic", "search", "search-full"]
 
 
-def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | None) -> Agent:
+def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | None, no_stream: bool = False) -> Agent:
     """Create an agent based on the specified mode."""
     logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
+    logger.debug(f"Using vision model: {vision_model_name}")
+    logger.debug(f"Using no_stream: {no_stream}")
     if mode == "code":
         logger.debug("Creating code agent without basic mode")
-        return create_coding_agent(model_name, vision_model_name, basic=False)
+        return create_coding_agent(model_name, vision_model_name, basic=False, no_stream=no_stream)
     if mode == "code-basic":
-        return create_coding_agent(model_name, vision_model_name, basic=True)
+        return create_coding_agent(model_name, vision_model_name, basic=True, no_stream=no_stream)
     elif mode == "basic":
-        return create_orchestrator_agent(model_name, vision_model_name)
+        return create_orchestrator_agent(model_name, vision_model_name, no_stream=no_stream)
     elif mode == "full":
-        return create_full_agent(model_name, vision_model_name)
+        return create_full_agent(model_name, vision_model_name, no_stream=no_stream)
     elif mode == "interpreter":
-        return create_interpreter_agent(model_name, vision_model_name)
+        return create_interpreter_agent(model_name, vision_model_name, no_stream=no_stream)
     elif mode == "search":
-        return create_search_agent(model_name)
+        return create_search_agent(model_name, no_stream=no_stream)
     if mode == "search-full":
-        return create_search_agent(model_name, mode_full=True)
+        return create_search_agent(model_name, mode_full=True, no_stream=no_stream)
     else:
         raise ValueError(f"Unknown agent mode: {mode}")
 
@@ -124,6 +130,27 @@ def get_task_from_file(file_path: str) -> str:
         raise PermissionError(f"Error: Permission denied when reading '{file_path}'.")
     except Exception as e:
         raise Exception(f"Unexpected error reading file: {e}")
+
+
+# Spinner control
+spinner_lock = Lock()
+current_spinner = None
+
+def start_spinner(console: Console) -> None:
+    """Start the thinking spinner."""
+    global current_spinner
+    with spinner_lock:
+        if current_spinner is None:
+            current_spinner = console.status("[yellow]Thinking...", spinner="dots")
+            current_spinner.start()
+
+def stop_spinner(console: Console) -> None:
+    """Stop the thinking spinner."""
+    global current_spinner
+    with spinner_lock:
+        if current_spinner is not None:
+            current_spinner.stop()
+            current_spinner = None
 
 
 def display_welcome_message(
@@ -234,6 +261,11 @@ def cli(
     default=30,
     help="Maximum number of iterations for task solving (default: 30).",
 )
+@click.option(
+    "--no-stream",
+    is_flag=True,
+    help="Disable streaming output (default: streaming enabled).",
+)
 @click.argument("task", required=False)
 def task(
     file: Optional[str],
@@ -244,6 +276,7 @@ def task(
     vision_model_name: str | None,
     task: Optional[str],
     max_iterations: int,
+    no_stream: bool,
 ) -> None:
     """Execute a task with the QuantaLogic AI Assistant."""
     console = Console()
@@ -286,9 +319,13 @@ def task(
             )
         )
 
-        logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
-        agent = create_agent_for_mode(mode, model_name, vision_model_name=vision_model_name)
-        logger.debug(f"Created agent for mode: {mode} with model: {model_name}")
+        logger.debug(
+            f"Creating agent for mode: {mode} with model: {model_name}, vision model: {vision_model_name}, no_stream: {no_stream}"
+        )
+        agent = create_agent_for_mode(mode, model_name, vision_model_name=vision_model_name, no_stream=no_stream)
+        logger.debug(
+            f"Created agent for mode: {mode} with model: {model_name}, vision model: {vision_model_name}, no_stream: {no_stream}"
+        )
 
         events = [
             "task_start",
@@ -302,16 +339,45 @@ def task(
             "memory_compacted",
             "memory_summary",
         ]
+        # Add spinner control to event handlers
+        def handle_task_think_start(*args, **kwargs):
+            start_spinner(console)
+
+        def handle_task_think_end(*args, **kwargs):
+            stop_spinner(console)
+
+        def handle_stream_chunk(event: str, data: str) -> None:
+            if current_spinner:
+                stop_spinner(console)
+            if data is not None:
+                console.print(data, end="", markup=False)
+
         agent.event_emitter.on(
             event=events,
             listener=console_print_events,
         )
+        
+        agent.event_emitter.on(
+            event="task_think_start",
+            listener=handle_task_think_start,
+        )
+        
+        agent.event_emitter.on(
+            event="task_think_end",
+            listener=handle_task_think_end,
+        )
+
+        agent.event_emitter.on(
+            event="stream_chunk",
+            listener=handle_stream_chunk,
+        )
+
         logger.debug("Registered event handlers for agent events with events: {events}")
 
         logger.debug(f"Solving task with agent: {task_content}")
         if max_iterations < 1:
             raise ValueError("max_iterations must be greater than 0")
-        result = agent.solve_task(task=task_content, max_iterations=max_iterations)
+        result = agent.solve_task(task=task_content, max_iterations=max_iterations, streaming=not no_stream)
         logger.debug(f"Task solved with result: {result} using {max_iterations} iterations")
 
         console.print(
