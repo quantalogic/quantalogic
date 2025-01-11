@@ -11,10 +11,11 @@ warnings.filterwarnings(
 
 
 from .agent import Agent  # noqa: E402
+from .console_print_events import console_print_events  # noqa: E402
+from .console_print_token import console_print_token  # noqa: E402
 from .event_emitter import EventEmitter  # noqa: E402
 from .memory import AgentMemory, VariableMemory  # noqa: E402
-from .print_event import console_print_events  # noqa: E402
 
 """QuantaLogic package for AI-powered generative models."""
 
-__all__ = ["Agent", "EventEmitter", "AgentMemory", "VariableMemory", "console_print_events"]
+__all__ = ["Agent", "EventEmitter", "AgentMemory", "VariableMemory", "console_print_events","console_print_token"]
