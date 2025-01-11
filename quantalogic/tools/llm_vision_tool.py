@@ -1,8 +1,8 @@
 """LLM Vision Tool for analyzing images using a language model."""
 
-import logging
 from typing import Optional
 
+from loguru import logger
 from pydantic import ConfigDict, Field
 
 from quantalogic.generative_model import GenerativeModel, Message
@@ -65,7 +65,7 @@ class LLMVisionTool(Tool):
         """Initialize the generative model after model initialization."""
         if self.generative_model is None:
             self.generative_model = GenerativeModel(model=self.model_name)
-            logging.debug(f"Initialized LLMVisionTool with model: {self.model_name}")
+            logger.debug(f"Initialized LLMVisionTool with model: {self.model_name}")
 
     def execute(self, system_prompt: str, prompt: str, image_url: str, temperature: str = "0.7") -> str:
         """Execute the tool to analyze an image and generate a response.
@@ -88,7 +88,7 @@ class LLMVisionTool(Tool):
             if not (0.0 <= temp <= 1.0):
                 raise ValueError("Temperature must be between 0 and 1.")
         except ValueError as ve:
-            logging.error(f"Invalid temperature value: {temperature}")
+            logger.error(f"Invalid temperature value: {temperature}")
             raise ValueError(f"Invalid temperature value: {temperature}") from ve
 
         if not image_url.startswith(("http://", "https://")):
@@ -109,10 +109,10 @@ class LLMVisionTool(Tool):
                 messages_history=messages_history, prompt=prompt, image_url=image_url
             )
             response = response_stats.response.strip()
-            logging.info(f"Generated response: {response}")
+            logger.info(f"Generated response: {response}")
             return response
         except Exception as e:
-            logging.error(f"Error generating response: {e}")
+            logger.error(f"Error generating response: {e}")
             raise Exception(f"Error generating response: {e}") from e
 
 
