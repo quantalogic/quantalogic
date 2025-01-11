@@ -38,26 +38,26 @@ from quantalogic.search_agent import create_search_agent  # noqa: E402
 AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic", "search", "search-full"]
 
 
-
-
-def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | None) -> Agent:
+def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | None, no_stream: bool = False) -> Agent:
     """Create an agent based on the specified mode."""
     logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
+    logger.debug(f"Using vision model: {vision_model_name}")
+    logger.debug(f"Using no_stream: {no_stream}")
     if mode == "code":
         logger.debug("Creating code agent without basic mode")
-        return create_coding_agent(model_name, vision_model_name, basic=False)
+        return create_coding_agent(model_name, vision_model_name, basic=False, no_stream=no_stream)
     if mode == "code-basic":
-        return create_coding_agent(model_name, vision_model_name, basic=True)
+        return create_coding_agent(model_name, vision_model_name, basic=True, no_stream=no_stream)
     elif mode == "basic":
-        return create_orchestrator_agent(model_name, vision_model_name)
+        return create_orchestrator_agent(model_name, vision_model_name, no_stream=no_stream)
     elif mode == "full":
-        return create_full_agent(model_name, vision_model_name)
+        return create_full_agent(model_name, vision_model_name, no_stream=no_stream)
     elif mode == "interpreter":
-        return create_interpreter_agent(model_name, vision_model_name)
+        return create_interpreter_agent(model_name, vision_model_name, no_stream=no_stream)
     elif mode == "search":
-        return create_search_agent(model_name)
+        return create_search_agent(model_name, no_stream=no_stream)
     if mode == "search-full":
-        return create_search_agent(model_name, mode_full=True)
+        return create_search_agent(model_name, mode_full=True, no_stream=no_stream)
     else:
         raise ValueError(f"Unknown agent mode: {mode}")
 
@@ -237,6 +237,11 @@ def cli(
     default=30,
     help="Maximum number of iterations for task solving (default: 30).",
 )
+@click.option(
+    "--no-stream",
+    is_flag=True,
+    help="Disable streaming output (default: streaming enabled).",
+)
 @click.argument("task", required=False)
 def task(
     file: Optional[str],
@@ -247,6 +252,7 @@ def task(
     vision_model_name: str | None,
     task: Optional[str],
     max_iterations: int,
+    no_stream: bool,
 ) -> None:
     """Execute a task with the QuantaLogic AI Assistant."""
     console = Console()
@@ -289,9 +295,13 @@ def task(
             )
         )
 
-        logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
-        agent = create_agent_for_mode(mode, model_name, vision_model_name=vision_model_name)
-        logger.debug(f"Created agent for mode: {mode} with model: {model_name}")
+        logger.debug(
+            f"Creating agent for mode: {mode} with model: {model_name}, vision model: {vision_model_name}, no_stream: {no_stream}"
+        )
+        agent = create_agent_for_mode(mode, model_name, vision_model_name=vision_model_name, no_stream=no_stream)
+        logger.debug(
+            f"Created agent for mode: {mode} with model: {model_name}, vision model: {vision_model_name}, no_stream: {no_stream}"
+        )
 
         events = [
             "task_start",
@@ -320,7 +330,7 @@ def task(
         logger.debug(f"Solving task with agent: {task_content}")
         if max_iterations < 1:
             raise ValueError("max_iterations must be greater than 0")
-        result = agent.solve_task(task=task_content, max_iterations=max_iterations,streaming=True)
+        result = agent.solve_task(task=task_content, max_iterations=max_iterations, streaming=not no_stream)
         logger.debug(f"Task solved with result: {result} using {max_iterations} iterations")
 
         console.print(

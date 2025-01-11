@@ -7,8 +7,6 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
-from quantalogic.console_print_events import console_print_events
-from quantalogic.console_print_token import console_print_token
 from quantalogic.event_emitter import EventEmitter
 from quantalogic.generative_model import GenerativeModel, ResponseStats, TokenUsage
 from quantalogic.memory import AgentMemory, Message, VariableMemory
@@ -89,10 +87,6 @@ class Agent(BaseModel):
             logger.debug("Initializing agent...")
             # Create event emitter first
             event_emitter = EventEmitter()
-
-            # Set up event listeners for streaming
-            event_emitter.on("stream_chunk", console_print_token)
-            event_emitter.on("stream_end", lambda *args: console_print_events("stream_end"))
 
             # Add TaskCompleteTool to the tools list if not already present
             if TaskCompleteTool() not in tools:
