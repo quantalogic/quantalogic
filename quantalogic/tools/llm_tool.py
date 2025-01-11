@@ -55,21 +55,31 @@ class LLMTool(Tool):
     )
 
     model_name: str = Field(..., description="The name of the language model to use")
-    generative_model: GenerativeModel | None = Field(default=None)
     system_prompt: str | None = Field(default=None)
     on_token: Callable | None = Field(default=None, exclude=True)
+    generative_model: GenerativeModel | None = Field(default=None, exclude=True)
 
-
-    def __init__(self, model_name: str, system_prompt: str | None = None, on_token: Callable | None = None):
+    def __init__(
+        self,
+        model_name: str,
+        system_prompt: str | None = None,
+        on_token: Callable | None = None,
+        name: str = "llm_tool",
+        generative_model: GenerativeModel | None = None,
+    ):
         # Use dict to pass validated data to parent constructor
-        super().__init__(**{
-            'model_name': model_name, 
-            'system_prompt': system_prompt, 
-            'on_token': on_token
-        })
-        
+        super().__init__(
+            **{
+                "model_name": model_name,
+                "system_prompt": system_prompt,
+                "on_token": on_token,
+                "name": name,
+                "generative_model": generative_model,
+            }
+        )
+
         # Initialize the generative model
-        self.model_post_init(None)   
+        self.model_post_init(None)
 
     def model_post_init(self, __context):
         """Initialize the generative model after model initialization."""
@@ -81,7 +91,6 @@ class LLMTool(Tool):
         if self.on_token is not None:
             logger.debug(f"Setting up event listener for LLMTool with model: {self.model_name}")
             self.generative_model.event_emitter.on("stream_chunk", self.on_token)
-
 
     def execute(
         self, system_prompt: str | None = None, prompt: str | None = None, temperature: str | None = None
@@ -127,14 +136,14 @@ class LLMTool(Tool):
                 result = self.generative_model.generate_with_history(
                     messages_history=messages_history, prompt=prompt, streaming=is_streaming
                 )
-                
+
                 if is_streaming:
                     response = ""
                     for chunk in result:
                         response += chunk
                 else:
                     response = result.response
-                    
+
                 logger.debug(f"Generated response: {response}")
                 return response
             except Exception as e:
@@ -152,7 +161,9 @@ if __name__ == "__main__":
     temperature = "0.7"
     answer = tool.execute(system_prompt=system_prompt, prompt=question, temperature=temperature)
     print(answer)
-    pirate = LLMTool(model_name="openrouter/openai/gpt-4o-mini", system_prompt="You are a pirate.",on_token=console_print_token)
+    pirate = LLMTool(
+        model_name="openrouter/openai/gpt-4o-mini", system_prompt="You are a pirate.", on_token=console_print_token
+    )
     pirate_answer = pirate.execute(system_prompt=system_prompt, prompt=question, temperature=temperature)
     print("\n")
     print(f"Anwser: {pirate_answer}")
