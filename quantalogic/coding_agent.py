@@ -1,4 +1,5 @@
 from quantalogic.agent import Agent
+from quantalogic.console_print_token import console_print_token
 from quantalogic.tools import (
     DuckDuckGoSearchTool,
     EditWholeContentTool,
@@ -72,6 +73,7 @@ def create_coding_agent(model_name: str, vision_model_name: str | None = None, b
                 model_name=model_name,
                 system_prompt="You are a software expert, your role is to answer coding questions.",
                 name="coding_consultant",  # Handles implementation-level coding questions
+                on_token=console_print_token,
             )
         )
         tools.append(
@@ -79,6 +81,7 @@ def create_coding_agent(model_name: str, vision_model_name: str | None = None, b
                 model_name=model_name,
                 system_prompt="You are a software architect, your role is to answer software architecture questions.",
                 name="software_architect",  # Handles system design and architecture questions
+                on_token=console_print_token,
             )
         )
 

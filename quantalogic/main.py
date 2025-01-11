@@ -10,6 +10,8 @@ from typing import Optional
 import click
 from loguru import logger
 
+from quantalogic.console_print_events import console_print_events
+from quantalogic.console_print_token import console_print_token
 from quantalogic.utils.check_version import check_if_is_latest_version
 from quantalogic.version import get_version
 
@@ -31,7 +33,6 @@ from quantalogic.agent_config import (  # noqa: E402
     create_orchestrator_agent,
 )
 from quantalogic.interactive_text_editor import get_multiline_input  # noqa: E402
-from quantalogic.print_event import console_print_events, console_print_token  # noqa: E402
 from quantalogic.search_agent import create_search_agent  # noqa: E402
 
 AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic", "search", "search-full"]

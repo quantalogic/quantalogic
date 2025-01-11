@@ -7,10 +7,11 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
+from quantalogic.console_print_events import console_print_events
+from quantalogic.console_print_token import console_print_token
 from quantalogic.event_emitter import EventEmitter
 from quantalogic.generative_model import GenerativeModel, ResponseStats, TokenUsage
 from quantalogic.memory import AgentMemory, Message, VariableMemory
-from quantalogic.print_event import console_print_events, console_print_token
 from quantalogic.prompts import system_prompt
 from quantalogic.tool_manager import ToolManager
 from quantalogic.tools.task_complete_tool import TaskCompleteTool
@@ -88,11 +89,11 @@ class Agent(BaseModel):
             logger.debug("Initializing agent...")
             # Create event emitter first
             event_emitter = EventEmitter()
-            
+
             # Set up event listeners for streaming
             event_emitter.on("stream_chunk", console_print_token)
             event_emitter.on("stream_end", lambda *args: console_print_events("stream_end"))
-            
+
             # Add TaskCompleteTool to the tools list if not already present
             if TaskCompleteTool() not in tools:
                 tools.append(TaskCompleteTool())
@@ -186,28 +187,24 @@ class Agent(BaseModel):
                     # For streaming, collect the response chunks
                     content = ""
                     for chunk in self.model.generate_with_history(
-                        messages_history=self.memory.memory,
-                        prompt=current_prompt,
-                        streaming=True
+                        messages_history=self.memory.memory, prompt=current_prompt, streaming=True
                     ):
                         content += chunk
-                    
+
                     # Create a response object similar to non-streaming mode
                     result = ResponseStats(
                         response=content,
                         usage=TokenUsage(
                             prompt_tokens=0,  # We don't have token counts in streaming mode
                             completion_tokens=0,
-                            total_tokens=0
+                            total_tokens=0,
                         ),
                         model=self.model.model,
-                        finish_reason="stop"
+                        finish_reason="stop",
                     )
                 else:
                     result = self.model.generate_with_history(
-                        messages_history=self.memory.memory,
-                        prompt=current_prompt,
-                        streaming=False
+                        messages_history=self.memory.memory, prompt=current_prompt, streaming=False
                     )
 
                 content = result.response
@@ -329,9 +326,10 @@ class Agent(BaseModel):
                 is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
 
                 if is_repeated_call:
-                    return self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                    executed_tool, response = self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                else:
+                    executed_tool, response = self._execute_tool(tool_name, tool, arguments_with_values)
 
-                executed_tool, response = self._execute_tool(tool_name, tool, arguments_with_values)
                 if not executed_tool:
                     return self._handle_tool_execution_failure(response)
 
@@ -465,19 +463,26 @@ class Agent(BaseModel):
         # Format the response message
         formatted_response = (
             f"\n--- Observations for iteration {iteration} / max {self.max_iterations} ---\n"
-            f"\n--- Tool execution result stored in variable ${variable_name}$ ---\n"
+            f"\n--- Tool execution result in ${variable_name}$ ---\n"
             f"<{variable_name}>\n{response_display}\n</{variable_name}>\n\n"
             f"--- Tools ---\n{self._get_tools_names_prompt()}\n"
             f"--- Variables ---\n{self._get_variable_prompt()}\n"
             "Analyze this response to determine the next steps. If the step failed, reconsider your approach.\n"
             f"--- Task to solve summary ---\n{self.task_to_solve_summary}\n"
             "--- Format ---\n"
-            "Respond with two XML blocks in markdown:\n"
-            " - One <thinking> block for analysis,\n"
-            " - One < ...tool_name... > block for the chosen tool and its arguments.\n"
-            " Ex: <task_complete>42</task_complete> for task_complete toolname\n"
+            "Respond only with two XML blocks in markdown as specified in system prompt.\n"
+            "No extra comments must be added.\n"
+            "```xml\n"
+            "<thinking>\n"
+            "...\n"
+            "</thinking>\n"
+            "```\n"
+            "```xml\n"
+            "< ...tool_name... >\n"
+            "...\n"
+            "</ ...tool_name... >\n"
+            "```"
         )
-
 
         return formatted_response
 

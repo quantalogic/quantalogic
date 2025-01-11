@@ -5,9 +5,11 @@
 # Local application imports
 from quantalogic.agent import Agent
 from quantalogic.coding_agent import create_coding_agent
+from quantalogic.console_print_token import console_print_token
 from quantalogic.tools import (
     AgentTool,
     DownloadHttpFileTool,
+    DuckDuckGoSearchTool,
     EditWholeContentTool,
     ExecuteBashCommandTool,
     InputQuestionTool,
@@ -23,9 +25,8 @@ from quantalogic.tools import (
     RipgrepTool,
     SearchDefinitionNames,
     TaskCompleteTool,
-    WriteFileTool,
-    DuckDuckGoSearchTool,
     WikipediaSearchTool,
+    WriteFileTool,
 )
 
 MODEL_NAME = "deepseek/deepseek-chat"
@@ -54,7 +55,7 @@ def create_agent(model_name: str, vision_model_name: str | None) -> Agent:
         RipgrepTool(),
         SearchDefinitionNames(),
         MarkitdownTool(),
-        LLMTool(model_name=model_name),
+        LLMTool(model_name=model_name, on_token=console_print_token),
         DownloadHttpFileTool(),
     ]
 
@@ -92,7 +93,7 @@ def create_interpreter_agent(model_name: str, vision_model_name: str | None) -> 
         NodeJsTool(),
         SearchDefinitionNames(),
         MarkitdownTool(),
-        LLMTool(model_name=model_name),
+        LLMTool(model_name=model_name, on_token=console_print_token),
         DownloadHttpFileTool(),
     ]
     return Agent(model_name=model_name, tools=tools)
@@ -124,7 +125,7 @@ def create_full_agent(model_name: str, vision_model_name: str | None) -> Agent:
         NodeJsTool(),
         SearchDefinitionNames(),
         MarkitdownTool(),
-        LLMTool(model_name=model_name),
+        LLMTool(model_name=model_name, on_token=console_print_token),
         DownloadHttpFileTool(),
         WikipediaSearchTool(),
         DuckDuckGoSearchTool(),
@@ -160,7 +161,7 @@ def create_orchestrator_agent(model_name: str, vision_model_name: str | None = N
         ReadFileBlockTool(),
         RipgrepTool(),
         SearchDefinitionNames(),
-        LLMTool(model_name=MODEL_NAME),
+        LLMTool(model_name=MODEL_NAME, on_token=console_print_token),
         AgentTool(agent=coding_agent_instance, agent_role="software expert", name="coder_agent_tool"),
     ]
 
