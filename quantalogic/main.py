@@ -18,9 +18,12 @@ from quantalogic.version import get_version
 # Configure logger
 logger.remove()  # Remove default logger
 
+from threading import Lock  # noqa: E402
+
 from rich.console import Console  # noqa: E402
 from rich.panel import Panel  # noqa: E402
 from rich.prompt import Confirm  # noqa: E402
+from rich.spinner import Spinner  # noqa: E402
 
 from quantalogic.agent import Agent  # noqa: E402
 
@@ -127,6 +130,27 @@ def get_task_from_file(file_path: str) -> str:
         raise PermissionError(f"Error: Permission denied when reading '{file_path}'.")
     except Exception as e:
         raise Exception(f"Unexpected error reading file: {e}")
+
+
+# Spinner control
+spinner_lock = Lock()
+current_spinner = None
+
+def start_spinner(console: Console) -> None:
+    """Start the thinking spinner."""
+    global current_spinner
+    with spinner_lock:
+        if current_spinner is None:
+            current_spinner = console.status("[yellow]Thinking...", spinner="dots")
+            current_spinner.start()
+
+def stop_spinner(console: Console) -> None:
+    """Stop the thinking spinner."""
+    global current_spinner
+    with spinner_lock:
+        if current_spinner is not None:
+            current_spinner.stop()
+            current_spinner = None
 
 
 def display_welcome_message(
@@ -315,14 +339,37 @@ def task(
             "memory_compacted",
             "memory_summary",
         ]
+        # Add spinner control to event handlers
+        def handle_task_think_start(*args, **kwargs):
+            start_spinner(console)
+
+        def handle_task_think_end(*args, **kwargs):
+            stop_spinner(console)
+
+        def handle_stream_chunk(event: str, data: str) -> None:
+            if current_spinner:
+                stop_spinner(console)
+            if data is not None:
+                console.print(data, end="", markup=False)
+
         agent.event_emitter.on(
             event=events,
             listener=console_print_events,
         )
+        
+        agent.event_emitter.on(
+            event="task_think_start",
+            listener=handle_task_think_start,
+        )
+        
+        agent.event_emitter.on(
+            event="task_think_end",
+            listener=handle_task_think_end,
+        )
 
         agent.event_emitter.on(
             event="stream_chunk",
-            listener=console_print_token,
+            listener=handle_stream_chunk,
         )
 
         logger.debug("Registered event handlers for agent events with events: {events}")
