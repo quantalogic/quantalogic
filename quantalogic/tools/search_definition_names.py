@@ -63,6 +63,20 @@ class SearchDefinitionNames(Tool):
             required=False,
             example="**/*.py",
         ),
+        ToolArgument(
+            name="page",
+            arg_type="int",
+            description="The page number to retrieve (1-based index).",
+            required=False,
+            example="1",
+        ),
+        ToolArgument(
+            name="page_size",
+            arg_type="int",
+            description="The number of results per page (default: 10).",
+            required=False,
+            example="10",
+        ),
     ]
 
     def _get_language_handler(self, language_name: str):
@@ -89,7 +103,7 @@ class SearchDefinitionNames(Tool):
             raise ValueError(f"Unsupported language: {language_name}")
 
     def execute(
-        self, directory_path: str, language_name: str, file_pattern: str = "*", output_format: str = "text"
+        self, directory_path: str, language_name: str, file_pattern: str = "*", output_format: str = "text", page: int = 1, page_size: int = 10
     ) -> Union[str, Dict]:
         """Searches for definition names in a directory using Tree-sitter.
 
@@ -98,11 +112,19 @@ class SearchDefinitionNames(Tool):
             language_name (str): The Tree-sitter language name.
             file_pattern (str): Optional glob pattern to filter files (default: '*').
             output_format (str): Output format ('text', 'json', 'markdown').
+            page (int): The page number to retrieve (1-based index).
+            page_size (int): The number of results per page (default: 10).
 
         Returns:
             Union[str, Dict]: The search results in the specified format.
         """
         try:
+            # Validate pagination parameters
+            if page < 1:
+                raise ValueError("Page number must be a positive integer.")
+            if page_size < 1:
+                raise ValueError("Page size must be a positive integer.")
+
             # Set up Tree-sitter based on language
             language_handler = self._get_language_handler(language_name)
             parser = Parser(language_handler.get_language())
@@ -140,7 +162,21 @@ class SearchDefinitionNames(Tool):
                         logger.warning(f"Error processing file {file_path}: {str(e)}")
                         continue
 
-            return self._format_results(results, directory_path, language_name, file_pattern, output_format)
+            # Apply pagination
+            start_index = (page - 1) * page_size
+            end_index = start_index + page_size
+            paginated_results = results[start_index:end_index]
+
+            return self._format_results(
+                paginated_results,
+                directory_path,
+                language_name,
+                file_pattern,
+                output_format,
+                page,
+                page_size,
+                len(results)
+            )
 
         except Exception as e:
             logger.error(f"Error during search: {str(e)}")
@@ -263,6 +299,9 @@ class SearchDefinitionNames(Tool):
         language_name: str,
         file_pattern: str,
         output_format: str = "text",
+        page: int = 1,
+        page_size: int = 10,
+        total_results: int = 0,
     ) -> Union[str, Dict]:
         """Formats the search results in the specified format.
 
@@ -272,6 +311,9 @@ class SearchDefinitionNames(Tool):
             language_name: The language that was searched.
             file_pattern: The file pattern that was used.
             output_format: The desired output format.
+            page: The page number.
+            page_size: The number of results per page.
+            total_results: The total number of results.
 
         Returns:
             Union[str, Dict]: The formatted results.
@@ -281,6 +323,9 @@ class SearchDefinitionNames(Tool):
                 "directory": directory_path,
                 "language": language_name,
                 "file_pattern": file_pattern,
+                "page": page,
+                "page_size": page_size,
+                "total_results": total_results,
                 "results": [],
             }
 
@@ -318,7 +363,10 @@ class SearchDefinitionNames(Tool):
             markdown = "# Search Results\n\n"
             markdown += f"- **Directory**: `{directory_path}`\n"
             markdown += f"- **Language**: `{language_name}`\n"
-            markdown += f"- **File Pattern**: `{file_pattern}`\n\n"
+            markdown += f"- **File Pattern**: `{file_pattern}`\n"
+            markdown += f"- **Page**: {page}\n"
+            markdown += f"- **Page Size**: {page_size}\n"
+            markdown += f"- **Total Results**: {total_results}\n\n"
 
             for result in results:
                 markdown += f"## File: {result['file_path']}\n"
@@ -354,7 +402,10 @@ class SearchDefinitionNames(Tool):
             text += "==============\n"
             text += f"Directory: {directory_path}\n"
             text += f"Language: {language_name}\n"
-            text += f"File Pattern: {file_pattern}\n\n"
+            text += f"File Pattern: {file_pattern}\n"
+            text += f"Page: {page}\n"
+            text += f"Page Size: {page_size}\n"
+            text += f"Total Results: {total_results}\n\n"
 
             for result in results:
                 text += f"File: {result['file_path']}\n"
