@@ -11,7 +11,6 @@ import click
 from loguru import logger
 
 from quantalogic.console_print_events import console_print_events
-from quantalogic.console_print_token import console_print_token
 from quantalogic.utils.check_version import check_if_is_latest_version
 from quantalogic.version import get_version
 
@@ -23,7 +22,6 @@ from threading import Lock  # noqa: E402
 from rich.console import Console  # noqa: E402
 from rich.panel import Panel  # noqa: E402
 from rich.prompt import Confirm  # noqa: E402
-from rich.spinner import Spinner  # noqa: E402
 
 from quantalogic.agent import Agent  # noqa: E402
 
