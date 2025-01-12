@@ -36,7 +36,8 @@ def create_agent(
     model_name: str, 
     vision_model_name: str | None, 
     no_stream: bool = False, 
-    compact_every_n_iteration: int | None = None
+    compact_every_n_iteration: int | None = None,
+    max_tokens_working_memory: int | None = None
 ) -> Agent:
     """Create an agent with the specified model and tools.
 
@@ -45,6 +46,7 @@ def create_agent(
         vision_model_name (str | None): Name of the vision model to use
         no_stream (bool, optional): If True, the agent will not stream results.
         compact_every_n_iteration (int | None, optional): Frequency of memory compaction.
+        max_tokens_working_memory (int | None, optional): Maximum tokens for working memory.
 
     Returns:
         Agent: An agent with the specified model and tools
@@ -73,6 +75,7 @@ def create_agent(
         model_name=model_name,
         tools=tools,
         compact_every_n_iterations=compact_every_n_iteration,
+        max_tokens_working_memory=max_tokens_working_memory,
     )
 
 
@@ -80,7 +83,8 @@ def create_interpreter_agent(
     model_name: str, 
     vision_model_name: str | None, 
     no_stream: bool = False, 
-    compact_every_n_iteration: int | None = None
+    compact_every_n_iteration: int | None = None,
+    max_tokens_working_memory: int | None = None
 ) -> Agent:
     """Create an interpreter agent with the specified model and tools.
 
@@ -89,6 +93,7 @@ def create_interpreter_agent(
         vision_model_name (str | None): Name of the vision model to use
         no_stream (bool, optional): If True, the agent will not stream results.
         compact_every_n_iteration (int | None, optional): Frequency of memory compaction.
+        max_tokens_working_memory (int | None, optional): Maximum tokens for working memory.
 
     Returns:
         Agent: An interpreter agent with the specified model and tools
@@ -114,7 +119,8 @@ def create_interpreter_agent(
     return Agent(
         model_name=model_name, 
         tools=tools,
-        compact_every_n_iterations=compact_every_n_iteration
+        compact_every_n_iterations=compact_every_n_iteration,
+        max_tokens_working_memory=max_tokens_working_memory,
     )
 
 
@@ -122,7 +128,8 @@ def create_full_agent(
     model_name: str, 
     vision_model_name: str | None, 
     no_stream: bool = False, 
-    compact_every_n_iteration: int | None = None
+    compact_every_n_iteration: int | None = None,
+    max_tokens_working_memory: int | None = None
 ) -> Agent:
     """Create an agent with the specified model and many tools.
 
@@ -131,6 +138,7 @@ def create_full_agent(
         vision_model_name (str | None): Name of the vision model to use
         no_stream (bool, optional): If True, the agent will not stream results.
         compact_every_n_iteration (int | None, optional): Frequency of memory compaction.
+        max_tokens_working_memory (int | None, optional): Maximum tokens for working memory.
 
     Returns:
         Agent: An agent with the specified model and tools
@@ -164,6 +172,7 @@ def create_full_agent(
         model_name=model_name,
         tools=tools,
         compact_every_n_iterations=compact_every_n_iteration,
+        max_tokens_working_memory=max_tokens_working_memory,
     )
 
 
@@ -171,7 +180,8 @@ def create_orchestrator_agent(
     model_name: str, 
     vision_model_name: str | None = None, 
     no_stream: bool = False, 
-    compact_every_n_iteration: int | None = None
+    compact_every_n_iteration: int | None = None,
+    max_tokens_working_memory: int | None = None
 ) -> Agent:
     """Create an agent with the specified model and tools.
 
@@ -180,6 +190,7 @@ def create_orchestrator_agent(
         vision_model_name (str | None): Name of the vision model to use
         no_stream (bool, optional): If True, the agent will not stream results.
         compact_every_n_iteration (int | None, optional): Frequency of memory compaction.
+        max_tokens_working_memory (int | None, optional): Maximum tokens for working memory.
 
     Returns:
         Agent: An agent with the specified model and tools
@@ -206,4 +217,5 @@ def create_orchestrator_agent(
         model_name=model_name,
         tools=tools,
         compact_every_n_iterations=compact_every_n_iteration,
+        max_tokens_working_memory=max_tokens_working_memory,
     )

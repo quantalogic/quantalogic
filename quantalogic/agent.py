@@ -72,6 +72,7 @@ class Agent(BaseModel):
     max_iterations: int = 30
     system_prompt: str = ""
     compact_every_n_iterations: int | None = None  # Add this to the class attributes
+    max_tokens_working_memory: int | None = None  # Add max_tokens_working_memory attribute
 
     def __init__(
         self,
@@ -83,6 +84,7 @@ class Agent(BaseModel):
         specific_expertise: str = "General AI assistant with coding and problem-solving capabilities",
         get_environment: Callable[[], str] = get_environment,
         compact_every_n_iterations: int | None = None,  # New parameter
+        max_tokens_working_memory: int | None = None,  # New parameter to set max working memory tokens
     ):
         """Initialize the agent with model, memory, tools, and configurations."""
         try:
@@ -127,6 +129,10 @@ class Agent(BaseModel):
             # Set the new compact_every_n_iterations parameter
             self.compact_every_n_iterations = compact_every_n_iterations or self.max_iterations
             logger.debug(f"Memory will be compacted every {self.compact_every_n_iterations} iterations")
+            
+            # Set the max_tokens_working_memory parameter
+            self.max_tokens_working_memory = max_tokens_working_memory
+            logger.debug(f"Max tokens for working memory set to: {self.max_tokens_working_memory}")
             
             logger.debug("Agent initialized successfully.")
         except Exception as e:
@@ -272,20 +278,25 @@ class Agent(BaseModel):
         self.total_tokens = self.model.token_counter_with_history(message_history, prompt)
 
     def _compact_memory_if_needed(self, current_prompt: str = ""):
-        """Compacts the memory if it exceeds the maximum occupancy."""
+        """Compacts the memory if it exceeds the maximum occupancy or token limit."""
         ratio_occupied = self._calculate_context_occupancy()
         
-        # Compact memory if either:
+        # Compact memory if any of these conditions are met:
         # 1. Memory occupancy exceeds MAX_OCCUPANCY, or
-        # 2. Current iteration is a multiple of compact_every_n_iterations
+        # 2. Current iteration is a multiple of compact_every_n_iterations, or
+        # 3. Working memory exceeds max_tokens_working_memory (if set)
         should_compact_by_occupancy = ratio_occupied >= MAX_OCCUPANCY
         should_compact_by_iteration = (
             self.compact_every_n_iterations is not None and 
             self.current_iteration > 0 and 
             self.current_iteration % self.compact_every_n_iterations == 0
         )
+        should_compact_by_token_limit = (
+            self.max_tokens_working_memory is not None and 
+            self.total_tokens > self.max_tokens_working_memory
+        )
         
-        if should_compact_by_occupancy or should_compact_by_iteration:
+        if should_compact_by_occupancy or should_compact_by_iteration or should_compact_by_token_limit:
             if should_compact_by_occupancy:
                 logger.debug(f"Memory compaction triggered: Occupancy {ratio_occupied}% exceeds {MAX_OCCUPANCY}%")
             
