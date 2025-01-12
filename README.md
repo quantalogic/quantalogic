@@ -31,6 +31,8 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 
 ## 📋 Table of Contents
 
+- [Release Notes](#release-notes)
+
 - [Installation](#-installation)
 - [Quick Start](#-quickstart)
 - [Key Components](#-key-components)
@@ -42,6 +44,10 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 - [Contributing](#-contributing)
 - [License](#-license)
 - [Documentation Development](#-documentation-development)
+
+## Release Notes
+
+See our [Release Notes](RELEASE_NOTES.MD) for detailed version history and changes.
 
 ## 📦 Installation
 
