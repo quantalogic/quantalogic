@@ -49,6 +49,8 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 
 See our [Release Notes](RELEASE_NOTES.MD) for detailed version history and changes.
 
+[TODO List](TODO.md)
+
 ## 📦 Installation
 
 ### Prerequisites
