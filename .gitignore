@@ -175,8 +175,5 @@ cython_debug/
 *.local.yaml
 *.local.json
 
-# Temporary development notes
-TODO.md
-NOTES.md
 
 .tasks/
