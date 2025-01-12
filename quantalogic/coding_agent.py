@@ -25,7 +25,8 @@ def create_coding_agent(
     vision_model_name: str | None = None, 
     basic: bool = False, 
     no_stream: bool = False, 
-    compact_every_n_iteration: int | None = None
+    compact_every_n_iteration: int | None = None,
+    max_tokens_working_memory: int | None = None
 ) -> Agent:
     """Creates and configures a coding agent with a comprehensive set of tools.
 
@@ -35,6 +36,7 @@ def create_coding_agent(
         basic (bool, optional): If True, the agent will be configured with a basic set of tools.
         no_stream (bool, optional): If True, the agent will not stream results.
         compact_every_n_iteration (int | None, optional): Frequency of memory compaction.
+        max_tokens_working_memory (int | None, optional): Maximum tokens for working memory.
 
     Returns:
         Agent: A fully configured coding agent instance with:
@@ -99,4 +101,5 @@ def create_coding_agent(
         specific_expertise=specific_expertise,
         get_environment=get_coding_environment,
         compact_every_n_iterations=compact_every_n_iteration,
+        max_tokens_working_memory=max_tokens_working_memory,
     )

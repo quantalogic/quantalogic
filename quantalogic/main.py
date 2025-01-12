@@ -39,27 +39,28 @@ from quantalogic.search_agent import create_search_agent  # noqa: E402
 AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic", "search", "search-full"]
 
 
-def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | None, no_stream: bool = False, compact_every_n_iteration: int | None = None) -> Agent:
+def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | None, no_stream: bool = False, compact_every_n_iteration: int | None = None, max_tokens_working_memory: int | None = None) -> Agent:
     """Create an agent based on the specified mode."""
     logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
     logger.debug(f"Using vision model: {vision_model_name}")
     logger.debug(f"Using no_stream: {no_stream}")
     logger.debug(f"Using compact_every_n_iteration: {compact_every_n_iteration}")
+    logger.debug(f"Using max_tokens_working_memory: {max_tokens_working_memory}")
     if mode == "code":
         logger.debug("Creating code agent without basic mode")
-        return create_coding_agent(model_name, vision_model_name, basic=False, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration)
+        return create_coding_agent(model_name, vision_model_name, basic=False, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
     if mode == "code-basic":
-        return create_coding_agent(model_name, vision_model_name, basic=True, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration)
+        return create_coding_agent(model_name, vision_model_name, basic=True, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
     elif mode == "basic":
-        return create_orchestrator_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration)
+        return create_orchestrator_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
     elif mode == "full":
-        return create_full_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration)
+        return create_full_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
     elif mode == "interpreter":
-        return create_interpreter_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration)
+        return create_interpreter_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
     elif mode == "search":
-        return create_search_agent(model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration)
+        return create_search_agent(model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
     if mode == "search-full":
-        return create_search_agent(model_name, mode_full=True, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration)
+        return create_search_agent(model_name, mode_full=True, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
     else:
         raise ValueError(f"Unknown agent mode: {mode}")
 
@@ -157,7 +158,8 @@ def display_welcome_message(
     model_name: str, 
     vision_model_name: str | None, 
     max_iterations: int = 50, 
-    compact_every_n_iteration: int | None = None
+    compact_every_n_iteration: int | None = None,
+    max_tokens_working_memory: int | None = None
 ) -> None:
     """Display the welcome message and instructions."""
     version = get_version()
@@ -173,7 +175,8 @@ def display_welcome_message(
             f"- Model: {model_name}\n"
             f"- Vision Model: {vision_model_name}\n"
             f"- Max Iterations: {max_iterations}\n"
-            f"- Memory Compact Frequency: {compact_every_n_iteration or 'Default (Max Iterations)'}\n\n"
+            f"- Memory Compact Frequency: {compact_every_n_iteration or 'Default (Max Iterations)'}\n"
+            f"- Max Working Memory Tokens: {max_tokens_working_memory or 'Default'}\n\n"
             "[bold magenta]💡 Pro Tips:[/bold magenta]\n\n"
             "- Be as specific as possible in your task description to get the best results!\n"
             "- Use clear and concise language when describing your task\n"
@@ -217,6 +220,12 @@ def display_welcome_message(
     default=30,
     help="Maximum number of iterations for task solving (default: 30).",
 )
+@click.option(
+    "--max-tokens-working-memory",
+    type=int,
+    default=None,
+    help="Set the maximum number of tokens allowed in the working memory."
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -228,6 +237,7 @@ def cli(
     vision_model_name: str | None,
     max_iterations: int,
     compact_every_n_iteration: int | None,
+    max_tokens_working_memory: int | None,
 ) -> None:
     """QuantaLogic AI Assistant - A powerful AI tool for various tasks."""
     if version:
@@ -244,6 +254,7 @@ def cli(
             vision_model_name=vision_model_name,
             max_iterations=max_iterations,
             compact_every_n_iteration=compact_every_n_iteration,
+            max_tokens_working_memory=max_tokens_working_memory,
         )
 
 
@@ -280,6 +291,12 @@ def cli(
     help="Set the frequency of memory compaction for the agent (default: max_iterations)."
 )
 @click.option(
+    "--max-tokens-working-memory",
+    type=int,
+    default=None,
+    help="Set the maximum number of tokens allowed in the working memory."
+)
+@click.option(
     "--no-stream",
     is_flag=True,
     help="Disable streaming output (default: streaming enabled).",
@@ -295,6 +312,7 @@ def task(
     task: Optional[str],
     max_iterations: int,
     compact_every_n_iteration: int | None,
+    max_tokens_working_memory: int | None,
     no_stream: bool,
 ) -> None:
     """Execute a task with the QuantaLogic AI Assistant."""
@@ -314,7 +332,8 @@ def task(
                     model_name, 
                     vision_model_name, 
                     max_iterations=max_iterations, 
-                    compact_every_n_iteration=compact_every_n_iteration
+                    compact_every_n_iteration=compact_every_n_iteration,
+                    max_tokens_working_memory=max_tokens_working_memory
                 )
                 check_new_version()
                 logger.debug("Waiting for user input...")
@@ -347,7 +366,7 @@ def task(
         logger.debug(
             f"Creating agent for mode: {mode} with model: {model_name}, vision model: {vision_model_name}, no_stream: {no_stream}"
         )
-        agent = create_agent_for_mode(mode, model_name, vision_model_name=vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration)
+        agent = create_agent_for_mode(mode, model_name, vision_model_name=vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
         logger.debug(
             f"Created agent for mode: {mode} with model: {model_name}, vision model: {vision_model_name}, no_stream: {no_stream}"
         )
