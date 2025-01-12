@@ -220,6 +220,12 @@ print(result)
 
 ## 📖 Examples
 
+Watch how QuantaLogic can generate complete tutorials from simple prompts:
+
+[![Tutorial Generation Demo](./examples/generated_tutorials/python/quantalogic_long.mp4)](./examples/generated_tutorials/python/quantalogic_long.mp4)
+
+Example prompt: [04-write-a-tutorial.md](./examples/tasks/04-write-a-tutorial.md)
+
 Here are some practical examples to help you get started:
 
 Here is the markdown table based on the provided directory listing:
