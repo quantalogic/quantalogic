@@ -38,6 +38,8 @@ quantalogic [OPTIONS] COMMAND [ARGS]...
 | `--mode` | Agent mode (code/search/full) | `code` |
 | `--vision-model-name` | Specify the vision model (litellm format, e.g., "openrouter/A/gpt-4o-mini") | - |
 | `--max-iterations` | Maximum iterations for task solving | `30` |
+| `--max-tokens-working-memory` | Maximum tokens to keep in working memory | `None` |
+| `--compact-every-n-iteration` | Compact memory every N iterations | `None` |
 | `--help` | Show help message and exit | - |
 
 ### Available Modes
