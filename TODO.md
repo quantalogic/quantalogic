@@ -7,7 +7,14 @@ Ideas of future features:
 - [ ] Add model list name 
 - [ ] Add cost tracking
 - [ ] Improve interactive session
-    - [ ] Thinking indicator
+    - [X] Thinking indicator
+    - [ ] Don't quit session after a task has completed 
+        - [ ] Ask for a new task / another question or quit 
+    - [ ] Add commands 
+        - [ ] /list of commands
+        - [ ] /tools list of tools
+        - [ ] /help
+        - [ ] /exit
 - [ ] Add Reflexion after N steps to see if the problem is solvable
 - [X] Add event streaming
 - [ ] Asynchronous execution
@@ -61,5 +68,14 @@ New command in interactive session:
 - [ ] Add a TTS tool
 - [ ] Add Search Tool for action
 - [-] Add Search WebTool like DuckDuckGo, Wikipedia, SerpAPI, Perplexity ...
+- [ ] Add a grep.app Tool to find code on the web
+- [ ] Add a GronTool 
 
 ## Ideas 
+
+
+## Article
+
+- [ ] How to create a agent to find code on the web use grep.app (example https://github.com/popovicn/grepgithub)
+- [ ] An agent that find coins info on the Web https://danaepp.com/grepping-through-api-payloads-with-gron 
+
