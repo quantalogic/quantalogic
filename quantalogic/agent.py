@@ -71,6 +71,7 @@ class Agent(BaseModel):
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
     max_iterations: int = 30
     system_prompt: str = ""
+    compact_every_n_iterations: int | None = None  # Add this to the class attributes
 
     def __init__(
         self,
@@ -81,6 +82,7 @@ class Agent(BaseModel):
         task_to_solve: str = "",
         specific_expertise: str = "General AI assistant with coding and problem-solving capabilities",
         get_environment: Callable[[], str] = get_environment,
+        compact_every_n_iterations: int | None = None,  # New parameter
     ):
         """Initialize the agent with model, memory, tools, and configurations."""
         try:
@@ -121,6 +123,11 @@ class Agent(BaseModel):
                 specific_expertise=specific_expertise,
                 event_emitter=event_emitter,
             )
+            
+            # Set the new compact_every_n_iterations parameter
+            self.compact_every_n_iterations = compact_every_n_iterations or self.max_iterations
+            logger.debug(f"Memory will be compacted every {self.compact_every_n_iterations} iterations")
+            
             logger.debug("Agent initialized successfully.")
         except Exception as e:
             logger.error(f"Failed to initialize agent: {str(e)}")
@@ -267,7 +274,24 @@ class Agent(BaseModel):
     def _compact_memory_if_needed(self, current_prompt: str = ""):
         """Compacts the memory if it exceeds the maximum occupancy."""
         ratio_occupied = self._calculate_context_occupancy()
-        if ratio_occupied >= MAX_OCCUPANCY:
+        
+        # Compact memory if either:
+        # 1. Memory occupancy exceeds MAX_OCCUPANCY, or
+        # 2. Current iteration is a multiple of compact_every_n_iterations
+        should_compact_by_occupancy = ratio_occupied >= MAX_OCCUPANCY
+        should_compact_by_iteration = (
+            self.compact_every_n_iterations is not None and 
+            self.current_iteration > 0 and 
+            self.current_iteration % self.compact_every_n_iterations == 0
+        )
+        
+        if should_compact_by_occupancy or should_compact_by_iteration:
+            if should_compact_by_occupancy:
+                logger.debug(f"Memory compaction triggered: Occupancy {ratio_occupied}% exceeds {MAX_OCCUPANCY}%")
+            
+            if should_compact_by_iteration:
+                logger.debug(f"Memory compaction triggered: Iteration {self.current_iteration} is a multiple of {self.compact_every_n_iterations}")
+            
             self._emit_event("memory_full")
             self.memory.compact()
             self.total_tokens = self.model.token_counter_with_history(self.memory.memory, current_prompt)

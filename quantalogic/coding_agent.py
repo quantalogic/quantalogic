@@ -20,7 +20,13 @@ from quantalogic.utils import get_coding_environment
 from quantalogic.utils.get_quantalogic_rules_content import get_quantalogic_rules_file_content
 
 
-def create_coding_agent(model_name: str, vision_model_name: str | None = None, basic: bool = False,no_stream: bool = False) -> Agent:
+def create_coding_agent(
+    model_name: str, 
+    vision_model_name: str | None = None, 
+    basic: bool = False, 
+    no_stream: bool = False, 
+    compact_every_n_iteration: int | None = None
+) -> Agent:
     """Creates and configures a coding agent with a comprehensive set of tools.
 
     Args:
@@ -28,6 +34,7 @@ def create_coding_agent(model_name: str, vision_model_name: str | None = None, b
         vision_model_name (str | None): Name of the vision model to use for the agent's core capabilities
         basic (bool, optional): If True, the agent will be configured with a basic set of tools.
         no_stream (bool, optional): If True, the agent will not stream results.
+        compact_every_n_iteration (int | None, optional): Frequency of memory compaction.
 
     Returns:
         Agent: A fully configured coding agent instance with:
@@ -91,4 +98,5 @@ def create_coding_agent(model_name: str, vision_model_name: str | None = None, b
         tools=tools,
         specific_expertise=specific_expertise,
         get_environment=get_coding_environment,
+        compact_every_n_iterations=compact_every_n_iteration,
     )
