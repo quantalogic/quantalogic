@@ -422,7 +422,7 @@ class Agent(BaseModel):
             answer=None,
         )
 
-    def _handle_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> ObserveResponseResult:
+    def _handle_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> (str,str):
         """Handle the case where a tool call is repeated."""
         repeat_count = self.last_tool_call.get("count", 0)
         error_message = (
@@ -436,11 +436,7 @@ class Agent(BaseModel):
             "3. Use a different tool or modify the arguments\n"
             "4. Ensure you're making progress towards the goal"
         )
-        return ObserveResponseResult(
-            next_prompt=error_message,
-            executed_tool="",
-            answer=None,
-        )
+        return tool_name, error_message
 
     def _handle_tool_execution_failure(self, response: str) -> ObserveResponseResult:
         """Handle the case where tool execution fails."""
