@@ -52,3 +52,5 @@ REMEMBER
 • Code for humans
 • Complexity kills
 • Requirements drive changes
+
+We use loguru for logging
