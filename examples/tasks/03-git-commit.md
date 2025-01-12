@@ -1,0 +1,1 @@
+ Commit all staged file with a meanining full comment, use diff to explain in a semantic what has be done in this commit.

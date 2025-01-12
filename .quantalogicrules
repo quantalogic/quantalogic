@@ -60,3 +60,5 @@ Conventions:
 - Use snake_case for function names
 - Use snake_case for module names
 - Use snake_case for file names
+
+We use loguru for logging

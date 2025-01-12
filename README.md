@@ -31,6 +31,8 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 
 ## 📋 Table of Contents
 
+- [Release Notes](#release-notes)
+
 - [Installation](#-installation)
 - [Quick Start](#-quickstart)
 - [Key Components](#-key-components)
@@ -42,6 +44,12 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 - [Contributing](#-contributing)
 - [License](#-license)
 - [Documentation Development](#-documentation-development)
+
+## Release Notes
+
+See our [Release Notes](RELEASE_NOTES.MD) for detailed version history and changes.
+
+[TODO List](TODO.md)
 
 ## 📦 Installation
 
@@ -94,6 +102,8 @@ Options:
   --mode [code|basic|interpreter|full|code-basic|search|search-full]  Agent mode.
   --vision-model-name TEXT        Specify the vision model (litellm format, e.g., "openrouter/A/gpt-4o-mini").
   --max-iterations INTEGER        Maximum iterations for task solving (default: 30).
+  --max-tokens-working-memory INTEGER Maximum tokens to keep in working memory (default: 4000).
+  --compact-every-n-iteration INTEGER Compact memory every N iterations (default: 5).
   --help                          Show this message and exit.
 
 Commands:
@@ -113,8 +123,27 @@ task    Execute a task with the QuantaLogic AI Assistant
 - `--log [info|debug|warning]`: Set logging level.  
 - `--vision-model-name TEXT`: Specify the vision model (litellm format).  
 - `--max-iterations INTEGER`: Maximum iterations for task solving (default: 30).  
+- `--max-tokens-working-memory INTEGER`: Maximum tokens to keep in working memory (default: 4000).  
+- `--compact-every-n-iteration INTEGER`: Compact memory every N iterations (default: 5).  
 - `--no-stream`: Disable streaming output (default: enabled).  
 - `--help`: Show this message and exit.
+
+**Detailed Parameter Descriptions:**
+
+- **--model-name**: Specifies the LLM model to use (e.g., "openrouter/deepseek/deepseek-chat")
+- **--mode**: Selects agent capabilities:
+  - *code*: Coding-focused with basic capabilities
+  - *basic*: General-purpose without coding tools
+  - *interpreter*: Interactive code execution
+  - *full*: All capabilities enabled
+  - *code-basic*: Coding with basic reasoning
+  - *search*: Web search integration
+- **--log**: Controls logging verbosity (info, debug, warning)
+- **--vision-model-name**: Specifies vision model for image processing
+- **--max-iterations**: Limits task-solving attempts (default: 30)
+- **--max-tokens-working-memory**: Controls memory usage (default: None)
+- **--compact-every-n-iteration**: Memory optimization frequency (default: None)
+- **--no-stream**: Disables real-time output streaming
 
 
 

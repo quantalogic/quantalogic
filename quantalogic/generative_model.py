@@ -2,6 +2,7 @@
 
 import functools
 
+import litellm
 import openai
 from litellm import completion, exceptions, get_max_tokens, get_model_info, token_counter
 from loguru import logger
@@ -10,6 +11,11 @@ from pydantic import BaseModel, Field, field_validator
 from quantalogic.event_emitter import EventEmitter  # Importing the EventEmitter class
 
 MIN_RETRIES = 1
+
+
+
+litellm.suppress_debug_info = True # Very important to suppress prints don't remove
+
 
 
 # Define the Message class for conversation handling
