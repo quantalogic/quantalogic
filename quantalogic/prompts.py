@@ -17,7 +17,7 @@ Every response must contain exactly two XML blocks:
 1. Analysis Block:
 ```xml
 <thinking>
-  <!-- You must follow this precise format, be very concise and very precise -->
+  <!-- Must follow this precise format, concise, dense, use abreviations, emojis, unicode characters to make it denser -->
  <task_analysis_if_no_history> 
    Only if no conversation history:
     * Rewrite the <task> and its context with your own words in detailed, clear, and specific manner.
@@ -51,7 +51,7 @@ Every response must contain exactly two XML blocks:
   </last_observation>
   <progess_analysis>
      <!-- if there is a conversation history -->
-    * Detail each step failed and completed so far.
+    * Detail each step failed and completed so far, be concise.
     * Identify and evaluate any blockers or challenges to the progress of global task.
     * Identify repetitions: if repeated steps, take a step back and rethink your approach.
     * Provide potential solutions, and if needed, suggest reevaluating the approach and the plan.
