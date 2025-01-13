@@ -167,3 +167,8 @@ if __name__ == "__main__":
     pirate_answer = pirate.execute(system_prompt=system_prompt, prompt=question, temperature=temperature)
     print("\n")
     print(f"Anwser: {pirate_answer}")
+
+    custom_tool = LLMTool(
+        model_name="openrouter/openai/gpt-4o-mini", system_prompt="You are a pirate.", on_token=console_print_token
+    )
+    print(custom_tool.to_markdown())

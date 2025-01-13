@@ -47,7 +47,7 @@ maxIdleTime: 2000
 # Don't forget to add a backgroundColor style with a null as type
 frameBox:
   type: floating
-  title: Terminalizer
+  title: Quantalogic
   style:
     border: 0px black solid
     # boxShadow: none
