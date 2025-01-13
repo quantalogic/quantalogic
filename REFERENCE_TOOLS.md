@@ -40,6 +40,40 @@ This document contains detailed documentation for all tools available in the Qua
    - [SerpAPISearchTool](#serpapisearchtool)
    - [WikipediaSearchTool](#wikipediasearchtool)
 
+## Argument Injection and Property Precedence
+
+QuantaLogic tools support advanced argument injection with property precedence. When a tool has both properties and arguments with the same name, the property value takes precedence over the argument value.
+
+### Implementation Details
+
+The argument injection mechanism is implemented in the Tool class (tool.py) through the `get_injectable_properties_in_execution()` method. This method:
+
+1. Checks for matching property names in the tool's configuration
+2. Returns a dictionary of injectable properties
+3. Filters out None values to ensure only valid properties are injected
+
+### Property Precedence Rules
+
+1. Tool properties take precedence over arguments
+2. Properties must match argument names exactly
+3. None values are excluded from injection
+4. Properties are injected before argument validation
+
+### Example Usage
+
+```python
+class MyTool(Tool):
+    field1: str | None = Field(default=None)
+    
+    def execute(self, **kwargs):
+        # field1 will be injected if defined
+        print(self.field1)
+
+# Property takes precedence over argument
+tool = MyTool(field1="property_value")
+tool.execute(field1="argument_value")  # Prints "property_value"
+```
+
 ## Task Automation Tools
 
 ### AgentTool

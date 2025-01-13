@@ -524,6 +524,13 @@ class Agent(BaseModel):
             tuple containing:
                 - executed_tool name (str)
                 - tool execution response (Any)
+
+        Note:
+            Predefined variable properties take precedence over dynamically provided values.
+            This ensures consistent behavior when tools have both predefined properties
+            and runtime-provided arguments. The precedence order is:
+            1. Predefined properties from tool.get_injectable_properties_in_execution()
+            2. Runtime-provided arguments from arguments_with_values
         """
         # Handle tool validation if required
         if tool.need_validation:
@@ -568,6 +575,11 @@ class Agent(BaseModel):
             if tool.need_caller_context_memory:
                 # Inject caller context into the tool if needed
                 arguments_with_values_interpolated["caller_context_memory"] = self.memory.memory
+
+            # Add injectable variables
+            injectable_properties = tool.get_injectable_properties_in_execution()
+            for key, value in injectable_properties.items():
+                arguments_with_values_interpolated[key] = value
 
             # Call tool execute with named arguments
             response = tool.execute(**arguments_with_values_interpolated)

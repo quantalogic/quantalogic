@@ -87,12 +87,23 @@ def create_coding_agent(
                 name="coding_consultant",  # Handles implementation-level coding questions
                 on_token=console_print_token if not no_stream else None,
             )
+            # Note: system_prompt is predefined in LLMTool properties and takes precedence over
+            # dynamically provided values. This ensures consistent behavior by prioritizing
+            # the predefined system prompt. See tool.py and agent.py for implementation details.
         )
         tools.append(
             LLMTool(
                 model_name=model_name,
                 system_prompt="You are a software architect, your role is to answer software architecture questions.",
                 name="software_architect",  # Handles system design and architecture questions
+                on_token=console_print_token if not no_stream else None,
+            )
+        )
+        ## Add a generic LLMTool
+        tools.append(
+            LLMTool(
+                model_name=model_name,
+                name="llm_tool",
                 on_token=console_print_token if not no_stream else None,
             )
         )
