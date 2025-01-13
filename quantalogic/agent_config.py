@@ -209,6 +209,7 @@ def create_basic_agent(
         WriteFileTool(),
         EditWholeContentTool(),
         ReplaceInFileTool(),
+        InputQuestionTool(),
         ExecuteBashCommandTool(),
         LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
     ]
