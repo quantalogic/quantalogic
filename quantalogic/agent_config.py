@@ -176,7 +176,7 @@ def create_full_agent(
     )
 
 
-def create_orchestrator_agent(
+def create_basic_agent(
     model_name: str, 
     vision_model_name: str | None = None, 
     no_stream: bool = False, 
@@ -198,16 +198,19 @@ def create_orchestrator_agent(
     # Rebuild AgentTool to resolve forward references
     AgentTool.model_rebuild()
 
-    coding_agent_instance = create_coding_agent(model_name)
 
     tools = [
         TaskCompleteTool(),
         ListDirectoryTool(),
         ReadFileBlockTool(),
-        RipgrepTool(),
         SearchDefinitionNames(),
+        ReadFileTool(),
+        ReplaceInFileTool(),
+        WriteFileTool(),
+        EditWholeContentTool(),
+        ReplaceInFileTool(),
+        ExecuteBashCommandTool(),
         LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
-        AgentTool(agent=coding_agent_instance, agent_role="software expert", name="coder_agent_tool"),
     ]
 
     if vision_model_name:

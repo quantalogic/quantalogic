@@ -31,7 +31,7 @@ from quantalogic.agent_config import (  # noqa: E402
     create_coding_agent,
     create_full_agent,
     create_interpreter_agent,
-    create_orchestrator_agent,
+    create_basic_agent,
 )
 from quantalogic.interactive_text_editor import get_multiline_input  # noqa: E402
 from quantalogic.search_agent import create_search_agent  # noqa: E402
@@ -52,7 +52,7 @@ def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | N
     if mode == "code-basic":
         return create_coding_agent(model_name, vision_model_name, basic=True, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
     elif mode == "basic":
-        return create_orchestrator_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
+        return create_basic_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
     elif mode == "full":
         return create_full_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
     elif mode == "interpreter":
@@ -159,7 +159,8 @@ def display_welcome_message(
     vision_model_name: str | None, 
     max_iterations: int = 50, 
     compact_every_n_iteration: int | None = None,
-    max_tokens_working_memory: int | None = None
+    max_tokens_working_memory: int | None = None,
+    mode: str = "basic"
 ) -> None:
     """Display the welcome message and instructions."""
     version = get_version()
@@ -174,6 +175,7 @@ def display_welcome_message(
             "\n"
             f"- Model: {model_name}\n"
             f"- Vision Model: {vision_model_name}\n"
+            f"- Mode: {mode}\n"
             f"- Max Iterations: {max_iterations}\n"
             f"- Memory Compact Frequency: {compact_every_n_iteration or 'Default (Max Iterations)'}\n"
             f"- Max Working Memory Tokens: {max_tokens_working_memory or 'Default'}\n\n"
@@ -208,7 +210,7 @@ def display_welcome_message(
     help="Set logging level (info/debug/warning).",
 )
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
-@click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")
+@click.option("--mode", type=click.Choice(AGENT_MODES), default="basic", help="Agent mode (code/search/full).")
 @click.option(
     "--vision-model-name",
     default=None,
@@ -266,7 +268,7 @@ def cli(
     help='Specify the model to use (litellm format, e.g. "openrouter/deepseek/deepseek-chat").',
 )
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
-@click.option("--mode", type=click.Choice(AGENT_MODES), default="code", help="Agent mode (code/search/full).")
+@click.option("--mode", type=click.Choice(AGENT_MODES), default="basic", help="Agent mode (code/search/full).")
 @click.option(
     "--log",
     type=click.Choice(["info", "debug", "warning"]),
@@ -333,7 +335,8 @@ def task(
                     vision_model_name, 
                     max_iterations=max_iterations, 
                     compact_every_n_iteration=compact_every_n_iteration,
-                    max_tokens_working_memory=max_tokens_working_memory
+                    max_tokens_working_memory=max_tokens_working_memory,
+                    mode=mode
                 )
                 check_new_version()
                 logger.debug("Waiting for user input...")

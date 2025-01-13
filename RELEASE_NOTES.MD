@@ -1,5 +1,10 @@
 # Release Notes
 
+## [0.2.21] (2025-01-13)
+- Fix a git_ls bug that caused that block the tool execution on certain directories
+- By default create a basic agent instead of a coding agent
+
+
 ## [0.2.20] (2025-01-13)
 - Added tool property injection precedence at runtime using tool.get_injectable_properties_in_execution()
 - Added Jinja2 template support with enhanced variable handling
