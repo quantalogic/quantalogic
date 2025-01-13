@@ -13,7 +13,7 @@ The `cli` version include coding capabilities comparable to Aider.
 
 [📖 Documentation](https://quantalogic.github.io/quantalogic/)
 
-![Video](./examples/generated_tutorials/python/quantalogic_8s.gif)
+![Video](https://youtu.be/pB6Uioc94SQ)
 
 [HowTo Guide](./docs/howto/howto.md)
 
