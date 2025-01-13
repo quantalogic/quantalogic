@@ -56,8 +56,8 @@ class Agent(BaseModel):
 
     specific_expertise: str
     model: GenerativeModel
-    memory: AgentMemory = AgentMemory()
-    variable_store: VariableMemory = VariableMemory()
+    memory: AgentMemory = AgentMemory() # A list User / Assistant Messages
+    variable_store: VariableMemory = VariableMemory() # A dictionary of variables (var1: value1, var2: value2)
     tools: ToolManager = ToolManager()
     event_emitter: EventEmitter = EventEmitter()
     config: AgentConfig
@@ -78,13 +78,14 @@ class Agent(BaseModel):
         self,
         model_name: str = "",
         memory: AgentMemory = AgentMemory(),
+        variable_store: VariableMemory = VariableMemory(),
         tools: list[Tool] = [TaskCompleteTool()],
         ask_for_user_validation: Callable[[str], bool] = console_ask_for_user_validation,
         task_to_solve: str = "",
         specific_expertise: str = "General AI assistant with coding and problem-solving capabilities",
         get_environment: Callable[[], str] = get_environment,
-        compact_every_n_iterations: int | None = None,  # New parameter
-        max_tokens_working_memory: int | None = None,  # New parameter to set max working memory tokens
+        compact_every_n_iterations: int | None = None,  # if set the memory will be compacted every n iterations
+        max_tokens_working_memory: int | None = None,  # if set the memory will be compacted each time the max_tokens_working_memory is reached
     ):
         """Initialize the agent with model, memory, tools, and configurations."""
         try:
@@ -117,7 +118,7 @@ class Agent(BaseModel):
             super().__init__(
                 model=GenerativeModel(model=model_name, event_emitter=event_emitter),
                 memory=memory,
-                variable_store=VariableMemory(),
+                variable_store=variable_store,
                 tools=tool_manager,
                 config=config,
                 ask_for_user_validation=ask_for_user_validation,
@@ -560,6 +561,14 @@ class Agent(BaseModel):
             arguments_with_values_interpolated = {
                 key: self._interpolate_variables(value) for key, value in arguments_with_values.items()
             }
+            # test if tool need variables in context 
+            if tool.need_variables:
+                # Inject variables into the tool if needed
+                arguments_with_values_interpolated["variables"] = self.variable_store
+            if tool.need_caller_context_memory:
+                # Inject caller context into the tool if needed
+                arguments_with_values_interpolated["caller_context_memory"] = self.memory.memory
+
             # Call tool execute with named arguments
             response = tool.execute(**arguments_with_values_interpolated)
             executed_tool = tool.name

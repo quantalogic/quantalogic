@@ -5,6 +5,7 @@ from quantalogic.tools import (
     EditWholeContentTool,
     ExecuteBashCommandTool,
     InputQuestionTool,
+    JinjaTool,
     ListDirectoryTool,
     LLMTool,
     LLMVisionTool,
@@ -72,6 +73,7 @@ def create_coding_agent(
         ExecuteBashCommandTool(),
         InputQuestionTool(),
         DuckDuckGoSearchTool(),
+        JinjaTool(),
     ]
 
     if vision_model_name:

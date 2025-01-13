@@ -2,10 +2,12 @@
 
 from .agent_tool import AgentTool
 from .download_http_file_tool import DownloadHttpFileTool
+from .duckduckgo_search_tool import DuckDuckGoSearchTool
 from .edit_whole_content_tool import EditWholeContentTool
 from .elixir_tool import ElixirTool
 from .execute_bash_command_tool import ExecuteBashCommandTool
 from .input_question_tool import InputQuestionTool
+from .jinja_tool import JinjaTool
 from .list_directory_tool import ListDirectoryTool
 from .llm_tool import LLMTool
 from .llm_vision_tool import LLMVisionTool
@@ -18,7 +20,6 @@ from .replace_in_file_tool import ReplaceInFileTool
 from .ripgrep_tool import RipgrepTool
 from .search_definition_names import SearchDefinitionNames
 from .serpapi_search_tool import SerpApiSearchTool
-from .duckduckgo_search_tool import DuckDuckGoSearchTool
 from .task_complete_tool import TaskCompleteTool
 from .tool import Tool, ToolArgument
 from .unified_diff_tool import UnifiedDiffTool
@@ -51,4 +52,5 @@ __all__ = [
     "MarkitdownTool",
     "DownloadHttpFileTool",
     "EditWholeContentTool",
+    "JinjaTool",
 ]

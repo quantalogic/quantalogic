@@ -29,7 +29,6 @@ class ToolArgument(BaseModel):
     required: bool = Field(default=False, description="Indicates if the argument is required.")
     default: str | None = Field(default=None, description="The default value for the argument. This parameter is required.")
     example: str | None = Field(default=None, description="An example value to illustrate the argument's usage.")
-    need_validation: bool = Field(default=False, description="Indicates if the argument needs validation.")
 
 
 class ToolDefinition(BaseModel):
@@ -48,6 +47,8 @@ class ToolDefinition(BaseModel):
     description: str = Field(..., description="A brief description of what the tool does.")
     arguments: list[ToolArgument] = Field(default_factory=list, description="A list of arguments the tool accepts.")
     need_validation: bool = Field(default=False, description="Indicates if the tool needs validation.")
+    need_variables: bool = Field(default=False, description="Indicates if the argument needs variables dictionary in context.")
+    need_caller_context_memory: bool = Field(default=False, description="Indicates if the argument needs caller context memory.")
 
     def to_json(self) -> str:
         """Convert the tool to a JSON string representation.
