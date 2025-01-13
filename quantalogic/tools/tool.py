@@ -46,9 +46,9 @@ class ToolDefinition(BaseModel):
     name: str = Field(..., description="The unique name of the tool.")
     description: str = Field(..., description="A brief description of what the tool does.")
     arguments: list[ToolArgument] = Field(default_factory=list, description="A list of arguments the tool accepts.")
-    need_validation: bool = Field(default=False, description="Indicates if the tool needs validation.")
-    need_variables: bool = Field(default=False, description="Indicates if the argument needs variables dictionary in context.")
-    need_caller_context_memory: bool = Field(default=False, description="Indicates if the argument needs caller context memory.")
+    need_validation: bool = Field(default=False, description="When True, requires user confirmation before execution. Useful for tools that perform potentially destructive operations.")
+    need_variables: bool = Field(default=False, description="When True, provides access to the agent's variable store. Required for tools that need to interpolate variables (e.g., Jinja templates).")
+    need_caller_context_memory: bool = Field(default=False, description="When True, provides access to the agent's conversation history. Useful for tools that need context from previous interactions.")
 
     def to_json(self) -> str:
         """Convert the tool to a JSON string representation.

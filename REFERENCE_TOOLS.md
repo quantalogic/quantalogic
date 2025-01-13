@@ -544,6 +544,44 @@ def new_function():
 - Limited to single-file modifications
 - No automatic conflict resolution
 
+## Utility Tools
+
+### JinjaTool
+
+The **JinjaTool** renders Jinja2 templates with access to the agent's variables.
+
+#### Parameters
+
+| Parameter         | Type   | Description                                                                   | Example                                    |
+|-------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
+| `name`            | string | Internal name of the tool (default: "jinja_tool")                             | `jinja_tool`                                |
+| `description`     | string | Description of the tool's purpose                                             | `Renders Jinja2 templates with variable access` |
+| `inline_template` | string | Jinja2 template string to render                                              | `Hello, {{ var1 }}!`                        |
+| `need_variables`  | bool   | When True, provides access to the agent's variable store                      | `True`                                      |
+
+#### Key Characteristics
+- Renders Jinja2 templates with variable interpolation
+- Requires `need_variables=True` to access agent's variables
+- Supports all Jinja2 template features
+- Useful for generating dynamic content
+
+#### Variable Access
+- Variables are accessed using `{{ var_name }}` syntax
+- Must set `need_variables=True` to enable variable access
+- Variables must be defined in the agent's context
+
+#### Example Usage
+```xml
+<jinja_tool>
+  <inline_template>Hello, {{ var1 }}! You have {{ var2|length }} items.</inline_template>
+</jinja_tool>
+```
+
+#### Restrictions
+- Requires `need_variables=True` for variable access
+- Template must be valid Jinja2 syntax
+- Variables must exist in agent's context
+
 ## Search Tools
 
 ### RipgrepTool
