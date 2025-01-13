@@ -6,7 +6,6 @@ with type-validated arguments and execution methods.
 
 from typing import Any, Literal
 
-from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
