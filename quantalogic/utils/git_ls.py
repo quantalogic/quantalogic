@@ -29,6 +29,10 @@ def git_ls(
 
     # Expand paths and get absolute path
     path = Path(os.path.expanduser(directory_path)).absolute()
+    
+    # Verify access to base directory
+    if not os.access(path, os.R_OK):
+        return f"==== Error: No read access to directory {path} ====\n==== End of Block ===="
 
     # Load .gitignore patterns
     ignore_spec = load_gitignore_spec(path)
@@ -49,9 +53,13 @@ def load_gitignore_spec(path: Path) -> PathSpec:
     while current != current.parent:  # Stop at root
         gitignore_path = current / ".gitignore"
         if gitignore_path.exists():
-            with open(gitignore_path) as f:
-                # Prepend parent patterns to maintain precedence
-                ignore_patterns = f.readlines() + ignore_patterns
+            try:
+                if os.access(gitignore_path, os.R_OK):
+                    with open(gitignore_path) as f:
+                        # Prepend parent patterns to maintain precedence
+                        ignore_patterns = f.readlines() + ignore_patterns
+            except (PermissionError, OSError):
+                continue
         current = current.parent
 
     return PathSpec.from_lines(GitWildMatchPattern, ignore_patterns)
@@ -68,12 +76,25 @@ def generate_file_tree(
         return {}
 
     if path.is_file():
-        return {"name": path.name, "type": "file", "size": f"{path.stat().st_size} bytes"}
+        try:
+            if not os.access(path, os.R_OK):
+                return {"name": path.name, "type": "file", "size": "no access"}
+            return {"name": path.name, "type": "file", "size": f"{path.stat().st_size} bytes"}
+        except (PermissionError, OSError):
+            return {"name": path.name, "type": "file", "size": "no access"}
 
     tree = {"name": path.name, "type": "directory", "children": []}
 
-    # Always list direct children, but only recursively list if recursive is True
-    children = sorted(path.iterdir(), key=lambda x: x.name.lower())
+    try:
+        if not os.access(path, os.R_OK | os.X_OK):
+            tree["children"].append({"name": "no access", "type": "error"})
+            return tree
+
+        # Always list direct children, but only recursively list if recursive is True
+        children = sorted(path.iterdir(), key=lambda x: x.name.lower())
+    except (PermissionError, OSError):
+        tree["children"].append({"name": "no access", "type": "error"})
+        return tree
     for child in children:
         if not ignore_spec.match_file(child):
             if child.is_file():
