@@ -1,5 +1,12 @@
 # Release Notes
 
+## [0.2.20] (2025-01-13)
+- Added tool property injection precedence at runtime using tool.get_injectable_properties_in_execution()
+- Added Jinja2 template support with enhanced variable handling
+- Implemented pagination support for search_definition_names tool
+- Updated documentation including JinjaTool and parameter descriptions
+- Various README improvements and tutorial additions
+
 ## [0.2.19] (2025-01-12)
 - Refactor _handle_repeated_tool_call to return tuple instead of ObserveResponseResult (182c505)
 - Add link (e455657)

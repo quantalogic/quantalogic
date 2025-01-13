@@ -76,15 +76,17 @@ class ToolParser:
             elements = self.xml_parser.extract_elements(xml_string, preserve_cdata=True)
             logger.debug(f"Extracted elements from XML: {elements}")
 
+            arguments = self.tool.get_non_injectable_arguments()
+
             # Check for required arguments
-            for arg in self.tool.arguments:
+            for arg in arguments:
                 if arg.required and arg.name not in elements:
                     error_msg = f"argument {arg.name} not found"
                     logger.error(f"Error extracting XML elements: {error_msg}")
                     raise ValueError(f"Error extracting XML elements: {error_msg}")
 
             # Create and validate arguments dictionary
-            argument_dict = {arg.name: elements.get(arg.name, "") for arg in self.tool.arguments}
+            argument_dict = {arg.name: elements.get(arg.name, "") for arg in arguments}
 
             # Validate using Pydantic model
             validated_args = ToolArguments(arguments=argument_dict)
