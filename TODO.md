@@ -23,6 +23,8 @@
 
 - [ ] Different strategy of function calling: actually we use XML function calling that are good for coding agent, we can add 2 new paradigam: JSON Tool function calling or Python Function Calling (as Pydantic) to use specific fined tuned LLM such as driaforall Dria-Agent-a-3B
 - Memory Handling 
+- [ ] Add integration with Composio https://app.composio.dev/, and create a pull request in https://docs.composio.dev/framework/ 
+
 
 ## Demo:
 
