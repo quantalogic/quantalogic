@@ -483,7 +483,7 @@ class Agent(BaseModel):
         if len(response) > MAX_RESPONSE_LENGTH:
             response_display = response[:MAX_RESPONSE_LENGTH]
             response_display += (
-                f"... content was trunctated full content available by interpolation in variable {variable_name}"
+                f"... content was truncated full content available by interpolation in variable {variable_name}"
             )
 
         # Format the response message
