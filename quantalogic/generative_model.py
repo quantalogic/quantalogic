@@ -1,10 +1,12 @@
 """Generative model module for AI-powered text generation."""
 
 import functools
+from typing import Dict, Any, Optional, List
+from datetime import datetime
 
 import litellm
 import openai
-from litellm import completion, exceptions, get_max_tokens, get_model_info, token_counter
+from litellm import completion, exceptions, get_max_tokens, get_model_info, token_counter, image_generation
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
@@ -70,10 +72,12 @@ class ResponseStats(BaseModel):
     usage: TokenUsage
     model: str
     finish_reason: str | None = None
+    data: List[Dict[str, Any]] | None = None
+    created: str | None = None
 
 
 class GenerativeModel:
-    """Generative model for AI-powered text generation with configurable parameters."""
+    """Generative model for AI-powered text generation and image generation."""
 
     def __init__(
         self,
@@ -311,3 +315,73 @@ class GenerativeModel:
         except Exception as e:
             logger.error(f"Error getting max output tokens for {self.model}: {e}")
             return None
+
+    def generate_image(self, prompt: str, params: Dict[str, Any]) -> ResponseStats:
+        """Generate an image using the specified model and parameters.
+
+        Args:
+            prompt: Text description of the image to generate
+            params: Dictionary of parameters for image generation including:
+                   - model: Name of the image generation model
+                   - size: Size of the generated image
+                   - quality: Quality level (DALL-E only)
+                   - style: Style preference (DALL-E only)
+                   - response_format: Format of the response (url/base64)
+                   - negative_prompt: What to avoid in the image (SD only)
+                   - cfg_scale: Classifier Free Guidance scale (SD only)
+
+        Returns:
+            ResponseStats containing the image generation results
+
+        Raises:
+            Exception: If there's an error during image generation
+        """
+        try:
+            logger.debug(f"Generating image with params: {params}")
+            
+            # Ensure prompt is in params
+            generation_params = {**params}
+            generation_params["prompt"] = prompt
+            
+            # Call litellm's image generation function
+            response = image_generation(
+                model=generation_params.pop("model"),
+                **generation_params
+            )
+
+            # Convert response data to list of dictionaries with string values
+            if hasattr(response, "data"):
+                data = []
+                for img in response.data:
+                    img_data = {}
+                    if hasattr(img, "url"):
+                        img_data["url"] = str(img.url)
+                    if hasattr(img, "b64_json"):
+                        img_data["b64_json"] = str(img.b64_json)
+                    if hasattr(img, "revised_prompt"):
+                        img_data["revised_prompt"] = str(img.revised_prompt)
+                    data.append(img_data)
+            else:
+                data = [{"url": str(response.url)}]
+
+            # Convert timestamp to ISO format string
+            if hasattr(response, "created"):
+                try:
+                    created = datetime.fromtimestamp(response.created).isoformat()
+                except (TypeError, ValueError):
+                    created = str(response.created)
+            else:
+                created = None
+
+            # Convert response to our ResponseStats format
+            return ResponseStats(
+                response="",  # Empty for image generation
+                usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+                model=str(params["model"]),
+                data=data,
+                created=created
+            )
+
+        except Exception as e:
+            logger.error(f"Error in image generation: {str(e)}")
+            raise
