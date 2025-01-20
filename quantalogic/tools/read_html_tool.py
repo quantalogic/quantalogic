@@ -6,7 +6,7 @@ from typing import Optional, Tuple
 import requests
 from bs4 import BeautifulSoup
 from loguru import logger
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 # Ensure that markdownify is installed: pip install markdownify
 try:
@@ -73,13 +73,13 @@ class ReadHTMLTool(Tool):
             example="300"
         )
 
-        @validator('convert')
+        @field_validator('convert')
         def validate_convert(cls, v):
             if v not in ["text", "html"]:
                 raise ValueError("Convert must be either 'text' or 'html'")
             return v
 
-        @validator('line_end')
+        @field_validator('line_end')
         def validate_line_end(cls, v, values):
             if 'line_start' in values and v < values['line_start']:
                 raise ValueError("line_end must be greater than or equal to line_start")
