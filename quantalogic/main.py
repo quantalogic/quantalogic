@@ -8,6 +8,7 @@ from typing import Optional
 
 # Third-party imports
 import click
+import requests
 from loguru import logger
 
 from quantalogic.console_print_events import console_print_events
@@ -119,17 +120,27 @@ def switch_verbose(verbose_mode: bool, log_level: str = "info") -> None:
     set_litellm_verbose(verbose_mode)
 
 
-def get_task_from_file(file_path: str) -> str:
-    """Get task content from specified file."""
+def get_task_from_file(source: str):
+    """Get task content from specified file path or URL."""
     try:
-        with open(file_path, encoding="utf-8") as f:
+        # Check if source is a URL
+        if source.startswith(('http://', 'https://')):
+            import requests
+            response = requests.get(source, timeout=10)
+            response.raise_for_status()  # Raise an exception for bad status codes
+            return response.text.strip()
+        
+        # If not a URL, treat as a local file path
+        with open(source, encoding="utf-8") as f:
             return f.read().strip()
     except FileNotFoundError:
-        raise FileNotFoundError(f"Error: File '{file_path}' not found.")
+        raise FileNotFoundError(f"Error: File '{source}' not found.")
     except PermissionError:
-        raise PermissionError(f"Error: Permission denied when reading '{file_path}'.")
+        raise PermissionError(f"Error: Permission denied when reading '{source}'.")
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Error retrieving URL content: {e}")
     except Exception as e:
-        raise Exception(f"Unexpected error reading file: {e}")
+        raise Exception(f"Unexpected error: {e}")
 
 
 # Spinner control
@@ -261,7 +272,7 @@ def cli(
 
 
 @cli.command()
-@click.option("--file", type=click.Path(exists=True), help="Path to task file.")
+@click.option("--file", type=str, help="Path to task file or URL.")
 @click.option(
     "--model-name",
     default=MODEL_NAME,
