@@ -1,7 +1,7 @@
 import os
 import random
 import time
-from typing import Optional, Tuple
+from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
@@ -57,7 +57,7 @@ class ReadHTMLTool(Tool):
         )
         convert: Optional[str] = Field(
             "text",
-            description="Convert input to 'text' (Markdown) or 'html'. Default is 'text'",
+            description="Convert input to 'text' (Markdown) or 'html' no conversion. Default is 'text'",
             example="'text' or 'html'"
         )
         line_start: Optional[int] = Field(
@@ -130,7 +130,9 @@ class ReadHTMLTool(Tool):
         try:
             result = requests.utils.urlparse(source)
             return all([result.scheme, result.netloc])
-        except:
+        except (requests.exceptions.RequestException, ValueError) as e:
+            # Log the specific exception for debugging
+            logger.debug(f"URL validation failed: {e}")
             return False
 
     def read_from_file(self, file_path: str) -> str:
@@ -216,6 +218,9 @@ class ReadHTMLTool(Tool):
         """Execute the tool to read and parse HTML content in specified line ranges."""
         logger.debug(f"Executing read_html_tool with source: {source}")
 
+        line_start = int(line_start)
+        line_end = int(line_end)
+
         if not self.validate_source(source):
             logger.warning(f"Invalid source: {source}")
             return f"Invalid source: {source}"
@@ -254,7 +259,7 @@ class ReadHTMLTool(Tool):
             result = [
                 f"==== Source: {source} ====",
                 f"==== Lines: {line_start} - {actual_end_line} of {total_lines} ====",
-                f"==== Block Detail ====",
+                "==== Block Detail ====",
                 f"Start Line: {line_start}",
                 f"End Line: {actual_end_line}",
                 f"Total Lines Returned: {total_lines_returned}",
