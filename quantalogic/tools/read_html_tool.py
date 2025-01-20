@@ -1,32 +1,44 @@
 import os
 import random
-from typing import Optional
-from urllib.parse import urlparse
+import time
+from typing import Optional, Tuple
 
 import requests
 from bs4 import BeautifulSoup
 from loguru import logger
-from pydantic import field_validator
+from pydantic import BaseModel, Field, validator
 
+# Ensure that markdownify is installed: pip install markdownify
+try:
+    from markdownify import markdownify as md
+except ImportError:
+    logger.error("Missing dependency: markdownify. Install it using 'pip install markdownify'")
+    raise
+
+# Assuming Tool and ToolArgument are properly defined in quantalogic.tools.tool
 from quantalogic.tools.tool import Tool, ToolArgument
 
-# Add User-Agent list to mimic different browsers
+# User-Agent list to mimic different browsers
 USER_AGENTS = [
     # Chrome on Windows
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
+    " Chrome/91.0.4472.124 Safari/537.36",
     # Chrome on macOS
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)"
+    " Chrome/91.0.4472.124 Safari/537.36",
     # Firefox on Windows
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
     # Firefox on macOS
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:89.0) Gecko/20100101 Firefox/89.0",
     # Safari on macOS
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15"
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+    " Version/14.1.1 Safari/605.1.15"
 ]
 
-# Additional headers to make requests look more like a real browser
+# Additional headers to mimic real browser requests
 ADDITIONAL_HEADERS = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;"
+              "q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
     "Upgrade-Insecure-Requests": "1",
     "DNT": "1",  # Do Not Track
@@ -34,15 +46,50 @@ ADDITIONAL_HEADERS = {
     "Cache-Control": "max-age=0"
 }
 
-
 class ReadHTMLTool(Tool):
-    """Tool for reading HTML content from files or URLs in blocks."""
-    
+    """Tool for reading HTML content from files or URLs in specified line ranges."""
+
+    class Arguments(BaseModel):
+        source: str = Field(
+            ...,
+            description="The file path or URL to read HTML from",
+            example="https://example.com or ./example.html"
+        )
+        convert: Optional[str] = Field(
+            "text",
+            description="Convert input to 'text' (Markdown) or 'html'. Default is 'text'",
+            example="'text' or 'html'"
+        )
+        line_start: Optional[int] = Field(
+            1,
+            description="The starting line number (1-based index). Default: 1",
+            ge=1,
+            example="1"
+        )
+        line_end: Optional[int] = Field(
+            300,
+            description="The ending line number (1-based index). Default: 300",
+            ge=1,
+            example="300"
+        )
+
+        @validator('convert')
+        def validate_convert(cls, v):
+            if v not in ["text", "html"]:
+                raise ValueError("Convert must be either 'text' or 'html'")
+            return v
+
+        @validator('line_end')
+        def validate_line_end(cls, v, values):
+            if 'line_start' in values and v < values['line_start']:
+                raise ValueError("line_end must be greater than or equal to line_start")
+            return v
+
     name: str = "read_html_tool"
     description: str = (
-        "Reads HTML content from either a file path or URL in blocks. "
-        "Returns parsed HTML content using BeautifulSoup. "
-        "Can read specific portions of HTML files in blocks of lines."
+        "Reads HTML content from either a file path or URL in specified line ranges. "
+        "Returns parsed HTML content using BeautifulSoup or converts it to Markdown. "
+        "Allows reading specific portions of HTML files by defining start and end lines."
     )
     arguments: list = [
         ToolArgument(
@@ -53,11 +100,19 @@ class ReadHTMLTool(Tool):
             example="https://example.com or ./example.html"
         ),
         ToolArgument(
+            name="convert",
+            arg_type="string",
+            description="Convert input to 'text' (Markdown) or 'html'. Default is 'text'",
+            default='text',
+            required=False,
+            example="'text' or 'html'"
+        ),
+        ToolArgument(
             name="line_start",
             arg_type="int",
-            description="The starting line number (1-based index). Default: 0",
+            description="The starting line number (1-based index). Default: 1",
             required=False,
-            example="0"
+            example="1"
         ),
         ToolArgument(
             name="line_end",
@@ -73,34 +128,34 @@ class ReadHTMLTool(Tool):
         if os.path.isfile(source):
             return True
         try:
-            result = urlparse(source)
+            result = requests.utils.urlparse(source)
             return all([result.scheme, result.netloc])
         except:
             return False
 
-    def read_from_file(self, file_path: str) -> Optional[str]:
+    def read_from_file(self, file_path: str) -> str:
         """Read HTML content from a file."""
         try:
             with open(file_path, encoding='utf-8') as file:
                 return file.read()
         except Exception as e:
+            logger.error(f"Error reading file: {e}")
             raise ValueError(f"Error reading file: {e}")
 
-    def read_from_url(self, url: str) -> Optional[str]:
+    def read_from_url(self, url: str) -> str:
         """Read HTML content from a URL with randomized User-Agent and headers."""
         try:
             # Randomize User-Agent
             headers = ADDITIONAL_HEADERS.copy()
             headers["User-Agent"] = random.choice(USER_AGENTS)
-            
+
             # Add a small random delay to mimic human behavior
-            import time
             time.sleep(random.uniform(0.5, 2.0))
-            
+
             # Use a timeout to prevent hanging
             response = requests.get(
-                url, 
-                headers=headers, 
+                url,
+                headers=headers,
                 timeout=10,
                 allow_redirects=True
             )
@@ -115,112 +170,121 @@ class ReadHTMLTool(Tool):
         try:
             return BeautifulSoup(html_content, 'html.parser')
         except Exception as e:
+            logger.error(f"Error parsing HTML: {e}")
             raise ValueError(f"Error parsing HTML: {e}")
 
-    @field_validator("line_start", "line_end", check_fields=False)
-    @classmethod
-    def validate_line_numbers(cls, v: Optional[int], info) -> Optional[int]:
+    def read_source(self, source: str) -> str:
+        """Read entire content from source."""
+        if os.path.isfile(source):
+            return self.read_from_file(source)
+        else:
+            return self.read_from_url(source)
+
+    def _convert_content(self, content: str, convert_type: str) -> str:
         """
-        Validate line numbers with robust error handling.
-        
+        Convert content based on the specified type.
+
         Args:
-            v (Optional[int]): Line number to validate
-            info: Validation context information
-        
+            content (str): The input content to convert
+            convert_type (str): The type of conversion to perform
+
         Returns:
-            Optional[int]: Validated line number
-        
-        Raises:
-            ValueError: If line number is invalid
+            str: Converted content
         """
-        # If no value is provided, return None
-        if v is None:
-            return None
-        
-        # Ensure the value is an integer
-        try:
-            line_number = int(v)
-        except (TypeError, ValueError):
-            logger.error(f"Invalid line number: {v}. Must be an integer.")
-            raise ValueError(f"Line number must be an integer, got {type(v).__name__}")
-        
-        # Validate line number is non-negative
-        if line_number < 0:
-            logger.error(f"Negative line number not allowed: {line_number}")
-            raise ValueError(f"Line number must be non-negative, got {line_number}")
-        
-        logger.debug(f"Validated line number: {line_number}")
-        return line_number
+        if convert_type == "text":
+            # Convert HTML to Markdown using markdownify
+            try:
+                markdown_content = md(content, heading_style="ATX")
+                return markdown_content
+            except Exception as e:
+                logger.error(f"Error converting HTML to Markdown: {e}")
+                raise ValueError(f"Error converting HTML to Markdown: {e}")
 
-    def execute(self, source: str, line_start: int = 0, line_end: int = 300) -> str:
-        """Execute the tool to read and parse HTML content in blocks."""
+        if convert_type == "html":
+            # Ensure content is valid HTML
+            try:
+                soup = BeautifulSoup(content, 'html.parser')
+                return soup.prettify()
+            except Exception as e:
+                logger.error(f"Error prettifying HTML: {e}")
+                raise ValueError(f"Error prettifying HTML: {e}")
+
+        return content
+
+    def execute(self, source: str, convert: Optional[str] = 'text',
+                line_start: int = 1, line_end: int = 300) -> str:
+        """Execute the tool to read and parse HTML content in specified line ranges."""
         logger.debug(f"Executing read_html_tool with source: {source}")
-        
+
         if not self.validate_source(source):
-            raise ValueError("Invalid source. Must be a valid file path or URL")
+            logger.warning(f"Invalid source: {source}")
+            return f"Invalid source: {source}"
 
         try:
-            # Validate line numbers
-            line_start = self.validate_line_numbers(line_start, {})
-            line_end = self.validate_line_numbers(line_end, {})
+            # Step 1: Read entire content from source
+            raw_content = self.read_source(source)
 
-            # Read content
-            if os.path.isfile(source):
-                with open(source, encoding='utf-8') as file:
-                    lines = file.readlines()
-                    total_lines = len(lines)
-                    block = lines[line_start:line_end + 1]
-                    html_content = ''.join(block)
+            # Step 2: Convert content
+            converted_content = self._convert_content(raw_content, convert)
+
+            # Step 3: Split converted content into lines
+            lines = converted_content.splitlines()
+            total_lines = len(lines)
+
+            # Step 4: Adjust line_end if it exceeds total_lines
+            adjusted_end_line = min(line_end, total_lines)
+
+            # Step 5: Slice lines based on line_start and adjusted_end_line
+            sliced_lines = lines[line_start - 1: adjusted_end_line]
+            sliced_content = "\n".join(sliced_lines)
+
+            # Step 6: Calculate actual_end_line based on lines returned
+            if sliced_lines:
+                actual_end_line = line_start + len(sliced_lines) - 1
             else:
-                # Improved URL reading with more robust error handling
-                try:
-                    html_content = self.read_from_url(source)
-                    lines = html_content.splitlines()
-                    total_lines = len(lines)
-                except Exception as url_error:
-                    logger.error(f"Failed to read URL {source}: {url_error}")
-                    # If URL reading fails, return an error message
-                    return f"Error reading URL: {url_error}"
+                actual_end_line = line_start
 
-                # Apply line filtering if specific lines are requested
-                if line_start != 0 or line_end != 300:
-                    block = lines[line_start:line_end + 1]
-                    html_content = '\n'.join(block)
+            # Step 7: Determine if this is the last block
+            is_last_block = actual_end_line >= total_lines
 
-            # Check if content is empty
-            if not html_content.strip():
-                logger.warning(f"No content retrieved from source: {source}")
-                return f"No content found in source: {source}"
+            # Step 8: Calculate total lines returned
+            total_lines_returned = len(sliced_lines)
 
-            # Parse HTML
-            soup = self.parse_html(html_content)
-            is_last_block = (line_end >= total_lines - 1) if total_lines > 0 else True
-            
+            # Prepare detailed output
             result = [
                 f"==== Source: {source} ====",
-                f"==== Lines: {line_start}-{min(line_end, total_lines - 1)} of {total_lines} ====",
+                f"==== Lines: {line_start} - {actual_end_line} of {total_lines} ====",
+                f"==== Block Detail ====",
+                f"Start Line: {line_start}",
+                f"End Line: {actual_end_line}",
+                f"Total Lines Returned: {total_lines_returned}",
+                f"Is Last Block: {'Yes' if is_last_block else 'No'}",
                 "==== Content ====",
-                soup.prettify(),
-                "==== End of Block ====" + (" [LAST BLOCK]" if is_last_block else "")
+                sliced_content,
+                "==== End of Block ===="
             ]
-            
+
             return "\n".join(result)
+
         except Exception as e:
             logger.error(f"Unexpected error processing source {source}: {e}")
             return f"Unexpected error: {e}"
 
+
 if __name__ == "__main__":
     tool = ReadHTMLTool()
-    print(tool.to_markdown())
-    
+
+    # Since to_markdown() is not defined, we'll comment it out.
+    # print(tool.to_markdown())
+
     # Test with a known working URL
     try:
-        result = tool.execute(source="https://www.python.org", line_start=1, line_end=100)
+        result = tool.execute(source="https://www.quantalogic.app", line_start=1, line_end=100)
         print("URL Test Result:")
         print(result)
     except Exception as e:
         print(f"URL Test Failed: {e}")
-    
+
     # Test with local file (if available)
     try:
         local_file = os.path.join(os.path.dirname(__file__), "test.html")
