@@ -14,7 +14,7 @@ class ReadFileTool(Tool):
 
     name: str = "read_file_tool"
     description: str = (
-        f"Reads a local file or HTTP content and returns its content."
+        f"Reads a local file content and returns its content."
         f"Cut to {MAX_LINES} first lines.\n"
         "Don't use on HTML files and large files."
         "Prefer to use read file block tool to don't fill the memory."
@@ -23,9 +23,9 @@ class ReadFileTool(Tool):
         ToolArgument(
             name="file_path",
             arg_type="string",
-            description="The path to the file or URL to read.",
+            description="The path to the file to read.",
             required=True,
-            example="/path/to/file.txt or https://example.com/data.txt",
+            example="/path/to/file.txt",
         ),
     ]
 

@@ -1,6 +1,7 @@
 """Tools for the QuantaLogic agent."""
 
 from .agent_tool import AgentTool
+from .dalle_e import LLMImageGenerationTool
 from .download_http_file_tool import DownloadHttpFileTool
 from .duckduckgo_search_tool import DuckDuckGoSearchTool
 from .edit_whole_content_tool import EditWholeContentTool
@@ -16,6 +17,7 @@ from .nodejs_tool import NodeJsTool
 from .python_tool import PythonTool
 from .read_file_block_tool import ReadFileBlockTool
 from .read_file_tool import ReadFileTool
+from .read_html_tool import ReadHTMLTool
 from .replace_in_file_tool import ReplaceInFileTool
 from .ripgrep_tool import RipgrepTool
 from .search_definition_names import SearchDefinitionNames
@@ -25,7 +27,6 @@ from .tool import Tool, ToolArgument
 from .unified_diff_tool import UnifiedDiffTool
 from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
-from .dalle_e import LLMImageGenerationTool
 
 __all__ = [
     "WikipediaSearchTool",
@@ -55,4 +56,5 @@ __all__ = [
     "EditWholeContentTool",
     "JinjaTool",
     "LLMImageGenerationTool",
+    "ReadHTMLTool"
 ]

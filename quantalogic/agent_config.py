@@ -3,8 +3,9 @@
 # Standard library imports
 
 # Local application imports
+from dotenv import load_dotenv
+
 from quantalogic.agent import Agent
-from quantalogic.coding_agent import create_coding_agent
 from quantalogic.console_print_token import console_print_token
 from quantalogic.tools import (
     AgentTool,
@@ -14,6 +15,7 @@ from quantalogic.tools import (
     ExecuteBashCommandTool,
     InputQuestionTool,
     ListDirectoryTool,
+    LLMImageGenerationTool,
     LLMTool,
     LLMVisionTool,
     MarkitdownTool,
@@ -21,15 +23,15 @@ from quantalogic.tools import (
     PythonTool,
     ReadFileBlockTool,
     ReadFileTool,
+    ReadHTMLTool,
     ReplaceInFileTool,
     RipgrepTool,
     SearchDefinitionNames,
     TaskCompleteTool,
     WikipediaSearchTool,
-    LLMImageGenerationTool,
     WriteFileTool,
 )
-from dotenv import load_dotenv
+
 load_dotenv()
 
 MODEL_NAME = "deepseek/deepseek-chat"
@@ -73,7 +75,8 @@ def create_agent(
                 provider="dall-e",
                 model_name="openai/dall-e-3",
                 on_token=console_print_token if not no_stream else None
-            )
+            ),
+        ReadHTMLTool()
     ]
 
     if vision_model_name:
@@ -123,6 +126,7 @@ def create_interpreter_agent(
         MarkitdownTool(),
         LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
         DownloadHttpFileTool(),
+        ReadHTMLTool(),
     ]
     return Agent(
         model_name=model_name, 
@@ -171,6 +175,7 @@ def create_full_agent(
         DownloadHttpFileTool(),
         WikipediaSearchTool(),
         DuckDuckGoSearchTool(),
+        ReadHTMLTool(),
     ]
 
     if vision_model_name:
@@ -220,6 +225,7 @@ def create_basic_agent(
         InputQuestionTool(),
         ExecuteBashCommandTool(),
         LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
+        ReadHTMLTool(),
     ]
 
     if vision_model_name:
