@@ -749,6 +749,51 @@ print(results)
 
 ## Vision and LLM Tools
 
+```markdown
+# LLM Image Generation Tool
+
+## Description
+The **LLM Image Generation Tool** is designed to generate images using either **DALL-E** or **Stable Diffusion** via **AWS Bedrock**. It supports various configurations such as image size, style, and quality settings, making it a versatile tool for creating high-quality images based on textual prompts.
+
+## Parameters
+
+| Parameter         | Type   | Required | Default Value | Description                                                                 |
+|-------------------|--------|----------|---------------|-----------------------------------------------------------------------------|
+| `prompt`          | string | Yes      | -             | Text description of the image to generate.                                 |
+| `provider`        | string | No       | `"dall-e"`    | Image generation provider (`dall-e` or `stable-diffusion`).                |
+| `size`            | string | No       | `"1024x1024"` | Size of the generated image.                                               |
+| `quality`         | string | No       | `"standard"`  | Quality level for DALL-E (`standard` or `hd`).                             |
+| `style`           | string | No       | `"vivid"`     | Style preference for DALL-E (`vivid` or `natural`).                        |
+| `negative_prompt` | string | No       | `""`          | What to avoid in the image (Stable Diffusion only).                        |
+| `cfg_scale`       | string | No       | `"7.5"`       | Classifier Free Guidance scale (Stable Diffusion only, range: 1.0-20.0).   |
+
+## Example Usage
+
+```python
+from quantalogic.tools.image_generation import LLMImageGenerationTool
+
+# Initialize the tool
+tool = LLMImageGenerationTool()
+
+# Generate an image using DALL-E
+prompt = "A serene Japanese garden with a red maple tree"
+image_path = tool.execute(prompt=prompt)
+
+print(f"Image saved at: {image_path}")
+```
+
+### Example Output
+```plaintext
+Image saved at: generated_images/dall-e_20231015_143022.png
+```
+
+### Notes:
+- The tool automatically saves the generated image in the `generated_images` directory.
+- Metadata about the image generation process (e.g., prompt, provider, model, etc.) is saved as a JSON file alongside the image.
+- For **Stable Diffusion**, the `negative_prompt` and `cfg_scale` parameters are used to control the generation process.
+- For **DALL-E**, the `quality` and `style` parameters are used to fine-tune the output.
+```
+
 ### LLMVisionTool
 
 The **LLMVisionTool** analyzes images using advanced multimodal language models.

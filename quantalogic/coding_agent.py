@@ -11,6 +11,7 @@ from quantalogic.tools import (
     LLMVisionTool,
     ReadFileBlockTool,
     ReadFileTool,
+    ReadHTMLTool,
     ReplaceInFileTool,
     RipgrepTool,
     SearchDefinitionNames,
@@ -74,6 +75,7 @@ def create_coding_agent(
         InputQuestionTool(),
         DuckDuckGoSearchTool(),
         JinjaTool(),
+        ReadHTMLTool()
     ]
 
     if vision_model_name:
