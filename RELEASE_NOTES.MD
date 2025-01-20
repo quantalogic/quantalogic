@@ -1,4 +1,17 @@
-# Release Notes
+## v0.2.23
+
+### New Features
+- Added a new tool `dalle_e` for image generation. (Yatchi)
+- Updated documentation to include details about DALL-E image generation. (Raphaël MANSUY)
+
+### Enhancements
+- Improved the `read html` tool with updates and refinements. (Raphaël MANSUY)
+- Reorganized imports for better code structure and maintainability. (Raphaël MANSUY)
+- Updated `agent.py` to improve functionality and performance. (Ikko Eltociear Ashimine)
+
+### Documentation
+- Updated the README.md file with the latest information and improvements. (Raphael MANSUY)
+
 
 ## [0.2.21] (2025-01-13)
 - Fix a git_ls bug that caused that block the tool execution on certain directories
