@@ -28,11 +28,11 @@ from quantalogic.agent import Agent  # noqa: E402
 # Local application imports
 from quantalogic.agent_config import (  # noqa: E402
     MODEL_NAME,
-    create_coding_agent,
+    create_basic_agent,
     create_full_agent,
     create_interpreter_agent,
-    create_basic_agent,
 )
+from quantalogic.coding_agent import create_coding_agent  # noqa: E402
 from quantalogic.interactive_text_editor import get_multiline_input  # noqa: E402
 from quantalogic.search_agent import create_search_agent  # noqa: E402
 

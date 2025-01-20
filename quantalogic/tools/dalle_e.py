@@ -1,19 +1,19 @@
 """LLM Image Generation Tool for creating images using DALL-E or Stable Diffusion via AWS Bedrock."""
 
+import datetime
+import json
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Optional, Any
-import base64
-import json
-import time
-from datetime import datetime
+from typing import Any, Dict, Optional
+
 import requests
-from tenacity import retry, stop_after_attempt, wait_exponential
 from loguru import logger
 from pydantic import ConfigDict, Field
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from quantalogic.generative_model import GenerativeModel
 from quantalogic.tools.tool import Tool, ToolArgument
+
 
 class ImageProvider(str, Enum):
     """Supported image generation providers."""
