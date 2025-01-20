@@ -25,6 +25,7 @@ from .tool import Tool, ToolArgument
 from .unified_diff_tool import UnifiedDiffTool
 from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
+from .dalle_e import LLMImageGenerationTool
 
 __all__ = [
     "WikipediaSearchTool",
@@ -53,4 +54,5 @@ __all__ = [
     "DownloadHttpFileTool",
     "EditWholeContentTool",
     "JinjaTool",
+    "LLMImageGenerationTool",
 ]

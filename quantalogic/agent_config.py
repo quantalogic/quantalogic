@@ -26,8 +26,11 @@ from quantalogic.tools import (
     SearchDefinitionNames,
     TaskCompleteTool,
     WikipediaSearchTool,
+    LLMImageGenerationTool,
     WriteFileTool,
 )
+from dotenv import load_dotenv
+load_dotenv()
 
 MODEL_NAME = "deepseek/deepseek-chat"
 
@@ -66,6 +69,11 @@ def create_agent(
         MarkitdownTool(),
         LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
         DownloadHttpFileTool(),
+        LLMImageGenerationTool(
+                provider="dall-e",
+                model_name="openai/dall-e-3",
+                on_token=console_print_token if not no_stream else None
+            )
     ]
 
     if vision_model_name:
@@ -209,6 +217,7 @@ def create_basic_agent(
         WriteFileTool(),
         EditWholeContentTool(),
         ReplaceInFileTool(),
+        InputQuestionTool(),
         ExecuteBashCommandTool(),
         LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
     ]

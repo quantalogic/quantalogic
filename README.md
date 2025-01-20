@@ -15,6 +15,7 @@ The `cli` version include coding capabilities comparable to Aider.
 
 ![Video](./examples/generated_tutorials/python/quantalogic_8s.gif)
 
+
 [HowTo Guide](./docs/howto/howto.md)
 
 ## Why QuantaLogic?

@@ -1,4 +1,4 @@
-Ideas of future features:
+## Ideas of future features:
 
 - [ ] Implement session token tracking
 - [ ] Add document to memory storage
@@ -19,7 +19,14 @@ Ideas of future features:
 - [X] Add event streaming
 - [ ] Asynchronous execution
 
-Demo:
+## Backlog:
+
+- [ ] Different strategy of function calling: actually we use XML function calling that are good for coding agent, we can add 2 new paradigam: JSON Tool function calling or Python Function Calling (as Pydantic) to use specific fined tuned LLM such as driaforall Dria-Agent-a-3B
+- Memory Handling 
+- [ ] Add integration with Composio https://app.composio.dev/, and create a pull request in https://docs.composio.dev/framework/ 
+
+
+## Demo:
 
 - [ ] Create a knwoledge base using https://github.com/BuilderIO/gpt-crawler 
 - [ ] Search from RAG
@@ -34,7 +41,7 @@ Demo:
 - [ ] Slide generator using https://sli.dev/guide/ 
 
 
-## Feature:
+## Features:
 
 New command in interactive session:
 
@@ -52,7 +59,7 @@ New command in interactive session:
 /log debug/info/warning/error
 
 
-# Ideas for Tools
+## Ideas for Tools
 
 - [X] Analyze image processing tools
 - [ ] Add a efficient text reader for Html
@@ -71,7 +78,6 @@ New command in interactive session:
 - [ ] Add a grep.app Tool to find code on the web
 - [ ] Add a GronTool 
 
-## Ideas 
 
 
 ## Article
@@ -79,3 +85,8 @@ New command in interactive session:
 - [ ] How to create a agent to find code on the web use grep.app (example https://github.com/popovicn/grepgithub)
 - [ ] An agent that find coins info on the Web https://danaepp.com/grepping-through-api-payloads-with-gron 
 
+
+
+## Interesting research articles
+
+- [Training Software Engineering Agents and Verifiers with SWE-Gym](https://arxiv.org/pdf/2412.21139)
