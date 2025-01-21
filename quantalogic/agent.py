@@ -140,7 +140,11 @@ class Agent(BaseModel):
             logger.error(f"Failed to initialize agent: {str(e)}")
             raise
 
-    def solve_task(self, task: str, max_iterations: int = 30, streaming: bool = False) -> str:
+    def clear_memory(self):
+        """Clear the memory and reset the session."""
+        self._reset_session(clear_memory=True)
+
+    def solve_task(self, task: str, max_iterations: int = 30, streaming: bool = False, clear_memory: bool = True) -> str:
         """Solve the given task using the ReAct framework.
 
         Args:
@@ -148,18 +152,23 @@ class Agent(BaseModel):
             max_iterations (int, optional): Maximum number of iterations to attempt solving the task.
                 Defaults to 30 to prevent infinite loops and ensure timely task completion.
             streaming (bool, optional): Whether to use streaming mode for generating responses.
+            clear_memory (bool, optional): Whether to clear the memory before solving the task.
 
         Returns:
             str: The final response after task completion.
         """
         logger.debug(f"Solving task... {task}")
-        self._reset_session(task_to_solve=task, max_iterations=max_iterations)
+        self._reset_session(task_to_solve=task, max_iterations=max_iterations,clear_memory=clear_memory)
 
         # Generate task summary
         self.task_to_solve_summary = self._generate_task_summary(task)
 
         # Add system prompt to memory
-        self.memory.add(Message(role="system", content=self.config.system_prompt))
+        # Check if system prompt is already in memory
+        # if not add it
+        # The system message is always the first message in memory
+        if not self.memory.memory or self.memory.memory[0].role != "system":
+            self.memory.add(Message(role="system", content=self.config.system_prompt))
 
         self._emit_event(
             "session_start",
@@ -263,13 +272,15 @@ class Agent(BaseModel):
 
         return answer
 
-    def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30):
+    def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30,clear_memory: bool = True):
         """Reset the agent's session."""
         logger.debug("Resetting session...")
         self.task_to_solve = task_to_solve
-        self.memory.reset()
-        self.variable_store.reset()
-        self.total_tokens = 0
+        if clear_memory:
+            logger.debug("Clearing memory...")
+            self.memory.reset()
+            self.variable_store.reset()
+            self.total_tokens = 0
         self.current_iteration = 0
         self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
         self.max_input_tokens = self.model.get_model_max_input_tokens() or DEFAULT_MAX_INPUT_TOKENS
