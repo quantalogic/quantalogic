@@ -1,3 +1,9 @@
+## v0.2.27
+
+### New Features
+
+- Added a new Tool `grep_app_tool` to search on GitHub repositories using grep.app API.
+
 ## v0.2.26
 
 ### Fix
