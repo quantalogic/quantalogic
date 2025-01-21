@@ -4,6 +4,7 @@ from quantalogic.tools import (
     DuckDuckGoSearchTool,
     EditWholeContentTool,
     ExecuteBashCommandTool,
+    GrepAppTool,
     InputQuestionTool,
     JinjaTool,
     ListDirectoryTool,
@@ -75,7 +76,8 @@ def create_coding_agent(
         InputQuestionTool(),
         DuckDuckGoSearchTool(),
         JinjaTool(),
-        ReadHTMLTool()
+        ReadHTMLTool(),
+        GrepAppTool()
     ]
 
     if vision_model_name:

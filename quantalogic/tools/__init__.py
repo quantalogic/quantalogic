@@ -27,6 +27,7 @@ from .tool import Tool, ToolArgument
 from .unified_diff_tool import UnifiedDiffTool
 from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
+from .grep_app_tool import GrepAppTool
 
 __all__ = [
     "WikipediaSearchTool",
@@ -56,5 +57,6 @@ __all__ = [
     "EditWholeContentTool",
     "JinjaTool",
     "LLMImageGenerationTool",
-    "ReadHTMLTool"
+    "ReadHTMLTool",
+    "GrepAppTool"
 ]
