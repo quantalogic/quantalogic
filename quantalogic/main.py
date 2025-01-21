@@ -2,99 +2,39 @@
 """Main module for the QuantaLogic agent."""
 
 # Standard library imports
-import random
 import sys
+from threading import Lock
 from typing import Optional
 
 # Third-party imports
 import click
-import requests
 from loguru import logger
 
 from quantalogic.console_print_events import console_print_events
-from quantalogic.utils.check_version import check_if_is_latest_version
+from quantalogic.task_file_reader import get_task_from_file
 from quantalogic.version import get_version
+from quantalogic.version_check import check_new_version
+from quantalogic.welcome_message import display_welcome_message
 
 # Configure logger
-logger.remove()  # Remove default logger
-
-from threading import Lock  # noqa: E402
+logger.remove()  
 
 from rich.console import Console  # noqa: E402
 from rich.panel import Panel  # noqa: E402
 from rich.prompt import Confirm  # noqa: E402
 
-from quantalogic.agent import Agent  # noqa: E402
-
 # Local application imports
 from quantalogic.agent_config import (  # noqa: E402
     MODEL_NAME,
-    create_basic_agent,
-    create_full_agent,
-    create_interpreter_agent,
 )
-from quantalogic.coding_agent import create_coding_agent  # noqa: E402
+from quantalogic.agent_factory import create_agent_for_mode  # noqa: E402
 from quantalogic.interactive_text_editor import get_multiline_input  # noqa: E402
-from quantalogic.search_agent import create_search_agent  # noqa: E402
 
 AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic", "search", "search-full"]
 
 
-def create_agent_for_mode(mode: str, model_name: str, vision_model_name: str | None, no_stream: bool = False, compact_every_n_iteration: int | None = None, max_tokens_working_memory: int | None = None) -> Agent:
-    """Create an agent based on the specified mode."""
-    logger.debug(f"Creating agent for mode: {mode} with model: {model_name}")
-    logger.debug(f"Using vision model: {vision_model_name}")
-    logger.debug(f"Using no_stream: {no_stream}")
-    logger.debug(f"Using compact_every_n_iteration: {compact_every_n_iteration}")
-    logger.debug(f"Using max_tokens_working_memory: {max_tokens_working_memory}")
-    if mode == "code":
-        logger.debug("Creating code agent without basic mode")
-        return create_coding_agent(model_name, vision_model_name, basic=False, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
-    if mode == "code-basic":
-        return create_coding_agent(model_name, vision_model_name, basic=True, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
-    elif mode == "basic":
-        return create_basic_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
-    elif mode == "full":
-        return create_full_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
-    elif mode == "interpreter":
-        return create_interpreter_agent(model_name, vision_model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
-    elif mode == "search":
-        return create_search_agent(model_name, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
-    if mode == "search-full":
-        return create_search_agent(model_name, mode_full=True, no_stream=no_stream, compact_every_n_iteration=compact_every_n_iteration, max_tokens_working_memory=max_tokens_working_memory)
-    else:
-        raise ValueError(f"Unknown agent mode: {mode}")
-
-
-def check_new_version():
-    # Randomly check for updates (1 in 10 chance)
-    if random.randint(1, 10) == 1:
-        try:
-            current_version = get_version()
-            has_new_version, latest_version = check_if_is_latest_version()
-
-            if has_new_version:
-                console = Console()
-                console.print(
-                    Panel.fit(
-                        f"[yellow]⚠️  Update Available![/yellow]\n\n"
-                        f"Current version: [bold]{current_version}[/bold]\n"
-                        f"Latest version: [bold]{latest_version}[/bold]\n\n"
-                        "To update, run:\n"
-                        "[bold]pip install --upgrade quantalogic[/bold]\n"
-                        "or if using pipx:\n"
-                        "[bold]pipx upgrade quantalogic[/bold]",
-                        title="[bold]Update Available[/bold]",
-                        border_style="yellow",
-                    )
-                )
-        except Exception:
-            return
-
-
 def configure_logger(log_level: str) -> None:
     """Configure the logger with the specified log level and format."""
-    logger.remove()
     logger.add(
         sys.stderr,
         level=log_level.upper(),
@@ -120,29 +60,6 @@ def switch_verbose(verbose_mode: bool, log_level: str = "info") -> None:
     set_litellm_verbose(verbose_mode)
 
 
-def get_task_from_file(source: str):
-    """Get task content from specified file path or URL."""
-    try:
-        # Check if source is a URL
-        if source.startswith(('http://', 'https://')):
-            import requests
-            response = requests.get(source, timeout=10)
-            response.raise_for_status()  # Raise an exception for bad status codes
-            return response.text.strip()
-        
-        # If not a URL, treat as a local file path
-        with open(source, encoding="utf-8") as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Error: File '{source}' not found.")
-    except PermissionError:
-        raise PermissionError(f"Error: Permission denied when reading '{source}'.")
-    except requests.exceptions.RequestException as e:
-        raise Exception(f"Error retrieving URL content: {e}")
-    except Exception as e:
-        raise Exception(f"Unexpected error: {e}")
-
-
 # Spinner control
 spinner_lock = Lock()
 current_spinner = None
@@ -162,43 +79,6 @@ def stop_spinner(console: Console) -> None:
         if current_spinner is not None:
             current_spinner.stop()
             current_spinner = None
-
-
-def display_welcome_message(
-    console: Console, 
-    model_name: str, 
-    vision_model_name: str | None, 
-    max_iterations: int = 50, 
-    compact_every_n_iteration: int | None = None,
-    max_tokens_working_memory: int | None = None,
-    mode: str = "basic"
-) -> None:
-    """Display the welcome message and instructions."""
-    version = get_version()
-    console.print(
-        Panel.fit(
-            f"[bold cyan]🌟 Welcome to QuantaLogic AI Assistant v{version} ! 🌟[/bold cyan]\n\n"
-            "[green]🎯 How to Use:[/green]\n\n"
-            "1. [bold]Describe your task[/bold]: Tell the AI what you need help with.\n"
-            "2. [bold]Submit your task[/bold]: Press [bold]Enter[/bold] twice to send your request.\n\n"
-            "3. [bold]Exit the app[/bold]: Leave the input blank and press [bold]Enter[/bold] twice to close the assistant.\n\n"
-            f"[yellow] 🤖 System Info:[/yellow]\n\n"
-            "\n"
-            f"- Model: {model_name}\n"
-            f"- Vision Model: {vision_model_name}\n"
-            f"- Mode: {mode}\n"
-            f"- Max Iterations: {max_iterations}\n"
-            f"- Memory Compact Frequency: {compact_every_n_iteration or 'Default (Max Iterations)'}\n"
-            f"- Max Working Memory Tokens: {max_tokens_working_memory or 'Default'}\n\n"
-            "[bold magenta]💡 Pro Tips:[/bold magenta]\n\n"
-            "- Be as specific as possible in your task description to get the best results!\n"
-            "- Use clear and concise language when describing your task\n"
-            "- For coding tasks, include relevant context and requirements\n"
-            "- The coding agent mode can handle complex tasks - don't hesitate to ask challenging questions!",
-            title="[bold]Instructions[/bold]",
-            border_style="blue",
-        )
-    )
 
 
 @click.group(invoke_without_command=True)
@@ -255,8 +135,10 @@ def cli(
     """QuantaLogic AI Assistant - A powerful AI tool for various tasks."""
     if version:
         console = Console()
-        console.print(f"QuantaLogic version: {get_version()}")
-        sys.exit(0)
+        current_version = get_version()
+        console.print(Panel(f"QuantaLogic Version: [bold green]{current_version}[/bold green]", title="Version Information"))
+        ctx.exit()
+
     if ctx.invoked_subcommand is None:
         ctx.invoke(
             task,
@@ -341,10 +223,11 @@ def task(
                 task_content = task
             else:
                 display_welcome_message(
-                    console, 
-                    model_name, 
-                    vision_model_name, 
-                    max_iterations=max_iterations, 
+                    console=console,
+                    model_name=model_name,
+                    version=get_version(),
+                    vision_model_name=vision_model_name,
+                    max_iterations=max_iterations,
                     compact_every_n_iteration=compact_every_n_iteration,
                     max_tokens_working_memory=max_tokens_working_memory,
                     mode=mode
