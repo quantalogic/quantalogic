@@ -66,6 +66,67 @@ def stop_spinner(console: Console) -> None:
             current_spinner = None
 
 
+def interactive_task_runner(
+    agent,
+    console: Console,
+    max_iterations: int,
+    no_stream: bool,
+) -> None:
+    """Run tasks interactively, asking the user if they want to continue after each task.
+
+    Args:
+        agent: The agent instance to use for solving tasks
+        console: Rich console instance for output
+        max_iterations: Maximum number of iterations per task
+        no_stream: Disable streaming output
+    """
+    while True:
+        logger.debug("Waiting for user input...")
+        task_content = get_multiline_input(console).strip()
+        
+        if not task_content:
+            logger.info("No task provided. Exiting...")
+            console.print("[yellow]No task provided. Exiting...[/yellow]")
+            break
+
+        console.print(
+            Panel.fit(
+                f"[bold]Task to be submitted:[/bold]\n{task_content}",
+                title="[bold]Task Preview[/bold]",
+                border_style="blue",
+            )
+        )
+        
+        if not Confirm.ask("[bold]Are you sure you want to submit this task?[/bold]"):
+            console.print("[yellow]Task submission cancelled.[/yellow]")
+            if not Confirm.ask("[bold]Would you like to ask another question?[/bold]"):
+                break
+            continue
+
+        console.print(
+            Panel.fit(
+                "[green]✓ Task successfully submitted! Processing...[/green]",
+                title="[bold]Status[/bold]",
+                border_style="green",
+            )
+        )
+
+        logger.debug(f"Solving task with agent: {task_content}")
+        result = agent.solve_task(task=task_content, max_iterations=max_iterations, streaming=not no_stream,clear_memory=False)
+        logger.debug(f"Task solved with result: {result} using {max_iterations} iterations")
+
+        console.print(
+            Panel.fit(
+                f"[bold]Task Result:[/bold]\n{result}",
+                title="[bold]Execution Output[/bold]",
+                border_style="green"
+            )
+        )
+
+        if not Confirm.ask("[bold]Would you like to ask another question?[/bold]"):
+            break
+
+
 def task_runner(
     console: Console,
     file: Optional[str],
@@ -98,13 +159,51 @@ def task_runner(
     """
     switch_verbose(verbose, log)
 
+    # Create the agent instance with the specified configuration
+    agent = create_agent_for_mode(
+        mode=mode,
+        model_name=model_name,
+        vision_model_name=vision_model_name,
+        compact_every_n_iteration=compact_every_n_iteration,
+        max_tokens_working_memory=max_tokens_working_memory
+    )
+
     if file:
         task_content = get_task_from_file(file)
+        # Execute single task from file
+        logger.debug(f"Solving task with agent: {task_content}")
+        if max_iterations < 1:
+            raise ValueError("max_iterations must be greater than 0")
+        result = agent.solve_task(task=task_content, max_iterations=max_iterations, streaming=not no_stream)
+        logger.debug(f"Task solved with result: {result} using {max_iterations} iterations")
+
+        console.print(
+            Panel.fit(
+                f"[bold]Task Result:[/bold]\n{result}",
+                title="[bold]Execution Output[/bold]",
+                border_style="green"
+            )
+        )
     else:
         if task:
             check_new_version()
             task_content = task
+            # Execute single task from command line
+            logger.debug(f"Solving task with agent: {task_content}")
+            if max_iterations < 1:
+                raise ValueError("max_iterations must be greater than 0")
+            result = agent.solve_task(task=task_content, max_iterations=max_iterations, streaming=not no_stream)
+            logger.debug(f"Task solved with result: {result} using {max_iterations} iterations")
+
+            console.print(
+                Panel.fit(
+                    f"[bold]Task Result:[/bold]\n{result}",
+                    title="[bold]Execution Output[/bold]",
+                    border_style="green"
+                )
+            )
         else:
+            # Interactive mode
             display_welcome_message(
                 console=console,
                 model_name=model_name,
@@ -116,102 +215,56 @@ def task_runner(
                 mode=mode,
             )
             check_new_version()
-            logger.debug("Waiting for user input...")
-            task_content = get_multiline_input(console).strip()
-            logger.debug(f"User input received. Task content: {task_content}")
-            if not task_content:
-                logger.info("No task provided. Exiting...")
-                console.print("[yellow]No task provided. Exiting...[/yellow]")
-                sys.exit(2)
+            logger.debug(
+                f"Created agent for mode: {mode} with model: {model_name}, vision model: {vision_model_name}, no_stream: {no_stream}"
+            )
 
-    console.print(
-        Panel.fit(
-            f"[bold]Task to be submitted:[/bold]\n{task_content}",
-            title="[bold]Task Preview[/bold]",
-            border_style="blue",
-        )
-    )
-    if not Confirm.ask("[bold]Are you sure you want to submit this task?[/bold]"):
-        console.print("[yellow]Task submission cancelled. Exiting...[/yellow]")
-        sys.exit(0)
+            events = [
+                "task_start",
+                "task_think_start",
+                "task_think_end",
+                "task_complete",
+                "tool_execution_start",
+                "tool_execution_end",
+                "error_max_iterations_reached",
+                "memory_full",
+                "memory_compacted",
+                "memory_summary",
+            ]
 
-    console.print(
-        Panel.fit(
-            "[green]✓ Task successfully submitted! Processing...[/green]",
-            title="[bold]Status[/bold]",
-            border_style="green",
-        )
-    )
+            # Add spinner control to event handlers
+            def handle_task_think_start(*args, **kwargs):
+                start_spinner(console)
 
-    logger.debug(
-        f"Creating agent for mode: {mode} with model: {model_name}, vision model: {vision_model_name}, no_stream: {no_stream}"
-    )
-    agent = create_agent_for_mode(
-        mode,
-        model_name,
-        vision_model_name=vision_model_name,
-        no_stream=no_stream,
-        compact_every_n_iteration=compact_every_n_iteration,
-        max_tokens_working_memory=max_tokens_working_memory,
-    )
-    logger.debug(
-        f"Created agent for mode: {mode} with model: {model_name}, vision model: {vision_model_name}, no_stream: {no_stream}"
-    )
+            def handle_task_think_end(*args, **kwargs):
+                stop_spinner(console)
 
-    events = [
-        "task_start",
-        "task_think_start",
-        "task_think_end",
-        "task_complete",
-        "tool_execution_start",
-        "tool_execution_end",
-        "error_max_iterations_reached",
-        "memory_full",
-        "memory_compacted",
-        "memory_summary",
-    ]
+            def handle_stream_chunk(event: str, data: str) -> None:
+                if current_spinner:
+                    stop_spinner(console)
+                if data is not None:
+                    console.print(data, end="", markup=False)
 
-    # Add spinner control to event handlers
-    def handle_task_think_start(*args, **kwargs):
-        start_spinner(console)
+            agent.event_emitter.on(
+                event=events,
+                listener=console_print_events,
+            )
 
-    def handle_task_think_end(*args, **kwargs):
-        stop_spinner(console)
+            agent.event_emitter.on(
+                event="task_think_start",
+                listener=handle_task_think_start,
+            )
 
-    def handle_stream_chunk(event: str, data: str) -> None:
-        if current_spinner:
-            stop_spinner(console)
-        if data is not None:
-            console.print(data, end="", markup=False)
+            agent.event_emitter.on(
+                event="task_think_end",
+                listener=handle_task_think_end,
+            )
 
-    agent.event_emitter.on(
-        event=events,
-        listener=console_print_events,
-    )
+            agent.event_emitter.on(
+                event="stream_chunk",
+                listener=handle_stream_chunk,
+            )
 
-    agent.event_emitter.on(
-        event="task_think_start",
-        listener=handle_task_think_start,
-    )
+            logger.debug("Registered event handlers for agent events with events: {events}")
 
-    agent.event_emitter.on(
-        event="task_think_end",
-        listener=handle_task_think_end,
-    )
-
-    agent.event_emitter.on(
-        event="stream_chunk",
-        listener=handle_stream_chunk,
-    )
-
-    logger.debug("Registered event handlers for agent events with events: {events}")
-
-    logger.debug(f"Solving task with agent: {task_content}")
-    if max_iterations < 1:
-        raise ValueError("max_iterations must be greater than 0")
-    result = agent.solve_task(task=task_content, max_iterations=max_iterations, streaming=not no_stream)
-    logger.debug(f"Task solved with result: {result} using {max_iterations} iterations")
-
-    console.print(
-        Panel.fit(f"[bold]Task Result:[/bold]\n{result}", title="[bold]Execution Output[/bold]", border_style="green")
-    )
+            interactive_task_runner(agent, console, max_iterations, no_stream)
