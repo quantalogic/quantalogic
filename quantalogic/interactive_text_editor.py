@@ -171,6 +171,10 @@ def get_multiline_input(console: Console) -> str:
             prompt_text = f"{line_number:>3}: "
             line = session.prompt(prompt_text, rprompt="Press Enter twice to submit")
 
+            # Handle commands with single return
+            if line.strip().startswith('/'):
+                return line.strip()
+
             if line.strip() == "":
                 blank_lines += 1
                 if blank_lines == 2:

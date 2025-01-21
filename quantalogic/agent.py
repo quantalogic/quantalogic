@@ -140,6 +140,10 @@ class Agent(BaseModel):
             logger.error(f"Failed to initialize agent: {str(e)}")
             raise
 
+    def clear_memory(self):
+        """Clear the memory and reset the session."""
+        self._reset_session(clear_memory=True)
+
     def solve_task(self, task: str, max_iterations: int = 30, streaming: bool = False, clear_memory: bool = True) -> str:
         """Solve the given task using the ReAct framework.
 
@@ -148,6 +152,7 @@ class Agent(BaseModel):
             max_iterations (int, optional): Maximum number of iterations to attempt solving the task.
                 Defaults to 30 to prevent infinite loops and ensure timely task completion.
             streaming (bool, optional): Whether to use streaming mode for generating responses.
+            clear_memory (bool, optional): Whether to clear the memory before solving the task.
 
         Returns:
             str: The final response after task completion.

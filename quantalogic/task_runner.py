@@ -89,6 +89,20 @@ def interactive_task_runner(
             console.print("[yellow]No task provided. Exiting...[/yellow]")
             break
 
+        # Handle commands with single return
+        if task_content.startswith('/'):
+            command = task_content.lower()
+            if command == '/clear':
+                logger.info("Clearing agent memory...")
+                console.print("[yellow]Clearing agent memory...[/yellow]")
+                agent.clear_memory()
+                console.print("[green]Memory cleared successfully![/green]")
+                continue
+            else:
+                console.print(f"[red]Unknown command: {command}[/red]")
+                continue
+
+        # For non-commands, ask for confirmation
         console.print(
             Panel.fit(
                 f"[bold]Task to be submitted:[/bold]\n{task_content}",
