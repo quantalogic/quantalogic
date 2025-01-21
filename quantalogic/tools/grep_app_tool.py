@@ -4,7 +4,7 @@ import os
 import random
 import sys
 import time
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from typing import Any, ClassVar, Dict, Optional, Union
 
 import requests
 from loguru import logger
@@ -32,38 +32,65 @@ class GrepAppArguments(BaseModel):
     """Pydantic model for grep.app search arguments"""
     search_query: str = Field(
         ...,
-        description="Code search query using grep.app syntax",
-        example="lang:python def __init__"
+        description="GitHub Code search using simple keyword or regular expression",
+        example="code2prompt"
     )
     repository: Optional[str] = Field(
         None,
         description="Filter by repository (e.g. user/repo)",
-        example="quantalogic/ai-tools",
-        pattern=r"^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$"
-    )
-    file_type: Optional[str] = Field(
-        None,
-        description="Filter by file extension",
-        example="py"
+        example="quantalogic/quantalogic",
     )
     page: int = Field(
         1,
         description="Results page number",
-        ge=1,
-        example=1
+        ge=1
     )
     per_page: int = Field(
         10,
-        description="Results per page (1-100)",
+        description="Number of results per page",
         ge=1,
-        le=100,
-        example=10
+        le=100
+    )
+    regexp: bool = Field(
+        False,
+        description="Enable regular expression search"
+    )
+    case: bool = Field(
+        False,
+        description="Enable case-sensitive search"
+    )
+    words: bool = Field(
+        False,
+        description="Match whole words only"
     )
 
+    @model_validator(mode='before')
+    @classmethod
+    def convert_types(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert input types before validation"""
+        # Convert string numbers to integers
+        for field in ['page', 'per_page']:
+            if field in data and isinstance(data[field], str):
+                try:
+                    data[field] = int(data[field])
+                except ValueError:
+                    raise ValueError(f"{field} must be a valid integer")
+
+        # Convert various string representations to booleans
+        for field in ['regexp', 'case', 'words']:
+            if field in data:
+                if isinstance(data[field], str):
+                    data[field] = data[field].lower() in ['true', '1', 'yes', 'on']
+
+        return data
+
     @model_validator(mode='after')
-    def check_search_query(self) -> 'GrepAppArguments':
+    def validate_search_query(self) -> 'GrepAppArguments':
+        """Validate search query is not empty and has reasonable length"""
         if not self.search_query or not self.search_query.strip():
-            raise ValueError("Search query cannot be empty or whitespace")
+            raise ValueError("Search query cannot be empty")
+        if len(self.search_query) > 500:  # Reasonable limit for search query
+            raise ValueError("Search query is too long (max 500 characters)")
         return self
 
 class GrepAppTool(Tool):
@@ -91,12 +118,6 @@ class GrepAppTool(Tool):
                 required=False
             ),
             ToolArgument(
-                name="file_type",
-                arg_type="string",
-                description="Filter by file extension",
-                required=False
-            ),
-            ToolArgument(
                 name="page",
                 arg_type="int",
                 description="Pagination page number",
@@ -108,6 +129,27 @@ class GrepAppTool(Tool):
                 arg_type="int",
                 description="Results per page",
                 default="10",
+                required=False
+            ),
+            ToolArgument(
+                name="regexp",
+                arg_type="boolean",
+                description="Enable regular expression search",
+                default="False",
+                required=False
+            ),
+            ToolArgument(
+                name="case",
+                arg_type="boolean",
+                description="Enable case-sensitive search",
+                default="False",
+                required=False
+            ),
+            ToolArgument(
+                name="words",
+                arg_type="boolean",
+                description="Match whole words only",
+                default="False",
                 required=False
             )
         ]
@@ -131,9 +173,13 @@ class GrepAppTool(Tool):
             "per_page": args.per_page
         }
         if args.repository:
-            params["repo"] = args.repository
-        if args.file_type:
-            params["filter"] = f"extension:{args.file_type}"
+            params["filter[repo][0]"] = args.repository
+        if args.regexp:
+            params["regexp"] = "true"
+        if args.case:
+            params["case"] = "true"
+        if args.words:
+            params["words"] = "true"
         logger.debug(f"Built params: {params}")
         return params
 
@@ -157,27 +203,33 @@ class GrepAppTool(Tool):
     def execute(self, 
                 search_query: str, 
                 repository: Optional[str] = None,
-                file_type: Optional[str] = None, 
                 page: Union[int, str] = 1,
-                per_page: Union[int, str] = 10) -> str:
+                per_page: Union[int, str] = 10,
+                regexp: bool = False,
+                case: bool = False,
+                words: bool = False,
+                skip_delay: bool = False) -> str:
         """Execute grep.app API search with pagination and return formatted results as a string"""
         try:
             # Validate and convert arguments
             args = GrepAppArguments(
                 search_query=search_query,
                 repository=repository,
-                file_type=file_type,
                 page=int(page),
-                per_page=int(per_page)
+                per_page=int(per_page),
+                regexp=regexp,
+                case=case,
+                words=words
             )
 
             logger.info(f"Executing search: '{args.search_query}'")
-            logger.debug(f"Search parameters: {args.dict()}")
+            logger.debug(f"Search parameters: {args.model_dump()}")
 
-            # Add random delay to mimic human behavior
-            delay = random.uniform(0.5, 1.5)
-            logger.debug(f"Sleeping for {delay:.2f} seconds to mimic human behavior")
-            time.sleep(delay)
+            # Add random delay to mimic human behavior (unless skipped for testing)
+            if not skip_delay:
+                delay = random.uniform(0.5, 1.5)
+                logger.debug(f"Sleeping for {delay:.2f} seconds to mimic human behavior")
+                time.sleep(delay)
 
             # Make API request
             headers = self._build_headers()
@@ -405,25 +457,36 @@ if __name__ == "__main__":
             "name": "Python __init__ Methods Search",
             "args": {
                 "search_query": "lang:python def __init__",
-                "per_page": 5
+                "per_page": 5,
+                "skip_delay": True  # Skip delay for testing
             }
         },
         {
             "name": "Logging Patterns Search",
             "args": {
                 "search_query": "logger",
-                "file_type": "py",
-                "per_page": 3
+                "per_page": 3,
+                "skip_delay": True
             }
         },
-                {
+        {
+            "name": "Repository-Specific Search",
+            "args": {
+                "search_query": "def",
+                "repository": "quantalogic/quantalogic",
+                "per_page": 5,
+                "words": True,
+                "skip_delay": True
+            }
+        },
+        {
             "name": "Raphaël MANSUY",
             "args": {
                 "search_query": "raphaelmansuy",
-                "per_page": 3
+                "per_page": 3,
+                "skip_delay": True
             }
         }
-
     ]
 
     for test in test_cases:
@@ -432,5 +495,6 @@ if __name__ == "__main__":
             logger.info(f"Executing with arguments: {test['args']}")
             result = tool.execute(**test['args'])
             print(f"\n### Test: {test['name']}\n{result}\n")
+            time.sleep(1)  # Add a small delay between tests to avoid rate limiting
         except Exception as e:
             logger.error(f"{test['name']} Failed: {e}", exc_info=True)
