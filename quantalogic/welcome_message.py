@@ -1,10 +1,7 @@
 """Module for displaying welcome messages and instructions."""
 
-from rich.align import Align
 from rich.console import Console
-from rich.layout import Layout
 from rich.panel import Panel
-from rich.table import Table
 
 
 def create_config_table(
