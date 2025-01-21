@@ -1,6 +1,5 @@
 # quantalogic/tools/grep_app_tool.py
 
-import os
 import random
 import sys
 import time
