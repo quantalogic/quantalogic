@@ -1,16 +1,17 @@
 """Generative model module for AI-powered text generation."""
 
 import functools
-from typing import Dict, Any, Optional, List
 from datetime import datetime
+from typing import Any, Dict, List
 
 import litellm
 import openai
-from litellm import completion, exceptions, get_max_tokens, get_model_info, token_counter, image_generation
+from litellm import completion, exceptions, get_max_tokens, get_model_info, image_generation, token_counter
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
 from quantalogic.event_emitter import EventEmitter  # Importing the EventEmitter class
+from quantalogic.get_model_info import get_max_input_tokens, get_max_output_tokens, model_info
 
 MIN_RETRIES = 1
 
@@ -265,15 +266,23 @@ class GenerativeModel:
     def _get_model_info_impl(self, model_name: str) -> dict:
         """Get information about the model with prefix fallback logic."""
         original_model = model_name
-
+        tried_models = [model_name]
+        
         while True:
             try:
                 logger.debug(f"Attempting to retrieve model info for: {model_name}")
-                model_info = get_model_info(model_name)
-                if model_info:
-                    logger.debug(f"Found model info for {model_name}: {model_info}")
-                    return model_info
-            except Exception:
+                # Try direct lookup from model_info dictionary first
+                if model_name in model_info:
+                    logger.debug(f"Found model info for {model_name} in model_info")
+                    return model_info[model_name]
+                    
+                # Try get_model_info as fallback
+                info = get_model_info(model_name)
+                if info:
+                    logger.debug(f"Found model info for {model_name} via get_model_info")
+                    return info
+            except Exception as e:
+                logger.debug(f"Failed to get model info for {model_name}: {str(e)}")
                 pass
 
             # Try removing one prefix level
@@ -281,8 +290,9 @@ class GenerativeModel:
             if len(parts) <= 1:
                 break
             model_name = "/".join(parts[1:])
+            tried_models.append(model_name)
 
-        error_msg = f"Could not find model info for {original_model} after trying: {self.model} → {model_name}"
+        error_msg = f"Could not find model info for {original_model} after trying: {' → '.join(tried_models)}"
         logger.error(error_msg)
         raise ValueError(error_msg)
 
@@ -292,12 +302,23 @@ class GenerativeModel:
             model_name = self.model
         return self._get_model_info_cached(model_name)
 
-    def get_model_max_input_tokens(self) -> int:
+    def get_model_max_input_tokens(self) -> int | None:
         """Get the maximum number of input tokens for the model."""
         try:
+            # First try direct lookup
+            max_tokens = get_max_input_tokens(self.model)
+            if max_tokens is not None:
+                return max_tokens
+            
+            # If not found, try getting from model info
             model_info = self.get_model_info()
-            max_tokens = model_info.get("max_input_tokens") if model_info else None
-            return max_tokens
+            if model_info:
+                return model_info.get("max_input_tokens")
+            
+            # If still not found, log warning and return default
+            logger.warning(f"No max input tokens found for {self.model}. Using default.")
+            return 8192  # A reasonable default for many models
+            
         except Exception as e:
             logger.error(f"Error getting max input tokens for {self.model}: {e}")
             return None
@@ -305,13 +326,20 @@ class GenerativeModel:
     def get_model_max_output_tokens(self) -> int | None:
         """Get the maximum number of output tokens for the model."""
         try:
+            # First try direct lookup
+            max_tokens = get_max_output_tokens(self.model)
+            if max_tokens is not None:
+                return max_tokens
+            
+            # If not found, try getting from model info
             model_info = self.get_model_info()
             if model_info:
                 return model_info.get("max_output_tokens")
-
-            # Fallback for unmapped models
+            
+            # If still not found, log warning and return default
             logger.warning(f"No max output tokens found for {self.model}. Using default.")
-            return 4096  # A reasonable default for many chat models
+            return 4096  # A reasonable default for many models
+            
         except Exception as e:
             logger.error(f"Error getting max output tokens for {self.model}: {e}")
             return None

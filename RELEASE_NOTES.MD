@@ -1,3 +1,19 @@
+## v0.2.25
+
+### New Features
+- Added support to https://huggingface.co/deepseek-ai/DeepSeek-R1 
+
+Usage:
+
+quantalogic --model-name deepseek/deepseek-reasoner 
+
+Or via OpenRouter:
+
+quantalogic --model-name openrouter/deepseek/deepseek-r1
+
+- Add multi questions in a session
+- Add /clear command in a session to clear the memory
+
 ## v0.2.23
 
 ### New Features
