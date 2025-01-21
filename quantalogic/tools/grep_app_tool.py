@@ -211,34 +211,171 @@ class GrepAppTool(Tool):
         hits = data.get("hits", {}).get("hits", [])
 
         output = [
-            f"## Grep.app Search Results",
-            f"**Query:** `{query}`",
-            f"**Total Results:** {total_results}",
-            "---"
+            "# 🔍 Search Results",
+            "",
+            f"**Query:** `{query if query else '<empty>'}`  •  **Found:** {total_results} matches",
+            ""
         ]
 
         if not hits:
-            output.append("**No matches found.**")
+            output.append("> No matches found for your search query.")
         else:
-            # Create Markdown table header
-            table_header = "| Repository | File Path | Language | Code Snippet |\n| --- | --- | --- | --- |"
-            output.append(table_header)
+            for idx, result in enumerate(hits, 1):
+                repo = result.get('repo', {}).get('raw', 'N/A')
+                file_path = result.get('path', {}).get('raw', 'N/A')
+                language = result.get('language', 'N/A').lower()
+                content = result.get("content", {})
+                
+                # Extract the actual code and line info
+                snippet = content.get("snippet", "")
+                line_num = content.get("line", "")
+                
+                # Clean up the snippet
+                import re
+                clean_snippet = re.sub(r'<[^>]+>', '', snippet)
+                clean_snippet = re.sub(r'&quot;', '"', clean_snippet)
+                clean_snippet = re.sub(r'&lt;', '<', clean_snippet)
+                clean_snippet = re.sub(r'&gt;', '>', clean_snippet)
+                clean_snippet = clean_snippet.strip()
+                
+                # Split into lines and clean each line
+                raw_lines = clean_snippet.split('\n')
+                lines = []
+                current_line_num = int(line_num) if line_num else 1
+                
+                # First pass: collect all lines and their content
+                for line in raw_lines:
+                    # Remove excess whitespace but preserve indentation
+                    stripped = line.rstrip()
+                    if not stripped:
+                        lines.append(('', current_line_num))
+                        current_line_num += 1
+                        continue
+                    
+                    # Remove duplicate indentation
+                    if stripped.startswith('    '):
+                        stripped = stripped[4:]
+                    
+                    # Handle URLs that might be split across lines
+                    if stripped.startswith(('prompt', '-working')):
+                        if lines and lines[-1][0].endswith('/'):
+                            # Combine with previous line
+                            prev_content, prev_num = lines.pop()
+                            lines.append((prev_content + stripped, prev_num))
+                            continue
+                    
+                    # Handle concatenated lines by looking for line numbers
+                    line_parts = re.split(r'(\d+)(?=\s*[^\d])', stripped)
+                    if len(line_parts) > 1:
+                        # Process each part that might be a new line
+                        for i in range(0, len(line_parts)-1, 2):
+                            prefix = line_parts[i].rstrip()
+                            if prefix:
+                                if not any(l[0] == prefix for l in lines):  # Avoid duplicates
+                                    lines.append((prefix, current_line_num))
+                            
+                            # Update line number if found
+                            try:
+                                current_line_num = int(line_parts[i+1])
+                            except ValueError:
+                                current_line_num += 1
+                            
+                            # Add the content after the line number
+                            if i+2 < len(line_parts):
+                                content = line_parts[i+2].lstrip()
+                                if content and not any(l[0] == content for l in lines):  # Avoid duplicates
+                                    lines.append((content, current_line_num))
+                    else:
+                        if not any(l[0] == stripped for l in lines):  # Avoid duplicates
+                            lines.append((stripped, current_line_num))
+                        current_line_num += 1
 
-            # Populate table rows
-            for result in hits:
-                repo = result.get('repo', {}).get('raw', 'N/A').replace('|', '\\|')
-                file_path = result.get('path', {}).get('raw', 'N/A').replace('|', '\\|')
-                language = result.get('language', 'N/A').replace('|', '\\|')
-                snippet = result.get("content", {}).get("snippet", "").strip().replace('|', '\\|').replace('\n', ' ')
-                # Limit snippet length to 200 characters to prevent excessively long lines
-                snippet = (snippet[:197] + '...') if len(snippet) > 200 else snippet
-                # Escape pipe characters to prevent table formatting issues
-                output.append(f"| `{repo}` | `{file_path}` | `{language}` | `{snippet}` |")
+                # Format line numbers and code
+                formatted_lines = []
+                max_line_width = len(str(max(line[1] for line in lines))) if lines else 3
+                
+                # Second pass: format each line
+                for line_content, line_no in lines:
+                    if not line_content:  # Empty line
+                        formatted_lines.append('')
+                        continue
+                    
+                    # Special handling for markdown badges and links
+                    if '[![' in line_content or '[!' in line_content:
+                        badges = re.findall(r'(\[!\[.*?\]\(.*?\)\]\(.*?\))', line_content)
+                        if badges:
+                            for badge in badges:
+                                if not any(badge in l for l in formatted_lines):  # Avoid duplicates
+                                    formatted_lines.append(f"{str(line_no).rjust(max_line_width)} │ {badge}")
+                            continue
+                    
+                    # Add syntax highlighting for comments
+                    if line_content.lstrip().startswith(('// ', '# ', '/* ', '* ', '*/')):
+                        line_str = f"{str(line_no).rjust(max_line_width)} │ <dim>{line_content}</dim>"
+                        if not any(line_str in l for l in formatted_lines):  # Avoid duplicates
+                            formatted_lines.append(line_str)
+                    else:
+                        # Split line into indentation and content for better formatting
+                        indent = len(line_content) - len(line_content.lstrip())
+                        indentation = line_content[:indent]
+                        content = line_content[indent:]
+                        
+                        # Highlight strings and special syntax
+                        content = re.sub(r'(["\'])(.*?)\1', r'<str>\1\2\1</str>', content)
+                        content = re.sub(r'\b(function|const|let|var|import|export|class|interface|type|enum)\b', 
+                                       r'<keyword>\1</keyword>', content)
+                        
+                        line_str = f"{str(line_no).rjust(max_line_width)} │ {indentation}{content}"
+                        if not any(line_str in l for l in formatted_lines):  # Avoid duplicates
+                            formatted_lines.append(line_str)
 
-        output.append("---")
-        output.append("**End of Results**")
+                # Truncate if too long and add line count
+                if len(formatted_lines) > 5:
+                    remaining = len(formatted_lines) - 5
+                    formatted_lines = formatted_lines[:5]
+                    if remaining > 0:
+                        formatted_lines.append(f"   ┆ {remaining} more line{'s' if remaining > 1 else ''}")
+                
+                clean_snippet = '\n'.join(formatted_lines)
+                
+                # Format the repository link to be clickable
+                if '/' in repo:
+                    repo_link = f"[`{repo}`](https://github.com/{repo})"
+                else:
+                    repo_link = f"`{repo}`"
 
-        return "\n".join(output)
+                # Determine the best language display and icon
+                lang_display = language if language != 'n/a' else ''
+                lang_icon = {
+                    'python': '🐍',
+                    'typescript': '📘',
+                    'javascript': '📒',
+                    'markdown': '📝',
+                    'toml': '⚙️',
+                    'yaml': '📋',
+                    'json': '📦',
+                    'shell': '🐚',
+                    'rust': '🦀',
+                    'go': '🔵',
+                    'java': '☕',
+                    'ruby': '💎',
+                }.get(lang_display, '📄')
+                
+                # Format file path with language icon and line info
+                file_info = [f"{lang_icon} `{file_path}`"]
+                if line_num:
+                    file_info.append(f"Line {line_num}")
+                
+                output.extend([
+                    f"### {repo_link}",
+                    " • ".join(file_info),
+                    "```",
+                    clean_snippet,
+                    "```",
+                    ""
+                ])
+
+        return "\n".join(filter(None, output))
 
     def _format_error(self, error_type: str, message: str, additional_info: Dict[str, str] = None) -> str:
         """Format error messages consistently using Markdown"""
