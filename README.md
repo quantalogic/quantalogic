@@ -28,7 +28,7 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 ## 🌟 Highlights
 
 - **ReAct Framework**: Advanced implementation combining LLM reasoning with concrete actions
-- **Universal LLM Support**: Integration with OpenAI, Anthropic, LM Studio, Bedrock, Ollama, DeepSeek V3, via LiteLLM
+- **Universal LLM Support**: Integration with OpenAI, Anthropic, LM Studio, Bedrock, Ollama, DeepSeek V3, DeepSeek R1, via LiteLLM. Example usage: `quantalogic --model-name deepseek/deepseek-reasoner` or `quantalogic --model-name openrouter/deepseek/deepseek-r1`
 - **Secure Tool System**: Docker-based code execution and file manipulation tools
 - **Real-time Monitoring**: Web interface with SSE-based event visualization
 - **Memory Management**: Intelligent context handling and optimization
