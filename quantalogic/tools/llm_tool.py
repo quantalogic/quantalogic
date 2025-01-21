@@ -122,7 +122,6 @@ class LLMTool(Tool):
         # Prepare the messages history
         messages_history = [
             Message(role="system", content=used_system_prompt),
-            Message(role="user", content=prompt),
         ]
 
         is_streaming = self.on_token is not None

@@ -1,3 +1,10 @@
+## v0.2.26
+
+### Fix
+
+- Fixed a bug in LLM Tools
+- Fixed a bug in when 2 consecutive task are used in the same session
+
 ## v0.2.25
 
 ### New Features

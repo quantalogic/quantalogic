@@ -164,7 +164,11 @@ class Agent(BaseModel):
         self.task_to_solve_summary = self._generate_task_summary(task)
 
         # Add system prompt to memory
-        self.memory.add(Message(role="system", content=self.config.system_prompt))
+        # Check if system prompt is already in memory
+        # if not add it
+        # The system message is always the first message in memory
+        if not self.memory.memory or self.memory.memory[0].role != "system":
+            self.memory.add(Message(role="system", content=self.config.system_prompt))
 
         self._emit_event(
             "session_start",
