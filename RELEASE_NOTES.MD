@@ -1,3 +1,8 @@
+## v0.2.28
+
+### Fix
+    - Fix bash tool to handle interactive input
+
 ## v0.2.27
 
 ### New Features
