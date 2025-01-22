@@ -1,4 +1,4 @@
-# 🚀 24-Hour AI Engineering Mastery: building an SQL AI Agent in less than 24 hours... with Quantalogic
+# 🚀 24-Hour AI Engineering Mastery: building a SQL AI Agent in less than 24 hours... with Quantalogic
 
 >  **How Elite Engineers Build AI powered SQL Query Agents with Quantalogic.... (While Others Stay Stuck) .... 💡**
 
