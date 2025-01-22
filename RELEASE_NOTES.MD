@@ -3,6 +3,11 @@
 ### New Features
 
 - Added a new Tool `grep_app_tool` to search on GitHub repositories using grep.app API.
+- Added a new Tool `sql_query_tool` to execute SQL queries on a database.
+- Added a new Tool `generate_database_report_tool` to generate a report on a database. (creation of a semantic layer)
+- Added a new example how to create SQL Query agent `examples/09-sql-query.py`
+- Added a new tutorial how to create SQL Query agent `docs/articles/how_to_create_a_db_analyst.md` 
+
 
 ## v0.2.26
 
