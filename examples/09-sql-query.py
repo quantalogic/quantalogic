@@ -1,6 +1,7 @@
 import os
 from typing import Any
 
+import loguru
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -14,6 +15,15 @@ from quantalogic.tools import GenerateDatabaseReportTool, InputQuestionTool, LLM
 
 MODEL_NAME = "deepseek/deepseek-chat"
 
+# It can be openai or Anthropic
+# Using litellm syntax for model
+# MODEL_NAME = "openai/gpt-4o-mini"
+# MODEL_NAME = "anthropic/claude-3.5-sonnet"
+# Or using openrouter model
+# MODEL_NAME = "openrouter/deepseek/deepseek-chat"
+# MODEL_NAME = "openrouter/anthropic/claude-3.5-sonnet"
+# MODEL_NAME = "openrouter/openai/gpt-4o-mini"
+
 # Verify required API keys
 if not os.environ.get("DEEPSEEK_API_KEY"):
     raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
@@ -24,16 +34,28 @@ db_conn = os.environ.get("DB_CONNECTION_STRING") or Prompt.ask(
     "[bold]Enter database connection string[/bold]", default="sqlite:///sample.db", console=console
 )
 
+
+def get_database_report():
+    """Generate a database report using the GenerateDatabaseReportTool."""
+    tool = GenerateDatabaseReportTool(connection_string=db_conn)
+    return tool.execute()
+
+
 # Initialize agent with SQL capabilities
-agent = Agent(
-    model_name=MODEL_NAME,
-    tools=[
-        SQLQueryTool(connection_string=db_conn),
-        InputQuestionTool(),
-        GenerateDatabaseReportTool(connection_string=db_conn),
-        LLMTool(model_name=MODEL_NAME, on_token=console_print_token),
-    ],
-)
+def create_agent(connection_string: str) -> Agent:
+    """Create an agent with SQL capabilities."""
+    agent = Agent(
+        model_name=MODEL_NAME,
+        tools=[
+            SQLQueryTool(connection_string=connection_string),
+            InputQuestionTool(),
+        ],
+    )
+
+    return agent
+
+
+agent = create_agent(db_conn)
 
 # Set up event handlers
 agent.event_emitter.on(
@@ -51,11 +73,13 @@ agent.event_emitter.on(
 # Store spinner reference and control state
 current_spinner = None
 
+
 def start_spinner(event: str, data: Any | None = None) -> None:
     """Start a spinner for query processing."""
     global current_spinner
     current_spinner = console.status("[bold green]Analyzing query...[/bold green]", spinner="dots")
     current_spinner.start()
+
 
 def stop_spinner(event: str, data: Any | None = None) -> None:
     """Stop the active spinner."""
@@ -64,11 +88,50 @@ def stop_spinner(event: str, data: Any | None = None) -> None:
         current_spinner.stop()
         current_spinner = None
 
+
+def show_sql_executing(event: str, data: Any | None = None) -> None:
+    """Show SQL execution result in a panel with detailed information."""
+    loguru.logger.info(f"show_sql_execution called with event: {event}, data: {data}")
+
+    # Start spinner for SQL execution
+    start_spinner(event, data)
+
+
+        
+    
+
+def display_sql_result(event: str, data: Any | None = None) -> None:
+    """Display detailed SQL execution result with comprehensive information."""
+    loguru.logger.info(f"display_sql_result called with event: {event}, data: {data}")
+    
+    global current_spinner
+    
+
+    
+    # Print result if available
+    panel = Panel.fit(
+        str(data),
+        title="[bold]SQL Execution Result:[/bold]",
+        border_style="bright_cyan",
+        padding=(1, 2)
+    )
+    console.print(panel)
+    # Stop spinner if active
+    if current_spinner:
+        current_spinner.stop()
+        current_spinner = None  
+
+
 # Updated event handling
+loguru.logger.info("Registering event listeners")
 agent.event_emitter.on("task_solve_start", start_spinner)
 agent.event_emitter.on("stream_chunk", stop_spinner)
 agent.event_emitter.on("stream_chunk", console_print_token)
 agent.event_emitter.on("task_solve_end", stop_spinner)
+agent.event_emitter.on("tool_execution_start", show_sql_executing)
+agent.event_emitter.on("tool_execution_end", display_sql_result)
+loguru.logger.info("Event listeners registered")
+
 
 def format_markdown(result: str) -> Panel:
     """Render markdown content with professional styling."""
@@ -85,10 +148,6 @@ def format_markdown(result: str) -> Panel:
         subtitle="📊 Database Results",
     )
 
-def get_database_report():
-    """Generate a database report using the GenerateDatabaseReportTool."""
-    tool = GenerateDatabaseReportTool(connection_string=db_conn)
-    return tool.execute()
 
 def query_loop():
     """Interactive loop for natural language database queries."""
@@ -118,7 +177,7 @@ def query_loop():
             2. Generate appropriate SQL query
             3. Execute the SQL query and present the results
 
-            The database context is as follows:
+            The database context is as follows, strictly respect it:
             
             {database_report}
             
@@ -144,6 +203,7 @@ def query_loop():
             subtitle="Thank you for using the SQL interface!",
         )
     )
+
 
 if __name__ == "__main__":
     query_loop()
