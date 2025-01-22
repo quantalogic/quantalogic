@@ -11,24 +11,27 @@ from rich.syntax import Syntax
 from quantalogic import Agent
 from quantalogic.console_print_events import console_print_events
 from quantalogic.console_print_token import console_print_token
-from quantalogic.tools import GenerateDatabaseReportTool, InputQuestionTool, LLMTool, SQLQueryTool
+from quantalogic.tools import GenerateDatabaseReportTool, InputQuestionTool, SQLQueryTool
+from quantalogic.tools.utils import create_sample_database
 
 MODEL_NAME = "deepseek/deepseek-chat"
 
-# It can be openai or Anthropic
-# Using litellm syntax for model
-# MODEL_NAME = "openai/gpt-4o-mini"
-# MODEL_NAME = "anthropic/claude-3.5-sonnet"
-# Or using openrouter model
-# MODEL_NAME = "openrouter/deepseek/deepseek-chat"
-# MODEL_NAME = "openrouter/anthropic/claude-3.5-sonnet"
-# MODEL_NAME = "openrouter/openai/gpt-4o-mini"
+# Using Deepseek as default model for cost-effectiveness and performance
+# Can be switched to OpenAI/Anthropic models if needed for specific use cases
+# MODEL_NAME = "deepseek/deepseek-chat"  # Default: Best balance of cost and capability
+# Alternative options (uncomment to use):
+# MODEL_NAME = "openai/gpt-4o-mini"  # For OpenAI ecosystem compatibility
+# MODEL_NAME = "anthropic/claude-3.5-sonnet"  # For advanced reasoning tasks
+# MODEL_NAME = "openrouter/deepseek/deepseek-chat"  # Via OpenRouter API
 
 # Verify required API keys
 if not os.environ.get("DEEPSEEK_API_KEY"):
     raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
 
-# Configure database connection
+# Database connection configuration
+# Prefers environment variable for security (avoids hardcoding credentials)
+# Falls back to interactive prompt for local development convenience
+# Defaults to SQLite for quick setup and demonstration purposes
 console = Console()
 db_conn = os.environ.get("DB_CONNECTION_STRING") or Prompt.ask(
     "[bold]Enter database connection string[/bold]", default="sqlite:///sample.db", console=console
@@ -57,69 +60,44 @@ def create_agent(connection_string: str) -> Agent:
 
 agent = create_agent(db_conn)
 
-# Set up event handlers
+# Event-driven architecture for better observability and control
+# Handles key lifecycle events to provide real-time feedback
+# Tracks: task states, tool execution, and error conditions
 agent.event_emitter.on(
     [
-        "task_complete",
-        "task_think_start",
-        "task_think_end",
-        "tool_execution_start",
-        "tool_execution_end",
-        "error_max_iterations_reached",
+        "task_complete",  # Final task state
+        "task_think_start",  # Agent begins processing
+        "task_think_end",  # Agent finishes processing
+        "tool_execution_start",  # Tool begins execution
+        "tool_execution_end",  # Tool completes execution
+        "error_max_iterations_reached",  # Safety limit exceeded
     ],
-    console_print_events,
+    console_print_events,  # Unified event display handler
 )
 
-# Store spinner reference and control state
-current_spinner = None
+# Visual feedback system using spinner
+# Global state ensures only one spinner runs at a time
+current_spinner = None  # Tracks active spinner instance
 
 
 def start_spinner(event: str, data: Any | None = None) -> None:
-    """Start a spinner for query processing."""
+    """Start spinner to indicate processing state.
+    Uses global state to prevent multiple concurrent spinners.
+    """
     global current_spinner
     current_spinner = console.status("[bold green]Analyzing query...[/bold green]", spinner="dots")
     current_spinner.start()
 
 
 def stop_spinner(event: str, data: Any | None = None) -> None:
-    """Stop the active spinner."""
+    """Cleanly stop spinner and release resources.
+    Prevents memory leaks from orphaned spinners.
+    """
     global current_spinner
     if current_spinner:
         current_spinner.stop()
-        current_spinner = None
+        current_spinner = None  # Clear reference to allow garbage collection
 
-
-def show_sql_executing(event: str, data: Any | None = None) -> None:
-    """Show SQL execution result in a panel with detailed information."""
-    loguru.logger.info(f"show_sql_execution called with event: {event}, data: {data}")
-
-    # Start spinner for SQL execution
-    start_spinner(event, data)
-
-
-        
-    
-
-def display_sql_result(event: str, data: Any | None = None) -> None:
-    """Display detailed SQL execution result with comprehensive information."""
-    loguru.logger.info(f"display_sql_result called with event: {event}, data: {data}")
-    
-    global current_spinner
-    
-
-    
-    # Print result if available
-    panel = Panel.fit(
-        str(data),
-        title="[bold]SQL Execution Result:[/bold]",
-        border_style="bright_cyan",
-        padding=(1, 2)
-    )
-    console.print(panel)
-    # Stop spinner if active
-    if current_spinner:
-        current_spinner.stop()
-        current_spinner = None  
 
 
 # Updated event handling
@@ -128,9 +106,7 @@ agent.event_emitter.on("task_solve_start", start_spinner)
 agent.event_emitter.on("stream_chunk", stop_spinner)
 agent.event_emitter.on("stream_chunk", console_print_token)
 agent.event_emitter.on("task_solve_end", stop_spinner)
-agent.event_emitter.on("tool_execution_start", show_sql_executing)
-agent.event_emitter.on("tool_execution_end", display_sql_result)
-loguru.logger.info("Event listeners registered")
+
 
 
 def format_markdown(result: str) -> Panel:
@@ -150,7 +126,10 @@ def format_markdown(result: str) -> Panel:
 
 
 def query_loop():
-    """Interactive loop for natural language database queries."""
+    """Interactive query interface with error recovery.
+    Designed for continuous operation with graceful exit handling.
+    Provides clear visual feedback and error recovery options.
+    """
     console.print(
         Panel.fit(
             "[bold reverse] 💽 SQL QUERY INTERFACE [/bold reverse]",
@@ -206,4 +185,5 @@ def query_loop():
 
 
 if __name__ == "__main__":
+    create_sample_database("sample.db")
     query_loop()
