@@ -177,3 +177,5 @@ cython_debug/
 
 
 .tasks/
+
+sample.db

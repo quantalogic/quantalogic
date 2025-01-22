@@ -7,6 +7,8 @@ from .duckduckgo_search_tool import DuckDuckGoSearchTool
 from .edit_whole_content_tool import EditWholeContentTool
 from .elixir_tool import ElixirTool
 from .execute_bash_command_tool import ExecuteBashCommandTool
+from .generate_database_report_tool import GenerateDatabaseReportTool
+from .grep_app_tool import GrepAppTool
 from .input_question_tool import InputQuestionTool
 from .jinja_tool import JinjaTool
 from .list_directory_tool import ListDirectoryTool
@@ -22,6 +24,7 @@ from .replace_in_file_tool import ReplaceInFileTool
 from .ripgrep_tool import RipgrepTool
 from .search_definition_names import SearchDefinitionNames
 from .serpapi_search_tool import SerpApiSearchTool
+from .sql_query_tool import SQLQueryTool
 from .task_complete_tool import TaskCompleteTool
 from .tool import Tool, ToolArgument
 from .unified_diff_tool import UnifiedDiffTool
@@ -56,5 +59,8 @@ __all__ = [
     "EditWholeContentTool",
     "JinjaTool",
     "LLMImageGenerationTool",
-    "ReadHTMLTool"
+    "ReadHTMLTool",
+    "GrepAppTool",
+    "GenerateDatabaseReportTool",
+    'SQLQueryTool'
 ]

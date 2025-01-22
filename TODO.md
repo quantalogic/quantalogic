@@ -8,8 +8,8 @@
 - [ ] Add cost tracking
 - [ ] Improve interactive session
     - [X] Thinking indicator
-    - [ ] Don't quit session after a task has completed 
-        - [ ] Ask for a new task / another question or quit 
+    - [X] Don't quit session after a task has completed 
+        - [X] Ask for a new task / another question or quit 
     - [ ] Add commands 
         - [ ] /list of commands
         - [ ] /tools list of tools
@@ -62,12 +62,12 @@ New command in interactive session:
 ## Ideas for Tools
 
 - [X] Analyze image processing tools
-- [ ] Add a efficient text reader for Html
-- [ ] Add BeautifulSoup tool
+- [X] Add a efficient text reader for Html
+- [X] Add BeautifulSoup tool
 - [ ] Add a Browser Tool (chrome plugin)
 - [ ] Add a RAG tool, search from a knowledge base
 - [ ] Add https://pypi.org/project/unstructured/ to extract text from PDFs
-- [ ] Add a Jinja2 tool
+- [X] Add a Jinja2 tool
 - [ ] Add search images tool
 - [ ] Add a whisper tool to transcribe audio
 - [ ] Add a generate image tool
@@ -75,7 +75,7 @@ New command in interactive session:
 - [ ] Add a TTS tool
 - [ ] Add Search Tool for action
 - [-] Add Search WebTool like DuckDuckGo, Wikipedia, SerpAPI, Perplexity ...
-- [ ] Add a grep.app Tool to find code on the web
+- [X] Add a grep.app Tool to find code on the web
 - [ ] Add a GronTool 
 
 

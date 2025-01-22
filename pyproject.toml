@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic"
-version = "0.2.26"
+version = "0.2.27"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
@@ -50,6 +50,10 @@ jinja2 = "^3.1.5"
 beautifulsoup4 = "^4.12.3"
 markdownify = "^0.14.1"
 requests = "^2.32.3"
+sqlalchemy = "^2.0.37"
+python-dotenv = "^1.0.1"
+networkx = "^3.4.2"
+faker = "^33.3.1"
 
 [tool.poetry.scripts]
 quantalogic = "quantalogic.main:cli"
