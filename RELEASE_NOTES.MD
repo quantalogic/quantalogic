@@ -1,3 +1,7 @@
+## v0.2.29
+### Fix 
+    -  Improved edit/search tool
+
 ## v0.2.28
 
 ### Fix
