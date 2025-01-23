@@ -65,7 +65,6 @@ class ReplaceInFileTool(Tool):
     )
     need_validation: bool = True
 
-    # Adjust this threshold to allow more or less approximate matching
     SIMILARITY_THRESHOLD: float = 0.85
 
     arguments: list[ToolArgument] = [
@@ -123,6 +122,15 @@ class ReplaceInFileTool(Tool):
             ),
         ),
     ]
+
+    def normalize_whitespace(self, text: str) -> str:
+        """Normalize leading whitespace by converting tabs to spaces."""
+        return '\n'.join([self._normalize_line(line) for line in text.split('\n')])
+
+    def _normalize_line(self, line: str) -> str:
+        """Normalize leading whitespace in a single line."""
+        leading_ws = len(line) - len(line.lstrip())
+        return line.replace('\t', '    ', leading_ws)  # Convert tabs to 4 spaces only in leading whitespace
 
     def parse_diff(self, diff: str) -> list[SearchReplaceBlock]:
         """Parses the diff string into a list of SearchReplaceBlock instances."""
@@ -250,6 +258,7 @@ class ReplaceInFileTool(Tool):
             except Exception as e:
                 return f"Error: Failed to write changes to '{path}': {str(e) or 'Unknown error'}"
 
+            # Maintain original success message format
             message = [f"Successfully modified '{path}'"]
             for idx, block in enumerate(blocks, 1):
                 status = "Exact match" if block.similarity is None else f"Similar match ({block.similarity:.1%})"
@@ -267,26 +276,27 @@ class ReplaceInFileTool(Tool):
             return f"Error: Unexpected error occurred - {error_msg or 'Unknown error'}"
 
     def find_similar_match(self, search: str, content: str) -> Tuple[float, str]:
-        """Finds the most similar substring in content compared to search."""
-        if not search or not content:
-            return 0.0, ""
+        """Finds the most similar substring in content compared to search with whitespace normalization."""
+        norm_search = self.normalize_whitespace(search)
+        content_lines = content.split('\n')
+        norm_content = self.normalize_whitespace(content)
+        norm_content_lines = norm_content.split('\n')
 
-        search_lines = search.splitlines()
-        content_lines = content.splitlines()
-
-        if len(search_lines) > len(content_lines):
+        if len(norm_content_lines) < len(norm_search.split('\n')):
             return 0.0, ""
 
         max_similarity = 0.0
         best_match = ""
+        search_line_count = len(norm_search.split('\n'))
 
-        for i in range(len(content_lines) - len(search_lines) + 1):
-            candidate = "\n".join(content_lines[i : i + len(search_lines)])
-            similarity = difflib.SequenceMatcher(None, search, candidate).ratio()
+        for i in range(len(norm_content_lines) - search_line_count + 1):
+            candidate_norm = '\n'.join(norm_content_lines[i:i+search_line_count])
+            similarity = difflib.SequenceMatcher(None, norm_search, candidate_norm).ratio()
 
             if similarity > max_similarity:
                 max_similarity = similarity
-                best_match = candidate
+                # Get original lines (non-normalized) for accurate replacement
+                best_match = '\n'.join(content_lines[i:i+search_line_count])
 
         return max_similarity, best_match
 
