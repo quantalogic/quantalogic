@@ -3,10 +3,12 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)](https://quantalogic.github.io/quantalogic/)
-![GitHub Stars](https://img.shields.io/github/stars/quantalogic/quantalogic?style=for-the-badge&color=blue)
+
 
 
 QuantaLogic is a  ReAct (Reasoning & Action) framework for building advanced AI agents. 
+
+🤩 ![GitHub Stars](https://img.shields.io/github/stars/quantalogic/quantalogic?style=for-the-badge&color=blue)
 
 It seamlessly integrates large language models (LLMs) with a robust tool system, enabling agents to understand, reason about, and execute complex tasks through natural language interaction.
 
