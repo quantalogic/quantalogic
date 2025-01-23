@@ -8,7 +8,6 @@
 
 QuantaLogic is a  ReAct (Reasoning & Action) framework for building advanced AI agents. 
 
-🤩 ![GitHub Stars](https://img.shields.io/github/stars/quantalogic/quantalogic?style=for-the-badge&color=blue)
 
 It seamlessly integrates large language models (LLMs) with a robust tool system, enabling agents to understand, reason about, and execute complex tasks through natural language interaction.
 
