@@ -578,6 +578,163 @@ def new_function():
 - Limited to single-file modifications
 - No automatic conflict resolution
 
+## Database Documentation Tools
+
+### GenerateDatabaseReportTool
+
+The **GenerateDatabaseReportTool** generates comprehensive database documentation reports, including ER diagrams, from a database connection string.
+
+#### Parameters
+
+| Parameter           | Type   | Description                                                                   | Example                                    |
+|---------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
+| `name`              | string | Internal name of the tool (default: "generate_database_report_tool")          | `generate_database_report_tool`             |
+| `description`       | string | Description of the tool's purpose                                             | `Generates a comprehensive Markdown database documentation report with ER diagram` |
+| `connection_string` | string | SQLAlchemy-compatible database connection string                              | `postgresql://user:password@localhost/mydatabase` |
+
+#### Key Characteristics
+- Generates detailed database documentation in Markdown format
+- Includes ER diagrams for visual representation
+- Supports SQLAlchemy-compatible connection strings
+- Handles various database types (SQLite, PostgreSQL, MySQL, etc.)
+- Provides structured documentation for tables, columns, and relationships
+
+#### Documentation Features
+- Table schema details
+- Column descriptions and data types
+- Primary and foreign key relationships
+- Index information
+- Visual ER diagrams
+- Markdown formatting for easy readability
+
+#### Supported Databases
+- SQLite
+- PostgreSQL
+- MySQL
+- Oracle
+- Microsoft SQL Server
+- Other SQLAlchemy-supported databases
+
+#### Example Usage
+```python
+from quantalogic.tools.database import GenerateDatabaseReportTool
+
+# Initialize the tool with a connection string
+tool = GenerateDatabaseReportTool(
+    connection_string="sqlite:///sample.db"
+)
+
+# Generate and print the database report
+report = tool.execute()
+print(report)
+```
+
+#### Output Format
+- **Markdown Document**:
+  - Table of contents
+  - Table schemas with detailed column information
+  - Relationship diagrams
+  - Index and constraint details
+- **ER Diagram**:
+  - Visual representation of table relationships
+  - Generated using Graphviz
+  - Embedded in Markdown document
+
+#### Advanced Features
+- Automatic relationship detection
+- Configurable output format
+- Support for large databases
+- Error handling for invalid connections
+
+#### Restrictions
+- Requires valid SQLAlchemy connection string
+- Database must be accessible
+- Performance may vary with large databases
+- Requires Graphviz for ER diagram generation
+
+## SQL Query Tools
+
+### SQLQueryTool
+
+The **SQLQueryTool** executes SQL queries against a database and returns the results in a paginated markdown table format.
+
+#### Parameters
+
+| Parameter         | Type   | Description                                                                   | Example                                    |
+|-------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
+| `name`            | string | Internal name of the tool (default: "sql_query_tool")                         | `sql_query_tool`                            |
+| `description`     | string | Description of the tool's purpose                                             | `Executes a SQL query and returns results in markdown table format with pagination support.` |
+| `connection_string`| string | SQLAlchemy-compatible database connection string                              | `postgresql://user:password@localhost/mydb` |
+| `query`           | string | The SQL query to execute                                                      | `SELECT * FROM customers WHERE country = 'France'` |
+| `start_row`       | int    | 1-based starting row number for results                                       | `1`                                         |
+| `end_row`         | int    | 1-based ending row number for results                                         | `100`                                       |
+
+#### Key Characteristics
+- Executes SQL queries against a database
+- Returns results in markdown table format
+- Supports pagination with start and end row numbers
+- Handles various numeric types for row numbers
+- Provides detailed error handling and validation
+
+#### Query Execution
+- Supports any valid SQL query
+- Returns results as a list of dictionaries
+- Handles large result sets with pagination
+- Validates query syntax and parameters
+
+#### Pagination Features
+- Configurable start and end row numbers
+- Automatically adjusts for out-of-range values
+- Provides metadata about total rows and displayed range
+- Includes notice for remaining rows
+
+#### Error Handling
+- Validates row numbers and query syntax
+- Handles database connection issues
+- Provides detailed error messages
+- Raises specific exceptions for different error types
+
+#### Example Usage
+```python
+sql_tool = SQLQueryTool(connection_string="sqlite:///sample.db")
+results = sql_tool.execute(
+    query="SELECT * FROM customers", 
+    start_row=1, 
+    end_row=10
+)
+print(results)
+```
+
+#### Output Format
+- **Header**: Displays the range of rows shown and total rows
+- **Table**: Markdown-formatted table with column headers and data
+- **Footer**: Notice about remaining rows if applicable
+
+#### Example Output
+```markdown
+**Query Results:** `1-10` of `50` rows
+
+| id | name          | country |
+|----|---------------|---------|
+| 1  | John Doe      | USA     |
+| 2  | Jane Smith    | Canada  |
+| ...| ...           | ...     |
+
+*Showing first 10 rows - 40 more rows available*
+```
+
+#### Advanced Features
+- Flexible row number input handling
+- Automatic result truncation for long values
+- Comprehensive error diagnostics
+- Configurable pagination range
+
+#### Restrictions
+- Requires valid database connection string
+- Performance depends on query complexity
+- Limited by database access permissions
+- Results are truncated based on pagination
+
 ## Utility Tools
 
 ### JinjaTool
