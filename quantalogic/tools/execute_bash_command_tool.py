@@ -1,12 +1,21 @@
 """Tool for executing bash commands with interactive input support."""
 
 import os
-import pty
 import select
 import signal
 import subprocess
 import sys
 from typing import Dict, Optional, Union
+
+from loguru import logger
+
+# Platform-specific imports
+try:
+    if sys.platform != 'win32':
+        import pty
+except ImportError as e:
+    logger.warning(f"Could not import platform-specific module: {e}")
+    pty = None
 
 from quantalogic.tools.tool import Tool, ToolArgument
 
@@ -41,20 +50,58 @@ class ExecuteBashCommandTool(Tool):
         ),
     ]
 
-    def execute(
+    def _execute_windows(
         self,
         command: str,
-        working_dir: Optional[str] = None,
-        timeout: Union[int, str, None] = 60,
-        env: Optional[Dict[str, str]] = None,
+        cwd: str,
+        timeout_seconds: int,
+        env_vars: Dict[str, str],
     ) -> str:
-        """Executes a bash command with interactive input handling."""
-        timeout_seconds = int(timeout) if timeout else 60
-        cwd = working_dir or os.getcwd()
-        env_vars = os.environ.copy()
-        if env:
-            env_vars.update(env)
+        """Execute command on Windows platform."""
+        try:
+            # On Windows, use subprocess with pipes
+            process = subprocess.Popen(
+                command,
+                shell=True,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=cwd,
+                env=env_vars,
+                text=True,
+                encoding='utf-8'
+            )
 
+            try:
+                stdout, stderr = process.communicate(timeout=timeout_seconds)
+                return_code = process.returncode
+                
+                if return_code != 0 and stderr:
+                    logger.warning(f"Command failed with error: {stderr}")
+                
+                formatted_result = (
+                    "<command_output>"
+                    f" <stdout>{stdout.strip()}</stdout>"
+                    f" <returncode>{return_code}</returncode>"
+                    f"</command_output>"
+                )
+                return formatted_result
+            
+            except subprocess.TimeoutExpired:
+                process.kill()
+                return f"Command timed out after {timeout_seconds} seconds."
+                
+        except Exception as e:
+            return f"Unexpected error executing command: {str(e)}"
+
+    def _execute_unix(
+        self,
+        command: str,
+        cwd: str,
+        timeout_seconds: int,
+        env_vars: Dict[str, str],
+    ) -> str:
+        """Execute command on Unix platform."""
         try:
             master, slave = pty.openpty()
             proc = subprocess.Popen(
@@ -94,9 +141,7 @@ class ExecuteBashCommandTool(Tool):
                             user_input = os.read(sys.stdin.fileno(), 1024)
                             os.write(master, user_input)
                     
-                    # Check if process completed or EOF received
                     if break_loop or proc.poll() is not None:
-                        # Read any remaining output
                         while True:
                             data = os.read(master, 1024).decode()
                             if not data:
@@ -126,6 +171,28 @@ class ExecuteBashCommandTool(Tool):
             return formatted_result
         except Exception as e:
             return f"Unexpected error executing command: {str(e)}"
+
+    def execute(
+        self,
+        command: str,
+        working_dir: Optional[str] = None,
+        timeout: Union[int, str, None] = 60,
+        env: Optional[Dict[str, str]] = None,
+    ) -> str:
+        """Executes a bash command with interactive input handling."""
+        timeout_seconds = int(timeout) if timeout else 60
+        cwd = working_dir or os.getcwd()
+        env_vars = os.environ.copy()
+        if env:
+            env_vars.update(env)
+
+        if sys.platform == 'win32':
+            return self._execute_windows(command, cwd, timeout_seconds, env_vars)
+        else:
+            if not pty:
+                logger.warning("PTY module not available, falling back to Windows-style execution")
+                return self._execute_windows(command, cwd, timeout_seconds, env_vars)
+            return self._execute_unix(command, cwd, timeout_seconds, env_vars)
 
 
 if __name__ == "__main__":

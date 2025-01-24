@@ -1,3 +1,9 @@
+## v0.2.30
+
+### Fix 
+
+    -  Fixed Windows support: termios module is not available on Windows
+
 ## v0.2.29
 ### Fix 
     -  Improved edit/search tool

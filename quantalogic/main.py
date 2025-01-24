@@ -23,7 +23,50 @@ from quantalogic.agent_config import (  # noqa: E402
 )
 from quantalogic.task_runner import task_runner  # noqa: E402
 
+# Platform-specific imports
+try:
+    if sys.platform == 'win32':
+        import msvcrt  # Built-in Windows module
+    else:
+        import termios
+        import tty
+except ImportError as e:
+    logger.warning(f"Could not import platform-specific module: {e}")
+    # Fall back to basic terminal handling if imports fail
+    msvcrt = None
+    termios = None
+    tty = None
+
 AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic", "search", "search-full"]
+
+
+def setup_terminal():
+    """Configure terminal settings based on platform."""
+    if sys.platform == 'win32':
+        if msvcrt:
+            return None  # Windows terminal is already configured
+        logger.warning("msvcrt module not available on Windows")
+        return None
+    else:
+        if termios and tty:
+            try:
+                fd = sys.stdin.fileno()
+                old_settings = termios.tcgetattr(fd)
+                tty.setraw(fd)
+                return old_settings
+            except (termios.error, AttributeError) as e:
+                logger.warning(f"Failed to configure terminal: {e}")
+                return None
+        return None
+
+
+def restore_terminal(old_settings):
+    """Restore terminal settings based on platform."""
+    if sys.platform != 'win32' and termios and old_settings:
+        try:
+            termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_settings)
+        except (termios.error, AttributeError) as e:
+            logger.warning(f"Failed to restore terminal settings: {e}")
 
 
 @click.group(invoke_without_command=True)
@@ -181,8 +224,12 @@ def task(
 
 
 def main():
-    """Main Entry point"""
-    cli()
+    """Main entry point."""
+    old_settings = setup_terminal()
+    try:
+        cli()  # type: ignore
+    finally:
+        restore_terminal(old_settings)
 
 
 if __name__ == "__main__":
