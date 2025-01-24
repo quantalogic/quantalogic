@@ -3,10 +3,6 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "streamlit",
-#     "yfinance",
-#     "pandas",
-#     "plotly",
 #     "quantalogic",
 # ]
 # ///
