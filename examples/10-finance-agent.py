@@ -11,6 +11,7 @@
 # ]
 # ///
 
+import html
 import json
 from datetime import datetime
 from io import StringIO
@@ -42,7 +43,7 @@ class StreamlitInputTool(Tool):
         input_container = st.container(border=True)
         with input_container:
             with st.form(key="input_form"):
-                st.markdown(f"**{question}**")
+                st.markdown(f"**{html.escape(question)}**")
                 user_input = st.text_input("Your answer:", key="input_field")
                 if st.form_submit_button("Submit") and user_input:
                     st.session_state.user_input = user_input
@@ -408,7 +409,7 @@ def main():
                     # Display formatted analysis results
                     st.subheader("📊 Analysis Results", divider="rainbow")
                     st.markdown("#### Key Findings:")
-                    st.markdown(result)
+                    st.markdown(html.escape(result))
 
             except Exception as e:
                 st.error(f"Processing error: {str(e)}")
