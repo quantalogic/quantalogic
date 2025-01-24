@@ -1,16 +1,9 @@
-## v0.2.30
+## v0.30.0
 
 ### Fix 
 
     -  Fixed Windows support: termios module is not available on Windows
-
-## v0.2.29
-### Fix 
     -  Improved edit/search tool
-
-## v0.2.28
-
-### Fix
     - Fix bash tool to handle interactive input
 
 ## v0.2.27
