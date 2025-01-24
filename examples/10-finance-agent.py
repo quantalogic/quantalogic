@@ -414,8 +414,8 @@ def main():
                 st.error(f"Processing error: {str(e)}")
                 st.exception(e)
 
-        # Disable new session creation
-        st.session_state.agent = st.session_state.get("agent")
+        # Reset session for fresh instance on next query
+        del st.session_state.agent
 
 
 if __name__ == "__main__":
