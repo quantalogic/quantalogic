@@ -43,7 +43,7 @@ class StreamlitInputTool(Tool):
         input_container = st.container(border=True)
         with input_container:
             with st.form(key="input_form"):
-                st.markdown(f"**{html.escape(question)}**")
+                st.markdown(f"**{question.strip()}**")  # Proper bold formatting
                 user_input = st.text_input("Your answer:", key="input_field")
                 if st.form_submit_button("Submit") and user_input:
                     st.session_state.user_input = user_input
