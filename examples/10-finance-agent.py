@@ -319,11 +319,19 @@ class VisualizationTool(Tool):
 
 
 def handle_stream_chunk(event: str, data: Optional[str] = None) -> None:
+    """Handle streaming token chunks with proper formatting and display"""
     if event == "stream_chunk" and data:
         if "response" not in st.session_state:
             st.session_state.response = ""
+            st.session_state.chunk_container = st.empty()
+            
+        # Append new chunk and update display
         st.session_state.response += data
-        st.markdown(f"```\n{st.session_state.response}\n```")
+        
+        # Create formatted display with syntax highlighting
+        formatted_response = st.session_state.response.replace("\n", "  \n")
+        with st.session_state.chunk_container.container():
+            st.code(formatted_response, language="python")
 
 
 def track_events(event: str, data: Optional[dict] = None) -> None:
