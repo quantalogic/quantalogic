@@ -59,9 +59,15 @@ MODEL_NAME = args.model
 # MODEL_NAME = "openrouter/deepseek/deepseek-chat"  # Via OpenRouter API
 # MODEL_NAME = "openrouter/mistral-large"  # Mistral Large via OpenRouter API
 
-# Verify required API keys
-if not os.environ.get("DEEPSEEK_API_KEY"):
+# Verify required API keys based on selected model
+if MODEL_NAME.startswith("deepseek") and not os.environ.get("DEEPSEEK_API_KEY"):
     raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
+elif MODEL_NAME.startswith("openai") and not os.environ.get("OPENAI_API_KEY"):
+    raise ValueError("OPENAI_API_KEY environment variable is not set")
+elif MODEL_NAME.startswith("anthropic") and not os.environ.get("ANTHROPIC_API_KEY"):
+    raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+elif MODEL_NAME.startswith("openrouter") and not os.environ.get("OPENROUTER_API_KEY"):
+    raise ValueError("OPENROUTER_API_KEY environment variable is not set")
 
 # Database connection configuration
 # Prefers environment variable for security (avoids hardcoding credentials)
@@ -79,15 +85,24 @@ def get_database_report():
     return tool.execute()
 
 
-# Initialize agent with SQL capabilities
+# Initialize agent with SQL capabilities using LiteLLM
 def create_agent(connection_string: str) -> Agent:
-    """Create an agent with SQL capabilities."""
+    """Create an agent with SQL capabilities using LiteLLM."""
     agent = Agent(
         model_name=MODEL_NAME,
         tools=[
             SQLQueryTool(connection_string=connection_string),
             InputQuestionTool(),
         ],
+        llm_config={
+            "provider": "litellm",
+            "api_keys": {
+                "deepseek": os.environ.get("DEEPSEEK_API_KEY"),
+                "openai": os.environ.get("OPENAI_API_KEY"),
+                "anthropic": os.environ.get("ANTHROPIC_API_KEY"),
+                "openrouter": os.environ.get("OPENROUTER_API_KEY"),
+            }
+        }
     )
 
     return agent
