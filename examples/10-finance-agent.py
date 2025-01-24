@@ -86,10 +86,11 @@ class VisualizationTool(Tool):
     description: str = "Creates financial visualizations"
     arguments: list[ToolArgument] = [
         ToolArgument(name="data", arg_type="string", description="JSON historical data", required=True),
-        ToolArgument(name="chart_type", arg_type="string", description="Chart style (line|candle|area)", required=False)
+        ToolArgument(name="chart_type", arg_type="string", description="Chart style (line|candle|area)", required=False),
+        ToolArgument(name="caption", arg_type="string", description="Chart caption text", required=False)
     ]
 
-    def execute(self, data: str, chart_type: str = "line") -> str:
+    def execute(self, data: str, chart_type: str = "line", caption: Optional[str] = None) -> str:
         try:
             df = pd.read_json(StringIO(data))
             df['Date'] = pd.to_datetime(df['Date'])
@@ -107,7 +108,8 @@ class VisualizationTool(Tool):
             fig.update_layout(
                 template='plotly_dark',
                 xaxis_rangeslider_visible=chart_type == "candle",
-                hovermode="x unified"
+                hovermode="x unified",
+                title=caption if caption else None
             )
             st.plotly_chart(fig, use_container_width=True)
             return "Graph displayed successfully"
@@ -161,12 +163,21 @@ def main():
                     f"Financial analysis request: {query}\n"
                 )
 
-                # Result processing
+                # Result processing with markdown detection
                 with st.container():
-                     st.markdown(f"```\n{result}\n```")
+                    if result.startswith("```") and result.endswith("```"):
+                        # Code block formatting
+                        st.code(result.strip("```"), language="python")
+                    elif any(md_char in result for md_char in ["#", "*", "`", "["]):
+                        # Markdown content
+                        st.markdown(result)
+                    else:
+                        # Plain text formatting
+                        st.text(result)
 
             except Exception as e:
                 st.error(f"Analysis failed: {str(e)}")
+                st.exception(e)
 
 if __name__ == "__main__":
     import sys
