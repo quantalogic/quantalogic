@@ -24,7 +24,7 @@ import streamlit as st
 import yfinance as yf
 
 from quantalogic import Agent
-from quantalogic.tools import DuckDuckGoSearchTool, LLMTool, SerpApiSearchTool, Tool, ToolArgument
+from quantalogic.tools import DuckDuckGoSearchTool, LLMTool, PythonTool, SerpApiSearchTool, Tool, ToolArgument
 
 
 class StreamlitInputTool(Tool):
@@ -58,8 +58,8 @@ class TechnicalAnalysisTool(Tool):
     description: str = "Calculates SMA/RSI with input validation and interactive visualization"
     arguments: list[ToolArgument] = [
         ToolArgument(name="symbol", arg_type="string", description="Stock ticker symbol", required=True),
-        ToolArgument(name="indicator", arg_type="string", description="Analysis type (sma/rsi)", required=True),
-        ToolArgument(name="period", arg_type="int", description="Lookback period (positive integer)", required=True),
+        ToolArgument(name="indicator", arg_type="string", description="Analysis type (sma/rsi/pe)", required=True),
+        ToolArgument(name="period", arg_type="int", description="Lookback period (positive integer, not required for PE)", required=False),
         ToolArgument(
             name="start_date",
             arg_type="string",
@@ -100,6 +100,10 @@ class TechnicalAnalysisTool(Tool):
                     result_df = self._calculate_sma(stock_data, period)
                 elif indicator.lower() == "rsi":
                     result_df = self._calculate_rsi(stock_data, period)
+                elif indicator.lower() == "pe":
+                    pe_ratio = self._calculate_pe_ratio(symbol)
+                    st.metric(f"{symbol} PE Ratio", f"{pe_ratio:.2f}")
+                    return f"Current PE Ratio for {symbol}: {pe_ratio:.2f}"
                 else:
                     raise ValueError(f"Unsupported indicator: {indicator}")
 
@@ -171,6 +175,18 @@ class TechnicalAnalysisTool(Tool):
 
             df["RSI"] = 100 - (100 / (1 + rs))
             return df[["Date", "Close", "RSI"]].dropna()
+
+    def _calculate_pe_ratio(self, symbol: str) -> float:
+        """Calculate Price-to-Earnings ratio for given stock symbol"""
+        try:
+            stock = yf.Ticker(symbol)
+            info = stock.info
+            pe_ratio = info.get('trailingPE', info.get('forwardPE', None))
+            if pe_ratio is None:
+                raise ValueError("PE ratio data not available")
+            return float(pe_ratio)
+        except Exception as e:
+            raise ValueError(f"Failed to calculate PE ratio: {str(e)}")
 
     def _display_analysis(self, df: pd.DataFrame, symbol: str, indicator: str, period: int) -> None:
         """Display interactive visualization and data table"""
@@ -372,6 +388,7 @@ def main():
                 LLMTool(model_name=model_name, on_token=handle_stream_chunk),
                 DuckDuckGoSearchTool(),
                 SerpApiSearchTool(),
+                PythonTool(),
             ],
         )
         st.session_state.agent.event_emitter.on(

@@ -1,3 +1,17 @@
+#!/usr/bin/env -S uv run
+
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "streamlit",
+#     "yfinance",
+#     "pandas",
+#     "plotly",
+#     "quantalogic",
+# ]
+# ///
+
+import argparse
 import os
 from typing import Any
 
@@ -14,15 +28,40 @@ from quantalogic.console_print_token import console_print_token
 from quantalogic.tools import GenerateDatabaseReportTool, InputQuestionTool, SQLQueryTool
 from quantalogic.tools.utils import create_sample_database
 
-MODEL_NAME = "deepseek/deepseek-chat"
+# Parse command-line arguments
+parser = argparse.ArgumentParser(
+    description="Interactive SQL query interface powered by AI",
+    epilog="""
+Examples:
+  python 09-sql-query.py --model deepseek/deepseek-chat
+  python 09-sql-query.py --help
 
-# Using Deepseek as default model for cost-effectiveness and performance
+Available models:
+  - deepseek/deepseek-chat (default)
+  - openai/gpt-4o-mini
+  - anthropic/claude-3.5-sonnet
+  - openrouter/deepseek/deepseek-chat
+  - openrouter/mistralai/mistral-large-2411
+"""
+)
+parser.add_argument(
+    "--model",
+    type=str,
+    default="deepseek/deepseek-chat",
+    help="Model name to use (default: deepseek/deepseek-chat) or any of the following: openai/gpt-4o-mini, anthropic/claude-3.5-sonnet, openrouter/deepseek/deepseek-chat, openrouter/mistralai/mistral-large-2411",
+)
+args = parser.parse_args()
+
+MODEL_NAME = args.model
+
+# Using specified model for cost-effectiveness and performance
 # Can be switched to OpenAI/Anthropic models if needed for specific use cases
 # MODEL_NAME = "deepseek/deepseek-chat"  # Default: Best balance of cost and capability
 # Alternative options (uncomment to use):
 # MODEL_NAME = "openai/gpt-4o-mini"  # For OpenAI ecosystem compatibility
 # MODEL_NAME = "anthropic/claude-3.5-sonnet"  # For advanced reasoning tasks
 # MODEL_NAME = "openrouter/deepseek/deepseek-chat"  # Via OpenRouter API
+# MODEL_NAME = "openrouter/mistral-large"  # Mistral Large via OpenRouter API
 
 # Verify required API keys
 if not os.environ.get("DEEPSEEK_API_KEY"):

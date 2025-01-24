@@ -1,6 +1,8 @@
 model_info = {
     "deepseek-reasoner": {"max_output_tokens": 8 * 1024, "max_input_tokens": 1024 * 128},
     "openrouter/deepseek/deepseek-r1": {"max_output_tokens": 8 * 1024, "max_input_tokens": 1024 * 128},
+    "openrouter/mistralai/mistral-large-2411": {"max_output_tokens": 128 * 1024, "max_input_tokens": 1024 * 128},
+    "mistralai/mistral-large-2411": {"max_output_tokens": 128 * 1024, "max_input_tokens": 1024 * 128},
 }
 
 
