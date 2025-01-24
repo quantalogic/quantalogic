@@ -23,7 +23,7 @@ import streamlit as st
 import yfinance as yf
 
 from quantalogic import Agent
-from quantalogic.tools.tool import Tool, ToolArgument
+from quantalogic.tools import DuckDuckGoSearchTool, LLMTool, SerpApiSearchTool, Tool, ToolArgument
 
 
 class StreamlitInputTool(Tool):
@@ -49,9 +49,10 @@ class StreamlitInputTool(Tool):
                     st.rerun()
         return st.session_state.user_input
 
+
 class TechnicalAnalysisTool(Tool):
     """Performs technical analysis with robust type validation and error handling."""
-    
+
     name: str = "technical_analysis_tool"
     description: str = "Calculates SMA/RSI with input validation and interactive visualization"
     arguments: list[ToolArgument] = [
@@ -63,43 +64,36 @@ class TechnicalAnalysisTool(Tool):
             arg_type="string",
             description="Start date (YYYY-MM-DD)",
             required=False,
-            default=datetime.now().strftime("%Y-%m-%d")
+            default=datetime.now().strftime("%Y-%m-%d"),
         ),
         ToolArgument(
             name="end_date",
             arg_type="string",
             description="End date (YYYY-MM-DD)",
             required=False,
-            default=datetime.now().strftime("%Y-%m-%d")
+            default=datetime.now().strftime("%Y-%m-%d"),
         ),
     ]
 
-    def execute(
-        self, 
-        symbol: str, 
-        indicator: str, 
-        period: int, 
-        start_date: str = None, 
-        end_date: str = None
-    ) -> str:
+    def execute(self, symbol: str, indicator: str, period: int, start_date: str = None, end_date: str = None) -> str:
         """Execute technical analysis with type-safe operations"""
         try:
             # Create analysis container first for proper Streamlit context
             analysis_container = st.container(border=True)
-            
+
             with analysis_container:
                 # Input validation and type conversion
                 period = self._validate_period(period)
                 start_date, end_date = self._validate_dates(start_date, end_date)
                 symbol = symbol.upper().strip()
-                
+
                 st.header(f"{symbol} Technical Analysis", divider="rainbow")
-                
+
                 # Validate stock symbol
                 stock_data = self._fetch_stock_data(symbol, start_date, end_date)
                 if stock_data.empty:
                     return f"No data found for {symbol}"
-                
+
                 # Calculate technical indicator
                 if indicator.lower() == "sma":
                     result_df = self._calculate_sma(stock_data, period)
@@ -107,11 +101,11 @@ class TechnicalAnalysisTool(Tool):
                     result_df = self._calculate_rsi(stock_data, period)
                 else:
                     raise ValueError(f"Unsupported indicator: {indicator}")
-                
+
                 # Display results
                 self._display_analysis(result_df, symbol, indicator, period)
                 return f"Successfully displayed {indicator.upper()} analysis for {symbol}"
-                
+
         except Exception as e:
             st.error(f"Technical analysis failed: {str(e)}")
             return f"Analysis error: {str(e)}"
@@ -131,10 +125,10 @@ class TechnicalAnalysisTool(Tool):
         try:
             start_dt = pd.to_datetime(start or datetime.now() - pd.DateOffset(years=1))
             end_dt = pd.to_datetime(end or datetime.now())
-            
+
             if start_dt >= end_dt:
                 raise ValueError("Start date must be before end date")
-                
+
             return start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
         except (ValueError, TypeError):
             raise ValueError("Invalid date format - use YYYY-MM-DD")
@@ -145,11 +139,11 @@ class TechnicalAnalysisTool(Tool):
             try:
                 stock = yf.Ticker(symbol)
                 hist = stock.history(start=start, end=end)
-                
+
                 if hist.empty:
                     st.warning(f"No historical data found for {symbol}")
                     return pd.DataFrame()
-                    
+
                 return hist.reset_index()
             except Exception as e:
                 raise ValueError(f"Data fetch failed: {str(e)}")
@@ -166,81 +160,82 @@ class TechnicalAnalysisTool(Tool):
             delta = df["Close"].diff()
             gain = delta.where(delta > 0, 0.0)
             loss = -delta.where(delta < 0, 0.0)
-            
+
             avg_gain = gain.rolling(period).mean()
             avg_loss = loss.rolling(period).mean()
-            
+
             # Prevent division by zero
             avg_loss = avg_loss.replace(0.0, 1e-10)
             rs = avg_gain / avg_loss
-            
+
             df["RSI"] = 100 - (100 / (1 + rs))
             return df[["Date", "Close", "RSI"]].dropna()
 
     def _display_analysis(self, df: pd.DataFrame, symbol: str, indicator: str, period: int) -> None:
         """Display interactive visualization and data table"""
         col1, col2 = st.columns([3, 1])
-        
+
+        period = int(period)
+
         with col1:
             fig = go.Figure()
             line_color = "#00FFAA" if indicator == "sma" else "#FFAA00"
-            
+
             # Price trace
-            fig.add_trace(go.Scatter(
-                x=df["Date"], 
-                y=df["Close"], 
-                name="Price",
-                line=dict(color="#FFFFFF", width=1)
-            ))
-            
+            fig.add_trace(go.Scatter(x=df["Date"], y=df["Close"], name="Price", line=dict(color="#FFFFFF", width=1)))
+
             # Indicator trace
-            fig.add_trace(go.Scatter(
-                x=df["Date"], 
-                y=df[indicator.upper()], 
-                name=f"{indicator.upper()} {period}",
-                line=dict(color=line_color, width=2)
-            ))
-            
+            fig.add_trace(
+                go.Scatter(
+                    x=df["Date"],
+                    y=df[indicator.upper()],
+                    name=f"{indicator.upper()} {period}",
+                    line=dict(color=line_color, width=2),
+                )
+            )
+
             # RSI-specific elements
-            if indicator == "rsi":
+            if indicator.strip().lower() == "rsi":
                 fig.add_hrect(y0=30, y1=70, fillcolor="rgba(128,128,128,0.2)", line_width=0)
                 fig.add_hline(y=30, line_dash="dash", line_color="red")
                 fig.add_hline(y=70, line_dash="dash", line_color="red")
-            
+
             fig.update_layout(
                 template="plotly_dark",
                 title=f"{symbol} {indicator.upper()} Analysis",
                 hovermode="x unified",
-                height=500
+                height=500,
             )
             st.plotly_chart(fig, use_container_width=True)
-        
+
         with col2:
             st.subheader("Latest Values", divider="gray")
             display_df = df.tail(10).copy()
             display_df["Date"] = display_df["Date"].dt.strftime("%Y-%m-%d")
-            
+
             st.dataframe(
-                display_df.style.format({
-                    "Close": "{:.2f}",
-                    indicator.upper(): "{:.2f}"
-                }).applymap(
+                display_df.style.format({"Close": "{:.2f}", indicator.upper(): "{:.2f}"}).applymap(
                     lambda x: self._style_indicator(x, indicator, display_df["Close"].iloc[-1]),
-                    subset=[indicator.upper()]
+                    subset=[indicator.upper()],
                 ),
                 hide_index=True,
-                height=500
+                height=500,
             )
-    
+
     def _style_indicator(self, value: float, indicator: str, last_close: float) -> str:
         """Apply conditional formatting to indicator values"""
         if indicator == "rsi":
-            if value < 30: return "color: #4CAF50"
-            if value > 70: return "color: #FF5722"
+            if value < 30:
+                return "color: #4CAF50"
+            if value > 70:
+                return "color: #FF5722"
         elif indicator == "sma":
-            if value > last_close: return "color: #4CAF50"
-            if value < last_close: return "color: #FF5722"
+            if value > last_close:
+                return "color: #4CAF50"
+            if value < last_close:
+                return "color: #FF5722"
         return ""
+
 
 class YFinanceTool(Tool):
     """Retrieves stock market data from Yahoo Finance."""
@@ -261,17 +256,15 @@ class YFinanceTool(Tool):
                 if hist.empty:
                     st.warning(f"No data for {ticker}")
                     return ""
-                
+
                 df = hist.reset_index()
                 st.subheader(f"{ticker} Historical Data", divider="rainbow")
                 st.dataframe(
-                    df.style.format({
-                        "Open": "{:.2f}", "High": "{:.2f}", 
-                        "Low": "{:.2f}", "Close": "{:.2f}",
-                        "Volume": "{:,.0f}"
-                    }),
+                    df.style.format(
+                        {"Open": "{:.2f}", "High": "{:.2f}", "Low": "{:.2f}", "Close": "{:.2f}", "Volume": "{:,.0f}"}
+                    ),
                     use_container_width=True,
-                    hide_index=True
+                    hide_index=True,
                 )
                 return df.to_json()
         except Exception as e:
@@ -303,27 +296,20 @@ class VisualizationTool(Tool):
                 fig = go.Figure()
 
                 if chart_type == "candle":
-                    fig.add_trace(go.Candlestick(
-                        x=df["Date"], open=df["Open"], 
-                        high=df["High"], low=df["Low"], close=df["Close"]
-                    ))
+                    fig.add_trace(
+                        go.Candlestick(x=df["Date"], open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"])
+                    )
                 elif chart_type == "area":
-                    fig.add_trace(go.Scatter(
-                        x=df["Date"], y=df["Close"],
-                        fill="tozeroy", line=dict(color="#00FFAA")
-                    ))
+                    fig.add_trace(go.Scatter(x=df["Date"], y=df["Close"], fill="tozeroy", line=dict(color="#00FFAA")))
                 else:
-                    fig.add_trace(go.Scatter(
-                        x=df["Date"], y=df["Close"], 
-                        line=dict(color="#FFAA00"), name="Price"
-                    ))
+                    fig.add_trace(go.Scatter(x=df["Date"], y=df["Close"], line=dict(color="#FFAA00"), name="Price"))
 
                 fig.update_layout(
                     template="plotly_dark",
                     title=caption or "Price Chart",
                     xaxis_rangeslider_visible=chart_type == "candle",
                     height=500,
-                    margin=dict(l=20, r=20, t=60, b=20)
+                    margin=dict(l=20, r=20, t=60, b=20),
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 return "Visualization created"
@@ -353,22 +339,33 @@ def track_events(event: str, data: Optional[dict] = None) -> None:
 
 
 def main():
+    model_name = "deepseek/deepseek-chat"
     st.set_page_config(page_title="Finance Suite Pro", layout="wide")
     st.title("📈 AI Financial Analyst")
 
     # Initialize agent with tools
     if "agent" not in st.session_state:
         st.session_state.agent = Agent(
-            model_name="deepseek/deepseek-chat",
+            model_name=model_name,
             tools=[
                 StreamlitInputTool(),
                 YFinanceTool(),
                 VisualizationTool(),
-                TechnicalAnalysisTool()
+                TechnicalAnalysisTool(),
+                LLMTool(model_name=model_name, on_token=handle_stream_chunk),
+                DuckDuckGoSearchTool(),
+                SerpApiSearchTool(),
             ],
         )
         st.session_state.agent.event_emitter.on(
-            ["task_think_start", "tool_execution_start", "task_think_end"], track_events
+            [
+                "task_think_start",
+                "tool_execution_start",
+                "task_think_end",
+                "tool_execution_end",
+                "error_max_iterations_reached",
+            ],
+            track_events,
         )
         st.session_state.agent.event_emitter.on(["stream_chunk"], handle_stream_chunk)
 
@@ -387,23 +384,23 @@ def main():
                 response_container = st.container(border=True)
                 with response_container:
                     result = st.session_state.agent.solve_task(f"User query: {query}\n")
-                    st.markdown(f"**Analysis Result:**\n{result}")
 
-                # Force UI refresh
-                st.rerun()
+                    # Display formatted analysis results
+                    st.subheader("📊 Analysis Results", divider="rainbow")
+                    st.markdown("#### Key Findings:")
+                    st.markdown(result)
 
             except Exception as e:
                 st.error(f"Processing error: {str(e)}")
                 st.exception(e)
 
-        # New session button
-        if st.button("🔄 Start New Session", use_container_width=True):
-            st.session_state.clear()
-            st.rerun()
+        # Disable new session creation
+        st.session_state.agent = st.session_state.get("agent")
 
 
 if __name__ == "__main__":
     import sys
+
     import streamlit.web.cli as stcli
 
     if st.runtime.exists():
