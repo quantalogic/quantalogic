@@ -7,9 +7,14 @@ from typing import Optional
 
 # Third-party imports
 import click
+from dotenv import load_dotenv
 from loguru import logger
 
 from quantalogic.version import get_version
+
+# Load environment variables from .env file
+load_dotenv()
+
 
 # Configure logger
 logger.remove()
@@ -80,7 +85,14 @@ def restore_terminal(old_settings):
 @click.option(
     "--model-name",
     default=MODEL_NAME,
-    help='Specify the model to use (litellm format, e.g. "openrouter/deepseek/deepseek-chat").',
+    help='Specify the model to use (litellm format). Examples:\n'
+         '  - openai/gpt-4o-mini\n'
+         '  - openai/gpt-4o\n'
+         '  - anthropic/claude-3.5-sonnet\n'
+         '  - deepseek/deepseek-chat\n'
+         '  - deepseek/deepseek-reasoner\n'
+         '  - openrouter/deepseek/deepseek-r1\n'
+         '  - openrouter/openai/gpt-4o',
 )
 @click.option(
     "--log",
@@ -120,7 +132,14 @@ def cli(
     compact_every_n_iteration: int | None,
     max_tokens_working_memory: int | None,
 ) -> None:
-    """QuantaLogic AI Assistant - A powerful AI tool for various tasks."""
+    """QuantaLogic AI Assistant - A powerful AI tool for various tasks.
+
+    Environment Variables:
+      - OpenAI: Set `OPENAI_API_KEY` to your OpenAI API key.
+      - Anthropic: Set `ANTHROPIC_API_KEY` to your Anthropic API key.
+      - DeepSeek: Set `DEEPSEEK_API_KEY` to your DeepSeek API key.
+    Use a `.env` file or export these variables in your shell for seamless integration.
+    """
     if version:
         console = Console()
         current_version = get_version()

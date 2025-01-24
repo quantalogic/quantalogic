@@ -36,6 +36,10 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 - **Memory Management**: Intelligent context handling and optimization
 - **Enterprise Ready**: Comprehensive logging, error handling, and validation system
 
+## Environment Configuration
+
+To configure the environment API key for Quantalogic using LiteLLM, set the required environment variable for your chosen provider (e.g., `OPENAI_API_KEY` for OpenAI, `ANTHROPIC_API_KEY` for Anthropic, or `DEEPSEEK_API_KEY` for DeepSeek) and any optional variables like `OPENAI_API_BASE` or `OPENROUTER_REFERRER`. Use a `.env` file or a secrets manager to securely store these keys, and load them in your code using `python-dotenv`. For advanced configurations, refer to the [LiteLLM documentation](https://docs.litellm.ai/docs/).
+
 ## 📋 Table of Contents
 
 - [Release Notes](#release-notes)
