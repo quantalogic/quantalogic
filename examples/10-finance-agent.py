@@ -344,6 +344,14 @@ def track_events(event: str, data: Optional[dict] = None) -> None:
     elif event == "task_think_end":
         if "current_status" in st.session_state:
             st.session_state.current_status.update(label="✅ Analysis Complete", state="complete")
+    elif event == "tool_execution_end":
+        tool_name = data.get("tool_name", "")
+        if tool_name == "llm_tool":
+            if "chunk_container" in st.session_state:
+                st.session_state.chunk_container.empty()
+                del st.session_state.chunk_container
+            if "response" in st.session_state:
+                del st.session_state.response
 
 
 def main():
@@ -381,11 +389,15 @@ def main():
     query = st.chat_input("Ask financial questions (e.g., 'Show AAPL stock analysis with SMA 50')")
 
     if query:
-        # Clear previous analysis containers
+        # Clear previous analysis containers and stream state
         if "analysis_containers" in st.session_state:
             for container in st.session_state.analysis_containers:
                 container.empty()
             del st.session_state.analysis_containers
+        if "response" in st.session_state:
+            del st.session_state.response
+        if "chunk_container" in st.session_state:
+            del st.session_state.chunk_container
 
         with st.spinner("Processing request..."):
             try:
