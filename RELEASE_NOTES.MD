@@ -1,3 +1,8 @@
+## [v0.30.1] (2025-10-24)
+
+### Fix
+- improve --help command and documentation about models and environment variables
+
 ## v0.30.0
 
 ### Fix 
