@@ -86,7 +86,32 @@ def handle_delete_command(lines: List[str], args: List[str], console: Console,
 
 @registry.register("/replace", "Search and replace: /replace <search> <replace>")
 def handle_replace_command(lines: List[str], args: List[str], console: Console,
-                         session: PromptSession, history_manager: InputHistoryManager) -> None:
+    session: PromptSession, history_manager: InputHistoryManager) -> None:
+    try:
+        search_str = args[0]
+        replace_str = args[1]
+        history_manager.push_state(lines)
+        for i in range(len(lines)):
+            lines[i] = lines[i].replace(search_str, replace_str)
+        console.print("[bold]Search and replace completed.[/bold]")
+    except (ValueError, IndexError):
+        console.print("[red]Invalid replace command. Usage: /replace <search_str> <replace_str>[/red]")
+
+@registry.register("/model", "Show current AI model") 
+def handle_model_command(lines: List[str], args: List[str], console: Console,
+    session: PromptSession, history_manager: InputHistoryManager) -> None:
+    from quantalogic.agent_config import get_current_model
+    try:
+        console.print(f"[yellow]Current AI model: {get_current_model()}[/yellow]")
+    except ValueError as e:
+        console.print(f"[red]Error: {str(e)}[/red]")
+
+@registry.register("/model", "Show current AI model")
+def handle_model_command(lines: List[str], args: List[str], console: Console,
+    session: PromptSession, history_manager: InputHistoryManager) -> None:
+    from quantalogic.agent_config import get_current_model
+    model = get_current_model()
+    console.print(f"[yellow]Current AI model: {model}[/yellow]")
     """Replace text across all lines in the input buffer."""
     try:
         search_str, replace_str = args
