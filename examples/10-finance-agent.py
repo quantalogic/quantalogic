@@ -385,7 +385,7 @@ def main():
                 YFinanceTool(),
                 VisualizationTool(),
                 TechnicalAnalysisTool(),
-                LLMTool(model_name=model_name, on_token=handle_stream_chunk),
+           #     LLMTool(model_name=model_name, on_token=handle_stream_chunk),
                 DuckDuckGoSearchTool(),
                 SerpApiSearchTool(),
                 PythonTool(),
