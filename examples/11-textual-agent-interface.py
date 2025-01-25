@@ -9,7 +9,6 @@
 # ]
 # ///
 
-import asyncio
 import os
 import threading
 from typing import Any
@@ -72,10 +71,9 @@ class Response(Markdown):
         self.text_content = ""
         self._update_lock = threading.Lock()
         self._streaming = True
-        self._last_update_length = 0
 
     def append(self, text: str):
-        """Thread-safe text appending with streaming check"""
+        """Thread-safe text appending"""
         if self._streaming and text:
             self.app.call_from_thread(self._append_text, text)
 
@@ -83,24 +81,12 @@ class Response(Markdown):
         """Main thread text append operation"""
         with self._update_lock:
             self.text_content += text
-            if len(self.text_content) - self._last_update_length >= 1:
-                self.app.create_task(self._async_update())
-                self._last_update_length = len(self.text_content)
-
-    async def _async_update(self):
-        """Update display with latest content"""
-        try:
             self.update(f"```\n{self.text_content}\n```")
-            chat_view = self.query_one("VerticalScroll", None)
-            if chat_view:
-                chat_view.scroll_end(animate=False)
-        except Exception as e:
-            logger.error(f"Update error: {e}")
+            self.query_one("VerticalScroll", None).scroll_end(animate=False)
 
     def reset_stream_state(self):
         """Prepare for new streaming session"""
         self.text_content = ""
-        self._last_update_length = 0
         self._streaming = True
 
 
@@ -126,7 +112,7 @@ class ChatApp(App):
     def __init__(self):
         super().__init__()
         if not os.environ.get("DEEPSEEK_API_KEY"):
-            raise RuntimeError("Missing DEEPSEEK_API_KEY")
+            raise RuntimeError("Missing DEEPSEEK_API_KEY environment variable")
 
         self.agent = Agent(model_name="deepseek/deepseek-chat")
         self.current_response = None
@@ -160,7 +146,8 @@ class ChatApp(App):
         """Centralized event handler"""
         match event:
             case "task_complete":
-                self.app.call_from_thread(self.finalize_response, data)
+                if isinstance(data, str):
+                    self.app.call_from_thread(self.finalize_response, data)
             case "task_think_start":
                 self.app.call_from_thread(self.toggle_loading, True)
                 self.app.call_from_thread(
@@ -168,7 +155,7 @@ class ChatApp(App):
                     "🤔 Thinking..."
                 )
             case "tool_execution_start":
-                tool = data.get("tool_name", "unknown") if data else "unknown"
+                tool = data.get("tool_name", "unknown") if isinstance(data, dict) else "unknown"
                 self.app.call_from_thread(
                     self.add_system_message,
                     f"🔧 Using tool: {tool}"
@@ -194,8 +181,9 @@ class ChatApp(App):
                 await chat_view.mount(final_response)
                 await final_response.update(f"**Answer:**\n{final_answer}")
                 
-                # Remove streaming widget
-                self.current_response.remove()
+                # Remove streaming widget safely
+                if self.current_response in chat_view.children:
+                    self.current_response.remove()
                 self.current_response = None
 
             except Exception as e:
@@ -205,7 +193,7 @@ class ChatApp(App):
                 await self.toggle_loading(False)
 
     async def on_input_submitted(self, event: Input.Submitted):
-        """Handle user queries"""
+        """Handle user query submission"""
         query = event.value.strip()
         if not query:
             return
@@ -218,8 +206,11 @@ class ChatApp(App):
         await chat_view.mount(Prompt(query))
 
         with self._response_lock:
+            # Clear previous response if exists
             if self.current_response:
                 self.current_response.remove()
+                
+            # Create new streaming response
             self.current_response = Response()
             await chat_view.mount(self.current_response)
             self.current_response.reset_stream_state()
@@ -227,6 +218,7 @@ class ChatApp(App):
         # Start processing in background thread
         def process_query():
             try:
+                # Synchronous call with streaming enabled
                 result = self.agent.solve_task(query, streaming=True)
                 if result:
                     self.app.call_from_thread(
