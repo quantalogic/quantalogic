@@ -171,9 +171,27 @@ def get_multiline_input(console: Console) -> str:
             prompt_text = f"{line_number:>3}: "
             line = session.prompt(prompt_text, rprompt="Press Enter twice to submit")
 
-            # Handle commands with single return
+            # Handle slash commands
             if line.strip().startswith('/'):
-                return line.strip()
+                cmd = line.strip().lower()
+                if cmd == '/help':
+                    console.print(Panel(
+                        "Available commands:\n"
+                        "/help - Show this help\n"
+                        "/date - Show current date/time\n"
+                        "edit <line> - Edit line\n"
+                        "delete <line> - Delete line\n"
+                        "replace <old> <new> - Replace text",
+                        title="Help Menu", 
+                        border_style="green"))
+                    continue
+                elif cmd == '/date':
+                    from datetime import datetime
+                    console.print(f"[yellow]Current datetime: {datetime.now().isoformat()}[/yellow]")
+                    continue
+                else:
+                    console.print(f"[red]Unknown command: {cmd}[/red]")
+                    continue
 
             if line.strip() == "":
                 blank_lines += 1
