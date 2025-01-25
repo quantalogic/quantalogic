@@ -37,6 +37,14 @@ load_dotenv()
 MODEL_NAME = "deepseek/deepseek-chat"
 
 
+_current_model_name: str = ""
+
+def get_current_model() -> str:
+    """Retrieve the currently active model name."""
+    if not _current_model_name:
+        raise ValueError("No model initialized")
+    return _current_model_name
+
 def create_agent(
     model_name: str, 
     vision_model_name: str | None, 
@@ -44,6 +52,8 @@ def create_agent(
     compact_every_n_iteration: int | None = None,
     max_tokens_working_memory: int | None = None
 ) -> Agent:
+    global _current_model_name
+    _current_model_name = model_name
     """Create an agent with the specified model and tools.
 
     Args:
