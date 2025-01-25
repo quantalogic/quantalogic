@@ -473,27 +473,6 @@ class Agent(BaseModel):
         if len(response) > MAX_RESPONSE_LENGTH:
             response_display = response[:MAX_RESPONSE_LENGTH]
             response_display += (
-                f"... content was truncated. Full content available by interpolation in variable {variable_name}"
-            )
-
-        formatted_response = (
-            "\n"
-            f"--- Observations for iteration {iteration} / max {self.max_iterations} ---\n"
-            "\n"
-            f"\n --- Tool execution result stored in variable ${variable_name}$ --- \n"
-            "\n"
-            f"<{variable_name}>\n{response_display}\n</{variable_name}>\n" + "\n"
-            "\n"
-            "--- Tools --- \n"
-        )
-        return formatted_response
-
-    def _format_observation_response(self, response: str, variable_name: str, iteration: int) -> str:
-        """Format the observation response with the given response, variable name, and iteration."""
-        response_display = response
-        if len(response) > MAX_RESPONSE_LENGTH:
-            response_display = response[:MAX_RESPONSE_LENGTH]
-            response_display += (
                 f"... content was truncated full content available by interpolation in variable {variable_name}"
             )
 
@@ -702,7 +681,9 @@ class Agent(BaseModel):
         # Remove the last assistant / user message
         user_message = memory_copy.pop()
         assistant_message = memory_copy.pop()
-        summary = self.model.generate_with_history(messages_history=memory_copy, prompt=prompt_summary)
+        summary = self.model.generate_with_history(
+            messages_history=memory_copy, prompt=prompt_summary
+        )
         # Remove user message
         memory_copy.pop()
         # Replace by summary
