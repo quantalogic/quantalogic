@@ -83,26 +83,33 @@ class ToolManager(BaseModel):
         tool = self.tools[tool_name]
         converted = {}
         
-        for arg in tool.arguments:
-            if arg.name in kwargs:
-                try:
-                    if arg.arg_type == "int":
-                        converted[arg.name] = int(kwargs[arg.name])
-                    elif arg.arg_type == "float":
-                        converted[arg.name] = float(kwargs[arg.name])
-                    elif arg.arg_type == "boolean":
-                        val = str(kwargs[arg.name]).lower()
-                        converted[arg.name] = val in ("true", "1", "yes", "y")
-                    else:  # string
-                        converted[arg.name] = str(kwargs[arg.name])
-                except (ValueError, TypeError) as e:
-                    if arg.required:
-                        raise ValueError(
-                            f"Failed to convert required argument '{arg.name}' to {arg.arg_type}: {str(e)}"
-                        )
-                    logger.warning(
-                        f"Failed to convert optional argument '{arg.name}' to {arg.arg_type}: {str(e)}"
+        for arg_name, arg_value in kwargs.items():
+            # Find the corresponding argument definition
+            arg = next((a for a in tool.arguments if a.name == arg_name), None)
+            
+            if arg is None:
+                logger.warning(f"Argument '{arg_name}' not found in tool definition")
+                converted[arg_name] = arg_value
+                continue
+            
+            try:
+                if arg.arg_type == "int":
+                    converted[arg_name] = int(arg_value)
+                elif arg.arg_type == "float":
+                    converted[arg_name] = float(arg_value)
+                elif arg.arg_type == "boolean":
+                    val = str(arg_value).lower()
+                    converted[arg_name] = val in ("true", "1", "yes", "y")
+                else:  # string
+                    converted[arg_name] = str(arg_value)
+            except (ValueError, TypeError) as e:
+                if arg.required:
+                    raise ValueError(
+                        f"Failed to convert required argument '{arg_name}' to {arg.arg_type}: {str(e)}"
                     )
-                    converted[arg.name] = kwargs[arg.name]  # keep original value
-                
+                logger.warning(f"Failed to convert optional argument '{arg_name}': {str(e)}")
+                converted[arg_name] = arg_value
+        
+
+        
         return converted
