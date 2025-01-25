@@ -29,6 +29,8 @@ class SystemMessage(Markdown):
         margin: 1 8;
         padding: 1;
         border: round $primary;
+        width: 100%;
+        align: left top;
     }
     """
 
@@ -41,6 +43,8 @@ class ErrorMessage(Markdown):
         margin: 1 8;
         padding: 1;
         border: round $error;
+        width: 100%;
+        align: left top;
     }
     """
 
@@ -51,6 +55,8 @@ class Prompt(Markdown):
         background: $primary 10%;
         margin-right: 8;
         padding: 1;
+        width: 100%;
+        align: left top;
     }
     """
 
@@ -62,7 +68,15 @@ class Response(Markdown):
         border: round $success;
         margin-left: 8;
         padding: 1;
-        min-height: 3;
+        height: auto;
+        width: 100%;
+        align: left top;
+    }
+    
+    Response > Markdown {
+        width: 100%;
+        padding: 1;
+        background: $surface;
     }
     """
 
@@ -78,11 +92,11 @@ class Response(Markdown):
             self.app.call_from_thread(self._append_text, text)
 
     def _append_text(self, text: str):
-        """Main thread text append operation"""
+        """Handle text updates with proper wrapping"""
         with self._update_lock:
             self.text_content += text
-            self.update(f"```\n{self.text_content}\n```")
-            self.query_one("VerticalScroll", None).scroll_end(animate=False)
+            self.update(self.text_content)
+            self.query_one("VerticalScroll", None).scroll_end(animate=True)
 
     def reset_stream_state(self):
         """Prepare for new streaming session"""
@@ -94,15 +108,20 @@ class ChatApp(App):
     CSS = """
     #chat-view {
         height: 1fr;
+        padding: 1;
     }
+    
     Input {
         dock: bottom;
+        margin: 1 0;
     }
+    
     LoadingIndicator {
         dock: bottom;
         height: 1;
         display: none;
     }
+    
     LoadingIndicator.visible {
         display: block;
     }
@@ -129,21 +148,24 @@ class ChatApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         with VerticalScroll(id="chat-view"):
-            yield Response("Welcome to DeepSeek TUI! Type your question below.")
+            yield Response("## Welcome to DeepSeek TUI!\nType your question below.")
         yield Input(placeholder="Ask Quantalogic DeepSeek...")
         yield Footer()
         yield LoadingIndicator()
 
     def handle_stream_chunk(self, event: str, data: Any):
-        """Handle real-time streaming chunks"""
+        """Handle real-time streaming chunks with proper encoding"""
         with self._response_lock:
             if self.current_response and data:
-                text = str(data).strip()
-                if text:
-                    self.current_response.append(text)
+                try:
+                    text = data.decode("utf-8") if isinstance(data, bytes) else str(data)
+                    if text.strip():
+                        self.current_response.append(text)
+                except UnicodeDecodeError:
+                    logger.error("Failed to decode stream chunk")
 
     def handle_agent_event(self, event: str, data: Any = None):
-        """Centralized event handler"""
+        """Centralized event handler with proper type checking"""
         match event:
             case "task_complete":
                 if isinstance(data, str):
@@ -152,34 +174,34 @@ class ChatApp(App):
                 self.app.call_from_thread(self.toggle_loading, True)
                 self.app.call_from_thread(
                     self.add_system_message, 
-                    "🤔 Thinking..."
+                    "🤔 **Thinking...**"
                 )
             case "tool_execution_start":
                 tool = data.get("tool_name", "unknown") if isinstance(data, dict) else "unknown"
                 self.app.call_from_thread(
                     self.add_system_message,
-                    f"🔧 Using tool: {tool}"
+                    f"🔧 **Using tool:** {tool}"
                 )
             case "error_max_iterations_reached":
                 self.app.call_from_thread(
                     self.add_error_message,
-                    "⚠️ Max iterations reached"
+                    "⚠️ **Max iterations reached**"
                 )
 
     async def finalize_response(self, final_answer: str):
-        """Handle final response cleanup"""
+        """Handle final response formatting and cleanup"""
         with self._response_lock:
             if not self.current_response:
                 return
 
             try:
-                await self.add_system_message("✅ Task complete!")
+                await self.add_system_message("✅ **Task complete!**")
                 chat_view = self.query_one("#chat-view")
 
-                # Create final response box
+                # Create final formatted response
                 final_response = Response()
                 await chat_view.mount(final_response)
-                await final_response.update(f"**Answer:**\n{final_answer}")
+                final_response.update(final_answer)
                 
                 # Remove streaming widget safely
                 if self.current_response in chat_view.children:
@@ -193,7 +215,7 @@ class ChatApp(App):
                 await self.toggle_loading(False)
 
     async def on_input_submitted(self, event: Input.Submitted):
-        """Handle user query submission"""
+        """Handle user query submission with proper validation"""
         query = event.value.strip()
         if not query:
             return
@@ -203,7 +225,7 @@ class ChatApp(App):
         await self.toggle_loading(True)
 
         chat_view = self.query_one("#chat-view")
-        await chat_view.mount(Prompt(query))
+        await chat_view.mount(Prompt(f"**You:** {query}"))
 
         with self._response_lock:
             # Clear previous response if exists
@@ -228,7 +250,7 @@ class ChatApp(App):
             except Exception as e:
                 self.app.call_from_thread(
                     self.add_error_message,
-                    f"⚠️ Error: {str(e)}"
+                    f"⚠️ **Error:** {str(e)}"
                 )
             finally:
                 self.app.call_from_thread(self.toggle_input, True)
@@ -237,26 +259,34 @@ class ChatApp(App):
         threading.Thread(target=process_query, daemon=True).start()
 
     async def toggle_input(self, enabled: bool):
+        """Toggle input field state with visual feedback"""
         input_field = self.query_one(Input)
         input_field.disabled = not enabled
+        self.refresh(layout=True)
 
     async def toggle_loading(self, visible: bool):
+        """Toggle loading indicator with animation"""
         loading = self.query_one(LoadingIndicator)
         loading.set_class(visible, "visible")
+        self.refresh(layout=True)
 
     async def add_system_message(self, text: str):
+        """Add system message with proper formatting"""
         chat_view = self.query_one("#chat-view")
         await chat_view.mount(SystemMessage(text))
-        chat_view.scroll_end(animate=False)
+        chat_view.scroll_end(animate=True)
 
     async def add_error_message(self, text: str):
+        """Add error message with proper formatting"""
         chat_view = self.query_one("#chat-view")
         await chat_view.mount(ErrorMessage(text))
-        chat_view.scroll_end(animate=False)
+        chat_view.scroll_end(animate=True)
 
     def on_unmount(self):
+        """Cleanup resources on app exit"""
         if hasattr(self.agent, "shutdown"):
             self.agent.shutdown()
+        logger.info("Application shutdown complete")
 
 
 if __name__ == "__main__":
