@@ -441,7 +441,6 @@ def main():
                             "You can only conduct analysis based on data provided don't make up data."
                         ),
                     ),
-                    PythonTool(need_validation=False),
                 ],
             )
             st.session_state.agent.system_prompt = (
