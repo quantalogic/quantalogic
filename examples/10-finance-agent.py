@@ -22,7 +22,7 @@ import streamlit as st
 import yfinance as yf
 
 from quantalogic import Agent
-from quantalogic.tools import DuckDuckGoSearchTool, SerpApiSearchTool, Tool, ToolArgument
+from quantalogic.tools import DuckDuckGoSearchTool, SerpApiSearchTool, Tool, ToolArgument, LLMTool
 
 
 class StreamlitInputTool(Tool):
@@ -57,7 +57,12 @@ class TechnicalAnalysisTool(Tool):
     arguments: list[ToolArgument] = [
         ToolArgument(name="symbol", arg_type="string", description="Stock ticker symbol", required=True),
         ToolArgument(name="indicator", arg_type="string", description="Analysis type (sma/rsi/pe)", required=True),
-        ToolArgument(name="period", arg_type="int", description="Lookback period (positive integer, not required for PE)", required=False),
+        ToolArgument(
+            name="period",
+            arg_type="int",
+            description="Lookback period (positive integer, not required for PE)",
+            required=False,
+        ),
         ToolArgument(
             name="start_date",
             arg_type="string",
@@ -181,7 +186,7 @@ class TechnicalAnalysisTool(Tool):
         try:
             stock = yf.Ticker(symbol)
             info = stock.info
-            pe_ratio = info.get('trailingPE', info.get('forwardPE', None))
+            pe_ratio = info.get("trailingPE", info.get("forwardPE", None))
             if pe_ratio is None:
                 raise ValueError("PE ratio data not available")
             return float(pe_ratio)
@@ -341,10 +346,10 @@ def handle_stream_chunk(event: str, data: Optional[str] = None) -> None:
         if "response" not in st.session_state:
             st.session_state.response = ""
             st.session_state.chunk_container = st.empty()
-            
+
         # Append new chunk and update display
         st.session_state.response += data
-        
+
         # Create formatted display with syntax highlighting
         formatted_response = st.session_state.response.replace("\n", "  \n")
         with st.session_state.chunk_container.container():
@@ -354,6 +359,12 @@ def handle_stream_chunk(event: str, data: Optional[str] = None) -> None:
 def track_events(event: str, data: Optional[dict] = None) -> None:
     if event == "task_think_start":
         st.session_state.current_status = st.status("🔍 Analyzing query...", expanded=False)
+        ## Display data dictionary in a readable format
+        st.session_state.data_display = st.empty()
+        if data:
+            with st.session_state.data_display:
+                st.write(data)
+                st.session_state.data_display.expanded = False
     elif event == "tool_execution_start":
         tool_name = data.get("tool_name", "Unknown tool")
         icon = "📊" if "viz" in tool_name.lower() else "💹"
@@ -361,6 +372,16 @@ def track_events(event: str, data: Optional[dict] = None) -> None:
     elif event == "task_think_end":
         if "current_status" in st.session_state:
             st.session_state.current_status.update(label="✅ Analysis Complete", state="complete")
+    elif event == "tool_execution_start":
+        tool_name = data.get("tool_name", "Unknown tool")
+        icon = "📊" if "viz" in tool_name.lower() else "💹"
+        st.toast(f"{icon} Executing {tool_name}", icon="⏳")
+        # Display data dictionary in a readable format
+        st.session_state.data_display = st.empty()
+        if data:
+            with st.session_state.data_display:
+                st.write(data)
+                st.session_state.data_display.expanded = False
     elif event == "tool_execution_end":
         tool_name = data.get("tool_name", "")
         if tool_name == "llm_tool":
@@ -376,36 +397,48 @@ def main():
     st.set_page_config(page_title="Finance Suite Pro", layout="wide")
     st.title("📈 AI Financial Analyst")
 
-    # Initialize agent with tools
-    if "agent" not in st.session_state:
-        st.session_state.agent = Agent(
-            model_name=model_name,
-            tools=[
-                StreamlitInputTool(),
-                YFinanceTool(),
-                VisualizationTool(),
-                TechnicalAnalysisTool(),
-                DuckDuckGoSearchTool(),
-                SerpApiSearchTool(),
-            ],
-        )
-        st.session_state.agent.event_emitter.on(
-            [
-                "task_think_start",
-                "tool_execution_start",
-                "task_think_end",
-                "tool_execution_end",
-                "error_max_iterations_reached",
-            ],
-            track_events,
-        )
-        st.session_state.agent.event_emitter.on(["stream_chunk"], handle_stream_chunk)
-
     # Chat interface
     query = st.chat_input("Ask financial questions (e.g., 'Show AAPL stock analysis with SMA 50')")
 
     if query:
+        ## Clear the screen
+        st.session_state.clear()
 
+        # Initialize agent with tools
+        if "agent" not in st.session_state:
+            st.session_state.agent = Agent(
+                model_name=model_name,
+                tools=[
+                    StreamlitInputTool(),
+                    YFinanceTool(),
+                    VisualizationTool(),
+                    TechnicalAnalysisTool(),
+                    DuckDuckGoSearchTool(),
+                    SerpApiSearchTool(),
+                    LLMTool(
+                        name="finance_llm_tool",
+                        model_name=model_name,
+                        on_token=handle_stream_chunk,
+                        system_prompt=(
+                            "You are a financial analyst that use the data provided to answer questions."
+                            "If not data provided ask for it"
+                            "You can only conduct analysis based on data provided don't make up data"
+                        ),
+                    ),
+                ],
+            )
+            st.session_state.agent.clear_memory()
+            st.session_state.agent.event_emitter.on(
+                [
+                    "task_think_start",
+                    "tool_execution_start",
+                    "task_think_end",
+                    "tool_execution_end",
+                    "error_max_iterations_reached",
+                ],
+                track_events,
+            )
+            st.session_state.agent.event_emitter.on(["stream_chunk"], handle_stream_chunk)
 
         with st.spinner("Processing request..."):
             try:
