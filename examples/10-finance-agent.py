@@ -22,7 +22,7 @@ import streamlit as st
 import yfinance as yf
 
 from quantalogic import Agent
-from quantalogic.tools import DuckDuckGoSearchTool, LLMTool, SerpApiSearchTool, Tool, ToolArgument
+from quantalogic.tools import DuckDuckGoSearchTool, LLMTool, PythonTool, SerpApiSearchTool, Tool, ToolArgument
 
 
 class StreamlitInputTool(Tool):
@@ -273,7 +273,7 @@ class YFinanceTool(Tool):
             arg_type="string",
             description="Data interval (1d, 1wk, 1mo, 1y)",
             required=False,
-            default="1d"
+            default="1d",
         ),
     ]
 
@@ -292,7 +292,7 @@ class YFinanceTool(Tool):
                 if interval not in valid_intervals:
                     st.error(f"Invalid interval: {interval}. Must be one of {valid_intervals}")
                     return ""
-                
+
                 hist = stock.history(start=start_date, end=end_date, interval=interval)
                 if hist.empty:
                     st.warning(f"No data for {ticker}")
@@ -414,10 +414,14 @@ def main():
     query = st.chat_input("Ask financial questions (e.g., 'Show AAPL stock analysis with SMA 50')")
 
     if query:
-        ## Clear the screen
+        ## Clear screen and containers
         st.session_state.clear()
-        st.empty()  # Clear all previous content
-        
+        for key in list(st.session_state.keys()):
+            if key.startswith("container_"):
+                del st.session_state[key]
+        main_container = st.container()
+        main_container.empty()
+
         # Initialize agent with tools
         if "agent" not in st.session_state:
             st.session_state.agent = Agent(
@@ -439,10 +443,11 @@ def main():
                             "You can only conduct analysis based on data provided don't make up data."
                         ),
                     ),
+                    PythonTool(need_validation=False),
                 ],
             )
             st.session_state.agent.system_prompt = (
-                "You are a financial analyst that use the data provided to answer questions."
+                "You are a top financial analyst that use the data provided to answer questions."
                 "If not data provided ask for it"
                 "You can only conduct analysis based on data provided don't make up data"
             )
@@ -468,7 +473,10 @@ def main():
                     # Display formatted analysis results
                     st.subheader("📊 Analysis Results", divider="rainbow")
                     st.markdown("#### Key Findings:")
-                    st.markdown(html.escape(result))
+                    # Limit summary to 3 sentences max
+                    sentences = html.escape(result).split(". ")
+                    truncated = ". ".join(sentences[:3]) + ("." if len(sentences) > 3 else "")
+                    st.markdown(truncated)
 
             except Exception as e:
                 st.error(f"Processing error: {str(e)}")
