@@ -103,7 +103,13 @@ class SearchDefinitionNames(Tool):
             raise ValueError(f"Unsupported language: {language_name}")
 
     def execute(
-        self, directory_path: str, language_name: str, file_pattern: str = "*", output_format: str = "text", page: int = 1, page_size: int = 10
+        self,
+        directory_path: str,
+        language_name: str,
+        file_pattern: str = "*",
+        output_format: str = "text",
+        page: int = 1,
+        page_size: int = 10,
     ) -> Union[str, Dict]:
         """Searches for definition names in a directory using Tree-sitter.
 
@@ -119,6 +125,9 @@ class SearchDefinitionNames(Tool):
             Union[str, Dict]: The search results in the specified format.
         """
         try:
+            page = int(page)
+            page_size = int(page_size)
+
             # Validate pagination parameters
             if page < 1:
                 raise ValueError("Page number must be a positive integer.")
@@ -175,7 +184,7 @@ class SearchDefinitionNames(Tool):
                 output_format,
                 page,
                 page_size,
-                len(results)
+                len(results),
             )
 
         except Exception as e:
