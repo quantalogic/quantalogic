@@ -22,7 +22,7 @@ import streamlit as st
 import yfinance as yf
 
 from quantalogic import Agent
-from quantalogic.tools import DuckDuckGoSearchTool, SerpApiSearchTool, Tool, ToolArgument, LLMTool
+from quantalogic.tools import DuckDuckGoSearchTool, LLMTool, SerpApiSearchTool, Tool, ToolArgument
 
 
 class StreamlitInputTool(Tool):
@@ -263,18 +263,37 @@ class YFinanceTool(Tool):
     """Retrieves stock market data from Yahoo Finance."""
 
     name: str = "yfinance_tool"
-    description: str = "Fetches historical stock data"
+    description: str = "Fetches historical stock data (max 12 months) with specified interval"
     arguments: list[ToolArgument] = [
         ToolArgument(name="ticker", arg_type="string", description="Stock symbol", required=True),
         ToolArgument(name="start_date", arg_type="string", description="Start date (YYYY-MM-DD)", required=True),
         ToolArgument(name="end_date", arg_type="string", description="End date (YYYY-MM-DD)", required=True),
+        ToolArgument(
+            name="interval",
+            arg_type="string",
+            description="Data interval (1d, 1wk, 1mo, 1y)",
+            required=False,
+            default="1d"
+        ),
     ]
 
-    def execute(self, ticker: str, start_date: str, end_date: str) -> str:
+    def execute(self, ticker: str, start_date: str, end_date: str, interval: str = "1d") -> str:
+        # Enforce 12-month maximum
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
+        if (end_dt - start_dt).days > 365:
+            start_dt = end_dt - pd.DateOffset(months=12)
+            start_date = start_dt.strftime("%Y-%m-%d")
         try:
             with st.spinner(f"Fetching {ticker} data..."):
                 stock = yf.Ticker(ticker)
-                hist = stock.history(start=start_date, end=end_date)
+                # Validate interval
+                valid_intervals = ["1d", "1wk", "1mo", "1y"]
+                if interval not in valid_intervals:
+                    st.error(f"Invalid interval: {interval}. Must be one of {valid_intervals}")
+                    return ""
+                
+                hist = stock.history(start=start_date, end=end_date, interval=interval)
                 if hist.empty:
                     st.warning(f"No data for {ticker}")
                     return ""
@@ -358,17 +377,18 @@ def handle_stream_chunk(event: str, data: Optional[str] = None) -> None:
 
 def track_events(event: str, data: Optional[dict] = None) -> None:
     if event == "task_think_start":
-        st.session_state.current_status = st.status("🔍 Analyzing query...", expanded=False)
         ## Display data dictionary in a readable format
         st.session_state.data_display = st.empty()
         if data:
             with st.session_state.data_display:
                 st.write(data)
                 st.session_state.data_display.expanded = False
+        st.session_state.current_status = st.status("🔍 Analyzing query...", expanded=False)
     elif event == "tool_execution_start":
         tool_name = data.get("tool_name", "Unknown tool")
         icon = "📊" if "viz" in tool_name.lower() else "💹"
         st.toast(f"{icon} Executing {tool_name}", icon="⏳")
+        st.session_state.current_status = st.status(f"🛠️ Executing {tool_name}...", expanded=False)
     elif event == "task_think_end":
         if "current_status" in st.session_state:
             st.session_state.current_status.update(label="✅ Analysis Complete", state="complete")
@@ -426,6 +446,11 @@ def main():
                         ),
                     ),
                 ],
+            )
+            st.session_state.agent.system_prompt = (
+                "You are a financial analyst that use the data provided to answer questions."
+                "If not data provided ask for it"
+                "You can only conduct analysis based on data provided don't make up data"
             )
             st.session_state.agent.clear_memory()
             st.session_state.agent.event_emitter.on(
