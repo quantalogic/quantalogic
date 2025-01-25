@@ -69,9 +69,12 @@ class Response(Markdown):
         super().__init__(content)
         self.text_content = ""
         self._update_queue = queue.Queue()
+        self._streaming = True  # Flag to indicate if we're in streaming mode
 
     def append(self, text: str) -> None:
         """Queue text to be appended to the response."""
+        if not self._streaming:
+            return  # Don't append if we're not in streaming mode
         self._update_queue.put(text)
         self.app.call_from_thread(self._process_updates)
 
@@ -82,7 +85,9 @@ class Response(Markdown):
             try:
                 text = self._update_queue.get_nowait()
                 self.text_content += text
-                await self.update(f"```\n{self.text_content}\n```")
+                if self._streaming:
+                    # In streaming mode, wrap in code block
+                    await self.update(f"```\n{self.text_content}\n```")
                 updated = True
             except queue.Empty:
                 break
@@ -90,6 +95,12 @@ class Response(Markdown):
         if updated:
             chat_view = self.app.query_one("#chat-view")
             await chat_view.scroll_end()
+
+    async def update(self, content: str) -> None:
+        """Update the markdown content."""
+        self._streaming = not content.startswith("**")  # Detect if we're showing formatted content
+        await super().update(content)
+        self.refresh(layout=True)
 
 class ChatApp(App):
     CSS = """
@@ -158,12 +169,54 @@ class ChatApp(App):
     def handle_event(self, event: str, data: Any | None = None) -> None:
         """Handle agent events."""
         if event == "task_complete":
+            if self.current_response:
+                # Get the final answer
+                final_answer = self.current_response.text_content
+                # Clear the streaming response
+                self.current_response.text_content = ""
+                
+                # First show completion message
+                self.call_from_thread(
+                    self.add_system_message,
+                    "✅ Task completed successfully"
+                )
+                
+                # Then create and show the final answer in a new response widget
+                def show_final_answer():
+                    chat_view = self.query_one("#chat-view")
+                    response = Response()
+                    chat_view.mount(response)
+                    response.update(f"**Answer:**\n{final_answer}")
+                    chat_view.scroll_end()
+                
+                self.call_from_thread(show_final_answer)
+                
             self.call_from_thread(self.toggle_input, True)
             self.call_from_thread(self.toggle_loading, False)
         elif event == "task_think_start":
             self.call_from_thread(self.toggle_loading, True)
+            self.call_from_thread(
+                self.add_system_message,
+                "🤔 Thinking..."
+            )
         elif event == "task_think_end":
             self.call_from_thread(self.toggle_loading, False)
+        elif event == "tool_execution_start":
+            tool_name = data.get("tool_name") if isinstance(data, dict) else "unknown"
+            self.call_from_thread(
+                self.add_system_message,
+                f"🔧 Using tool: {tool_name}"
+            )
+        elif event == "error_max_iterations_reached":
+            self.call_from_thread(
+                self.add_error_message,
+                "⚠️ Max iterations reached"
+            )
+        elif event == "memory_full":
+            self.call_from_thread(
+                self.add_system_message,
+                "💭 Memory full, compacting..."
+            )
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle user input submission."""
