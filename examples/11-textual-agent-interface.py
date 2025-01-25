@@ -4,15 +4,21 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "textual",
-#     "quantalogic"
+#     "quantalogic",
+#     "loguru"
 # ]
 # ///
 
 import asyncio
 import os
 import queue
+import sys
 import threading
 from typing import Any
+
+from loguru import logger
+logger.remove()  # Remove default handler
+logger.add(sys.stderr, level="ERROR", format="{level}: {message}", diagnose=False, backtrace=False)  # Add handler for ERROR level
 
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
@@ -72,27 +78,31 @@ class Response(Markdown):
 
     def append(self, text: str) -> None:
         """Queue text to be appended to the response."""
-        if not self._streaming:
-            return  # Don't append if we're not in streaming mode
-        
-        # Use call_from_thread to schedule async update
-        self.app.call_from_thread(self._async_append, text)
+        if self._streaming:
+            asyncio.create_task(self._async_append(text))
 
-    def _async_append(self, text: str) -> None:
+    async def _async_append(self, text: str) -> None:
         """Async method to append text and update the widget."""
-        async def update_content():
-            async with self._update_lock:
-                self.text_content += text
-                if self._streaming:
-                    # In streaming mode, wrap in code block
-                    await self.update(f"```\n{self.text_content}\n```")
-                    
-                    # Scroll to the end of the chat view
-                    chat_view = self.app.query_one("#chat-view")
-                    await chat_view.scroll_end()
+        async with self._update_lock:
+            self.text_content += text
+            await self.update_content()
 
-        # Create a task to run the async update
-        asyncio.create_task(update_content())
+    async def update_content(self) -> None:
+        """Update the markdown content."""
+        try:
+            # Find the closest parent ScrollView
+            chat_view = self.query_one("VerticalScroll", None)
+            
+            # Update content
+            await self.update(self.text_content)
+            
+            # Scroll only if chat_view is found
+            if chat_view:
+                await chat_view.scroll_end()
+        except Exception as e:
+            logger.error(f"Error in update_content: {e}")
+            # Optionally re-raise if you want to propagate the error
+            # raise
 
     async def update(self, content: str) -> None:
         """Update the markdown content."""
@@ -121,33 +131,47 @@ class ChatApp(App):
     BINDINGS = [("ctrl+c", "quit", "Exit")]
 
     def __init__(self):
-        super().__init__()
-        if not os.environ.get("DEEPSEEK_API_KEY"):
-            raise RuntimeError("Missing DEEPSEEK_API_KEY environment variable")
+        try:
+            super().__init__()
+            if not os.environ.get("DEEPSEEK_API_KEY"):
+                logger.error("Missing DEEPSEEK_API_KEY environment variable")
+                raise RuntimeError("Missing DEEPSEEK_API_KEY environment variable")
 
-        # Initialize agent with event handling
-        self.agent = Agent(model_name="deepseek/deepseek-chat")
-        self.current_response = None
-        
-        # Set up event listeners
-        self.agent.event_emitter.on(
-            event=["stream_chunk"],
-            listener=self.handle_stream_token
-        )
-        self.agent.event_emitter.on(
-            event=[
-                "task_complete",
-                "task_think_start",
-                "task_think_end",
-                "tool_execution_start",
-                "tool_execution_end",
-                "error_max_iterations_reached",
-                "memory_full",
-                "memory_compacted",
-                "memory_summary",
-            ],
-            listener=self.handle_event
-        )
+            # Initialize agent with event handling
+            try:
+                self.agent = Agent(model_name="deepseek/deepseek-chat")
+            except TypeError as e:
+                logger.error(f"TypeError initializing Agent: {e}")
+                raise
+
+            self.current_response = None
+            
+            # Set up event listeners
+            try:
+                self.agent.event_emitter.on(
+                    event=["stream_chunk"],
+                    listener=self.handle_stream_token
+                )
+                self.agent.event_emitter.on(
+                    event=[
+                        "task_complete",
+                        "task_think_start",
+                        "task_think_end",
+                        "tool_execution_start",
+                        "tool_execution_end",
+                        "error_max_iterations_reached",
+                        "memory_full",
+                        "memory_compacted",
+                        "memory_summary",
+                    ],
+                    listener=self.handle_event
+                )
+            except TypeError as e:
+                logger.error(f"TypeError setting up event listeners: {e}")
+                raise
+        except Exception as e:
+            logger.exception(f"Unexpected error in ChatApp initialization: {e}")
+            raise
 
     def compose(self) -> ComposeResult:
         """Compose the app layout."""
