@@ -67,49 +67,60 @@ class ToolManager(BaseModel):
             index += 1
         return markdown
 
-    def _convert_kwargs_types(self, tool_name: str, **kwargs) -> dict:
-        """Convert kwargs values to their expected types based on tool definition.
+
+
+    def validate_and_convert_arguments(self, tool_name: str, provided_args: dict) -> dict:
+        """Validates and converts arguments based on tool definition.
         
         Args:
-            tool_name: Name of the tool to get argument types from
-            **kwargs: Input arguments to convert
+            tool_name: Name of the tool to validate against
+            provided_args: Dictionary of arguments to validate
             
         Returns:
-            Dictionary of converted arguments
+            Dictionary of converted arguments with proper types
             
         Raises:
-            ValueError: If type conversion fails for a required argument
+            ValueError: For missing/invalid arguments or conversion errors
         """
-        tool = self.tools[tool_name]
-        converted = {}
-        
-        for arg_name, arg_value in kwargs.items():
-            # Find the corresponding argument definition
-            arg = next((a for a in tool.arguments if a.name == arg_name), None)
-            
-            if arg is None:
-                logger.warning(f"Argument '{arg_name}' not found in tool definition")
-                converted[arg_name] = arg_value
-                continue
-            
-            try:
-                if arg.arg_type == "int":
-                    converted[arg_name] = int(arg_value)
-                elif arg.arg_type == "float":
-                    converted[arg_name] = float(arg_value)
-                elif arg.arg_type == "boolean":
-                    val = str(arg_value).lower()
-                    converted[arg_name] = val in ("true", "1", "yes", "y")
-                else:  # string
-                    converted[arg_name] = str(arg_value)
-            except (ValueError, TypeError) as e:
-                if arg.required:
-                    raise ValueError(
-                        f"Failed to convert required argument '{arg_name}' to {arg.arg_type}: {str(e)}"
-                    )
-                logger.warning(f"Failed to convert optional argument '{arg_name}': {str(e)}")
-                converted[arg_name] = arg_value
-        
+        tool = self.get(tool_name)
+        converted_args = {}
+        type_conversion = {
+            "string": lambda x: str(x),
+            "int": lambda x: int(x),
+            "float": lambda x: float(x),
+            "bool": lambda x: str(x).lower() in ['true', '1', 'yes']
+        }
 
-        
-        return converted
+        for arg_def in tool.arguments:
+            arg_name = arg_def.name
+            arg_type = arg_def.arg_type
+            required = arg_def.required
+            default = getattr(arg_def, 'default', None)
+
+            # Handle missing arguments
+            if arg_name not in provided_args:
+                if required:
+                    raise ValueError(f"Missing required argument: {arg_name}")
+                if default is None:
+                    continue  # Skip optional args with no default
+                provided_args[arg_name] = default
+
+            # Type conversion
+            value = provided_args[arg_name]
+            if arg_type in type_conversion:
+                try:
+                    converted = type_conversion[arg_type](value)
+                except (ValueError, TypeError) as e:
+                    raise ValueError(
+                        f"Invalid value '{value}' for {arg_name} ({arg_type}): {str(e)}"
+                    )
+                converted_args[arg_name] = converted
+            else:
+                converted_args[arg_name] = value  # Unknown type, pass through
+
+        # Validate extra arguments
+        extra_args = set(provided_args.keys()) - {a.name for a in tool.arguments}
+        if extra_args:
+            raise ValueError(f"Unexpected arguments: {', '.join(extra_args)}")
+
+        return converted_args
