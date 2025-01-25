@@ -171,11 +171,12 @@ class ChatApp(App):
             if self.current_response:
                 # Get the final answer
                 final_answer = self.current_response.text_content.strip()
+
                 
                 # First show completion message
                 self.call_from_thread(
                     self.add_system_message,
-                    "✅ Task completed successfully"
+                    "✅ Task complete!"
                 )
 
                 # Remove the streaming response and show final answer
@@ -248,7 +249,11 @@ class ChatApp(App):
         # Create a new thread for processing the agent's response
         def process_agent_response():
             try:
-                self.agent.solve_task(input_value, streaming=True)
+                task_answer = self.agent.solve_task(input_value, streaming=True)
+                self.call_from_thread(
+                    self.add_system_message,
+                    f"**Task Answer:**\n{task_answer}"
+                )
             except Exception as e:
                 self.call_from_thread(
                     self.add_error_message,
