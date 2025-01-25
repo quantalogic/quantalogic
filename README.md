@@ -38,10 +38,25 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 
 ## Environment Configuration
 
-To configure the environment API key for Quantalogic using LiteLLM, set the required environment variable for your chosen provider (e.g., `OPENAI_API_KEY` for OpenAI, `ANTHROPIC_API_KEY` for Anthropic, or `DEEPSEEK_API_KEY` for DeepSeek) and any optional variables like `OPENAI_API_BASE` or `OPENROUTER_REFERRER`. Use a `.env` file or a secrets manager to securely store these keys, and load them in your code using `python-dotenv`. For advanced configurations, refer to the [LiteLLM documentation](https://docs.litellm.ai/docs/).
+### Supported Models
+
+| Model Name | API Key Environment Variable | Description |
+|------------|------------------------------|-------------|
+| openai/gpt-4o-mini | OPENAI_API_KEY | OpenAI's compact version of GPT-4, optimized for efficiency and cost-effectiveness while maintaining strong performance. |
+| openai/gpt-4o | OPENAI_API_KEY | OpenAI's flagship model offering state-of-the-art performance across various tasks with enhanced reasoning capabilities. |
+| anthropic/claude-3.5-sonnet | ANTHROPIC_API_KEY | Claude 3.5 Sonnet model from Anthropic, balancing performance and speed with strong reasoning capabilities. |
+| deepseek/deepseek-chat | DEEPSEEK_API_KEY | DeepSeek's conversational model optimized for chat-based interactions and general-purpose tasks. |
+| deepseek/deepseek-reasoner | DEEPSEEK_API_KEY | DeepSeek's specialized model for complex reasoning tasks and problem-solving. |
+| openrouter/deepseek/deepseek-r1 | OPENROUTER_API_KEY | DeepSeek R1 model available through OpenRouter, optimized for research and development tasks. |
+| openrouter/openai/gpt-4o | OPENROUTER_API_KEY | OpenAI's GPT-4o model accessible through OpenRouter platform. |
+| openrouter/mistralai/mistral-large-2411 | OPENROUTER_API_KEY | Mistral's large model optimized for complex reasoning tasks, available through OpenRouter with enhanced multilingual capabilities. |
+| mistral/mistral-large-2407 | MISTRAL_API_KEY | Mistral's high-performance model designed for enterprise-grade applications, offering advanced reasoning and multilingual support. |
+
+To configure the environment API key for Quantalogic using LiteLLM, set the required environment variable for your chosen provider and any optional variables like `OPENAI_API_BASE` or `OPENROUTER_REFERRER`. Use a `.env` file or a secrets manager to securely store these keys, and load them in your code using `python-dotenv`. For advanced configurations, refer to the [LiteLLM documentation](https://docs.litellm.ai/docs/).
 
 ## 📋 Table of Contents
 
+- [Usage](#usage)
 - [Release Notes](#release-notes)
 
 - [Installation](#-installation)
@@ -55,6 +70,35 @@ To configure the environment API key for Quantalogic using LiteLLM, set the requ
 - [Contributing](#-contributing)
 - [License](#-license)
 - [Documentation Development](#-documentation-development)
+
+## Usage
+
+**Usage:** `quantalogic [OPTIONS] COMMAND [ARGS]...`  
+**Environment Variables:** Set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `DEEPSEEK_API_KEY` for API integration.
+
+**Options:**
+- `--model-name TEXT`: Specify the model (litellm format, e.g., "openrouter/deepseek/deepseek-chat")
+- `--log [info|debug|warning]`: Set logging level
+- `--mode [code|basic|interpreter|full|code-basic|search|search-full]`: Agent mode
+- `--vision-model-name TEXT`: Specify vision model (litellm format)
+- `--max-tokens-working-memory INTEGER`: Maximum tokens in working memory (default: 4000)
+- `--max-iterations INTEGER`: Maximum task iterations (default: 30)
+- `--compact-every-n-iteration INTEGER`: Compact memory every N iterations (default: 5)
+- `--no-stream`: Disable streaming output (default: enabled)
+- `--help`: Show help message
+
+**Commands:**
+- `task`: Execute a task with the QuantaLogic AI Assistant
+  - `--file PATH`: Path to task file
+  - `--model-name TEXT`: Specify model
+  - `--verbose`: Enable verbose output
+  - `--mode`: Select agent capabilities
+  - `--log`: Set logging level
+  - `--vision-model-name`: Specify vision model
+  - `--max-iterations`: Maximum task iterations
+  - `--max-tokens-working-memory`: Memory limit
+  - `--compact-every-n-iteration`: Memory optimization
+  - `--no-stream`: Disable streaming
 
 ## Release Notes
 
@@ -97,64 +141,7 @@ pipx install quantalogic
 
 ### Basic Usage
 
-## 📖 CLI Reference
 
-The QuantaLogic CLI provides powerful command-line capabilities:
-
-```bash
-Usage: quantalogic [OPTIONS] COMMAND [ARGS]...
-  QuantaLogic AI Assistant - A powerful AI tool for various tasks.
-
-Options:
-  --version                       Show version information.
-  --model-name TEXT               Specify the model (litellm format, e.g., "openrouter/deepseek/deepseek-chat").
-  --log [info|debug|warning]      Set logging level.
-  --verbose                       Enable verbose output.
-  --mode [code|basic|interpreter|full|code-basic|search|search-full]  Agent mode.
-  --vision-model-name TEXT        Specify the vision model (litellm format, e.g., "openrouter/A/gpt-4o-mini").
-  --max-iterations INTEGER        Maximum iterations for task solving (default: 30).
-  --max-tokens-working-memory INTEGER Maximum tokens to keep in working memory (default: 4000).
-  --compact-every-n-iteration INTEGER Compact memory every N iterations (default: 5).
-  --help                          Show this message and exit.
-
-Commands:
-  task  Execute a task with the QuantaLogic AI Assistant.
-```
-
-### Commands
-task    Execute a task with the QuantaLogic AI Assistant
-
-**Usage:** `quantalogic task [OPTIONS] [TASK]`  
-**Description:** Execute a task with the QuantaLogic AI Assistant.  
-**Options:**  
-- `--file PATH`: Path to task file.  
-- `--model-name TEXT`: Specify the model (litellm format, e.g., `openrouter/deepseek/deepseek-chat`).  
-- `--verbose`: Enable verbose output.  
-- `--mode [code|basic|interpreter|full|code-basic|search|search-full]`: Agent mode.  
-- `--log [info|debug|warning]`: Set logging level.  
-- `--vision-model-name TEXT`: Specify the vision model (litellm format).  
-- `--max-iterations INTEGER`: Maximum iterations for task solving (default: 30).  
-- `--max-tokens-working-memory INTEGER`: Maximum tokens to keep in working memory (default: 4000).  
-- `--compact-every-n-iteration INTEGER`: Compact memory every N iterations (default: 5).  
-- `--no-stream`: Disable streaming output (default: enabled).  
-- `--help`: Show this message and exit.
-
-**Detailed Parameter Descriptions:**
-
-- **--model-name**: Specifies the LLM model to use (e.g., "openrouter/deepseek/deepseek-chat")
-- **--mode**: Selects agent capabilities:
-  - *code*: Coding-focused with basic capabilities
-  - *basic*: General-purpose without coding tools
-  - *interpreter*: Interactive code execution
-  - *full*: All capabilities enabled
-  - *code-basic*: Coding with basic reasoning
-  - *search*: Web search integration
-- **--log**: Controls logging verbosity (info, debug, warning)
-- **--vision-model-name**: Specifies vision model for image processing
-- **--max-iterations**: Limits task-solving attempts (default: 30)
-- **--max-tokens-working-memory**: Controls memory usage (default: None)
-- **--compact-every-n-iteration**: Memory optimization frequency (default: None)
-- **--no-stream**: Disables real-time output streaming
 
 
 
