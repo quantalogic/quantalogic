@@ -378,17 +378,11 @@ def handle_stream_chunk(event: str, data: Optional[str] = None) -> None:
 def track_events(event: str, data: Optional[dict] = None) -> None:
     if event == "task_think_start":
         ## Display data dictionary in a readable format
-        st.session_state.data_display = st.empty()
+        st.session_state.data_display = st.expander("Data Display", expanded=False)
         if data:
             with st.session_state.data_display:
                 st.write(data)
-                st.session_state.data_display.expanded = False
-        st.session_state.current_status = st.status("🔍 Analyzing query...", expanded=False)
-    elif event == "tool_execution_start":
-        tool_name = data.get("tool_name", "Unknown tool")
-        icon = "📊" if "viz" in tool_name.lower() else "💹"
-        st.toast(f"{icon} Executing {tool_name}", icon="⏳")
-        st.session_state.current_status = st.status(f"🛠️ Executing {tool_name}...", expanded=False)
+        st.session_state.current_status = st.status("🔍 Analyzing query...", expanded=False, state="running")
     elif event == "task_think_end":
         if "current_status" in st.session_state:
             st.session_state.current_status.update(label="✅ Analysis Complete", state="complete")
@@ -396,15 +390,14 @@ def track_events(event: str, data: Optional[dict] = None) -> None:
         tool_name = data.get("tool_name", "Unknown tool")
         icon = "📊" if "viz" in tool_name.lower() else "💹"
         st.toast(f"{icon} Executing {tool_name}", icon="⏳")
-        # Display data dictionary in a readable format
-        st.session_state.data_display = st.empty()
+        # Display data dictionary in expander
+        st.session_state.data_display = st.expander("Data Display", expanded=False)
         if data:
             with st.session_state.data_display:
                 st.write(data)
-                st.session_state.data_display.expanded = False
     elif event == "tool_execution_end":
         tool_name = data.get("tool_name", "")
-        if tool_name == "llm_tool":
+        if "llm_tool" in tool_name:
             if "chunk_container" in st.session_state:
                 st.session_state.chunk_container.empty()
                 del st.session_state.chunk_container
@@ -423,7 +416,8 @@ def main():
     if query:
         ## Clear the screen
         st.session_state.clear()
-
+        st.empty()  # Clear all previous content
+        
         # Initialize agent with tools
         if "agent" not in st.session_state:
             st.session_state.agent = Agent(
@@ -440,9 +434,9 @@ def main():
                         model_name=model_name,
                         on_token=handle_stream_chunk,
                         system_prompt=(
-                            "You are a financial analyst that use the data provided to answer questions."
-                            "If not data provided ask for it"
-                            "You can only conduct analysis based on data provided don't make up data"
+                            "You are a top financial analyst that uses the data provided to answer questions."
+                            "If no data provided ask for it, ask variable by interpolation such as $var1$."
+                            "You can only conduct analysis based on data provided don't make up data."
                         ),
                     ),
                 ],
