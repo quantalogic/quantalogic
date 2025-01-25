@@ -36,23 +36,6 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 - **Memory Management**: Intelligent context handling and optimization
 - **Enterprise Ready**: Comprehensive logging, error handling, and validation system
 
-## Environment Configuration
-
-### Supported Models
-
-| Model Name | API Key Environment Variable | Description |
-|------------|------------------------------|-------------|
-| openai/gpt-4o-mini | OPENAI_API_KEY | OpenAI's compact version of GPT-4, optimized for efficiency and cost-effectiveness while maintaining strong performance. |
-| openai/gpt-4o | OPENAI_API_KEY | OpenAI's flagship model offering state-of-the-art performance across various tasks with enhanced reasoning capabilities. |
-| anthropic/claude-3.5-sonnet | ANTHROPIC_API_KEY | Claude 3.5 Sonnet model from Anthropic, balancing performance and speed with strong reasoning capabilities. |
-| deepseek/deepseek-chat | DEEPSEEK_API_KEY | DeepSeek's conversational model optimized for chat-based interactions and general-purpose tasks. |
-| deepseek/deepseek-reasoner | DEEPSEEK_API_KEY | DeepSeek's specialized model for complex reasoning tasks and problem-solving. |
-| openrouter/deepseek/deepseek-r1 | OPENROUTER_API_KEY | DeepSeek R1 model available through OpenRouter, optimized for research and development tasks. |
-| openrouter/openai/gpt-4o | OPENROUTER_API_KEY | OpenAI's GPT-4o model accessible through OpenRouter platform. |
-| openrouter/mistralai/mistral-large-2411 | OPENROUTER_API_KEY | Mistral's large model optimized for complex reasoning tasks, available through OpenRouter with enhanced multilingual capabilities. |
-| mistral/mistral-large-2407 | MISTRAL_API_KEY | Mistral's high-performance model designed for enterprise-grade applications, offering advanced reasoning and multilingual support. |
-
-To configure the environment API key for Quantalogic using LiteLLM, set the required environment variable for your chosen provider and any optional variables like `OPENAI_API_BASE` or `OPENROUTER_REFERRER`. Use a `.env` file or a secrets manager to securely store these keys, and load them in your code using `python-dotenv`. For advanced configurations, refer to the [LiteLLM documentation](https://docs.litellm.ai/docs/).
 
 ## 📋 Table of Contents
 
@@ -105,6 +88,25 @@ To configure the environment API key for Quantalogic using LiteLLM, set the requ
 See our [Release Notes](RELEASE_NOTES.MD) for detailed version history and changes.
 
 [TODO List](TODO.md)
+
+## Environment Configuration
+
+### Supported Models
+
+| Model Name | API Key Environment Variable | Description |
+|------------|------------------------------|-------------|
+| openai/gpt-4o-mini | OPENAI_API_KEY | OpenAI's compact version of GPT-4, optimized for efficiency and cost-effectiveness while maintaining strong performance. |
+| openai/gpt-4o | OPENAI_API_KEY | OpenAI's flagship model offering state-of-the-art performance across various tasks with enhanced reasoning capabilities. |
+| anthropic/claude-3.5-sonnet | ANTHROPIC_API_KEY | Claude 3.5 Sonnet model from Anthropic, balancing performance and speed with strong reasoning capabilities. |
+| deepseek/deepseek-chat | DEEPSEEK_API_KEY | DeepSeek's conversational model optimized for chat-based interactions and general-purpose tasks. |
+| deepseek/deepseek-reasoner | DEEPSEEK_API_KEY | DeepSeek's specialized model for complex reasoning tasks and problem-solving. |
+| openrouter/deepseek/deepseek-r1 | OPENROUTER_API_KEY | DeepSeek R1 model available through OpenRouter, optimized for research and development tasks. |
+| openrouter/openai/gpt-4o | OPENROUTER_API_KEY | OpenAI's GPT-4o model accessible through OpenRouter platform. |
+| openrouter/mistralai/mistral-large-2411 | OPENROUTER_API_KEY | Mistral's large model optimized for complex reasoning tasks, available through OpenRouter with enhanced multilingual capabilities. |
+| mistral/mistral-large-2407 | MISTRAL_API_KEY | Mistral's high-performance model designed for enterprise-grade applications, offering advanced reasoning and multilingual support. |
+
+To configure the environment API key for Quantalogic using LiteLLM, set the required environment variable for your chosen provider and any optional variables like `OPENAI_API_BASE` or `OPENROUTER_REFERRER`. Use a `.env` file or a secrets manager to securely store these keys, and load them in your code using `python-dotenv`. For advanced configurations, refer to the [LiteLLM documentation](https://docs.litellm.ai/docs/).
+
 
 ## 📦 Installation
 
