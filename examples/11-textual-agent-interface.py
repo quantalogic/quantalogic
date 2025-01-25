@@ -8,6 +8,7 @@
 # ]
 # ///
 
+import asyncio
 import os
 import queue
 import threading
@@ -66,33 +67,32 @@ class Response(Markdown):
         content = args[0] if args else ""
         super().__init__(content)
         self.text_content = ""
-        self._update_queue = queue.Queue()
+        self._update_lock = asyncio.Lock()
         self._streaming = True  # Flag to indicate if we're in streaming mode
 
     def append(self, text: str) -> None:
         """Queue text to be appended to the response."""
         if not self._streaming:
             return  # Don't append if we're not in streaming mode
-        self._update_queue.put(text)
-        self.app.call_from_thread(self._process_updates)
+        
+        # Use call_from_thread to schedule async update
+        self.app.call_from_thread(self._async_append, text)
 
-    async def _process_updates(self) -> None:
-        """Process any pending updates from the queue."""
-        updated = False
-        while not self._update_queue.empty():
-            try:
-                text = self._update_queue.get_nowait()
+    def _async_append(self, text: str) -> None:
+        """Async method to append text and update the widget."""
+        async def update_content():
+            async with self._update_lock:
                 self.text_content += text
                 if self._streaming:
                     # In streaming mode, wrap in code block
                     await self.update(f"```\n{self.text_content}\n```")
-                updated = True
-            except queue.Empty:
-                break
-        
-        if updated:
-            chat_view = self.app.query_one("#chat-view")
-            await chat_view.scroll_end()
+                    
+                    # Scroll to the end of the chat view
+                    chat_view = self.app.query_one("#chat-view")
+                    await chat_view.scroll_end()
+
+        # Create a task to run the async update
+        asyncio.create_task(update_content())
 
     async def update(self, content: str) -> None:
         """Update the markdown content."""
@@ -172,33 +172,8 @@ class ChatApp(App):
                 # Get the final answer
                 final_answer = self.current_response.text_content.strip()
 
-                
-                # First show completion message
-                self.call_from_thread(
-                    self.add_system_message,
-                    "✅ Task complete!"
-                )
-
-                # Remove the streaming response and show final answer
-                def show_final_answer():
-                    chat_view = self.query_one("#chat-view")
-                    
-                    # Remove the streaming response widget
-                    self.current_response.remove()
-                    
-                    # Create and mount new formatted response
-                    response = Response()
-                    chat_view.mount(response)
-                    response.update(f"**Answer:**\n{final_answer}")
-                    chat_view.scroll_end()
-                    
-                    # Clear current response reference
-                    self.current_response = None
-
-                self.call_from_thread(show_final_answer)
-                
-            self.call_from_thread(self.toggle_input, True)
-            self.call_from_thread(self.toggle_loading, False)
+                # Use call_from_thread with an async method
+                self.call_from_thread(self._async_handle_task_complete, final_answer)
         elif event == "task_think_start":
             self.call_from_thread(self.toggle_loading, True)
             self.call_from_thread(
@@ -224,6 +199,34 @@ class ChatApp(App):
                 "💭 Memory full, compacting..."
             )
 
+    def _async_handle_task_complete(self, final_answer: str) -> None:
+        """Async method to handle task completion and update UI."""
+        async def update_ui():
+            # First show completion message
+            await self.add_system_message("✅ Task complete!")
+
+            # Get chat view
+            chat_view = self.query_one("#chat-view")
+            
+            # Remove the streaming response widget
+            self.current_response.remove()
+            
+            # Create and mount new formatted response
+            response = Response()
+            await chat_view.mount(response)
+            await response.update(f"**Answer:**\n{final_answer}")
+            await chat_view.scroll_end()
+            
+            # Clear current response reference
+            self.current_response = None
+
+            # Toggle input and loading
+            await self.toggle_input(True)
+            await self.toggle_loading(False)
+
+        # Create task to run the async update
+        asyncio.create_task(update_ui())
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle user input submission."""
         # Clear input early to prevent double submission
@@ -243,8 +246,8 @@ class ChatApp(App):
         await chat_view.mount(response)
 
         # Disable input and show loading
-        self.toggle_input(False)
-        self.toggle_loading(True)
+        await self.toggle_input(False)
+        await self.toggle_loading(True)
 
         # Create a new thread for processing the agent's response
         def process_agent_response():
@@ -265,25 +268,28 @@ class ChatApp(App):
         thread = threading.Thread(target=process_agent_response, daemon=True)
         thread.start()
 
-    def toggle_input(self, enabled: bool) -> None:
-        """Toggle input field state."""
-        self.query_one(Input).disabled = not enabled
+    async def toggle_input(self, enabled: bool) -> None:
+        """Async method to toggle input field."""
+        input_field = self.query_one(Input)
+        input_field.disabled = not enabled
 
-    def toggle_loading(self, visible: bool) -> None:
-        """Toggle loading indicator visibility."""
-        loader = self.query_one(LoadingIndicator)
-        loader.set_class(visible, "visible")
+    async def toggle_loading(self, visible: bool) -> None:
+        """Async method to toggle loading indicator."""
+        loading = self.query_one(LoadingIndicator)
+        loading.set_class(visible, "visible")
 
     async def add_system_message(self, text: str) -> None:
-        """Add a system status message to the chat."""
+        """Async method to add a system message."""
         chat_view = self.query_one("#chat-view")
-        await chat_view.mount(SystemMessage(text))
+        message = SystemMessage(text)
+        await chat_view.mount(message)
         await chat_view.scroll_end()
 
     async def add_error_message(self, text: str) -> None:
-        """Add an error message to the chat."""
+        """Async method to add an error message."""
         chat_view = self.query_one("#chat-view")
-        await chat_view.mount(ErrorMessage(text))
+        message = ErrorMessage(text)
+        await chat_view.mount(message)
         await chat_view.scroll_end()
 
     def on_unmount(self) -> None:
