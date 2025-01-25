@@ -228,7 +228,6 @@ Example prompt: [04-write-a-tutorial.md](./examples/tasks/04-write-a-tutorial.md
 
 Here are some practical examples to help you get started:
 
-Here is the markdown table based on the provided directory listing:
 
 | Example | Description | File |
 |---------|-------------|------|
@@ -237,6 +236,12 @@ Here is the markdown table based on the provided directory listing:
 | Agent with Interpreter | An example of an agent that includes an interpreter. | [examples/03-agent-with-interpreter.py](examples/03-agent-with-interpreter.py) |
 | Agent Summary Task | An example of an agent performing a summary task. | [examples/04-agent-summary-task.py](examples/04-agent-summary-task.py) |
 | Code Example | A general code example. | [examples/05-code.py](examples/05-code.py) |
+| Code Screen Example | An example demonstrating code execution with screen output. | [examples/06-code-screen.py](examples/06-code-screen.py) |
+| Write Tutorial | An example of generating a tutorial using the agent. | [examples/07-write-tutorial.py](examples/07-write-tutorial.py) |
+| PRD Writer | An example of generating a Product Requirements Document (PRD). | [examples/08-prd-writer.py](examples/08-prd-writer.py) |
+| SQL Query | An example of executing SQL queries using the agent. | [examples/09-sql-query.py](examples/09-sql-query.py) |
+| Finance Agent | An example of a finance-focused agent. | [examples/10-finance-agent.py](examples/10-finance-agent.py) |
+| Textual Agent Interface | An example of a textual user interface for the agent. | [examples/11-textual-agent-interface.py](examples/11-textual-agent-interface.py) |
 
 
 ## 🔨 Key Components
