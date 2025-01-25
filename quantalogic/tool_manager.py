@@ -66,3 +66,45 @@ class ToolManager(BaseModel):
             markdown += "\n"
             index += 1
         return markdown
+
+    def _convert_kwargs_types(self, tool_name: str, **kwargs) -> dict:
+        """Convert kwargs values to their expected types based on tool definition.
+        
+        Args:
+            tool_name: Name of the tool to get argument types from
+            **kwargs: Input arguments to convert
+            
+        Returns:
+            Dictionary of converted arguments
+            
+        Raises:
+            ValueError: If type conversion fails for a required argument
+        """
+        tool = self.tools[tool_name]
+        converted = {}
+        
+        for arg in tool.arguments:
+            if arg.name in kwargs:
+                try:
+                    if arg.arg_type == "int":
+                        converted[arg.name] = int(kwargs[arg.name])
+                    elif arg.arg_type == "float":
+                        converted[arg.name] = float(kwargs[arg.name])
+                    elif arg.arg_type == "boolean":
+                        val = str(kwargs[arg.name]).lower()
+                        converted[arg.name] = val in ("true", "1", "yes", "y")
+                    else:  # string
+                        converted[arg.name] = str(kwargs[arg.name])
+                except (ValueError, TypeError) as e:
+                    if arg.required:
+                        raise ValueError(
+                            f"Failed to convert required argument '{arg.name}' to {arg.arg_type}: {str(e)}"
+                        )
+                    logger.warning(
+                        f"Failed to convert optional argument '{arg.name}' to {arg.arg_type}: {str(e)}"
+                    )
+                    converted[arg.name] = kwargs[arg.name]  # keep original value
+            elif arg.required and arg.default is None:
+                raise ValueError(f"Missing required argument: {arg.name}")
+                
+        return converted

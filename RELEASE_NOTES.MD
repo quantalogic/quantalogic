@@ -1,3 +1,8 @@
+## [v.30.4] (2025-10-24)
+- Fix
+    - Automatic conversion before execution of tools with variables
+    - Fix duplicated method in Agent class
+
 ## [v0.30.1] (2025-10-24)
 
 ### Fix

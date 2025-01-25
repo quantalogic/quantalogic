@@ -558,21 +558,29 @@ class Agent(BaseModel):
             arguments_with_values_interpolated = {
                 key: self._interpolate_variables(value) for key, value in arguments_with_values.items()
             }
+            
+            # Convert arguments to correct types
+            try:
+                converted_args = self.tools._convert_kwargs_types(tool_name, **arguments_with_values_interpolated)
+            except ValueError as e:
+                logger.error(f"Type conversion failed: {str(e)}")
+                return "", f"Error: Type conversion failed for tool '{tool_name}': {str(e)}"
+
             # test if tool need variables in context 
             if tool.need_variables:
                 # Inject variables into the tool if needed
-                arguments_with_values_interpolated["variables"] = self.variable_store
+                converted_args["variables"] = self.variable_store
             if tool.need_caller_context_memory:
                 # Inject caller context into the tool if needed
-                arguments_with_values_interpolated["caller_context_memory"] = self.memory.memory
+                converted_args["caller_context_memory"] = self.memory.memory
 
             # Add injectable variables
             injectable_properties = tool.get_injectable_properties_in_execution()
             for key, value in injectable_properties.items():
-                arguments_with_values_interpolated[key] = value
+                converted_args[key] = value
 
             # Call tool execute with named arguments
-            response = tool.execute(**arguments_with_values_interpolated)
+            response = tool.execute(**converted_args)
             executed_tool = tool.name
         except Exception as e:
             response = f"Error executing tool: {tool_name}: {str(e)}\n"
