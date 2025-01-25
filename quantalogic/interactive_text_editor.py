@@ -120,9 +120,42 @@ def get_multiline_input(console: Console) -> str:
         if history_manager.undo(lines):
             console.print("[bold]Undo successful.[/bold]")
 
-    session = PromptSession(history=InMemoryHistory(), 
-                          auto_suggest=AutoSuggestFromHistory(), 
-                          key_bindings=bindings)
+    from prompt_toolkit.completion import Completer, Completion
+    from prompt_toolkit.styles import Style
+    
+    import re
+    
+    class CommandCompleter(Completer):
+        def get_completions(self, document, complete_event):
+            pattern = re.compile(r'(?<!\S)/\w*')  # Match /commands with word boundary
+            word = document.get_word_before_cursor(pattern=pattern)
+            if word.startswith('/'):
+                for cmd, details in registry.commands.items():
+                    if cmd.startswith(word[1:]):
+                        yield Completion(
+                            cmd,
+                            start_position=-len(word),
+                            display=f"{cmd} - {details['help']}",
+                            style="fg:ansiyellow bold",
+                        )
+
+    command_completer = CommandCompleter()
+    
+    custom_style = Style.from_dict({
+        'completion-menu.completion': 'bg:#008888 #ffffff',
+        'completion-menu.completion.current': 'bg:#00aaaa #000000 bold',
+        'scrollbar.background': 'bg:#88aaaa',
+        'scrollbar.button': 'bg:#222222',
+    })
+    
+    session = PromptSession(
+        history=InMemoryHistory(),
+        auto_suggest=AutoSuggestFromHistory(),
+        key_bindings=bindings,
+        completer=command_completer,
+        complete_while_typing=True,
+        style=custom_style
+    )
 
     try:
         while True:
