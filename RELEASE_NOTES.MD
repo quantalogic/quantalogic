@@ -1,3 +1,7 @@
+## [v.30.5] (2025-10-24)
+- Fix
+    - Small fixes
+
 ## [v.30.4] (2025-10-24)
 - Fix
     - Automatic conversion before execution of tools with variables

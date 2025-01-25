@@ -104,7 +104,5 @@ class ToolManager(BaseModel):
                         f"Failed to convert optional argument '{arg.name}' to {arg.arg_type}: {str(e)}"
                     )
                     converted[arg.name] = kwargs[arg.name]  # keep original value
-            elif arg.required and arg.default is None:
-                raise ValueError(f"Missing required argument: {arg.name}")
                 
         return converted
