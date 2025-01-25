@@ -258,35 +258,64 @@ class ChatApp(App):
 
         threading.Thread(target=process_query, daemon=True).start()
 
-    async def toggle_input(self, enabled: bool):
-        """Toggle input field state with visual feedback"""
+    async def toggle_input(self, enabled: bool) -> None:
+        """
+        Toggle the input field state with visual feedback.
+        
+        Args:
+            enabled (bool): Whether the input field should be enabled or disabled.
+        """
         input_field = self.query_one(Input)
         input_field.disabled = not enabled
         self.refresh(layout=True)
 
-    async def toggle_loading(self, visible: bool):
-        """Toggle loading indicator with animation"""
+    async def toggle_loading(self, visible: bool) -> None:
+        """
+        Toggle the loading indicator with smooth animation.
+        
+        Args:
+            visible (bool): Whether the loading indicator should be shown or hidden.
+        """
         loading = self.query_one(LoadingIndicator)
         loading.set_class(visible, "visible")
         self.refresh(layout=True)
 
-    async def add_system_message(self, text: str):
-        """Add system message with proper formatting"""
+    async def add_system_message(self, text: str) -> None:
+        """
+        Add a system message to the chat view with proper formatting.
+        
+        Args:
+            text (str): The system message text to display.
+        """
         chat_view = self.query_one("#chat-view")
         await chat_view.mount(SystemMessage(text))
         chat_view.scroll_end(animate=True)
+        logger.info(f"System Message: {text}")
 
-    async def add_error_message(self, text: str):
-        """Add error message with proper formatting"""
+    async def add_error_message(self, text: str) -> None:
+        """
+        Add an error message to the chat view with visual emphasis.
+        
+        Args:
+            text (str): The error message text to display.
+        """
         chat_view = self.query_one("#chat-view")
         await chat_view.mount(ErrorMessage(text))
         chat_view.scroll_end(animate=True)
+        logger.error(f"Error Message: {text}")
 
-    def on_unmount(self):
-        """Cleanup resources on app exit"""
-        if hasattr(self.agent, "shutdown"):
-            self.agent.shutdown()
-        logger.info("Application shutdown complete")
+    def on_unmount(self) -> None:
+        """
+        Perform cleanup of resources when the application is about to exit.
+        
+        Ensures proper shutdown of the agent and logs the exit process.
+        """
+        try:
+            if hasattr(self.agent, "shutdown"):
+                self.agent.shutdown()
+            logger.info("Application shutdown initiated")
+        except Exception as e:
+            logger.error(f"Error during application shutdown: {e}")
 
 
 if __name__ == "__main__":
