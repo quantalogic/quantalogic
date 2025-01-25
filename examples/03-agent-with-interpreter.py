@@ -1,3 +1,12 @@
+#!/usr/bin/env -S uv run
+
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "quantalogic",
+# ]
+# ///
+
 import os
 
 from quantalogic import Agent

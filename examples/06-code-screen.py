@@ -1,3 +1,12 @@
+#!/usr/bin/env -S uv run
+
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "quantalogic",
+# ]
+# ///
+
 import os
 
 from quantalogic import Agent
@@ -24,6 +33,9 @@ VISION_MODEL_NAME = "openrouter/openai/gpt-4o-mini"
 # and allow for future service switching without code changes
 if not os.environ.get("DEEPSEEK_API_KEY"):
     raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
+
+if not os.environ.get("OPENAI_API_KEY"):
+    raise ValueError("OPENAI_API_KEY environment variable is not set")
 
 
 agent = Agent(

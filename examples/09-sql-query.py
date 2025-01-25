@@ -48,6 +48,10 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+# Handle case where no arguments are provided
+if not args.model:
+    args.model = "deepseek/deepseek-chat"  # Default model
+
 MODEL_NAME = args.model
 
 # Using specified model for cost-effectiveness and performance

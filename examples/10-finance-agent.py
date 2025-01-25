@@ -12,13 +12,11 @@
 # ///
 
 import html
-import json
 from datetime import datetime
 from io import StringIO
 from typing import Optional
 
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
@@ -81,6 +79,8 @@ class TechnicalAnalysisTool(Tool):
         try:
             # Create analysis container first for proper Streamlit context
             analysis_container = st.container(border=True)
+
+            period = period if period is not None else 14
 
             with analysis_container:
                 # Input validation and type conversion
@@ -407,15 +407,7 @@ def main():
     query = st.chat_input("Ask financial questions (e.g., 'Show AAPL stock analysis with SMA 50')")
 
     if query:
-        # Clear previous analysis containers and stream state
-        if "analysis_containers" in st.session_state:
-            for container in st.session_state.analysis_containers:
-                container.empty()
-            del st.session_state.analysis_containers
-        if "response" in st.session_state:
-            del st.session_state.response
-        if "chunk_container" in st.session_state:
-            del st.session_state.chunk_container
+
 
         with st.spinner("Processing request..."):
             try:
