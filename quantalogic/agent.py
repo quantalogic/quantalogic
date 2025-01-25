@@ -533,7 +533,10 @@ class Agent(BaseModel):
             question_validation: str = (
                 "Do you permit the execution of this tool?\n"
                 f"Tool: {tool_name}\n"
-                f"Arguments: {arguments_with_values}\n"
+                "Arguments:\n"
+                "<arguments>\n"
+                + "\n".join([f"    <{key}>{value}</{key}>" for key, value in arguments_with_values.items()])
+                + "\n</arguments>\n"
                 "Yes or No"
             )
             permission_granted = self.ask_for_user_validation(question_validation)
