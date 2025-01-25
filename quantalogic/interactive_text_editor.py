@@ -1,4 +1,4 @@
-"""Utility functions for the QuantaLogic AI Assistant."""
+from typing import List
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
@@ -9,48 +9,54 @@ from rich.panel import Panel
 
 
 class InputHistoryManager:
-    """Manages the history of input states for undo functionality."""
-
     def __init__(self):
-        """Initialize the InputHistoryManager with an empty history stack and current state."""
         self.history_stack = []
         self.current_state = []
 
-    def push_state(self, lines):
-        """Push the current state to the history stack and update the current state.
-
-        Args:
-            lines (list): The current lines of input to be saved in the history.
-        """
+    def push_state(self, lines: List[str]) -> None:
         self.history_stack.append(self.current_state.copy())
         self.current_state = lines.copy()
 
-    def undo(self, lines):
-        """Revert to the previous state from the history stack.
-
-        Args:
-            lines (list): The current lines of input to be updated to the previous state.
-
-        Returns:
-            bool: True if undo was successful, False otherwise.
-        """
+    def undo(self, lines: List[str]) -> bool:
         if self.history_stack:
             self.current_state = self.history_stack.pop()
             lines[:] = self.current_state
             return True
         return False
 
+class CommandRegistry:
+    def __init__(self):
+        self.commands = {}
+        
+    def register(self, name: str, help_text: str = "") -> callable:
+        def decorator(func: callable) -> callable:
+            self.commands[name] = {
+                "handler": func,
+                "help": func.__doc__ or help_text
+            }
+            return func
+        return decorator
 
-def handle_edit_command(lines, args, console, session, history_manager):
-    """Handle the 'edit' command to modify a specific line.
+registry = CommandRegistry()
 
-    Args:
-        lines (list): The current lines of input.
-        args (list): The arguments provided with the command.
-        console (Console): The console object for output.
-        session (PromptSession): The prompt session for user input.
-        history_manager (InputHistoryManager): The history manager for state tracking.
-    """
+@registry.register("/help", "Show available commands")
+def handle_help_command(lines: List[str], args: List[str], console: Console, 
+                      session: PromptSession, history_manager: InputHistoryManager) -> None:
+    """Display auto-generated help from registered commands."""
+    help_content = "\n".join([f"  {name}: {cmd['help']}" for name, cmd in registry.commands.items()])
+    console.print(Panel(f"Available commands:\n{help_content}", title="Help Menu", border_style="green"))
+
+@registry.register("/date", "Show current date/time")
+def handle_date_command(lines: List[str], args: List[str], console: Console,
+                      session: PromptSession, history_manager: InputHistoryManager) -> None:
+    """Display current date and time."""
+    from datetime import datetime
+    console.print(f"[yellow]Current datetime: {datetime.now().isoformat()}[/yellow]")
+
+@registry.register("/edit", "Edit specific line: /edit <line_number>")
+def handle_edit_command(lines: List[str], args: List[str], console: Console,
+                      session: PromptSession, history_manager: InputHistoryManager) -> None:
+    """Edit a specific line in the input buffer."""
     try:
         edit_line_num = int(args[0]) - 1
         if 0 <= edit_line_num < len(lines):
@@ -61,18 +67,12 @@ def handle_edit_command(lines, args, console, session, history_manager):
         else:
             console.print("[red]Invalid line number.[/red]")
     except (ValueError, IndexError):
-        console.print("[red]Invalid edit command. Usage: edit <line_number>[/red]")
+        console.print("[red]Invalid edit command. Usage: /edit <line_number>[/red]")
 
-
-def handle_delete_command(lines, args, console, history_manager):
-    """Handle the 'delete' command to remove a specific line.
-
-    Args:
-        lines (list): The current lines of input.
-        args (list): The arguments provided with the command.
-        console (Console): The console object for output.
-        history_manager (InputHistoryManager): The history manager for state tracking.
-    """
+@registry.register("/delete", "Delete specific line: /delete <line_number>")
+def handle_delete_command(lines: List[str], args: List[str], console: Console,
+                        session: PromptSession, history_manager: InputHistoryManager) -> None:
+    """Delete a specific line from the input buffer."""
     try:
         delete_line_num = int(args[0]) - 1
         if 0 <= delete_line_num < len(lines):
@@ -82,18 +82,12 @@ def handle_delete_command(lines, args, console, history_manager):
         else:
             console.print("[red]Invalid line number.[/red]")
     except (ValueError, IndexError):
-        console.print("[red]Invalid delete command. Usage: delete <line_number>[/red]")
+        console.print("[red]Invalid delete command. Usage: /delete <line_number>[/red]")
 
-
-def handle_replace_command(lines, args, console, history_manager):
-    """Handle the 'replace' command to search and replace text in all lines.
-
-    Args:
-        lines (list): The current lines of input.
-        args (list): The arguments provided with the command.
-        console (Console): The console object for output.
-        history_manager (InputHistoryManager): The history manager for state tracking.
-    """
+@registry.register("/replace", "Search and replace: /replace <search> <replace>")
+def handle_replace_command(lines: List[str], args: List[str], console: Console,
+                         session: PromptSession, history_manager: InputHistoryManager) -> None:
+    """Replace text across all lines in the input buffer."""
     try:
         search_str, replace_str = args
         history_manager.push_state(lines)
@@ -101,52 +95,14 @@ def handle_replace_command(lines, args, console, history_manager):
             lines[i] = lines[i].replace(search_str, replace_str)
         console.print("[bold]Search and replace completed.[/bold]")
     except ValueError:
-        console.print("[red]Invalid replace command. Usage: replace <search_str> <replace_str>[/red]")
-
-
-commands = {"edit": handle_edit_command, "delete": handle_delete_command, "replace": handle_replace_command}
-
-
-def handle_command(line, lines, console, session, history_manager):
-    """Handle a command entered by the user.
-
-    Args:
-        line (str): The command line entered by the user.
-        lines (list): The current lines of input.
-        console (Console): The console object for output.
-        session (PromptSession): The prompt session for user input.
-        history_manager (InputHistoryManager): The history manager for state tracking.
-
-    Returns:
-        bool: True if the command was handled, False otherwise.
-    """
-    parts = line.split()
-    if not parts:
-        return False
-    command = parts[0]
-    args = parts[1:]
-    if command in commands:
-        commands[command](lines, args, console, session, history_manager)
-        return True
-    return False
-
+        console.print("[red]Invalid replace command. Usage: /replace <search_str> <replace_str>[/red]")
 
 def get_multiline_input(console: Console) -> str:
-    """Get multiline input from the user with enhanced UX.
-
-    Args:
-        console (Console): The console object for output.
-
-    Returns:
-        str: The multiline input provided by the user.
-    """
+    """Get multiline input with slash command support."""
     console.print(
         Panel(
             "Enter your task. Press [bold]Enter[/bold] twice to submit.\n"
-            "Available commands:\n"
-            "  edit <line_number> - Edit a specific line\n"
-            "  delete <line_number> - Delete a specific line\n"
-            "  replace <search_str> <replace_str> - Replace text in all lines",
+            "Type /help for available commands",
             title="Multi-line Input",
             border_style="blue",
         )
@@ -164,34 +120,28 @@ def get_multiline_input(console: Console) -> str:
         if history_manager.undo(lines):
             console.print("[bold]Undo successful.[/bold]")
 
-    session = PromptSession(history=InMemoryHistory(), auto_suggest=AutoSuggestFromHistory(), key_bindings=bindings)
+    session = PromptSession(history=InMemoryHistory(), 
+                          auto_suggest=AutoSuggestFromHistory(), 
+                          key_bindings=bindings)
 
     try:
         while True:
             prompt_text = f"{line_number:>3}: "
             line = session.prompt(prompt_text, rprompt="Press Enter twice to submit")
 
-            # Handle slash commands
             if line.strip().startswith('/'):
-                cmd = line.strip().lower()
-                if cmd == '/help':
-                    console.print(Panel(
-                        "Available commands:\n"
-                        "/help - Show this help\n"
-                        "/date - Show current date/time\n"
-                        "edit <line> - Edit line\n"
-                        "delete <line> - Delete line\n"
-                        "replace <old> <new> - Replace text",
-                        title="Help Menu", 
-                        border_style="green"))
-                    continue
-                elif cmd == '/date':
-                    from datetime import datetime
-                    console.print(f"[yellow]Current datetime: {datetime.now().isoformat()}[/yellow]")
-                    continue
+                cmd_parts = line.strip().split()
+                cmd_name = cmd_parts[0].lower()
+                args = cmd_parts[1:]
+                
+                if cmd_handler := registry.commands.get(cmd_name):
+                    try:
+                        cmd_handler["handler"](lines, args, console, session, history_manager)
+                    except Exception as e:
+                        console.print(f"[red]Error executing {cmd_name}: {str(e)}[/red]")
                 else:
-                    console.print(f"[red]Unknown command: {cmd}[/red]")
-                    continue
+                    console.print(f"[red]Unknown command: {cmd_name}[/red]")
+                continue
 
             if line.strip() == "":
                 blank_lines += 1
@@ -199,7 +149,7 @@ def get_multiline_input(console: Console) -> str:
                     break
             else:
                 blank_lines = 0
-                if not handle_command(line, lines, console, session, history_manager):
+                if not any(line.strip().startswith(cmd) for cmd in registry.commands):
                     history_manager.push_state(lines)
                     lines.append(line)
                     line_number += 1
