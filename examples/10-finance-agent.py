@@ -22,7 +22,7 @@ import streamlit as st
 import yfinance as yf
 
 from quantalogic import Agent
-from quantalogic.tools import DuckDuckGoSearchTool, LLMTool, PythonTool, SerpApiSearchTool, Tool, ToolArgument
+from quantalogic.tools import DuckDuckGoSearchTool, SerpApiSearchTool, Tool, ToolArgument
 
 
 class StreamlitInputTool(Tool):
@@ -385,10 +385,8 @@ def main():
                 YFinanceTool(),
                 VisualizationTool(),
                 TechnicalAnalysisTool(),
-           #     LLMTool(model_name=model_name, on_token=handle_stream_chunk),
                 DuckDuckGoSearchTool(),
                 SerpApiSearchTool(),
-                PythonTool(),
             ],
         )
         st.session_state.agent.event_emitter.on(
