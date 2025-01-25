@@ -13,13 +13,11 @@ import queue
 import threading
 from typing import Any
 
-from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
 from textual.widgets import Footer, Header, Input, LoadingIndicator, Markdown
 
 from quantalogic import Agent
-from quantalogic.tools import LLMTool
 
 
 class SystemMessage(Markdown):
@@ -102,6 +100,7 @@ class Response(Markdown):
         await super().update(content)
         self.refresh(layout=True)
 
+
 class ChatApp(App):
     CSS = """
     #chat-view {
@@ -171,24 +170,30 @@ class ChatApp(App):
         if event == "task_complete":
             if self.current_response:
                 # Get the final answer
-                final_answer = self.current_response.text_content
-                # Clear the streaming response
-                self.current_response.text_content = ""
+                final_answer = self.current_response.text_content.strip()
                 
                 # First show completion message
                 self.call_from_thread(
                     self.add_system_message,
                     "✅ Task completed successfully"
                 )
-                
-                # Then create and show the final answer in a new response widget
+
+                # Remove the streaming response and show final answer
                 def show_final_answer():
                     chat_view = self.query_one("#chat-view")
+                    
+                    # Remove the streaming response widget
+                    self.current_response.remove()
+                    
+                    # Create and mount new formatted response
                     response = Response()
                     chat_view.mount(response)
                     response.update(f"**Answer:**\n{final_answer}")
                     chat_view.scroll_end()
-                
+                    
+                    # Clear current response reference
+                    self.current_response = None
+
                 self.call_from_thread(show_final_answer)
                 
             self.call_from_thread(self.toggle_input, True)
@@ -279,6 +284,7 @@ class ChatApp(App):
     def on_unmount(self) -> None:
         """Clean up worker thread on app exit."""
         pass
+
 
 if __name__ == "__main__":
     ChatApp().run()
