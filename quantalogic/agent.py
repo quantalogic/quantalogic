@@ -531,11 +531,11 @@ class Agent(BaseModel):
             )
 
             question_validation: str = (
-                "Do you permit the execution of this tool?"
-                f"Tool: {tool_name}"
-                f"Arguments: {arguments_with_values}"
+                "Do you permit the execution of this tool?\n"
+                f"Tool: {tool_name}\n"
+                f"Arguments: {arguments_with_values}\n"
                 "Yes or No"
-            ).join("\n")
+            )
             permission_granted = self.ask_for_user_validation(question_validation)
 
             self._emit_event(
