@@ -414,13 +414,11 @@ def main():
     query = st.chat_input("Ask financial questions (e.g., 'Show AAPL stock analysis with SMA 50')")
 
     if query:
-        ## Clear screen and containers
-        st.session_state.clear()
-        for key in list(st.session_state.keys()):
-            if key.startswith("container_"):
-                del st.session_state[key]
-        main_container = st.container()
-        main_container.empty()
+        # Clear previous analysis outputs
+        keys_to_clear = [k for k in st.session_state.keys() 
+                       if k.startswith(("response", "data_display", "chunk_container"))]
+        for key in keys_to_clear:
+            del st.session_state[key]
 
         # Initialize agent with tools
         if "agent" not in st.session_state:
