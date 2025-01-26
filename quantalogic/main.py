@@ -249,16 +249,8 @@ def task(
         task_runner(
             console,
             file,
-            config.model_name,
-            config.verbose,
-            config.mode,
-            config.log,
-            config.vision_model_name,
+            config,
             task,
-            config.max_iterations,
-            config.compact_every_n_iteration,
-            config.max_tokens_working_memory,
-            config.no_stream,
         )
     except Exception as e:
         console.print(f"[red]{str(e)}[/red]")
