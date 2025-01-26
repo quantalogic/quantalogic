@@ -26,6 +26,7 @@ from rich.panel import Panel  # noqa: E402
 from quantalogic.agent_config import (  # noqa: E402
     MODEL_NAME,
 )
+from quantalogic.config import QLConfig  # noqa: E402
 from quantalogic.task_runner import task_runner  # noqa: E402
 
 # Platform-specific imports
@@ -149,8 +150,7 @@ def cli(
         ctx.exit()
 
     if ctx.invoked_subcommand is None:
-        ctx.invoke(
-            task,
+        config = QLConfig(
             model_name=model_name,
             verbose=verbose,
             mode=mode,
@@ -159,6 +159,18 @@ def cli(
             max_iterations=max_iterations,
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory,
+            no_stream=False  # Default value for backward compatibility
+        )
+        ctx.invoke(
+            task,
+            model_name=config.model_name,
+            verbose=config.verbose,
+            mode=config.mode,
+            log=config.log,
+            vision_model_name=config.vision_model_name,
+            max_iterations=config.max_iterations,
+            compact_every_n_iteration=config.compact_every_n_iteration,
+            max_tokens_working_memory=config.max_tokens_working_memory,
         )
 
 
@@ -222,19 +234,31 @@ def task(
     console = Console()
 
     try:
+        config = QLConfig(
+            model_name=model_name,
+            verbose=verbose,
+            mode=mode,
+            log=log,
+            vision_model_name=vision_model_name,
+            max_iterations=max_iterations,
+            compact_every_n_iteration=compact_every_n_iteration,
+            max_tokens_working_memory=max_tokens_working_memory,
+            no_stream=no_stream,
+        )
+        
         task_runner(
             console,
             file,
-            model_name,
-            verbose,
-            mode,
-            log,
-            vision_model_name,
+            config.model_name,
+            config.verbose,
+            config.mode,
+            config.log,
+            config.vision_model_name,
             task,
-            max_iterations,
-            compact_every_n_iteration,
-            max_tokens_working_memory,
-            no_stream,
+            config.max_iterations,
+            config.compact_every_n_iteration,
+            config.max_tokens_working_memory,
+            config.no_stream,
         )
     except Exception as e:
         console.print(f"[red]{str(e)}[/red]")
