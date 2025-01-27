@@ -8,9 +8,8 @@ from typing import Optional
 # Third-party imports
 import click
 from dotenv import load_dotenv
-from loguru import logger
 from fuzzywuzzy import process
-from typing import Optional
+from loguru import logger
 
 from quantalogic.version import get_version
 
@@ -279,9 +278,9 @@ def list_models(search: Optional[str] = None):
         models = all_models
     
     console.print(Panel(
-        f"Total Models: [bold green]{len(models)}[/bold green] "
-        f"([dim]{len(all_models)} total[/dim])",
-        title="[bold]Supported LiteLLM Models[/bold]"
+        f"Total Models: {len(models)} "
+        f"({len(all_models)} total)",
+        title="Supported LiteLLM Models"
     ))
     
     if not models:
