@@ -100,27 +100,16 @@ def handle_replace_command(lines: List[str], args: List[str], console: Console,
 @registry.register("/model", "Show current AI model") 
 def handle_model_command(lines: List[str], args: List[str], console: Console,
     session: PromptSession, history_manager: InputHistoryManager) -> None:
-    from quantalogic.agent_config import get_current_model
+    from quantalogic.agent_factory import AgentRegistry
     try:
-        console.print(f"[yellow]Current AI model: {get_current_model()}[/yellow]")
+        current_agent = AgentRegistry.get_agent("main_agent")
+        if current_agent:
+            console.print(f"[yellow]Current AI model: {current_agent.model_name}[/yellow]")
+        else:
+            console.print("[yellow]No active agent found.[/yellow]")
     except ValueError as e:
         console.print(f"[red]Error: {str(e)}[/red]")
 
-@registry.register("/model", "Show current AI model")
-def handle_model_command(lines: List[str], args: List[str], console: Console,
-    session: PromptSession, history_manager: InputHistoryManager) -> None:
-    from quantalogic.agent_config import get_current_model
-    model = get_current_model()
-    console.print(f"[yellow]Current AI model: {model}[/yellow]")
-    """Replace text across all lines in the input buffer."""
-    try:
-        search_str, replace_str = args
-        history_manager.push_state(lines)
-        for i in range(len(lines)):
-            lines[i] = lines[i].replace(search_str, replace_str)
-        console.print("[bold]Search and replace completed.[/bold]")
-    except ValueError:
-        console.print("[red]Invalid replace command. Usage: /replace <search_str> <replace_str>[/red]")
 
 def get_multiline_input(console: Console) -> str:
     """Get multiline input with slash command support."""
@@ -145,10 +134,10 @@ def get_multiline_input(console: Console) -> str:
         if history_manager.undo(lines):
             console.print("[bold]Undo successful.[/bold]")
 
+    import re
+
     from prompt_toolkit.completion import Completer, Completion
     from prompt_toolkit.styles import Style
-    
-    import re
     
     class CommandCompleter(Completer):
         def get_completions(self, document, complete_event):

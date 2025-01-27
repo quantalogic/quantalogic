@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from loguru import logger
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from quantalogic.event_emitter import EventEmitter
 from quantalogic.generative_model import GenerativeModel, ResponseStats, TokenUsage
@@ -52,12 +52,16 @@ class ObserveResponseResult(BaseModel):
 class Agent(BaseModel):
     """Enhanced QuantaLogic agent implementing ReAct framework."""
 
-    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True, extra="forbid")
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        extra="forbid"
+    )
 
     specific_expertise: str
     model: GenerativeModel
-    memory: AgentMemory = AgentMemory() # A list User / Assistant Messages
-    variable_store: VariableMemory = VariableMemory() # A dictionary of variables (var1: value1, var2: value2)
+    memory: AgentMemory = AgentMemory()  # A list User / Assistant Messages
+    variable_store: VariableMemory = VariableMemory()  # A dictionary of variables
     tools: ToolManager = ToolManager()
     event_emitter: EventEmitter = EventEmitter()
     config: AgentConfig
@@ -71,8 +75,9 @@ class Agent(BaseModel):
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
     max_iterations: int = 30
     system_prompt: str = ""
-    compact_every_n_iterations: int | None = None  # Add this to the class attributes
-    max_tokens_working_memory: int | None = None  # Add max_tokens_working_memory attribute
+    compact_every_n_iterations: int | None = None
+    max_tokens_working_memory: int | None = None
+    _model_name: str = PrivateAttr(default="")
 
     def __init__(
         self,
@@ -84,13 +89,14 @@ class Agent(BaseModel):
         task_to_solve: str = "",
         specific_expertise: str = "General AI assistant with coding and problem-solving capabilities",
         get_environment: Callable[[], str] = get_environment,
-        compact_every_n_iterations: int | None = None,  # if set the memory will be compacted every n iterations
-        max_tokens_working_memory: int | None = None,  # if set the memory will be compacted each time the max_tokens_working_memory is reached
+        compact_every_n_iterations: int | None = None,
+        max_tokens_working_memory: int | None = None,
     ):
         """Initialize the agent with model, memory, tools, and configurations."""
         try:
             logger.debug("Initializing agent...")
-            # Create event emitter first
+            
+            # Create event emitter
             event_emitter = EventEmitter()
 
             # Add TaskCompleteTool to the tools list if not already present
@@ -114,31 +120,49 @@ class Agent(BaseModel):
                 system_prompt=system_prompt_text,
             )
 
-            logger.debug("Base class init started ...")
+            # Initialize using Pydantic's model_validate
             super().__init__(
+                specific_expertise=specific_expertise,
                 model=GenerativeModel(model=model_name, event_emitter=event_emitter),
                 memory=memory,
                 variable_store=variable_store,
                 tools=tool_manager,
-                config=config,
-                ask_for_user_validation=ask_for_user_validation,
-                task_to_solve=task_to_solve,
-                specific_expertise=specific_expertise,
                 event_emitter=event_emitter,
+                config=config,
+                task_to_solve=task_to_solve,
+                task_to_solve_summary="",
+                ask_for_user_validation=ask_for_user_validation,
+                last_tool_call={},
+                total_tokens=0,
+                current_iteration=0,
+                max_input_tokens=DEFAULT_MAX_INPUT_TOKENS,
+                max_output_tokens=DEFAULT_MAX_OUTPUT_TOKENS,
+                max_iterations=30,
+                system_prompt="",
+                compact_every_n_iterations=compact_every_n_iterations or 30,
+                max_tokens_working_memory=max_tokens_working_memory,
             )
             
-            # Set the new compact_every_n_iterations parameter
-            self.compact_every_n_iterations = compact_every_n_iterations or self.max_iterations
+            self._model_name = model_name
+            
             logger.debug(f"Memory will be compacted every {self.compact_every_n_iterations} iterations")
-            
-            # Set the max_tokens_working_memory parameter
-            self.max_tokens_working_memory = max_tokens_working_memory
             logger.debug(f"Max tokens for working memory set to: {self.max_tokens_working_memory}")
-            
             logger.debug("Agent initialized successfully.")
         except Exception as e:
             logger.error(f"Failed to initialize agent: {str(e)}")
             raise
+
+    @property
+    def model_name(self) -> str:
+        """Get the current model name."""
+        return self._model_name
+
+    @model_name.setter
+    def model_name(self, value: str) -> None:
+        """Set the model name."""
+        self._model_name = value
+        # Update the model instance with the new name
+        self.model = GenerativeModel(model=value, event_emitter=self.event_emitter)
 
     def clear_memory(self):
         """Clear the memory and reset the session."""
@@ -750,3 +774,8 @@ class Agent(BaseModel):
             "session_add_message",
             {"role": "assistant", "content": assistant_content},
         )
+
+    def update_model(self, new_model_name: str) -> None:
+        """Update the model name and recreate the model instance."""
+        self.model_name = new_model_name
+        self.model = GenerativeModel(model=new_model_name, event_emitter=self.event_emitter)

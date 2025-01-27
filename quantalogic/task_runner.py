@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
 
-from quantalogic.agent_factory import create_agent_for_mode
+from quantalogic.agent_factory import AgentRegistry, create_agent_for_mode
 from quantalogic.config import QLConfig
 from quantalogic.console_print_events import console_print_events
 from quantalogic.interactive_text_editor import get_multiline_input
@@ -166,6 +166,8 @@ def task_runner(
         compact_every_n_iteration=config.compact_every_n_iteration,
         max_tokens_working_memory=config.max_tokens_working_memory
     )
+
+    AgentRegistry.register_agent("main_agent", agent)
 
     if file:
         task_content = get_task_from_file(file)
