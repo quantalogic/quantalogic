@@ -153,20 +153,16 @@ def get_multiline_input(console: Console) -> str:
         if history_manager.undo(lines):
             console.print("[bold]Undo successful.[/bold]")
 
-    import re
 
     from prompt_toolkit.completion import Completer, Completion
     from prompt_toolkit.styles import Style
     
     class CommandCompleter(Completer):
         def get_completions(self, document, complete_event):
-            # Context-aware completion logic
             text = document.text_before_cursor
             line_parts = text.split()
             
-            # Command completion
             if len(line_parts) == 0 or (len(line_parts) == 1 and text.endswith(' ')):
-                # Show all commands with help
                 for cmd, details in registry.commands.items():
                     yield Completion(
                         cmd,
@@ -175,11 +171,9 @@ def get_multiline_input(console: Console) -> str:
                         style="fg:ansicyan bold",
                     )
             elif line_parts[0] in registry.commands:
-                # Argument suggestions
                 cmd = registry.commands[line_parts[0]]
                 arg_index = len(line_parts) - 1
                 if arg_index == 1:
-                    # Dynamic argument hints from docstring
                     doc = cmd['handler'].__doc__ or ""
                     args_hint = next((line.split(':')[1].strip() for line in doc.split('\n') 
                                     if 'Args:' in line), "")
@@ -191,17 +185,91 @@ def get_multiline_input(console: Console) -> str:
                             display=f"Expected argument: {args_hint}",
                         )
             else:
-                # Partial command matching with slash handling
                 if text.startswith('/'):
-                    partial = text[1:].lstrip('/')  # Remove existing slashes
+                    partial = text[1:].lstrip('/')
+                    exact_matches = []
+                    prefix_matches = []
+                    
                     for cmd in registry.commands:
-                        cmd_without_slash = cmd[1:]  # Strip leading slash for comparison
-                        if cmd_without_slash.lower().startswith(partial.lower()):
-                            remaining = cmd_without_slash[len(partial):]
+                        cmd_without_slash = cmd[1:]
+                        if cmd_without_slash.lower() == partial.lower():
+                            exact_matches.append(cmd)
+                        elif cmd_without_slash.lower().startswith(partial.lower()):
+                            prefix_matches.append(cmd)
+                    
+                    # Prioritize exact matches first
+                    for match in exact_matches:
+                        remaining = match[len('/' + partial):]
+                        yield Completion(
+                            remaining,
+                            start_position=0,  # Corrected from -len(partial)
+                            display=f"{match} - {registry.commands[match]['help']}",
+                            style="fg:ansiyellow bold",
+                        )
+                    
+                    # Then prefix matches
+                    for match in prefix_matches:
+                        remaining = match[len('/' + partial):]
+                        yield Completion(
+                            remaining,
+                            start_position=0,  # Corrected from -len(partial)
+                            display=f"{match} - {registry.commands[match]['help']}",
+                            style="fg:ansiyellow bold",
+                        )
+            def get_completions(self, document, complete_event):
+                text = document.text_before_cursor
+                line_parts = text.split()
+                
+                if len(line_parts) == 0 or (len(line_parts) == 1 and text.endswith(' ')):
+                    for cmd, details in registry.commands.items():
+                        yield Completion(
+                            cmd,
+                            start_position=-len(text),
+                            display=f"[{cmd}] {details['help']}",
+                            style="fg:ansicyan bold",
+                        )
+                elif line_parts[0] in registry.commands:
+                    cmd = registry.commands[line_parts[0]]
+                    arg_index = len(line_parts) - 1
+                    if arg_index == 1:
+                        doc = cmd['handler'].__doc__ or ""
+                        args_hint = next((line.split(':')[1].strip() for line in doc.split('\n') 
+                                        if 'Args:' in line), "")
+                        if args_hint:
+                            yield Completion(
+                                f"<{args_hint}>",
+                                start_position=-len(text.split()[-1]),
+                                style="fg:ansimagenta italic",
+                                display=f"Expected argument: {args_hint}",
+                            )
+                else:
+                    if text.startswith('/'):
+                        partial = text[1:].lstrip('/')
+                        exact_matches = []
+                        prefix_matches = []
+                        
+                        for cmd in registry.commands:
+                            cmd_without_slash = cmd[1:]
+                            if cmd_without_slash.lower() == partial.lower():
+                                exact_matches.append(cmd)
+                            elif cmd_without_slash.lower().startswith(partial.lower()):
+                                prefix_matches.append(cmd)
+                        
+                        for match in exact_matches:
+                            remaining = match[len('/' + partial):]
                             yield Completion(
                                 remaining,
                                 start_position=-len(partial),
-                                display=f"{cmd} - {registry.commands[cmd]['help']}",
+                                display=f"{match} - {registry.commands[match]['help']}",
+                                style="fg:ansiyellow bold",
+                            )
+                        
+                        for match in prefix_matches:
+                            remaining = match[len('/' + partial):]
+                            yield Completion(
+                                remaining,
+                                start_position=-len(partial),
+                                display=f"{match} - {registry.commands[match]['help']}",
                                 style="fg:ansiyellow bold",
                             )
 
