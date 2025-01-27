@@ -1,7 +1,7 @@
 import litellm
 
 
-def get_litellm_models():
+def get_litellm_models() -> list[str]:
     """
     Retrieves a list of all model names supported by LiteLLM across all providers.
     

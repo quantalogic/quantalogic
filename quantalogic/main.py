@@ -9,6 +9,8 @@ from typing import Optional
 import click
 from dotenv import load_dotenv
 from loguru import logger
+from fuzzywuzzy import process
+from typing import Optional
 
 from quantalogic.version import get_version
 
@@ -28,6 +30,7 @@ from quantalogic.agent_config import (  # noqa: E402
 )
 from quantalogic.config import QLConfig  # noqa: E402
 from quantalogic.task_runner import task_runner  # noqa: E402
+from quantalogic.utils.get_litellm_models import get_litellm_models  # noqa: E402
 
 # Platform-specific imports
 try:
@@ -256,6 +259,37 @@ def task(
         console.print(f"[red]{str(e)}[/red]")
         logger.error(f"Error in task execution: {e}", exc_info=True)
         sys.exit(1)
+
+
+@cli.command()
+@click.option("--search", type=str, help="Fuzzy search for models containing the given string.")
+def list_models(search: Optional[str] = None):
+    """List supported LiteLLM models with optional fuzzy search.
+    
+    If a search term is provided, it will return models that closely match the term.
+    """
+    console = Console()
+    all_models = get_litellm_models()
+    
+    if search:
+        # Perform fuzzy matching
+        matched_models = process.extractBests(search, all_models, limit=None, score_cutoff=70)
+        models = [model for model, score in matched_models]
+    else:
+        models = all_models
+    
+    console.print(Panel(
+        f"Total Models: [bold green]{len(models)}[/bold green] "
+        f"([dim]{len(all_models)} total[/dim])",
+        title="[bold]Supported LiteLLM Models[/bold]"
+    ))
+    
+    if not models:
+        console.print(f"[yellow]No models found matching '[bold]{search}[/bold]'[/yellow]")
+        return
+    
+    for model in sorted(models):
+        console.print(f"- {model}")
 
 
 def main():
