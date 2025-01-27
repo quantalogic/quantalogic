@@ -160,34 +160,77 @@ def get_multiline_input(console: Console) -> str:
     
     class CommandCompleter(Completer):
         def get_completions(self, document, complete_event):
-            pattern = re.compile(r'(?<!\S)/\w*')  # Match /commands with word boundary
-            word = document.get_word_before_cursor(pattern=pattern)
-            if word.startswith('/'):
+            # Context-aware completion logic
+            text = document.text_before_cursor
+            line_parts = text.split()
+            
+            # Command completion
+            if len(line_parts) == 0 or (len(line_parts) == 1 and text.endswith(' ')):
+                # Show all commands with help
                 for cmd, details in registry.commands.items():
-                    if cmd.startswith(word[1:]):
+                    yield Completion(
+                        cmd,
+                        start_position=-len(text),
+                        display=f"[{cmd}] {details['help']}",
+                        style="fg:ansicyan bold",
+                    )
+            elif line_parts[0] in registry.commands:
+                # Argument suggestions
+                cmd = registry.commands[line_parts[0]]
+                arg_index = len(line_parts) - 1
+                if arg_index == 1:
+                    # Dynamic argument hints from docstring
+                    doc = cmd['handler'].__doc__ or ""
+                    args_hint = next((line.split(':')[1].strip() for line in doc.split('\n') 
+                                    if 'Args:' in line), "")
+                    if args_hint:
                         yield Completion(
-                            cmd,
-                            start_position=-len(word),
-                            display=f"{cmd} - {details['help']}",
-                            style="fg:ansiyellow bold",
+                            f"<{args_hint}>",
+                            start_position=-len(text.split()[-1]),
+                            style="fg:ansimagenta italic",
+                            display=f"Expected argument: {args_hint}",
                         )
+            else:
+                # Partial command matching with slash handling
+                if text.startswith('/'):
+                    partial = text[1:].lstrip('/')  # Remove existing slashes
+                    for cmd in registry.commands:
+                        cmd_without_slash = cmd[1:]  # Strip leading slash for comparison
+                        if cmd_without_slash.lower().startswith(partial.lower()):
+                            remaining = cmd_without_slash[len(partial):]
+                            yield Completion(
+                                remaining,
+                                start_position=-len(partial),
+                                display=f"{cmd} - {registry.commands[cmd]['help']}",
+                                style="fg:ansiyellow bold",
+                            )
 
     command_completer = CommandCompleter()
     
+    def get_command_help(cmd_name: str) -> str:
+        """Get formatted help text for a command"""
+        if cmd := registry.commands.get(cmd_name):
+            return f"[bold]{cmd_name}[/bold]: {cmd['help']}\n{cmd['handler'].__doc__ or ''}"
+        return ""
+
     custom_style = Style.from_dict({
         'completion-menu.completion': 'bg:#008888 #ffffff',
         'completion-menu.completion.current': 'bg:#00aaaa #000000 bold',
         'scrollbar.background': 'bg:#88aaaa',
         'scrollbar.button': 'bg:#222222',
+        'documentation': 'bg:#004444 #ffffff',
     })
-    
+
     session = PromptSession(
         history=InMemoryHistory(),
         auto_suggest=AutoSuggestFromHistory(),
         key_bindings=bindings,
         completer=command_completer,
         complete_while_typing=True,
-        style=custom_style
+        style=custom_style,
+        bottom_toolbar=lambda: get_command_help(session.default_buffer.document.text.split()[0][1:] 
+                                              if session.default_buffer.document.text.startswith('/') 
+                                              else ""),
     )
 
     try:
