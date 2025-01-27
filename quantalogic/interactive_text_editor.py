@@ -110,6 +110,25 @@ def handle_model_command(lines: List[str], args: List[str], console: Console,
     except ValueError as e:
         console.print(f"[red]Error: {str(e)}[/red]")
 
+@registry.register("/setmodel", "Set AI model name: /setmodel <name>")
+def handle_set_model_command(lines: List[str], args: List[str], console: Console,
+    session: PromptSession, history_manager: InputHistoryManager) -> None:
+    from quantalogic.agent_factory import AgentRegistry
+    try:
+        if len(args) < 1:
+            console.print("[red]Error: Model name required. Usage: /setmodel <name>[/red]")
+            return
+            
+        model_name = args[0]
+        current_agent = AgentRegistry.get_agent("main_agent")
+        if current_agent:
+            current_agent.model_name = model_name
+            console.print(f"[green]Model name updated to: {model_name}[/green]")
+        else:
+            console.print("[yellow]No active agent found.[/yellow]")
+    except ValueError as e:
+        console.print(f"[red]Error: {str(e)}[/red]")
+
 
 def get_multiline_input(console: Console) -> str:
     """Get multiline input with slash command support."""
