@@ -129,6 +129,35 @@ def handle_set_model_command(lines: List[str], args: List[str], console: Console
     except ValueError as e:
         console.print(f"[red]Error: {str(e)}[/red]")
 
+@registry.register("/models", "List all available AI models")
+def handle_models_command(lines: List[str], args: List[str], console: Console,
+    session: PromptSession, history_manager: InputHistoryManager) -> None:
+    """Display all available AI models supported by the system."""
+    from quantalogic.utils.get_litellm_models import get_litellm_models
+    try:
+        models = get_litellm_models()
+        if models:
+            # Group models by provider
+            provider_groups = {}
+            for model in models:
+                provider = model.split('/')[0] if '/' in model else 'default'
+                if provider not in provider_groups:
+                    provider_groups[provider] = []
+                provider_groups[provider].append(model)
+            
+            # Create formatted output
+            output = "[bold #00cc66]Available AI Models:[/bold #00cc66]\n"
+            for provider, model_list in provider_groups.items():
+                output += f"\n[bold #ffaa00]{provider.upper()}[/bold #ffaa00]\n"
+                for model in sorted(model_list):
+                    output += f"  • {model}\n"
+            
+            console.print(Panel(output, border_style="green"))
+        else:
+            console.print("[yellow]No models available.[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Error retrieving models: {str(e)}[/red]")
+
 
 def get_multiline_input(console: Console) -> str:
     """Get multiline input with slash command support."""
