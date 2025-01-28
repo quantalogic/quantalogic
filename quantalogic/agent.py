@@ -100,7 +100,7 @@ class Agent(BaseModel):
             event_emitter = EventEmitter()
 
             # Add TaskCompleteTool to the tools list if not already present
-            if TaskCompleteTool() not in tools:
+            if not any(isinstance(t, TaskCompleteTool) for t in tools):
                 tools.append(TaskCompleteTool())
 
             tool_manager = ToolManager(tools={tool.name: tool for tool in tools})
@@ -632,8 +632,9 @@ class Agent(BaseModel):
     def _interpolate_variables(self, text: str) -> str:
         """Interpolate variables using $var1$ syntax in the given text."""
         try:
+            import re
             for var in self.variable_store.keys():
-                text = text.replace(f"${var}$", self.variable_store[var])
+                text = re.sub(rf'\${var}\$', re.escape(self.variable_store[var]), text)
             return text
         except Exception as e:
             logger.error(f"Error in _interpolate_variables: {str(e)}")
