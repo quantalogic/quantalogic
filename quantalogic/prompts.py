@@ -84,6 +84,26 @@ Every response must contain exactly two XML blocks:
     <parameter2>value2</parameter2>
 </tool_name>
 ```
+Example: One Action Block Only
+
+```xml
+<!-- NEW TASK ACTION EXAMPLE -->
+<data_analyzer>
+  <file_path>$input_file$</file_path>
+  <operation>validate_structure</operation>
+</data_analyzer>
+
+<!-- CONTINUING TASK ACTION EXAMPLE -->
+<memory_optimizer>
+  <process_id>$current_process$</process_id>
+  <target_utilization>75%</target_utilization>
+</memory_optimizer>
+
+<!-- END TASK ACTION EXAMPLE -->
+<task_complete>
+  <answer>Task completed successfully</answer>
+</task_complete>
+```
 
 ### Available Tools
 {tools}
