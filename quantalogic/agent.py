@@ -630,11 +630,14 @@ class Agent(BaseModel):
         return executed_tool, response
 
     def _interpolate_variables(self, text: str) -> str:
-        """Interpolate variables using $var1$ syntax in the given text."""
+        """Interpolate variables using $var$ syntax in the given text."""
         try:
             import re
             for var in self.variable_store.keys():
-                text = re.sub(rf'\${var}\$', re.escape(self.variable_store[var]), text)
+                # Escape the variable name for regex, but use raw value for replacement
+                pattern = rf'\${re.escape(var)}\$'
+                replacement = self.variable_store[var]
+                text = re.sub(pattern, replacement, text)
             return text
         except Exception as e:
             logger.error(f"Error in _interpolate_variables: {str(e)}")
