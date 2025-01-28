@@ -51,7 +51,7 @@ def handle_date_command(lines: List[str], args: List[str], console: Console,
                       session: PromptSession, history_manager: InputHistoryManager) -> None:
     """Display current date and time."""
     from datetime import datetime
-    console.print(f"[yellow]Current datetime: {datetime.now().isoformat()}[/yellow]")
+    console.print(f"[bold #ffaa00]Current datetime: {datetime.now().isoformat()}[/bold #ffaa00]")
 
 @registry.register("/edit", "Edit specific line: /edit <line_number>")
 def handle_edit_command(lines: List[str], args: List[str], console: Console,
@@ -60,14 +60,14 @@ def handle_edit_command(lines: List[str], args: List[str], console: Console,
     try:
         edit_line_num = int(args[0]) - 1
         if 0 <= edit_line_num < len(lines):
-            console.print(f"[bold]Editing Line {edit_line_num + 1}:[/bold] {lines[edit_line_num]}")
+            console.print(f"[bold #1d3557]Editing Line {edit_line_num + 1}:[/bold #1d3557] {lines[edit_line_num]}")  # Dark blue
             new_line = session.prompt("New content: ")
             history_manager.push_state(lines)
             lines[edit_line_num] = new_line
         else:
-            console.print("[red]Invalid line number.[/red]")
+            console.print("[bold #ff4444]Invalid line number.[/bold #ff4444]")
     except (ValueError, IndexError):
-        console.print("[red]Invalid edit command. Usage: /edit <line_number>[/red]")
+            console.print("[bold #ff4444]Invalid edit command. Usage: /edit <line_number>[/bold #ff4444]")
 
 @registry.register("/delete", "Delete specific line: /delete <line_number>")
 def handle_delete_command(lines: List[str], args: List[str], console: Console,
@@ -82,7 +82,7 @@ def handle_delete_command(lines: List[str], args: List[str], console: Console,
         else:
             console.print("[red]Invalid line number.[/red]")
     except (ValueError, IndexError):
-        console.print("[red]Invalid delete command. Usage: /delete <line_number>[/red]")
+            console.print("[bold #ff4444]Invalid delete command. Usage: /delete <line_number>[/bold #ff4444]")
 
 @registry.register("/replace", "Search and replace: /replace <search> <replace>")
 def handle_replace_command(lines: List[str], args: List[str], console: Console,
@@ -93,9 +93,9 @@ def handle_replace_command(lines: List[str], args: List[str], console: Console,
         history_manager.push_state(lines)
         for i in range(len(lines)):
             lines[i] = lines[i].replace(search_str, replace_str)
-        console.print("[bold]Search and replace completed.[/bold]")
+            console.print("[bold #00cc66]Search and replace completed.[/bold #00cc66]")
     except (ValueError, IndexError):
-        console.print("[red]Invalid replace command. Usage: /replace <search_str> <replace_str>[/red]")
+            console.print("[bold #ff4444]Invalid replace command. Usage: /replace <search_str> <replace_str>[/bold #ff4444]")
 
 @registry.register("/model", "Show current AI model") 
 def handle_model_command(lines: List[str], args: List[str], console: Console,
@@ -104,11 +104,11 @@ def handle_model_command(lines: List[str], args: List[str], console: Console,
     try:
         current_agent = AgentRegistry.get_agent("main_agent")
         if current_agent:
-            console.print(f"[yellow]Current AI model: {current_agent.model_name}[/yellow]")
+            console.print(f"[bold #ffaa00]Current AI model: {current_agent.model_name}[/bold #ffaa00]")
         else:
-            console.print("[yellow]No active agent found.[/yellow]")
+            console.print("[bold #ffaa00]No active agent found.[/bold #ffaa00]")
     except ValueError as e:
-        console.print(f"[red]Error: {str(e)}[/red]")
+            console.print(f"[bold #ff4444]Error: {str(e)}[/bold #ff4444]")
 
 @registry.register("/setmodel", "Set AI model name: /setmodel <name>")
 def handle_set_model_command(lines: List[str], args: List[str], console: Console,
@@ -116,14 +116,14 @@ def handle_set_model_command(lines: List[str], args: List[str], console: Console
     from quantalogic.agent_factory import AgentRegistry
     try:
         if len(args) < 1:
-            console.print("[red]Error: Model name required. Usage: /setmodel <name>[/red]")
+            console.print("[bold #ff4444]Error: Model name required. Usage: /setmodel <name>[/bold #ff4444]")
             return
             
         model_name = args[0]
         current_agent = AgentRegistry.get_agent("main_agent")
         if current_agent:
             current_agent.model_name = model_name
-            console.print(f"[green]Model name updated to: {model_name}[/green]")
+            console.print(f"[bold #00cc66]Model name updated to: {model_name}[/bold #00cc66]")
         else:
             console.print("[yellow]No active agent found.[/yellow]")
     except ValueError as e:
@@ -151,7 +151,7 @@ def get_multiline_input(console: Console) -> str:
     @bindings.add("c-z")
     def _(event):
         if history_manager.undo(lines):
-            console.print("[bold]Undo successful.[/bold]")
+            console.print("[bold #00cc66]Undo successful.[/bold #00cc66]")
 
 
     from prompt_toolkit.completion import Completer, Completion
@@ -282,11 +282,11 @@ def get_multiline_input(console: Console) -> str:
         return ""
 
     custom_style = Style.from_dict({
-        'completion-menu.completion': 'bg:#008888 #ffffff',
-        'completion-menu.completion.current': 'bg:#00aaaa #000000 bold',
-        'scrollbar.background': 'bg:#88aaaa',
-        'scrollbar.button': 'bg:#222222',
-        'documentation': 'bg:#004444 #ffffff',
+        'completion-menu.completion': 'bg:#005577 #ffffff',
+        'completion-menu.completion.current': 'bg:#007799 #ffffff bold',
+        'scrollbar.background': 'bg:#6699aa',
+        'scrollbar.button': 'bg:#444444',
+        'documentation': 'bg:#003366 #ffffff',
     })
 
     session = PromptSession(
