@@ -103,7 +103,7 @@ Every response must contain exactly two XML blocks:
 </memory_optimizer>
 ```
 
-- **Task Completion Example**:
+- **Task Completion Example / When a task is completed**:
 ```xml
 <task_complete>
   <answer>Task completed successfully</answer>
