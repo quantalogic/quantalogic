@@ -734,23 +734,32 @@ class Agent(BaseModel):
         return summary.response
 
     def _generate_task_summary(self, content: str) -> str:
-        """Generate a concise summary of the given content using the generative model.
+        """Generate a concise task-focused summary using the generative model.
 
         Args:
             content (str): The content to summarize
 
         Returns:
-            str: Generated summary
+            str: Generated task summary
         """
         try:
             prompt = (
-                "Rewrite this task in a precise, dense, and concise manner:\n"
-                f"{content}\n"
-                "Summary should be 2-3 sentences maximum. No extra comments should be added.\n"
+                "Create an ultra-concise task summary that captures ONLY: \n"
+                "1. Primary objective/purpose\n"
+                "2. Core actions/requirements\n"
+                "3. Desired end-state/outcome\n\n"
+                "Guidelines:\n"
+                "- Use imperative voice\n"
+                "- Exclude background, explanations, and examples\n"
+                "- Compress information using semantic density\n"
+                "- Strict 2-3 sentence maximum (under 50 words)\n"
+                "- Format: 'Concise Task Summary: [Your summary]'\n\n"
+                f"Input Task Description:\n{content}\n\n"
+                "Concise Task Summary:"
             )
             result = self.model.generate(prompt=prompt)
             logger.debug(f"Generated summary: {result.response}")
-            return result.response
+            return result.response.strip() + "\n🚨 The FULL task is in <task> tag in the previous messages.\n"
         except Exception as e:
             logger.error(f"Error generating summary: {str(e)}")
             return f"Summary generation failed: {str(e)}"
