@@ -30,14 +30,16 @@ class SQLQueryTool(Tool):
             arg_type="int",
             description="1-based starting row number for results",
             required=True,
-            example="1"
+            example="1",
+            default="1"
         ),
         ToolArgument(
             name="end_row",
             arg_type="int",
             description="1-based ending row number for results",
             required=True,
-            example="100"
+            example="100",
+            default="100"
         ),
     ]
     connection_string: str = Field(
