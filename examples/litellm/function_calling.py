@@ -23,8 +23,8 @@ from litellm import Router, acompletion
 from loguru import logger
 from pydantic import BaseModel, Field
 
-#MODEL_NAME = "openrouter/openai/gpt-4o-mini"
-MODEL_NAME = "ollama/qwen2.5-coder:14b"
+MODEL_NAME = "openrouter/openai/gpt-4o-mini"
+# MODEL_NAME = "openrouter/anthropic/claude-3-opus"  # Alternative option
 
 # Load environment variables
 load_dotenv()
@@ -100,9 +100,10 @@ class ReActAgent:
         model_name: str = MODEL_NAME,
         max_steps: int = 10,
         temperature: float = 0.7,
-        functions: Optional[List[Callable]] = None
+        functions: Optional[List[Callable]] = None,
+        stream_handlers: Optional[List[Callable[[str, str], None]]] = None
     ):
-        logger.debug(f"Initializing ReActAgent")
+        logger.debug("Initializing ReActAgent")
         logger.debug(f"Model: {model_name}")
         logger.debug(f"Max Steps: {max_steps}")
         logger.debug(f"Temperature: {temperature}")
@@ -114,10 +115,12 @@ class ReActAgent:
         self.functions_schema = self._generate_function_schema()
         self.system_prompt = self._generate_system_prompt()
         self.conversation_history: List[AgentObservation] = []
+        self.stream_handlers = stream_handlers or []
         
         logger.debug(f"Available functions: {list(self.function_map.keys())}")
-        logger.debug(f"Functions schema generated")
-        
+        logger.debug("Functions schema generated")
+        logger.debug(f"Stream handlers registered: {len(self.stream_handlers)}")
+
     def _initialize_functions(self, functions: Optional[List[Callable]]) -> Dict[str, Callable]:
         """Initialize functions with either provided list or defaults."""
         logger.debug("Initializing agent functions")
@@ -151,23 +154,29 @@ class ReActAgent:
             logger.info("Added default print_answer function")
             
         return function_map
-    
+
     def _create_default_functions(self) -> Dict[str, Callable]:
-        """Create default math functions with metadata."""
+        """Create default math functions with metadata and type annotations."""
+        def add(a: float, b: float) -> float: return a + b
+        def subtract(a: float, b: float) -> float: return a - b
+        def multiply(a: float, b: float) -> float: return a * b
+        def divide(a: float, b: float) -> Optional[float]: return a / b if b != 0 else None
+        def sqrt(a: float) -> Optional[float]: return a**0.5 if a >= 0 else None
+
         base_functions = {
-            "add": lambda a, b: float(a + b),
-            "subtract": lambda a, b: float(a - b),
-            "multiply": lambda a, b: float(a * b),
-            "divide": lambda a, b: float(a / b) if b != 0 else None,
-            "sqrt": lambda a: float(a ** 0.5) if a >= 0 else None,
+            "add": add,
+            "subtract": subtract,
+            "multiply": multiply,
+            "divide": divide,
+            "sqrt": sqrt,
             "print_answer": self._create_print_answer()
         }
         
         for name, func in base_functions.items():
             func.__name__ = name
-            func.__doc__ = f"Execute {name} operation"
+            func.__doc__ = f"Execute {name} operation: {func.__name__}({inspect.signature(func)})"
             
-        logger.info("Initialized default math functions")
+        logger.info("Initialized default math functions with type annotations")
         return base_functions
     
     def _create_print_answer(self) -> Callable:
@@ -242,15 +251,14 @@ Follow these guidelines for each interaction:
    - Break down complex calculations
    - Consider edge cases
 
-
-   Express your reasoning in Xml:
-
-
-
 2. ACTION:
    - Use appropriate functions for calculations
    - Validate inputs before operations
    - Handle errors gracefully
+   - When streaming:
+     * Emit FULL tool parameters in FIRST chunk
+     * Maintain valid JSON between updates
+     * Never mix text content with tool calls
 
 3. OBSERVATION:
    - Analyze function results
@@ -278,41 +286,12 @@ Remember: ALWAYS use print_answer as the final step to display results.
         logger.debug(f"Messages: {messages}")
         
         try:
-            logger.debug("Attempting async completion")
-            response = await acompletion(
-                model=self.model_name,
-                messages=messages,
-                tools=[{"type": "function", "function": func} for func in self.functions_schema],
-                temperature=self.temperature,
-                extra_headers={
-                    "HTTP-Referer": os.getenv("OR_SITE_URL", ""),
-                    "X-Title": os.getenv("OR_APP_NAME", "")
-                }
-            )
-            
-            assistant_message = response.choices[0].message
-            
-            logger.debug(f"Assistant message content: {assistant_message.content}")
-            logger.debug(f"Tool calls present: {bool(assistant_message.tool_calls)}")
-            
-            if tool_calls := assistant_message.tool_calls:
-                tool_call = tool_calls[0]
-                logger.info("Function call detected")
-                logger.debug(f"Function name: {tool_call.function.name}")
-                logger.debug(f"Function arguments: {tool_call.function.arguments}")
-                
-                return AgentAction(
-                    thought=assistant_message.content or '',
-                    action=tool_call.function.name,
-                    action_input=json.loads(tool_call.function.arguments)
-                )
-            
-            logger.info("Returning text response")
-            return assistant_message.content or ''
+            if self.stream_handlers:
+                return await self._process_streaming_step(messages)
+            return await self._process_non_streaming_step(messages)
             
         except Exception as e:
             logger.exception(f"Error in process_step: {str(e)}")
-            
             if "APIError" in str(type(e)):
                 logger.error("""
                 OpenRouter API Error Troubleshooting:
@@ -322,8 +301,132 @@ Remember: ALWAYS use print_answer as the final step to display results.
                 4. Check network connectivity
                 5. Verify OpenRouter service status
                 """)
-            
             raise RuntimeError(f"Process step failed: {str(e)}")
+
+    async def _process_streaming_step(self, messages: List[Dict[str, str]]) -> Union[str, AgentAction]:
+        """Handle streaming response with token callbacks."""
+        logger.debug("Processing streaming response")
+        
+        # Block Ollama models from streaming function calls
+        if "ollama" in self.model_name.lower():
+            logger.error("Ollama models don't support function calling in stream mode")
+            raise RuntimeError("Streaming function calls not supported with Ollama models")
+
+        stream = await acompletion(
+            model=self.model_name,
+            messages=messages,
+            tools=[{"type": "function", "function": func} for func in self.functions_schema],
+            temperature=self.temperature,
+            stream=True,
+            extra_headers={
+                "HTTP-Referer": os.getenv("OR_SITE_URL", ""),
+                "X-Title": os.getenv("OR_APP_NAME", "")
+            }
+        )
+        
+        content = []
+        tool_calls = []
+        async for chunk in stream:
+            delta = chunk.choices[0].delta
+            
+            # Handle content streaming
+            if delta.content:
+                token = delta.content
+                content.append(token)
+                for handler in self.stream_handlers:
+                    handler('token_stream', token)
+            
+            # Handle tool call streaming
+            if delta.tool_calls:
+                for tool_call in delta.tool_calls:
+                    index = tool_call.index
+                    if index >= len(tool_calls):
+                        tool_calls.append({
+                            "id": "",
+                            "function": {"name": "", "arguments": ""},
+                            "type": "function"
+                        })
+                    current_call = tool_calls[index]
+                    
+                    # Process tool call components
+                    if tool_call.id:
+                        current_call["id"] += tool_call.id
+                        for handler in self.stream_handlers:
+                            handler('tool_id_stream', tool_call.id)
+                    if tool_call.function.name:
+                        current_call["function"]["name"] += tool_call.function.name
+                        for handler in self.stream_handlers:
+                            handler('tool_name_stream', tool_call.function.name)
+                    if tool_call.function.arguments:
+                        # Validate incremental JSON to maintain parser state
+                        try:
+                            current_args = current_call["function"]["arguments"]
+                            test_args = current_args + tool_call.function.arguments
+                            json.loads(test_args)  # Validate JSON integrity
+                            current_call["function"]["arguments"] = test_args
+                        except json.JSONDecodeError:
+                            # If invalid, append raw data but warn
+                            current_call["function"]["arguments"] += tool_call.function.arguments
+                            logger.warning("Partial JSON arguments failed validation")
+                        
+                        for handler in self.stream_handlers:
+                            handler('tool_args_stream', tool_call.function.arguments)
+        
+        # Construct final message
+        assistant_message = type('obj', (), {
+            'content': ''.join(content),
+            'tool_calls': [type('obj', (), {
+                'id': tc['id'],
+                'function': type('obj', (), {
+                    'name': tc['function']['name'],
+                    'arguments': tc['function']['arguments']
+                }),
+                'type': 'function'
+            }) for tc in tool_calls] if tool_calls else None
+        })
+        
+        return self._parse_assistant_message(assistant_message)
+
+    async def _process_non_streaming_step(self, messages: List[Dict[str, str]]) -> Union[str, AgentAction]:
+        """Handle standard non-streaming response."""
+        logger.debug("Processing non-streaming response")
+        response = await acompletion(
+            model=self.model_name,
+            messages=messages,
+            tools=[{"type": "function", "function": func} for func in self.functions_schema],
+            temperature=self.temperature,
+            extra_headers={
+                "HTTP-Referer": os.getenv("OR_SITE_URL", ""),
+                "X-Title": os.getenv("OR_APP_NAME", "")
+            }
+        )
+        return self._parse_assistant_message(response.choices[0].message)
+
+    def _parse_assistant_message(self, message: Any) -> Union[str, AgentAction]:
+        """Parse assistant message structure."""
+        logger.debug(f"Assistant message content: {getattr(message, 'content', '')}")
+        logger.debug(f"Tool calls present: {bool(getattr(message, 'tool_calls', None))}")
+        
+        if getattr(message, 'tool_calls', None):
+            tool_call = message.tool_calls[0]
+            logger.info("Function call detected")
+            logger.debug(f"Function name: {tool_call.function.name}")
+            logger.debug(f"Function arguments: {tool_call.function.arguments}")
+            
+            try:
+                arguments = json.loads(tool_call.function.arguments)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse function arguments: {e}")
+                arguments = {"error": "Invalid JSON parameters"}
+            
+            return AgentAction(
+                thought=message.content or '',
+                action=tool_call.function.name,
+                action_input=arguments
+            )
+        
+        logger.info("Returning text response")
+        return message.content or ''
 
     async def run(self, query: str) -> str:
         """Execute the ReAct agent's reasoning chain."""
@@ -421,19 +524,20 @@ Remember: ALWAYS use print_answer as the final step to display results.
             logger.error(f"Final answer formatting failed: {str(e)}")
             return answer
 
+
+def evaluate_expression(expression: str) -> float:
+    """Evaluate mathematical expressions safely.
+    Supports basic arithmetic operations (+-*/) and parentheses.
+    Example: evaluate_expression('(3+5)*2') -> 16.0
+    """
+    try:
+        return float(eval(expression))
+    except:
+        return "Error: Invalid expression"
+
 def think(step_progression: str, envisioned_plan: str, problem_to_solve: str, constraints: str, expected_results: str) -> str:
     """
     Generates a detailed XML representation of the agent's thought process.
-    
-    Args:
-        step_progression (str): Description of the steps taken towards solving the problem.
-        envisioned_plan (str): The planned approach to tackle the problem.
-        problem_to_solve (str): The specific issue or challenge being addressed.
-        constraints (str): Any limitations or restrictions that must be considered.
-        expected_results (str): The anticipated outcomes of the proposed plan.
-    
-    Returns:
-        str: An XML-formatted string encapsulating the thought process details.
     """
     # Escape special XML characters
     step_progression = sax.escape(step_progression)
@@ -508,7 +612,18 @@ async def main():
         logger.error(str(e))
         return
     
-    agent = ReActAgent(functions=[think])   
+    # Enhanced stream handler with type annotations
+    def console_stream_handler(event: str, token: str) -> None:
+        """Basic console output for streaming events with type hints"""
+        if event == 'token_stream':
+            print(token, end='', flush=True)
+        elif event.startswith('tool_'):
+            logger.debug(f"Tool call chunk: {event} - {repr(token)}")
+
+    agent = ReActAgent(
+        functions=[think, evaluate_expression],
+        stream_handlers=[console_stream_handler]  # Enable streaming
+    )
 
     logger.info("ReAct Agent initialized")
     
