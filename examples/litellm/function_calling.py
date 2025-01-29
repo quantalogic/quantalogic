@@ -13,6 +13,7 @@
 import inspect
 import json
 import os
+import xml.sax.saxutils as sax
 from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -22,7 +23,8 @@ from litellm import Router, acompletion
 from loguru import logger
 from pydantic import BaseModel, Field
 
-MODEL_NAME = "openrouter/openai/gpt-4o-mini"
+#MODEL_NAME = "openrouter/openai/gpt-4o-mini"
+MODEL_NAME = "ollama/qwen2.5-coder:14b"
 
 # Load environment variables
 load_dotenv()
@@ -240,6 +242,11 @@ Follow these guidelines for each interaction:
    - Break down complex calculations
    - Consider edge cases
 
+
+   Express your reasoning in Xml:
+
+
+
 2. ACTION:
    - Use appropriate functions for calculations
    - Validate inputs before operations
@@ -414,6 +421,86 @@ Remember: ALWAYS use print_answer as the final step to display results.
             logger.error(f"Final answer formatting failed: {str(e)}")
             return answer
 
+def think(step_progression: str, envisioned_plan: str, problem_to_solve: str, constraints: str, expected_results: str) -> str:
+    """
+    Generates a detailed XML representation of the agent's thought process.
+    
+    Args:
+        step_progression (str): Description of the steps taken towards solving the problem.
+        envisioned_plan (str): The planned approach to tackle the problem.
+        problem_to_solve (str): The specific issue or challenge being addressed.
+        constraints (str): Any limitations or restrictions that must be considered.
+        expected_results (str): The anticipated outcomes of the proposed plan.
+    
+    Returns:
+        str: An XML-formatted string encapsulating the thought process details.
+    """
+    # Escape special XML characters
+    step_progression = sax.escape(step_progression)
+    envisioned_plan = sax.escape(envisioned_plan)
+    problem_to_solve = sax.escape(problem_to_solve)
+    constraints = sax.escape(constraints)
+    expected_results = sax.escape(expected_results)
+    
+    return f"""
+    <thought_process>
+        <problem_to_solve>{problem_to_solve}</problem_to_solve>
+        <constraints>{constraints}</constraints>
+        <envisioned_plan>{envisioned_plan}</envisioned_plan>
+        <expected_results>{expected_results}</expected_results>
+        <step_progression>
+            {step_progression}
+        </step_progression>
+        <detailed_reasoning>
+            <step_breakdown>
+                <reasoning_step>
+                    <description>Initial Problem Analysis</description>
+                    <details>Analyzed the problem statement to understand requirements</details>
+                </reasoning_step>
+                <reasoning_step>
+                    <description>Plan Development</description>
+                    <details>Developed a step-by-step approach to solve the problem</details>
+                </reasoning_step>
+                <reasoning_step>
+                    <description>Constraints Consideration</description>
+                    <details>Reviewed constraints to ensure compliance</details>
+                </reasoning_step>
+            </step_breakdown>
+            <action_plan>
+                <planned_actions>
+                    <action>Execute Step 1</action>
+                    <action>Execute Step 2</action>
+                    <action>Execute Step 3</action>
+                </planned_actions>
+            </action_plan>
+            <risk_assessment>
+                <potential_risks>Identified potential risks and developed mitigation strategies</potential_risks>
+            </risk_assessment>
+        </detailed_reasoning>
+        <observations>
+            <observation>Observed that the initial approach is feasible</observation>
+            <observation>Noted potential areas for optimization</observation>
+        </observations>
+        <reflection>
+            <reflection_step>
+                <description>Self-Assessment</description>
+                <details>Assessed the effectiveness of the current approach</details>
+            </reflection_step>
+            <reflection_step>
+                <description>Result Evaluation</description>
+                <details>Evaluated the results against expected outcomes</details>
+            </reflection_step>
+        </reflection>
+        <final_assessment>
+            <conclusion>The proposed plan is viable and aligns with expected results</conclusion>
+            <recommendations>
+                <recommendation>Proceed with the planned steps</recommendation>
+                <recommendation>Monitor for potential risks</recommendation>
+            </recommendations>
+        </final_assessment>
+    </thought_process>
+    """
+
 async def main():
     try:
         validate_openrouter_config()
@@ -421,7 +508,8 @@ async def main():
         logger.error(str(e))
         return
     
-    agent = ReActAgent()
+    agent = ReActAgent(functions=[think])   
+
     logger.info("ReAct Agent initialized")
     
     while True:
