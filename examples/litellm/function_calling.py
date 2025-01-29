@@ -15,10 +15,10 @@ import json
 import os
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
-from litellm import acompletion
+from litellm import Router, acompletion
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -97,7 +97,8 @@ class ReActAgent:
         self,
         model_name: str = MODEL_NAME,
         max_steps: int = 10,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        functions: Optional[List[Callable]] = None
     ):
         logger.debug(f"Initializing ReActAgent")
         logger.debug(f"Model: {model_name}")
@@ -107,7 +108,7 @@ class ReActAgent:
         self.model_name = model_name
         self.max_steps = max_steps
         self.temperature = temperature
-        self.function_map = self._initialize_functions()
+        self.function_map = self._initialize_functions(functions)
         self.functions_schema = self._generate_function_schema()
         self.system_prompt = self._generate_system_prompt()
         self.conversation_history: List[AgentObservation] = []
@@ -115,37 +116,82 @@ class ReActAgent:
         logger.debug(f"Available functions: {list(self.function_map.keys())}")
         logger.debug(f"Functions schema generated")
         
-    def _initialize_functions(self) -> Dict[str, callable]:
-        """Initialize available functions with enhanced error handling."""
+    def _initialize_functions(self, functions: Optional[List[Callable]]) -> Dict[str, Callable]:
+        """Initialize functions with either provided list or defaults."""
         logger.debug("Initializing agent functions")
+        
+        if functions:
+            return self._process_custom_functions(functions)
+        return self._create_default_functions()
+    
+    def _process_custom_functions(self, functions: List[Callable]) -> Dict[str, Callable]:
+        """Process user-provided functions with validation."""
+        function_map = {}
+        for func in functions:
+            if not callable(func):
+                raise ValueError(f"Provided function {func} is not callable")
+            
+            name = getattr(func, '__name__', None)
+            if not name:
+                raise ValueError(f"Function {func} must have a __name__ attribute")
+            
+            # Add metadata if missing
+            if not func.__doc__:
+                func.__doc__ = f"Execute {name} operation"
+                logger.warning(f"Added default docstring to function: {name}")
+            
+            function_map[name] = func
+            logger.info(f"Registered custom function: {name}")
+        
+        # Ensure print_answer is always present
+        if 'print_answer' not in function_map:
+            function_map['print_answer'] = self._create_print_answer()
+            logger.info("Added default print_answer function")
+            
+        return function_map
+    
+    def _create_default_functions(self) -> Dict[str, Callable]:
+        """Create default math functions with metadata."""
         base_functions = {
             "add": lambda a, b: float(a + b),
             "subtract": lambda a, b: float(a - b),
             "multiply": lambda a, b: float(a * b),
             "divide": lambda a, b: float(a / b) if b != 0 else None,
             "sqrt": lambda a: float(a ** 0.5) if a >= 0 else None,
-            "print_answer": lambda answer: str(answer)
+            "print_answer": self._create_print_answer()
         }
         
-        # Add function metadata
         for name, func in base_functions.items():
             func.__name__ = name
             func.__doc__ = f"Execute {name} operation"
             
-        logger.debug(f"Initialized {len(base_functions)} base functions")
+        logger.info("Initialized default math functions")
         return base_functions
+    
+    def _create_print_answer(self) -> Callable:
+        """Create standard print_answer function with metadata."""
+        def print_answer(answer: Union[str, float, int]) -> str:
+            """Format final answer for user presentation."""
+            return str(answer)
+        
+        print_answer.__name__ = "print_answer"
+        return print_answer
 
     def _generate_function_schema(self) -> List[Dict[str, Any]]:
         """Generate enhanced OpenAI-compatible function schemas."""
         schemas = []
         for func_name, func in self.function_map.items():
-            signature = inspect.signature(func)
+            try:
+                signature = inspect.signature(func)
+            except ValueError:
+                logger.warning(f"Could not inspect signature for {func_name}, using default schema")
+                signature = inspect.Signature()
             
             properties = {}
             required = []
             
             for param_name, param in signature.parameters.items():
-                param_type = "number" if func_name != "print_answer" else "string"
+                param_type = self._map_param_type(param.annotation)
                 properties[param_name] = {
                     "type": param_type,
                     "description": f"Parameter {param_name} for {func_name} operation"
@@ -163,9 +209,24 @@ class ReActAgent:
                 }
             })
         return schemas
+    
+    def _map_param_type(self, annotation: Any) -> str:
+        """Map Python types to JSON schema types."""
+        type_map = {
+            int: "number",
+            float: "number",
+            str: "string",
+            bool: "boolean"
+        }
+        return type_map.get(annotation, "string")
 
     def _generate_system_prompt(self) -> str:
         """Generate comprehensive system prompt with enhanced guidelines."""
+        function_list = "\n".join(
+            f"- {name}: {func.__doc__}" 
+            for name, func in self.function_map.items()
+        )
+        
         return f"""You are an advanced ReAct (Reasoning + Acting) agent that excels at:
 1. Breaking down complex problems into steps
 2. Maintaining a clear thought process
@@ -195,7 +256,7 @@ Follow these guidelines for each interaction:
    - Use print_answer only for final results
 
 Available Functions:
-{json.dumps(self._generate_function_schema(), indent=2)}
+{function_list}
 
 Remember: ALWAYS use print_answer as the final step to display results.
 """
@@ -216,18 +277,12 @@ Remember: ALWAYS use print_answer as the final step to display results.
                 messages=messages,
                 tools=[{"type": "function", "function": func} for func in self.functions_schema],
                 temperature=self.temperature,
-                # Add OpenRouter-specific parameters
                 extra_headers={
                     "HTTP-Referer": os.getenv("OR_SITE_URL", ""),
                     "X-Title": os.getenv("OR_APP_NAME", "")
                 }
             )
             
-            # Log raw response details
-            logger.debug(f"Completion response received")
-            logger.debug(f"Response choices: {len(response.choices)}")
-            
-            # Extract the first choice message from the response
             assistant_message = response.choices[0].message
             
             logger.debug(f"Assistant message content: {assistant_message.content}")
@@ -249,10 +304,8 @@ Remember: ALWAYS use print_answer as the final step to display results.
             return assistant_message.content or ''
             
         except Exception as e:
-            # Log detailed error information
             logger.exception(f"Error in process_step: {str(e)}")
             
-            # Specific error handling for common LiteLLM/OpenRouter issues
             if "APIError" in str(type(e)):
                 logger.error("""
                 OpenRouter API Error Troubleshooting:
@@ -285,7 +338,6 @@ Remember: ALWAYS use print_answer as the final step to display results.
                     return result
                 
                 if isinstance(result, AgentAction):
-                    # Track assistant's action in messages
                     messages.append({
                         "role": "assistant",
                         "content": result.thought,
@@ -299,12 +351,10 @@ Remember: ALWAYS use print_answer as the final step to display results.
                         }]
                     })
                     
-                    # Execute action and record observation
                     observation = self._execute_action(result)
                     last_observation = observation
                     self.conversation_history.append(observation)
                     
-                    # Track tool response in messages
                     messages.append({
                         "role": "tool",
                         "content": observation.content,
@@ -314,11 +364,9 @@ Remember: ALWAYS use print_answer as the final step to display results.
                     logger.debug(f"Action executed: {result.action}")
                     logger.debug(f"Observation: {observation.content}")
                     
-                    # Directly check for completion after successful action
                     if result.action == "print_answer":
                         return observation.content.split(":")[-1].strip()
                     
-                    # Early exit if we have a numerical result
                     if result.action == "add" and "result" in observation.content.lower():
                         answer = observation.content.split(":")[-1].strip()
                         return await self._trigger_final_answer(answer, messages)
