@@ -4,209 +4,355 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "litellm>=1.59.8",
-#     "loguru"
+#     "loguru",
+#     "pydantic>=2.0.0",
+#     "python-dotenv"
 # ]
 # ///
 
 import inspect
 import json
-from typing import Any, Dict, List
+import os
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union
 
-from litellm import completion
+from dotenv import load_dotenv
+from litellm import Router, acompletion
 from loguru import logger
+from pydantic import BaseModel, Field
 
-# Configure logging
-logger.add("function_calling.log", rotation="10 MB")
+MODEL_NAME = "openrouter/openai/gpt-4o-mini"
 
-MODEL_NAME = "ollama/llama3.1:latest"
+# Load environment variables
+load_dotenv()
 
-def add(a: float, b: float) -> float:
-    """Add two numbers."""
-    return float(a + b)
+# Enhanced logging configuration
+logger.add(
+    f"logs/react_agent_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
+    rotation="10 MB",
+    compression="zip",
+    backtrace=True,
+    diagnose=True,
+    level="DEBUG"
+)
 
-def subtract(a: float, b: float) -> float:
-    """Subtract two numbers."""
-    return float(a - b)
-
-def multiply(a: float, b: float) -> float:
-    """Multiply two numbers."""
-    return float(a * b)
-
-def divide(a: float, b: float) -> float:
-    """Divide two numbers."""
-    if b == 0:
-        raise ValueError("Cannot divide by zero")
-    return float(a / b)
-
-def sqrt(a: float) -> float:
-    """Calculate the square root of a number."""
-    if a < 0:
-        raise ValueError("Cannot calculate square root of negative number")
-    return float(a ** 0.5)
-
-def print_answer(answer: str) -> str:
-    """Format and return the final answer."""
-    return answer
-
-# Function map
-function_map = {
-    "add": add,
-    "subtract": subtract,
-    "multiply": multiply,
-    "divide": divide,
-    "sqrt": sqrt,
-    "print_answer": print_answer
-}
-
-def generate_function_schema() -> list:
-    """Generate OpenAI-compatible function schemas."""
-    functions = []
-    for func_name, func in function_map.items():
-        params = {}
-        signature = inspect.signature(func)
-        for param_name, param in signature.parameters.items():
-            params[param_name] = {
-                "type": "number" if param_name != "answer" else "string",
-                "description": f"Parameter {param_name}"
-            }
+def validate_openrouter_config():
+    """Validate OpenRouter API configuration."""
+    logger.debug("Validating OpenRouter configuration")
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    site_url = os.getenv("OR_SITE_URL", "https://github.com/raphaelmansuy/quantalogic")
+    app_name = os.getenv("OR_APP_NAME", "QuantaLogic ReAct Agent")
+    
+    logger.debug(f"Site URL: {site_url}")
+    logger.debug(f"App Name: {app_name}")
+    
+    if not api_key:
+        logger.error("""
+        ❌ OpenRouter API Configuration Error
         
-        functions.append({
-            "name": func_name,
-            "description": func.__doc__ or "",
-            "parameters": {
-                "type": "object",
-                "properties": params,
-                "required": list(params.keys())
-            }
-        })
-    return functions
-
-def generate_system_prompt(functions: list) -> str:
-    """Generate the system prompt with function descriptions."""
-    prompt = [
-        "You are a ReAct agent designed to solve problems through multi-step reasoning and actions.\n",
-        "Available functions:\n"
-    ]
+        Required steps:
+        1. Sign up at https://openrouter.ai/
+        2. Create an API key in your account settings
+        3. Set environment variables:
+           - OPENROUTER_API_KEY: Your OpenRouter API key
+           - Optional: OR_SITE_URL (default: GitHub repo)
+           - Optional: OR_APP_NAME (default: QuantaLogic ReAct Agent)
+        
+        Example .env file:
+        OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+        OR_SITE_URL=https://github.com/raphaelmansuy/quantalogic
+        OR_APP_NAME=QuantaLogic ReAct Agent
+        """)
+        raise ValueError("OpenRouter API Key is required. Please configure your environment.")
     
-    for func in functions:
-        name = func['name']
-        params = ', '.join(func['parameters']['properties'].keys())
-        desc = func['description']
-        prompt.append(f"{name}({params}): {desc}\n")
-        prompt.append("   Parameters:\n")
-        for param_name, param_info in func['parameters']['properties'].items():
-            prompt.append(f"   - {param_name} ({param_info['type']}): {param_info['description']}\n")
-        prompt.append("\n")
+    # Set environment variables for LiteLLM
+    os.environ["OPENROUTER_API_KEY"] = api_key
+    os.environ["OR_SITE_URL"] = site_url
+    os.environ["OR_APP_NAME"] = app_name
+    
+    logger.info(f"OpenRouter configuration validated successfully")
+    logger.debug(f"API Key present: {bool(api_key)}")
+    logger.debug(f"Site URL: {site_url}")
+    logger.debug(f"App Name: {app_name}")
 
-    prompt.append("""
-Guidelines:
-1. For calculations, ALWAYS follow these two steps:
-   a. First, perform the calculation using the appropriate function
-   b. Then, use print_answer to display the result
-2. Never skip the print_answer step - it's required to show results
-3. Format calculation results clearly, e.g. "The result is 42"
+class ThoughtProcess(str, Enum):
+    REASONING = "reasoning"
+    OBSERVATION = "observation"
+    ACTION = "action"
+    REFLECTION = "reflection"
 
-""")
-    return ''.join(prompt)
+class AgentAction(BaseModel):
+    thought: str = Field(..., description="Current reasoning step")
+    action: str = Field(..., description="Function to execute")
+    action_input: Dict[str, Any] = Field(..., description="Function parameters")
+    
+class AgentObservation(BaseModel):
+    thought_type: ThoughtProcess
+    content: str
+    timestamp: datetime = Field(default_factory=datetime.now)
 
-def parse_arguments(arguments: str) -> Dict[str, Any]:
-    """Parse and validate function arguments."""
+class ReActAgent:
+    def __init__(
+        self,
+        model_name: str = MODEL_NAME,
+        max_steps: int = 10,
+        temperature: float = 0.7
+    ):
+        logger.debug(f"Initializing ReActAgent")
+        logger.debug(f"Model: {model_name}")
+        logger.debug(f"Max Steps: {max_steps}")
+        logger.debug(f"Temperature: {temperature}")
+        
+        self.model_name = model_name
+        self.max_steps = max_steps
+        self.temperature = temperature
+        self.function_map = self._initialize_functions()
+        self.functions_schema = self._generate_function_schema()
+        self.system_prompt = self._generate_system_prompt()
+        self.conversation_history: List[AgentObservation] = []
+        
+        logger.debug(f"Available functions: {list(self.function_map.keys())}")
+        logger.debug(f"Functions schema generated")
+        
+    def _initialize_functions(self) -> Dict[str, callable]:
+        """Initialize available functions with enhanced error handling."""
+        logger.debug("Initializing agent functions")
+        base_functions = {
+            "add": lambda a, b: float(a + b),
+            "subtract": lambda a, b: float(a - b),
+            "multiply": lambda a, b: float(a * b),
+            "divide": lambda a, b: float(a / b) if b != 0 else None,
+            "sqrt": lambda a: float(a ** 0.5) if a >= 0 else None,
+            "print_answer": lambda answer: str(answer)
+        }
+        
+        # Add function metadata
+        for name, func in base_functions.items():
+            func.__name__ = name
+            func.__doc__ = f"Execute {name} operation"
+            
+        logger.debug(f"Initialized {len(base_functions)} base functions")
+        return base_functions
+
+    def _generate_function_schema(self) -> List[Dict[str, Any]]:
+        """Generate enhanced OpenAI-compatible function schemas."""
+        schemas = []
+        for func_name, func in self.function_map.items():
+            signature = inspect.signature(func)
+            
+            properties = {}
+            required = []
+            
+            for param_name, param in signature.parameters.items():
+                param_type = "number" if param_name != "answer" else "string"
+                properties[param_name] = {
+                    "type": param_type,
+                    "description": f"Parameter {param_name} for {func_name} operation"
+                }
+                if param.default == inspect.Parameter.empty:
+                    required.append(param_name)
+            
+            schemas.append({
+                "name": func_name,
+                "description": func.__doc__ or f"Execute {func_name} operation",
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": required
+                }
+            })
+        return schemas
+
+    def _generate_system_prompt(self) -> str:
+        """Generate comprehensive system prompt with enhanced guidelines."""
+        return f"""You are an advanced ReAct (Reasoning + Acting) agent that excels at:
+1. Breaking down complex problems into steps
+2. Maintaining a clear thought process
+3. Using available tools effectively
+4. Learning from previous steps
+
+Follow these guidelines for each interaction:
+
+1. REASONING:
+   - Always explain your thought process
+   - Break down complex calculations
+   - Consider edge cases
+
+2. ACTION:
+   - Use appropriate functions for calculations
+   - Validate inputs before operations
+   - Handle errors gracefully
+
+3. OBSERVATION:
+   - Analyze function results
+   - Track intermediate steps
+   - Update your understanding
+
+4. REFLECTION:
+   - Verify if the solution is complete
+   - Consider if additional steps are needed
+   - Use print_answer only for final results
+
+Available Functions:
+{json.dumps(self._generate_function_schema(), indent=2)}
+
+Remember: ALWAYS use print_answer as the final step to display results.
+"""
+
+    async def process_step(
+        self,
+        messages: List[Dict[str, str]],
+        prev_observation: Optional[AgentObservation] = None
+    ) -> Union[str, AgentAction]:
+        """Process a single step in the reasoning chain with enhanced error handling."""
+        logger.info(f"Processing step with model: {self.model_name}")
+        logger.debug(f"Messages: {messages}")
+        
+        try:
+            logger.debug("Attempting async completion")
+            response = await acompletion(
+                model=self.model_name,
+                messages=messages,
+                tools=[{"type": "function", "function": func} for func in self.functions_schema],
+                temperature=self.temperature,
+                # Add OpenRouter-specific parameters
+                extra_headers={
+                    "HTTP-Referer": os.getenv("OR_SITE_URL", ""),
+                    "X-Title": os.getenv("OR_APP_NAME", "")
+                }
+            )
+            
+            # Log raw response details
+            logger.debug(f"Completion response received")
+            logger.debug(f"Response choices: {len(response.choices)}")
+            
+            # Extract the first choice message from the response
+            assistant_message = response.choices[0].message
+            
+            logger.debug(f"Assistant message content: {assistant_message.content}")
+            logger.debug(f"Tool calls present: {bool(assistant_message.tool_calls)}")
+            
+            if tool_calls := assistant_message.tool_calls:
+                tool_call = tool_calls[0]
+                logger.info("Function call detected")
+                logger.debug(f"Function name: {tool_call.function.name}")
+                logger.debug(f"Function arguments: {tool_call.function.arguments}")
+                
+                return AgentAction(
+                    thought=assistant_message.content or '',
+                    action=tool_call.function.name,
+                    action_input=json.loads(tool_call.function.arguments)
+                )
+            
+            logger.info("Returning text response")
+            return assistant_message.content or ''
+            
+        except Exception as e:
+            # Log detailed error information
+            logger.exception(f"Error in process_step: {str(e)}")
+            
+            # Specific error handling for common LiteLLM/OpenRouter issues
+            if "APIError" in str(type(e)):
+                logger.error("""
+                OpenRouter API Error Troubleshooting:
+                1. Verify API key is correct and active
+                2. Check your account balance
+                3. Confirm model availability
+                4. Check network connectivity
+                5. Verify OpenRouter service status
+                """)
+            
+            raise RuntimeError(f"Process step failed: {str(e)}")
+
+    async def run(self, query: str) -> str:
+        """Execute the ReAct agent's reasoning chain."""
+        logger.info(f"Starting agent run with query: {query}")
+        messages = [{"role": "system", "content": self.system_prompt}]
+        messages.append({"role": "user", "content": query})
+        
+        logger.debug("Initial message stack prepared")
+        
+        steps_taken = 0
+        last_observation = None
+        
+        while steps_taken < self.max_steps:
+            logger.debug(f"Reasoning step {steps_taken + 1}")
+            
+            try:
+                result = await self.process_step(messages, last_observation)
+                
+                if isinstance(result, str):
+                    logger.info("Final result obtained")
+                    return result
+                
+                if isinstance(result, AgentAction):
+                    # Execute action and record observation
+                    observation = self._execute_action(result)
+                    last_observation = observation
+                    self.conversation_history.append(observation)
+                    
+                    logger.debug(f"Action executed: {result.action}")
+                    logger.debug(f"Observation: {observation.content}")
+                    
+                    if observation.thought_type == ThoughtProcess.REFLECTION:
+                        logger.info("Reflection reached, returning result")
+                        return observation.content
+                
+                steps_taken += 1
+                
+            except Exception as e:
+                logger.exception(f"Error in reasoning chain at step {steps_taken}")
+                raise
+        
+        logger.warning(f"Max steps ({self.max_steps}) reached without resolution")
+        return "Unable to complete task within maximum steps"
+
+    def _execute_action(self, action: AgentAction) -> AgentObservation:
+        """Execute an action and return an observation."""
+        try:
+            func = self.function_map[action.action]
+            result = func(**action.action_input)
+            
+            return AgentObservation(
+                thought_type=ThoughtProcess.OBSERVATION,
+                content=f"Action '{action.action}' completed with result: {result}"
+            )
+            
+        except Exception as e:
+            logger.exception(f"Action execution failed: {action.action}")
+            return AgentObservation(
+                thought_type=ThoughtProcess.REFLECTION,
+                content=f"Error executing {action.action}: {str(e)}"
+            )
+
+async def main():
     try:
-        args = json.loads(arguments)
-        return {k: float(v) if isinstance(v, (int, float)) and k != "answer" else v 
-                for k, v in args.items()}
-    except json.JSONDecodeError:
-        raise ValueError("Invalid JSON format in function arguments")
+        validate_openrouter_config()
     except ValueError as e:
-        raise ValueError(f"Error converting arguments: {str(e)}")
-
-def handle_function_call(tool_call: Dict, messages: List) -> tuple[Any, bool]:
-    """Execute function call and return result and completion status."""
-    function_info = tool_call['function']
-    operation = function_info['name']
-    arguments = parse_arguments(function_info['arguments'])
+        logger.error(str(e))
+        return
     
-    result = function_map[operation](**arguments)
+    agent = ReActAgent()
+    logger.info("ReAct Agent initialized")
     
-    if operation == 'print_answer':
-        print(f"\nResult: {result}")
-        return result, True
-    else:
-        observation = f"The result of the {operation} operation is: {result}"
-        print(f"Observation: {observation}")
-        messages.append({
-            "role": "tool",
-            "tool_call_id": tool_call['id'],
-            "content": str(result)
-        })
-        return result, False
-
-def main():
-    functions = generate_function_schema()
-    system_prompt = generate_system_prompt(functions)
-    messages = [{"role": "system", "content": system_prompt}]
-    
-    logger.info("Starting ReAct Agent")
-    print("Welcome to the ReAct Agent! Type 'exit' to quit.")
-    print("\nSystem Prompt:")
-    print(system_prompt)
-
     while True:
         try:
-            user_input = input("\nAsk a question or give a task: ").strip()
+            query = input("\nEnter your query (or 'exit' to quit): ").strip()
             
-            if user_input.lower() == 'exit':
-                print("Goodbye!")
+            if query.lower() == 'exit':
                 break
+                
+            result = await agent.run(query)
+            print(f"\nResult: {result}")
             
-            messages.append({"role": "user", "content": user_input})
-            last_calculation = None
-            
-            while True:
-                try:
-                    response = completion(
-                        model=MODEL_NAME,
-                        messages=messages,
-                        tools=[{"type": "function", "function": func} for func in functions]
-                    )
-                    
-                    assistant_message = response['choices'][0]['message']
-                    logger.info(f"Assistant Response: {assistant_message}")
-                    
-                    if not assistant_message.get('tool_calls'):
-                        if content := assistant_message.get('content'):
-                            print(f"\nAssistant: {content}")
-                        break
-                    
-                    messages.append({
-                        "role": "assistant",
-                        "tool_calls": assistant_message['tool_calls'],
-                        "content": assistant_message.get('content')
-                    })
-                    
-                    result, is_complete = handle_function_call(
-                        assistant_message['tool_calls'][0], 
-                        messages
-                    )
-                    
-                    if is_complete:
-                        messages = [{"role": "system", "content": system_prompt}]
-                        break
-                    else:
-                        last_calculation = result
-                        continue
-                        
-                except Exception as e:
-                    logger.error(f"Error in processing: {str(e)}")
-                    print(f"Error: {str(e)}")
-                    break
-                    
         except KeyboardInterrupt:
-            print("\nOperation cancelled by user.")
+            logger.info("Agent terminated by user")
             break
         except Exception as e:
-            logger.exception("Unexpected error")
-            print(f"An unexpected error occurred: {str(e)}")
+            logger.exception("Unexpected error in main loop")
+            print(f"An error occurred: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
