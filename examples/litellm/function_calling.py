@@ -18,7 +18,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
-from litellm import Router, acompletion
+from litellm import acompletion
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -145,7 +145,7 @@ class ReActAgent:
             required = []
             
             for param_name, param in signature.parameters.items():
-                param_type = "number" if param_name != "answer" else "string"
+                param_type = "number" if func_name != "print_answer" else "string"
                 properties[param_name] = {
                     "type": param_type,
                     "description": f"Parameter {param_name} for {func_name} operation"
@@ -268,10 +268,8 @@ Remember: ALWAYS use print_answer as the final step to display results.
     async def run(self, query: str) -> str:
         """Execute the ReAct agent's reasoning chain."""
         logger.info(f"Starting agent run with query: {query}")
-        messages = [{"role": "system", "content": self.system_prompt}]
-        messages.append({"role": "user", "content": query})
-        
-        logger.debug("Initial message stack prepared")
+        messages = [{"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": query}]
         
         steps_taken = 0
         last_observation = None
@@ -287,19 +285,45 @@ Remember: ALWAYS use print_answer as the final step to display results.
                     return result
                 
                 if isinstance(result, AgentAction):
+                    # Track assistant's action in messages
+                    messages.append({
+                        "role": "assistant",
+                        "content": result.thought,
+                        "tool_calls": [{
+                            "id": f"call_{steps_taken}",
+                            "function": {
+                                "name": result.action,
+                                "arguments": json.dumps(result.action_input)
+                            },
+                            "type": "function"
+                        }]
+                    })
+                    
                     # Execute action and record observation
                     observation = self._execute_action(result)
                     last_observation = observation
                     self.conversation_history.append(observation)
                     
+                    # Track tool response in messages
+                    messages.append({
+                        "role": "tool",
+                        "content": observation.content,
+                        "tool_call_id": f"call_{steps_taken}"
+                    })
+                    
                     logger.debug(f"Action executed: {result.action}")
                     logger.debug(f"Observation: {observation.content}")
                     
-                    if observation.thought_type == ThoughtProcess.REFLECTION:
-                        logger.info("Reflection reached, returning result")
-                        return observation.content
-                
-                steps_taken += 1
+                    # Directly check for completion after successful action
+                    if result.action == "print_answer":
+                        return observation.content.split(":")[-1].strip()
+                    
+                    # Early exit if we have a numerical result
+                    if result.action == "add" and "result" in observation.content.lower():
+                        answer = observation.content.split(":")[-1].strip()
+                        return await self._trigger_final_answer(answer, messages)
+                    
+                    steps_taken += 1
                 
             except Exception as e:
                 logger.exception(f"Error in reasoning chain at step {steps_taken}")
@@ -325,6 +349,22 @@ Remember: ALWAYS use print_answer as the final step to display results.
                 thought_type=ThoughtProcess.REFLECTION,
                 content=f"Error executing {action.action}: {str(e)}"
             )
+
+    async def _trigger_final_answer(self, answer: str, messages: list) -> str:
+        """Force final answer formatting when numerical result is detected."""
+        try:
+            messages.append({
+                "role": "user",
+                "content": "Please format this final answer using print_answer"
+            })
+            
+            result = await self.process_step(messages)
+            if isinstance(result, AgentAction) and result.action == "print_answer":
+                return result.action_input.get("answer", answer)
+            return answer
+        except Exception as e:
+            logger.error(f"Final answer formatting failed: {str(e)}")
+            return answer
 
 async def main():
     try:
