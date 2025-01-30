@@ -66,6 +66,7 @@ Every response must contain exactly two XML blocks:
     * Justify tool selection and parameter choices.
     * Use variable interpolation (e.g., `$var1$`) to minimize token generation.
     * Consider alternatives or reevaluate the plan if previous attempts failed.
+    * Use the `task_complete` tool to confirm task completion.
   </next_steps>
   <taskpad>
     <!-- Optional: Use for notes about intermediate steps. -->
