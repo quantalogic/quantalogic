@@ -56,7 +56,7 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 
 ## Usage
 
-**Usage:** `quantalogic [OPTIONS] COMMAND [ARGS]...`  
+**Usage:** `quantalogic [OPTIONS] COMMAND i[ARGS]...`  
 **Environment Variables:** Set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `DEEPSEEK_API_KEY` for API integration.
 
 **Options:**
@@ -71,6 +71,7 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
 - `--help`: Show help message
 
 **Commands:**
+
 - `task`: Execute a task with the QuantaLogic AI Assistant
   - `--file PATH`: Path to task file
   - `--model-name TEXT`: Specify model
@@ -82,6 +83,25 @@ We created [QuantaLogic](https://www.quantalogic.app) because we saw a significa
   - `--max-tokens-working-memory`: Memory limit
   - `--compact-every-n-iteration`: Memory optimization
   - `--no-stream`: Disable streaming
+
+
+- `list-models`: List available models with optional filtering.
+  - `--search TEXT`: Filter models by name or description.
+  - `--help`: Show help message.
+
+  Example:
+  ```bash
+  quantalogic list-models --search qwen
+  ```
+
+  Output:
+  ```
+  Model Name           Description
+  -------------------  -------------------------------------------------------
+  dashscope/qwen-max   Alibaba's Qwen-Max model optimized for maximum performance
+  dashscope/qwen-plus  Alibaba's Qwen-Plus model offering balanced performance
+  ```
+
 
 ## Release Notes
 
