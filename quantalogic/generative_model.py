@@ -6,12 +6,13 @@ from typing import Any, Dict, List
 
 import litellm
 import openai
-from litellm import completion, exceptions, get_max_tokens, get_model_info, image_generation, token_counter
+from litellm import exceptions, get_max_tokens, get_model_info, token_counter
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
 from quantalogic.event_emitter import EventEmitter  # Importing the EventEmitter class
 from quantalogic.get_model_info import get_max_input_tokens, get_max_output_tokens, model_info
+from quantalogic.llm import generate_completion, generate_image, count_tokens
 
 MIN_RETRIES = 1
 
@@ -161,7 +162,7 @@ class GenerativeModel:
         try:
             logger.debug(f"Generating response for prompt: {prompt}")
 
-            response = completion(
+            response = generate_completion(
                 temperature=self.temperature,
                 model=self.model,
                 messages=messages,
@@ -187,7 +188,7 @@ class GenerativeModel:
     def _stream_response(self, messages):
         """Private method to handle streaming responses."""
         try:
-            for chunk in completion(
+            for chunk in generate_completion(
                 temperature=self.temperature,
                 model=self.model,
                 messages=messages,
@@ -253,15 +254,13 @@ class GenerativeModel:
         """Count the number of tokens in a list of messages."""
         logger.debug(f"Counting tokens for {len(messages)} messages using model {self.model}")
         litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages]
-        token_count = token_counter(model=self.model, messages=litellm_messages)
-        logger.debug(f"Token count: {token_count}")
-        return token_count
+        return count_tokens(model=self.model, messages=litellm_messages)
 
     def token_counter_with_history(self, messages_history: list[Message], prompt: str) -> int:
         """Count the number of tokens in a list of messages and a prompt."""
         litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages_history]
         litellm_messages.append({"role": "user", "content": str(prompt)})
-        return token_counter(model=self.model, messages=litellm_messages)
+        return count_tokens(model=self.model, messages=litellm_messages)
 
     def _get_model_info_impl(self, model_name: str) -> dict:
         """Get information about the model with prefix fallback logic."""
@@ -372,7 +371,7 @@ class GenerativeModel:
             generation_params["prompt"] = prompt
             
             # Call litellm's image generation function
-            response = image_generation(
+            response = generate_image(
                 model=generation_params.pop("model"),
                 **generation_params
             )

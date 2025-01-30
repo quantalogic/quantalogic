@@ -676,6 +676,7 @@ class Agent(BaseModel):
             "1. Select ONE tool per message\n"
             "2. You will receive the tool's output in the next user response\n"
             "3. Choose the most appropriate tool for each step\n"
+            "4. Use task_complete tool to confirm task completion\n"
         )
         return prompt_use_tools
 
