@@ -9,7 +9,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
 
-from quantalogic.agent_factory import create_agent_for_mode
+from quantalogic.agent_factory import AgentRegistry, create_agent_for_mode
+from quantalogic.config import QLConfig
 from quantalogic.console_print_events import console_print_events
 from quantalogic.interactive_text_editor import get_multiline_input
 from quantalogic.task_file_reader import get_task_from_file
@@ -144,52 +145,38 @@ def interactive_task_runner(
 def task_runner(
     console: Console,
     file: Optional[str],
-    model_name: str,
-    verbose: bool,
-    mode: str,
-    log: str,
-    vision_model_name: str | None,
+    config: QLConfig,
     task: Optional[str],
-    max_iterations: int,
-    compact_every_n_iteration: int | None,
-    max_tokens_working_memory: int | None,
-    no_stream: bool,
 ) -> None:
     """Execute a task with the QuantaLogic AI Assistant.
 
     Args:
         console: Rich console instance for output
         file: Optional path to task file
-        model_name: Name of the model to use
-        verbose: Enable verbose logging
-        mode: Operation mode
-        log: Log level
-        vision_model_name: Optional vision model name
+        config: QuantaLogic configuration object
         task: Optional task string
-        max_iterations: Maximum number of iterations
-        compact_every_n_iteration: Optional number of iterations before memory compaction
-        max_tokens_working_memory: Optional maximum tokens for working memory
-        no_stream: Disable streaming output
     """
-    switch_verbose(verbose, log)
+    switch_verbose(config.verbose, config.log)
 
     # Create the agent instance with the specified configuration
     agent = create_agent_for_mode(
-        mode=mode,
-        model_name=model_name,
-        vision_model_name=vision_model_name,
-        compact_every_n_iteration=compact_every_n_iteration,
-        max_tokens_working_memory=max_tokens_working_memory
+        mode=config.mode,
+        model_name=config.model_name,
+        vision_model_name=config.vision_model_name,
+        compact_every_n_iteration=config.compact_every_n_iteration,
+        max_tokens_working_memory=config.max_tokens_working_memory
     )
+
+    AgentRegistry.register_agent("main_agent", agent)
 
     if file:
         task_content = get_task_from_file(file)
         # Execute single task from file
         logger.debug(f"Solving task with agent: {task_content}")
-        if max_iterations < 1:
+        if config.max_iterations < 1:
             raise ValueError("max_iterations must be greater than 0")
-        result = agent.solve_task(task=task_content, max_iterations=max_iterations, streaming=not no_stream)
-        logger.debug(f"Task solved with result: {result} using {max_iterations} iterations")
+        result = agent.solve_task(task=task_content, max_iterations=config.max_iterations, streaming=not config.no_stream)
+        logger.debug(f"Task solved with result: {result} using {config.max_iterations} iterations")
 
         console.print(
             Panel.fit(
@@ -204,10 +191,10 @@ def task_runner(
             task_content = task
             # Execute single task from command line
             logger.debug(f"Solving task with agent: {task_content}")
-            if max_iterations < 1:
+            if config.max_iterations < 1:
                 raise ValueError("max_iterations must be greater than 0")
-            result = agent.solve_task(task=task_content, max_iterations=max_iterations, streaming=not no_stream)
-            logger.debug(f"Task solved with result: {result} using {max_iterations} iterations")
+            result = agent.solve_task(task=task_content, max_iterations=config.max_iterations, streaming=not config.no_stream)
+            logger.debug(f"Task solved with result: {result} using {config.max_iterations} iterations")
 
             console.print(
                 Panel.fit(
@@ -220,17 +207,17 @@ def task_runner(
             # Interactive mode
             display_welcome_message(
                 console=console,
-                model_name=model_name,
+                model_name=config.model_name,
                 version=get_version(),
-                vision_model_name=vision_model_name,
-                max_iterations=max_iterations,
-                compact_every_n_iteration=compact_every_n_iteration,
-                max_tokens_working_memory=max_tokens_working_memory,
-                mode=mode,
+                vision_model_name=config.vision_model_name,
+                max_iterations=config.max_iterations,
+                compact_every_n_iteration=config.compact_every_n_iteration,
+                max_tokens_working_memory=config.max_tokens_working_memory,
+                mode=config.mode,
             )
             check_new_version()
             logger.debug(
-                f"Created agent for mode: {mode} with model: {model_name}, vision model: {vision_model_name}, no_stream: {no_stream}"
+                f"Created agent for mode: {config.mode} with model: {config.model_name}, vision model: {config.vision_model_name}, no_stream: {config.no_stream}"
             )
 
             events = [
@@ -281,4 +268,4 @@ def task_runner(
 
             logger.debug("Registered event handlers for agent events with events: {events}")
 
-            interactive_task_runner(agent, console, max_iterations, no_stream)
+            interactive_task_runner(agent, console, config.max_iterations, config.no_stream)

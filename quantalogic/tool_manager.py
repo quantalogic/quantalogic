@@ -95,6 +95,72 @@ class ToolManager(BaseModel):
             arg_name = arg_def.name
             arg_type = arg_def.arg_type
             required = arg_def.required
+            default = arg_def.default
+
+            # Handle missing arguments
+            if arg_name not in provided_args:
+                if required:
+                    raise ValueError(f"Missing required argument: {arg_name}")
+                if default is None:
+                    continue  # Skip optional args with no default
+                provided_args[arg_name] = default
+
+            value = provided_args[arg_name]
+
+            # Handle empty string for non-string types by replacing with default if available
+            if (
+                arg_type != "string"
+                and isinstance(value, str)
+                and value.strip() == ""
+                and default is not None
+            ):
+                logger.debug(f"Replaced empty string for argument {arg_name} with default value {default}")
+                value = default
+                provided_args[arg_name] = value  # Update to ensure validation uses the default
+
+            # Type conversion
+            if arg_type in type_conversion:
+                try:
+                    converted = type_conversion[arg_type](value)
+                except (ValueError, TypeError) as e:
+                    raise ValueError(
+                        f"Invalid value '{value}' for {arg_name} ({arg_type}): {str(e)}"
+                    )
+                converted_args[arg_name] = converted
+            else:
+                converted_args[arg_name] = value  # Unknown type, pass through
+
+        # Validate extra arguments
+        extra_args = set(provided_args.keys()) - {a.name for a in tool.arguments}
+        if extra_args:
+            raise ValueError(f"Unexpected arguments: {', '.join(extra_args)}")
+
+        return converted_args
+        """Validates and converts arguments based on tool definition.
+        
+        Args:
+            tool_name: Name of the tool to validate against
+            provided_args: Dictionary of arguments to validate
+            
+        Returns:
+            Dictionary of converted arguments with proper types
+            
+        Raises:
+            ValueError: For missing/invalid arguments or conversion errors
+        """
+        tool = self.get(tool_name)
+        converted_args = {}
+        type_conversion = {
+            "string": lambda x: str(x),
+            "int": lambda x: int(x),
+            "float": lambda x: float(x),
+            "bool": lambda x: str(x).lower() in ['true', '1', 'yes']
+        }
+
+        for arg_def in tool.arguments:
+            arg_name = arg_def.name
+            arg_type = arg_def.arg_type
+            required = arg_def.required
             default = getattr(arg_def, 'default', None)
 
             # Handle missing arguments

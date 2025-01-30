@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from loguru import logger
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from quantalogic.event_emitter import EventEmitter
 from quantalogic.generative_model import GenerativeModel, ResponseStats, TokenUsage
@@ -52,12 +52,16 @@ class ObserveResponseResult(BaseModel):
 class Agent(BaseModel):
     """Enhanced QuantaLogic agent implementing ReAct framework."""
 
-    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True, extra="forbid")
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        validate_assignment=True,
+        extra="forbid"
+    )
 
     specific_expertise: str
     model: GenerativeModel
-    memory: AgentMemory = AgentMemory() # A list User / Assistant Messages
-    variable_store: VariableMemory = VariableMemory() # A dictionary of variables (var1: value1, var2: value2)
+    memory: AgentMemory = AgentMemory()  # A list User / Assistant Messages
+    variable_store: VariableMemory = VariableMemory()  # A dictionary of variables
     tools: ToolManager = ToolManager()
     event_emitter: EventEmitter = EventEmitter()
     config: AgentConfig
@@ -71,8 +75,9 @@ class Agent(BaseModel):
     max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
     max_iterations: int = 30
     system_prompt: str = ""
-    compact_every_n_iterations: int | None = None  # Add this to the class attributes
-    max_tokens_working_memory: int | None = None  # Add max_tokens_working_memory attribute
+    compact_every_n_iterations: int | None = None
+    max_tokens_working_memory: int | None = None
+    _model_name: str = PrivateAttr(default="")
 
     def __init__(
         self,
@@ -84,17 +89,18 @@ class Agent(BaseModel):
         task_to_solve: str = "",
         specific_expertise: str = "General AI assistant with coding and problem-solving capabilities",
         get_environment: Callable[[], str] = get_environment,
-        compact_every_n_iterations: int | None = None,  # if set the memory will be compacted every n iterations
-        max_tokens_working_memory: int | None = None,  # if set the memory will be compacted each time the max_tokens_working_memory is reached
+        compact_every_n_iterations: int | None = None,
+        max_tokens_working_memory: int | None = None,
     ):
         """Initialize the agent with model, memory, tools, and configurations."""
         try:
             logger.debug("Initializing agent...")
-            # Create event emitter first
+            
+            # Create event emitter
             event_emitter = EventEmitter()
 
             # Add TaskCompleteTool to the tools list if not already present
-            if TaskCompleteTool() not in tools:
+            if not any(isinstance(t, TaskCompleteTool) for t in tools):
                 tools.append(TaskCompleteTool())
 
             tool_manager = ToolManager(tools={tool.name: tool for tool in tools})
@@ -114,31 +120,49 @@ class Agent(BaseModel):
                 system_prompt=system_prompt_text,
             )
 
-            logger.debug("Base class init started ...")
+            # Initialize using Pydantic's model_validate
             super().__init__(
+                specific_expertise=specific_expertise,
                 model=GenerativeModel(model=model_name, event_emitter=event_emitter),
                 memory=memory,
                 variable_store=variable_store,
                 tools=tool_manager,
-                config=config,
-                ask_for_user_validation=ask_for_user_validation,
-                task_to_solve=task_to_solve,
-                specific_expertise=specific_expertise,
                 event_emitter=event_emitter,
+                config=config,
+                task_to_solve=task_to_solve,
+                task_to_solve_summary="",
+                ask_for_user_validation=ask_for_user_validation,
+                last_tool_call={},
+                total_tokens=0,
+                current_iteration=0,
+                max_input_tokens=DEFAULT_MAX_INPUT_TOKENS,
+                max_output_tokens=DEFAULT_MAX_OUTPUT_TOKENS,
+                max_iterations=30,
+                system_prompt="",
+                compact_every_n_iterations=compact_every_n_iterations or 30,
+                max_tokens_working_memory=max_tokens_working_memory,
             )
             
-            # Set the new compact_every_n_iterations parameter
-            self.compact_every_n_iterations = compact_every_n_iterations or self.max_iterations
+            self._model_name = model_name
+            
             logger.debug(f"Memory will be compacted every {self.compact_every_n_iterations} iterations")
-            
-            # Set the max_tokens_working_memory parameter
-            self.max_tokens_working_memory = max_tokens_working_memory
             logger.debug(f"Max tokens for working memory set to: {self.max_tokens_working_memory}")
-            
             logger.debug("Agent initialized successfully.")
         except Exception as e:
             logger.error(f"Failed to initialize agent: {str(e)}")
             raise
+
+    @property
+    def model_name(self) -> str:
+        """Get the current model name."""
+        return self._model_name
+
+    @model_name.setter
+    def model_name(self, value: str) -> None:
+        """Set the model name."""
+        self._model_name = value
+        # Update the model instance with the new name
+        self.model = GenerativeModel(model=value, event_emitter=self.event_emitter)
 
     def clear_memory(self):
         """Clear the memory and reset the session."""
@@ -533,7 +557,10 @@ class Agent(BaseModel):
             question_validation: str = (
                 "Do you permit the execution of this tool?\n"
                 f"Tool: {tool_name}\n"
-                f"Arguments: {arguments_with_values}\n"
+                "Arguments:\n"
+                "<arguments>\n"
+                + "\n".join([f"    <{key}>{value}</{key}>" for key, value in arguments_with_values.items()])
+                + "\n</arguments>\n"
                 "Yes or No"
             )
             permission_granted = self.ask_for_user_validation(question_validation)
@@ -603,10 +630,14 @@ class Agent(BaseModel):
         return executed_tool, response
 
     def _interpolate_variables(self, text: str) -> str:
-        """Interpolate variables using $var1$ syntax in the given text."""
+        """Interpolate variables using $var$ syntax in the given text."""
         try:
+            import re
             for var in self.variable_store.keys():
-                text = text.replace(f"${var}$", self.variable_store[var])
+                # Escape the variable name for regex, but use raw value for replacement
+                pattern = rf'\${re.escape(var)}\$'
+                replacement = self.variable_store[var]
+                text = re.sub(pattern, replacement, text)
             return text
         except Exception as e:
             logger.error(f"Error in _interpolate_variables: {str(e)}")
@@ -645,6 +676,7 @@ class Agent(BaseModel):
             "1. Select ONE tool per message\n"
             "2. You will receive the tool's output in the next user response\n"
             "3. Choose the most appropriate tool for each step\n"
+            "4. Use task_complete tool to confirm task completion\n"
         )
         return prompt_use_tools
 
@@ -706,23 +738,32 @@ class Agent(BaseModel):
         return summary.response
 
     def _generate_task_summary(self, content: str) -> str:
-        """Generate a concise summary of the given content using the generative model.
+        """Generate a concise task-focused summary using the generative model.
 
         Args:
             content (str): The content to summarize
 
         Returns:
-            str: Generated summary
+            str: Generated task summary
         """
         try:
             prompt = (
-                "Rewrite this task in a precise, dense, and concise manner:\n"
-                f"{content}\n"
-                "Summary should be 2-3 sentences maximum. No extra comments should be added.\n"
+                "Create an ultra-concise task summary that captures ONLY: \n"
+                "1. Primary objective/purpose\n"
+                "2. Core actions/requirements\n"
+                "3. Desired end-state/outcome\n\n"
+                "Guidelines:\n"
+                "- Use imperative voice\n"
+                "- Exclude background, explanations, and examples\n"
+                "- Compress information using semantic density\n"
+                "- Strict 2-3 sentence maximum (under 50 words)\n"
+                "- Format: 'Concise Task Summary: [Your summary]'\n\n"
+                f"Input Task Description:\n{content}\n\n"
+                "Concise Task Summary:"
             )
             result = self.model.generate(prompt=prompt)
             logger.debug(f"Generated summary: {result.response}")
-            return result.response
+            return result.response.strip() + "\n🚨 The FULL task is in <task> tag in the previous messages.\n"
         except Exception as e:
             logger.error(f"Error generating summary: {str(e)}")
             return f"Summary generation failed: {str(e)}"
@@ -747,3 +788,8 @@ class Agent(BaseModel):
             "session_add_message",
             {"role": "assistant", "content": assistant_content},
         )
+
+    def update_model(self, new_model_name: str) -> None:
+        """Update the model name and recreate the model instance."""
+        self.model_name = new_model_name
+        self.model = GenerativeModel(model=new_model_name, event_emitter=self.event_emitter)

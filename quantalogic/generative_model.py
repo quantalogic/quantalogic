@@ -1,24 +1,22 @@
 """Generative model module for AI-powered text generation."""
 
-import functools
 from datetime import datetime
 from typing import Any, Dict, List
 
 import litellm
 import openai
-from litellm import completion, exceptions, get_max_tokens, get_model_info, image_generation, token_counter
+from litellm import exceptions
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
 from quantalogic.event_emitter import EventEmitter  # Importing the EventEmitter class
-from quantalogic.get_model_info import get_max_input_tokens, get_max_output_tokens, model_info
+from quantalogic.get_model_info import get_max_input_tokens, get_max_output_tokens, get_max_tokens
+from quantalogic.llm import count_tokens, generate_completion, generate_image
 
 MIN_RETRIES = 1
 
 
-
-litellm.suppress_debug_info = True # Very important to suppress prints don't remove
-
+litellm.suppress_debug_info = True  # Very important to suppress prints don't remove
 
 
 # Define the Message class for conversation handling
@@ -90,17 +88,16 @@ class GenerativeModel:
 
         Args:
             model: Model identifier. Defaults to "ollama/qwen2.5-coder:14b".
-            temperature: Temperature parameter for controlling randomness in generation. 
-                        Higher values (e.g. 0.8) make output more random, lower values (e.g. 0.2) 
+            temperature: Temperature parameter for controlling randomness in generation.
+                        Higher values (e.g. 0.8) make output more random, lower values (e.g. 0.2)
                         make it more deterministic. Defaults to 0.7.
-            event_emitter: Optional event emitter instance for handling asynchronous events 
+            event_emitter: Optional event emitter instance for handling asynchronous events
                           and callbacks during text generation. Defaults to None.
         """
         logger.debug(f"Initializing GenerativeModel with model={model}, temperature={temperature}")
         self.model = model
         self.temperature = temperature
         self.event_emitter = event_emitter or EventEmitter()  # Initialize event emitter
-        self._get_model_info_cached = functools.lru_cache(maxsize=32)(self._get_model_info_impl)
 
     # Define retriable exceptions based on LiteLLM's exception mapping
     RETRIABLE_EXCEPTIONS = (
@@ -161,7 +158,7 @@ class GenerativeModel:
         try:
             logger.debug(f"Generating response for prompt: {prompt}")
 
-            response = completion(
+            response = generate_completion(
                 temperature=self.temperature,
                 model=self.model,
                 messages=messages,
@@ -187,7 +184,7 @@ class GenerativeModel:
     def _stream_response(self, messages):
         """Private method to handle streaming responses."""
         try:
-            for chunk in completion(
+            for chunk in generate_completion(
                 temperature=self.temperature,
                 model=self.model,
                 messages=messages,
@@ -253,96 +250,21 @@ class GenerativeModel:
         """Count the number of tokens in a list of messages."""
         logger.debug(f"Counting tokens for {len(messages)} messages using model {self.model}")
         litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages]
-        token_count = token_counter(model=self.model, messages=litellm_messages)
-        logger.debug(f"Token count: {token_count}")
-        return token_count
+        return count_tokens(model=self.model, messages=litellm_messages)
 
     def token_counter_with_history(self, messages_history: list[Message], prompt: str) -> int:
         """Count the number of tokens in a list of messages and a prompt."""
         litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages_history]
         litellm_messages.append({"role": "user", "content": str(prompt)})
-        return token_counter(model=self.model, messages=litellm_messages)
-
-    def _get_model_info_impl(self, model_name: str) -> dict:
-        """Get information about the model with prefix fallback logic."""
-        original_model = model_name
-        tried_models = [model_name]
-        
-        while True:
-            try:
-                logger.debug(f"Attempting to retrieve model info for: {model_name}")
-                # Try direct lookup from model_info dictionary first
-                if model_name in model_info:
-                    logger.debug(f"Found model info for {model_name} in model_info")
-                    return model_info[model_name]
-                    
-                # Try get_model_info as fallback
-                info = get_model_info(model_name)
-                if info:
-                    logger.debug(f"Found model info for {model_name} via get_model_info")
-                    return info
-            except Exception as e:
-                logger.debug(f"Failed to get model info for {model_name}: {str(e)}")
-                pass
-
-            # Try removing one prefix level
-            parts = model_name.split("/")
-            if len(parts) <= 1:
-                break
-            model_name = "/".join(parts[1:])
-            tried_models.append(model_name)
-
-        error_msg = f"Could not find model info for {original_model} after trying: {' → '.join(tried_models)}"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-
-    def get_model_info(self, model_name: str = None) -> dict:
-        """Get cached information about the model."""
-        if model_name is None:
-            model_name = self.model
-        return self._get_model_info_cached(model_name)
+        return count_tokens(model=self.model, messages=litellm_messages)
 
     def get_model_max_input_tokens(self) -> int | None:
         """Get the maximum number of input tokens for the model."""
-        try:
-            # First try direct lookup
-            max_tokens = get_max_input_tokens(self.model)
-            if max_tokens is not None:
-                return max_tokens
-            
-            # If not found, try getting from model info
-            model_info = self.get_model_info()
-            if model_info:
-                return model_info.get("max_input_tokens")
-            
-            # If still not found, log warning and return default
-            logger.warning(f"No max input tokens found for {self.model}. Using default.")
-            return 8192  # A reasonable default for many models
-            
-        except Exception as e:
-            logger.error(f"Error getting max input tokens for {self.model}: {e}")
-            return None
+        return get_max_input_tokens(self.model)
 
     def get_model_max_output_tokens(self) -> int | None:
         """Get the maximum number of output tokens for the model."""
-        try:
-            # First try direct lookup
-            max_tokens = get_max_output_tokens(self.model)
-            if max_tokens is not None:
-                return max_tokens
-            
-            # If not found, try getting from model info
-            model_info = self.get_model_info()
-            if model_info:
-                return model_info.get("max_output_tokens")
-            
-            # If still not found, log warning and return default
-            logger.warning(f"No max output tokens found for {self.model}. Using default.")
-            return 4096  # A reasonable default for many models
-            
-        except Exception as e:
-            logger.error(f"Error getting max output tokens for {self.model}: {e}")
-            return None
+        return get_max_output_tokens(self.model)
 
     def generate_image(self, prompt: str, params: Dict[str, Any]) -> ResponseStats:
         """Generate an image using the specified model and parameters.
@@ -366,16 +288,13 @@ class GenerativeModel:
         """
         try:
             logger.debug(f"Generating image with params: {params}")
-            
+
             # Ensure prompt is in params
             generation_params = {**params}
             generation_params["prompt"] = prompt
-            
+
             # Call litellm's image generation function
-            response = image_generation(
-                model=generation_params.pop("model"),
-                **generation_params
-            )
+            response = generate_image(model=generation_params.pop("model"), **generation_params)
 
             # Convert response data to list of dictionaries with string values
             if hasattr(response, "data"):
@@ -407,7 +326,7 @@ class GenerativeModel:
                 usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
                 model=str(params["model"]),
                 data=data,
-                created=created
+                created=created,
             )
 
         except Exception as e:

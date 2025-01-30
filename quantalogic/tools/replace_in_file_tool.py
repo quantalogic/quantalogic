@@ -35,7 +35,7 @@ class SearchReplaceBlock(BaseModel):
 
     search: str = Field(
         ...,
-        description="Exact content to search for in the file.",
+        description="Exact content to search for in the file. Space and tab characters are VERY important.",
         example="def old_function():\n    pass",
     )
     replace: str = Field(

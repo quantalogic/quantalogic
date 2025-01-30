@@ -14,9 +14,9 @@ from litellm import completion
 
 litellm.set_verbose = True
 
-print(os.environ["DEEPSEEK_API_KEY"])
+print(os.environ["OPENROUTER_API_KEY"])
 response = completion(
-    model="deepseek/deepseek-chat",
+    model="openrouter/openai/gpt-4o-mini",
     messages=[{"role": "user", "content": "hello from litellm"}],
 )
 print(response)

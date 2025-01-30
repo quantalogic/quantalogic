@@ -1,6 +1,4 @@
-"""Agent factory module for creating different types of agents."""
-
-from typing import Optional
+from typing import Dict, Optional
 
 from loguru import logger
 
@@ -11,7 +9,57 @@ from quantalogic.agent_config import (
     create_interpreter_agent,
 )
 from quantalogic.coding_agent import create_coding_agent
-from quantalogic.search_agent import create_search_agent
+from quantalogic.search_agent import create_search_agent  # noqa: E402
+
+
+class AgentRegistry:
+    """Registry for managing agent instances by name."""
+    
+    _instance = None
+    _agents: Dict[str, Agent] = {}
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    @classmethod
+    def register_agent(cls, name: str, agent: Agent) -> None:
+        """Register an agent instance with a name.
+        
+        Args:
+            name: Unique name for the agent
+            agent: Agent instance to register
+        """
+        if name in cls._agents:
+            raise ValueError(f"Agent with name {name} already exists")
+        cls._agents[name] = agent
+
+    @classmethod
+    def get_agent(cls, name: str) -> Agent:
+        """Retrieve a registered agent by name.
+        
+        Args:
+            name: Name of the agent to retrieve
+            
+        Returns:
+            Registered Agent instance
+            
+        Raises:
+            KeyError: If no agent with that name exists
+        """
+        return cls._agents[name]
+
+    @classmethod
+    def list_agents(cls) -> Dict[str, str]:
+        """List all registered agents.
+        
+        Returns:
+            Dictionary mapping agent names to their types
+        """
+        return {name: type(agent).__name__ for name, agent in cls._agents.items()}
+
+"""Agent factory module for creating different types of agents."""
 
 
 def create_agent_for_mode(
@@ -46,7 +94,7 @@ def create_agent_for_mode(
 
     if mode == "code":
         logger.debug("Creating code agent without basic mode")
-        return create_coding_agent(
+        agent = create_coding_agent(
             model_name,
             vision_model_name,
             basic=False,
@@ -54,8 +102,9 @@ def create_agent_for_mode(
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory
         )
+        return agent
     if mode == "code-basic":
-        return create_coding_agent(
+        agent = create_coding_agent(
             model_name,
             vision_model_name,
             basic=True,
@@ -63,44 +112,50 @@ def create_agent_for_mode(
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory
         )
+        return agent
     elif mode == "basic":
-        return create_basic_agent(
+        agent = create_basic_agent(
             model_name,
             vision_model_name,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory
         )
+        return agent
     elif mode == "full":
-        return create_full_agent(
+        agent = create_full_agent(
             model_name,
             vision_model_name,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory
         )
+        return agent
     elif mode == "interpreter":
-        return create_interpreter_agent(
+        agent = create_interpreter_agent(
             model_name,
             vision_model_name,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory
         )
+        return agent
     elif mode == "search":
-        return create_search_agent(
+        agent = create_search_agent(
             model_name,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory
         )
+        return agent
     if mode == "search-full":
-        return create_search_agent(
+        agent = create_search_agent(
             model_name,
             mode_full=True,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory
         )
+        return agent
     else:
         raise ValueError(f"Unknown agent mode: {mode}")
