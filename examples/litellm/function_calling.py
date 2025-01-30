@@ -19,11 +19,17 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
-from litellm import Router, acompletion
+from litellm import acompletion
 from loguru import logger
 from pydantic import BaseModel, Field
 
-MODEL_NAME = "openrouter/openai/gpt-4o-mini"
+#MODEL_NAME = "openrouter/openai/gpt-4o-mini"
+MODEL_NAME = "lm_studio/virtuoso-lite"
+MODEL_NAME = "lm_studio/deepseek-r1-distill-qwen-7b"
+MODEL_NAME = "lm_studio/phi-4@8bit"
+MODEL_NAME = "lm_studio/qwen2.5-coder-3b-instruct-mlx@8bit"
+MODEL_NAME = "lm_studio/llama-3.2-3b-instruct"
+#MODEL_NAME = "lm_studio/deepseek-r1-distill-qwen-32b"
 # MODEL_NAME = "openrouter/anthropic/claude-3-opus"  # Alternative option
 
 # Load environment variables
