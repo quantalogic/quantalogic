@@ -1,13 +1,22 @@
-## [v.30.5] (2025-10-24)
+## [v.0.31.0] (2025-01-30)
+
+### New Features
+- Added support for Alibaba models:
+    - dashscope/qwen-max: Optimized for maximum performance and extensive reasoning capabilities.
+    - dashscope/qwen-plus: Offers balanced performance and cost-efficiency for a variety of tasks.
+    - dashscope/qwen-turbo: Designed for fast and efficient responses, ideal for high-throughput scenarios.
+- Included DASHSCOPE_API_KEY for API integration with Alibaba models.
+
+## [v.0.30.5] (2025-01-24)
 - Fix
     - Small fixes
 
-## [v.30.4] (2025-10-24)
+## [v.0.30.4] (2025-01-24)
 - Fix
     - Automatic conversion before execution of tools with variables
     - Fix duplicated method in Agent class
 
-## [v0.30.1] (2025-10-24)
+## [v0.30.1] (2025-01-24)
 
 ### Fix
 - improve --help command and documentation about models and environment variables
