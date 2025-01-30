@@ -29,7 +29,7 @@ from quantalogic.agent_config import (  # noqa: E402
 )
 from quantalogic.config import QLConfig  # noqa: E402
 from quantalogic.task_runner import task_runner  # noqa: E402
-from quantalogic.utils.get_litellm_models import get_litellm_models  # noqa: E402
+from quantalogic.utils.get_all_models import get_all_models  # noqa: E402
 
 # Platform-specific imports
 try:
@@ -268,7 +268,7 @@ def list_models(search: Optional[str] = None):
     If a search term is provided, it will return models that closely match the term.
     """
     console = Console()
-    all_models = get_litellm_models()
+    all_models = get_all_models()
     
     if search:
         # Perform fuzzy matching

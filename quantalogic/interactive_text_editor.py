@@ -133,9 +133,9 @@ def handle_set_model_command(lines: List[str], args: List[str], console: Console
 def handle_models_command(lines: List[str], args: List[str], console: Console,
     session: PromptSession, history_manager: InputHistoryManager) -> None:
     """Display all available AI models supported by the system."""
-    from quantalogic.utils.get_litellm_models import get_litellm_models
+    from quantalogic.utils.get_all_models import get_all_models
     try:
-        models = get_litellm_models()
+        models = get_all_models()
         if models:
             # Group models by provider
             provider_groups = {}
