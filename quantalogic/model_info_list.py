@@ -52,6 +52,9 @@ model_info = {
         max_output_tokens=8 * 1024,
         max_input_tokens=1024 * 64,
     ),
-    
-
+    "ovh/DeepSeek-R1-Distill-Llama-70B": ModelInfo(
+        model_name="ovh/DeepSeek-R1-Distill-Llama-70B",
+        max_output_tokens=8 * 1024,
+        max_input_tokens=1024 * 64,
+    ),
 }

@@ -60,6 +60,12 @@ PROVIDERS = {
         provider="openai",
         base_url="https://integrate.api.nvidia.com/v1",
         env_var="NVIDIA_API_KEY"
+    ),
+    "ovh": ModelProviderConfig(
+        prefix="ovh/",
+        provider="openai",
+        base_url="https://deepseek-r1-distill-llama-70b.endpoints.kepler.ai.cloud.ovh.net/api/openai_compat/v1",
+        env_var="OVH_API_KEY"
     )
 }
 
