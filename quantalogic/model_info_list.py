@@ -47,4 +47,11 @@ model_info = {
         max_input_tokens=1024 * 64,
         max_cot_tokens=1024 * 32,
     ),
+    "nvidia/deepseek-ai/deepseek-r1": ModelInfo(
+        model_name="nvidia/deepseek-ai/deepseek-r1",
+        max_output_tokens=8 * 1024,
+        max_input_tokens=1024 * 64,
+    ),
+    
+
 }
