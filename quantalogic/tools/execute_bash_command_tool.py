@@ -11,7 +11,7 @@ from loguru import logger
 
 # Platform-specific imports
 try:
-    if sys.platform != 'win32':
+    if sys.platform != "win32":
         import pty
 except ImportError as e:
     logger.warning(f"Could not import platform-specific module: {e}")
@@ -40,6 +40,7 @@ class ExecuteBashCommandTool(Tool):
             description="The working directory where the command will be executed. Defaults to the current directory.",
             required=False,
             example="/path/to/directory",
+            default=os.getcwd(),
         ),
         ToolArgument(
             name="timeout",
@@ -47,6 +48,7 @@ class ExecuteBashCommandTool(Tool):
             description="Maximum time in seconds to wait for the command to complete. Defaults to 60 seconds.",
             required=False,
             example="60",
+            default="60",
         ),
     ]
 
@@ -69,16 +71,16 @@ class ExecuteBashCommandTool(Tool):
                 cwd=cwd,
                 env=env_vars,
                 text=True,
-                encoding='utf-8'
+                encoding="utf-8",
             )
 
             try:
                 stdout, stderr = process.communicate(timeout=timeout_seconds)
                 return_code = process.returncode
-                
+
                 if return_code != 0 and stderr:
                     logger.warning(f"Command failed with error: {stderr}")
-                
+
                 formatted_result = (
                     "<command_output>"
                     f" <stdout>{stdout.strip()}</stdout>"
@@ -86,11 +88,11 @@ class ExecuteBashCommandTool(Tool):
                     f"</command_output>"
                 )
                 return formatted_result
-            
+
             except subprocess.TimeoutExpired:
                 process.kill()
                 return f"Command timed out after {timeout_seconds} seconds."
-                
+
         except Exception as e:
             return f"Unexpected error executing command: {str(e)}"
 
@@ -127,7 +129,7 @@ class ExecuteBashCommandTool(Tool):
                         if proc.poll() is not None:
                             break  # Process completed but select timed out
                         raise subprocess.TimeoutExpired(command, timeout_seconds)
-                    
+
                     for fd in rlist:
                         if fd == master:
                             data = os.read(master, 1024).decode()
@@ -140,7 +142,7 @@ class ExecuteBashCommandTool(Tool):
                         elif fd == sys.stdin:
                             user_input = os.read(sys.stdin.fileno(), 1024)
                             os.write(master, user_input)
-                    
+
                     if break_loop or proc.poll() is not None:
                         while True:
                             data = os.read(master, 1024).decode()
@@ -160,7 +162,7 @@ class ExecuteBashCommandTool(Tool):
                 os.close(master)
                 proc.wait()
 
-            stdout_content = ''.join(stdout_buffer)
+            stdout_content = "".join(stdout_buffer)
             return_code = proc.returncode
             formatted_result = (
                 "<command_output>"
@@ -186,7 +188,7 @@ class ExecuteBashCommandTool(Tool):
         if env:
             env_vars.update(env)
 
-        if sys.platform == 'win32':
+        if sys.platform == "win32":
             return self._execute_windows(command, cwd, timeout_seconds, env_vars)
         else:
             if not pty:
