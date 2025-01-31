@@ -298,5 +298,6 @@ class ToleranceXMLParser:
 
         except Exception as e:
             error_msg = f"Error extracting XML elements: {str(e)}"
+            error_msg = error_msg + f"\n{text}\n"
             logger.error(error_msg)
             raise ValueError(error_msg)

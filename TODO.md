@@ -77,6 +77,8 @@ New command in interactive session:
 - [-] Add Search WebTool like DuckDuckGo, Wikipedia, SerpAPI, Perplexity ...
 - [X] Add a grep.app Tool to find code on the web
 - [ ] Add a GronTool 
+- [ ] Add A sequence operation to call multiple tools in one call
+- [ ]
 
 
 

@@ -412,6 +412,9 @@ class Agent(BaseModel):
 
     def _parse_tool_usage(self, content: str) -> dict:
         """Extract tool usage from the response content."""
+        if not content or not isinstance(content, str):
+            return {}
+        
         xml_parser = ToleranceXMLParser()
         tool_names = self.tools.tool_names()
         return xml_parser.extract_elements(text=content, element_names=tool_names)
@@ -502,6 +505,7 @@ class Agent(BaseModel):
 
         # Format the response message
         formatted_response = (
+            f"Your next step: you Must now plan the next tool call to complete the based on this new observation\n"
             f"\n--- Observations for iteration {iteration} / max {self.max_iterations} ---\n"
             f"\n--- Tool execution result in ${variable_name}$ ---\n"
             f"<{variable_name}>\n{response_display}\n</{variable_name}>\n\n"
