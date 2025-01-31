@@ -751,6 +751,8 @@ class Agent(BaseModel):
             str: Generated task summary
         """
         try:
+            if len(content) < 200:
+                return content
             prompt = (
                 "Create an ultra-concise task summary that captures ONLY: \n"
                 "1. Primary objective/purpose\n"

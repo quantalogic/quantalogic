@@ -233,6 +233,12 @@ def task_runner(
                 "memory_summary",
             ]
 
+            def ask_continue(event: str, data: any) -> None:
+                ## Ask for ctrl+return
+                if event == "task_think_end":
+                    ## Wait return on the keyboard
+                    input("Press [Enter] to continue...")
+
             # Add spinner control to event handlers
             def handle_task_think_start(*args, **kwargs):
                 start_spinner(console)
@@ -246,6 +252,11 @@ def task_runner(
                 if data is not None:
                     console.print(data, end="", markup=False)
 
+            agent.event_emitter.on(
+                event="task_think_end",
+                listener=ask_continue,
+            )
+            
             agent.event_emitter.on(
                 event=events,
                 listener=console_print_events,
