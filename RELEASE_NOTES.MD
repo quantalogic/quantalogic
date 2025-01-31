@@ -1,3 +1,9 @@
+## [v.0.32.0] (2025-01-31)
+
+### New Features
+- Added support for Mistral model:
+    - lm_studio/mistral-small-24b-instruct-2501: Optimized for local inference with advanced reasoning capabilities.
+
 ## [v.0.31.1] (2025-01-31)
     - Fix
         - Better management of token limits

@@ -125,11 +125,23 @@ See our [Release Notes](RELEASE_NOTES.MD) for detailed version history and chang
 | openrouter/mistralai/mistral-large-2411 | OPENROUTER_API_KEY | Mistral's large model optimized for complex reasoning tasks, available through OpenRouter with enhanced multilingual capabilities. |
 | mistral/mistral-large-2407 | MISTRAL_API_KEY | Mistral's high-performance model designed for enterprise-grade applications, offering advanced reasoning and multilingual support. |
 | nvidia/deepseek-ai/deepseek-r1 | NVIDIA_API_KEY | NVIDIA's DeepSeek R1 model optimized for high-performance AI tasks and advanced reasoning capabilities. |
+| lm_studio/mistral-small-24b-instruct-2501 | LM_STUDIO_API_KEY | LM Studio's Mistral Small model optimized for local inference with advanced reasoning capabilities. |
 | dashscope/qwen-max | DASHSCOPE_API_KEY | Alibaba's Qwen-Max model optimized for maximum performance and extensive reasoning capabilities. |
 | dashscope/qwen-plus | DASHSCOPE_API_KEY | Alibaba's Qwen-Plus model offering balanced performance and cost-efficiency for a variety of tasks. |
 | dashscope/qwen-turbo | DASHSCOPE_API_KEY | Alibaba's Qwen-Turbo model designed for fast and efficient responses, ideal for high-throughput scenarios. |
 
 To configure the environment API key for Quantalogic using LiteLLM, set the required environment variable for your chosen provider and any optional variables like `OPENAI_API_BASE` or `OPENROUTER_REFERRER`. Use a `.env` file or a secrets manager to securely store these keys, and load them in your code using `python-dotenv`. For advanced configurations, refer to the [LiteLLM documentation](https://docs.litellm.ai/docs/).
+
+### LM Studio Local Setup
+
+To use LM Studio with the Mistral model locally, set the following environment variables:
+
+```bash
+export LM_STUDIO_API_BASE="http://localhost:1234/v1"
+export LM_STUDIO_API_KEY="your-api-key-here"
+```
+
+Replace `http://localhost:1234/v1` with your LM Studio server URL and `your-api-key-here` with your actual API key.
 
 
 ## 📦 Installation
