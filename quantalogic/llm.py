@@ -30,18 +30,50 @@ def get_model_info(model_name: str) -> dict | None:
     return model_info.get(model_name, None)
 
 
+class ModelProviderConfig:
+    def __init__(self, prefix: str, provider: str, base_url: str, env_var: str):
+        self.prefix = prefix
+        self.provider = provider
+        self.base_url = base_url
+        self.env_var = env_var
+
+    def configure(self, model: str, kwargs: Dict[str, Any]) -> None:
+        kwargs["model"] = model.replace(self.prefix, "")
+        kwargs["custom_llm_provider"] = self.provider
+        kwargs["base_url"] = self.base_url
+        api_key = os.getenv(self.env_var)
+        if not api_key:
+            raise ValueError(f"{self.env_var} is not set in the environment variables.")
+        kwargs["api_key"] = api_key
+
+
+# Default provider configurations
+PROVIDERS = {
+    "dashscope": ModelProviderConfig(
+        prefix="dashscope/",
+        provider="openai",
+        base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        env_var="DASHSCOPE_API_KEY"
+    ),
+    "nvidia": ModelProviderConfig(
+        prefix="nvidia/",
+        provider="openai",
+        base_url="https://integrate.api.nvidia.com/v1",
+        env_var="NVIDIA_API_KEY"
+    )
+}
+
+
 def generate_completion(**kwargs: Dict[str, Any]) -> Any:
     """Wraps litellm completion with proper type hints."""
     model = kwargs.get("model", "")
-    if model.startswith("dashscope/"):
-        # Remove prefix and configure for OpenAI-compatible endpoint
-        kwargs["model"] = model.replace("dashscope/", "")
-        kwargs["custom_llm_provider"] = "openai"  # Explicitly specify OpenAI provider
-        kwargs["base_url"] = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
-        api_key = os.getenv("DASHSCOPE_API_KEY")
-        if not api_key:
-            raise ValueError("DASHSCOPE_API_KEY is not set in the environment variables.")
-        kwargs["api_key"] = api_key
+    
+    # Find matching provider
+    for provider_name, provider_config in PROVIDERS.items():
+        if model.startswith(provider_config.prefix):
+            provider_config.configure(model, kwargs)
+            break
+    
     return completion(**kwargs)
 
 
