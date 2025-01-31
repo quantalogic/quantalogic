@@ -124,6 +124,7 @@ See our [Release Notes](RELEASE_NOTES.MD) for detailed version history and chang
 | openrouter/openai/gpt-4o | OPENROUTER_API_KEY | OpenAI's GPT-4o model accessible through OpenRouter platform. |
 | openrouter/mistralai/mistral-large-2411 | OPENROUTER_API_KEY | Mistral's large model optimized for complex reasoning tasks, available through OpenRouter with enhanced multilingual capabilities. |
 | mistral/mistral-large-2407 | MISTRAL_API_KEY | Mistral's high-performance model designed for enterprise-grade applications, offering advanced reasoning and multilingual support. |
+| nvidia/deepseek-ai/deepseek-r1 | NVIDIA_API_KEY | NVIDIA's DeepSeek R1 model optimized for high-performance AI tasks and advanced reasoning capabilities. |
 | dashscope/qwen-max | DASHSCOPE_API_KEY | Alibaba's Qwen-Max model optimized for maximum performance and extensive reasoning capabilities. |
 | dashscope/qwen-plus | DASHSCOPE_API_KEY | Alibaba's Qwen-Plus model offering balanced performance and cost-efficiency for a variety of tasks. |
 | dashscope/qwen-turbo | DASHSCOPE_API_KEY | Alibaba's Qwen-Turbo model designed for fast and efficient responses, ideal for high-throughput scenarios. |
