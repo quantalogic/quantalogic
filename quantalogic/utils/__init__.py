@@ -5,6 +5,7 @@ from .git_ls import git_ls
 from .get_environment import get_environment
 from .get_coding_environment import get_coding_environment
 from .get_quantalogic_rules_content import get_quantalogic_rules_file_content
+from .lm_studio_model_info import get_model_list
 
 __all__ = [
     "download_http_file",
@@ -14,4 +15,5 @@ __all__ = [
     "get_environment",
     "get_coding_environment",
     "get_quantalogic_rules_file_content",
+    "get_model_list",
 ]
