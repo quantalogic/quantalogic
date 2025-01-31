@@ -1,3 +1,7 @@
+## [v.0.31.1] (2025-01-31)
+    - Fix
+        - Better management of token limits
+
 ## [v.0.31.0] (2025-01-30)
 
 ### New Features
