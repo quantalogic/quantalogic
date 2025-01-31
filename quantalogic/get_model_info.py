@@ -1,9 +1,8 @@
-from functools import lru_cache
 
 import loguru
-from litellm import get_max_tokens as litellm_get_max_tokens
 
 from quantalogic.model_info_list import model_info
+from quantalogic.model_info_litellm import litellm_get_model_max_input_tokens, litellm_get_model_max_output_tokens
 
 DEFAULT_MAX_OUTPUT_TOKENS = 4 * 1024  # Reasonable default for most models
 DEFAULT_MAX_INPUT_TOKENS = 32 * 1024  # Reasonable default for most models
@@ -12,12 +11,6 @@ DEFAULT_MAX_INPUT_TOKENS = 32 * 1024  # Reasonable default for most models
 def validate_model_name(model_name: str) -> None:
     if not isinstance(model_name, str) or not model_name.strip():
         raise ValueError(f"Invalid model name: {model_name}")
-
-
-@lru_cache(maxsize=128)
-def _call_llm_api(model_name: str) -> int:
-    # Rate limit: 10 calls/minute
-    return litellm_get_max_tokens(model_name)
 
 
 def print_model_info():
@@ -35,7 +28,7 @@ def get_max_output_tokens(model_name: str) -> int:
         return model_info[model_name].max_output_tokens
 
     try:
-        return litellm_get_max_tokens(model_name)
+        return litellm_get_model_max_output_tokens(model_name)
     except Exception as e:
         loguru.logger.warning(f"Model {model_name} not found in LiteLLM registry, using default")
         return DEFAULT_MAX_OUTPUT_TOKENS
@@ -49,7 +42,7 @@ def get_max_input_tokens(model_name: str) -> int:
         return model_info[model_name].max_input_tokens
 
     try:
-        return litellm_get_max_tokens(model_name)
+        return litellm_get_model_max_input_tokens(model_name)
     except Exception:
         loguru.logger.warning(f"Model {model_name} not found in LiteLLM registry, using default")
         return DEFAULT_MAX_INPUT_TOKENS
