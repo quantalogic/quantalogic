@@ -78,7 +78,8 @@ New command in interactive session:
 - [X] Add a grep.app Tool to find code on the web
 - [ ] Add a GronTool 
 - [ ] Add A sequence operation to call multiple tools in one call
-- [ ]
+- [ ] Add integration to CodeGen https://x.com/mathemagic1an/status/1884660574241657048?s=12&t=TDcEu-9VmV2EvPkDUefXPg 
+
 
 
 
