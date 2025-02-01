@@ -1,3 +1,8 @@
+## [v.0.33.0] (2025-02-01)
+
+### New Features
+- Improved cognitive process.
+
 ## [v.0.32.0] (2025-01-31)
 
 ### New Features
