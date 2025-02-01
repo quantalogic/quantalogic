@@ -1,3 +1,8 @@
+## [v.0.33.1] (2025-02-01)
+
+### Fix
+- Small fix to the cognitive process
+
 ## [v.0.33.0] (2025-02-01)
 
 ### New Features
