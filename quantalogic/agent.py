@@ -52,11 +52,7 @@ class ObserveResponseResult(BaseModel):
 class Agent(BaseModel):
     """Enhanced QuantaLogic agent implementing ReAct framework."""
 
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        validate_assignment=True,
-        extra="forbid"
-    )
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True, extra="forbid")
 
     specific_expertise: str
     model: GenerativeModel
@@ -95,7 +91,7 @@ class Agent(BaseModel):
         """Initialize the agent with model, memory, tools, and configurations."""
         try:
             logger.debug("Initializing agent...")
-            
+
             # Create event emitter
             event_emitter = EventEmitter()
 
@@ -142,9 +138,9 @@ class Agent(BaseModel):
                 compact_every_n_iterations=compact_every_n_iterations or 30,
                 max_tokens_working_memory=max_tokens_working_memory,
             )
-            
+
             self._model_name = model_name
-            
+
             logger.debug(f"Memory will be compacted every {self.compact_every_n_iterations} iterations")
             logger.debug(f"Max tokens for working memory set to: {self.max_tokens_working_memory}")
             logger.debug("Agent initialized successfully.")
@@ -168,7 +164,9 @@ class Agent(BaseModel):
         """Clear the memory and reset the session."""
         self._reset_session(clear_memory=True)
 
-    def solve_task(self, task: str, max_iterations: int = 30, streaming: bool = False, clear_memory: bool = True) -> str:
+    def solve_task(
+        self, task: str, max_iterations: int = 30, streaming: bool = False, clear_memory: bool = True
+    ) -> str:
         """Solve the given task using the ReAct framework.
 
         Args:
@@ -182,7 +180,7 @@ class Agent(BaseModel):
             str: The final response after task completion.
         """
         logger.debug(f"Solving task... {task}")
-        self._reset_session(task_to_solve=task, max_iterations=max_iterations,clear_memory=clear_memory)
+        self._reset_session(task_to_solve=task, max_iterations=max_iterations, clear_memory=clear_memory)
 
         # Generate task summary
         self.task_to_solve_summary = self._generate_task_summary(task)
@@ -228,7 +226,9 @@ class Agent(BaseModel):
                     # For streaming, collect the response chunks
                     content = ""
                     for chunk in self.model.generate_with_history(
-                        messages_history=self.memory.memory, prompt=current_prompt, streaming=True
+                        messages_history=self.memory.memory,
+                        prompt=current_prompt,
+                        streaming=True,
                     ):
                         content += chunk
 
@@ -245,7 +245,8 @@ class Agent(BaseModel):
                     )
                 else:
                     result = self.model.generate_with_history(
-                        messages_history=self.memory.memory, prompt=current_prompt, streaming=False
+                        messages_history=self.memory.memory, prompt=current_prompt, streaming=False,
+                        stop_words=["thinking"]
                     )
 
                 content = result.response
@@ -296,7 +297,7 @@ class Agent(BaseModel):
 
         return answer
 
-    def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30,clear_memory: bool = True):
+    def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30, clear_memory: bool = True):
         """Reset the agent's session."""
         logger.debug("Resetting session...")
         self.task_to_solve = task_to_solve
@@ -316,29 +317,30 @@ class Agent(BaseModel):
     def _compact_memory_if_needed(self, current_prompt: str = ""):
         """Compacts the memory if it exceeds the maximum occupancy or token limit."""
         ratio_occupied = self._calculate_context_occupancy()
-        
+
         # Compact memory if any of these conditions are met:
         # 1. Memory occupancy exceeds MAX_OCCUPANCY, or
         # 2. Current iteration is a multiple of compact_every_n_iterations, or
         # 3. Working memory exceeds max_tokens_working_memory (if set)
         should_compact_by_occupancy = ratio_occupied >= MAX_OCCUPANCY
         should_compact_by_iteration = (
-            self.compact_every_n_iterations is not None and 
-            self.current_iteration > 0 and 
-            self.current_iteration % self.compact_every_n_iterations == 0
+            self.compact_every_n_iterations is not None
+            and self.current_iteration > 0
+            and self.current_iteration % self.compact_every_n_iterations == 0
         )
         should_compact_by_token_limit = (
-            self.max_tokens_working_memory is not None and 
-            self.total_tokens > self.max_tokens_working_memory
+            self.max_tokens_working_memory is not None and self.total_tokens > self.max_tokens_working_memory
         )
-        
+
         if should_compact_by_occupancy or should_compact_by_iteration or should_compact_by_token_limit:
             if should_compact_by_occupancy:
                 logger.debug(f"Memory compaction triggered: Occupancy {ratio_occupied}% exceeds {MAX_OCCUPANCY}%")
-            
+
             if should_compact_by_iteration:
-                logger.debug(f"Memory compaction triggered: Iteration {self.current_iteration} is a multiple of {self.compact_every_n_iterations}")
-            
+                logger.debug(
+                    f"Memory compaction triggered: Iteration {self.current_iteration} is a multiple of {self.compact_every_n_iterations}"
+                )
+
             self._emit_event("memory_full")
             self.memory.compact()
             self.total_tokens = self.model.token_counter_with_history(self.memory.memory, current_prompt)
@@ -399,7 +401,7 @@ class Agent(BaseModel):
                     return self._handle_tool_execution_failure(response)
 
                 variable_name = self.variable_store.add(response)
-                new_prompt = self._format_observation_response(response, variable_name, iteration)
+                new_prompt = self._format_observation_response(response, executed_tool, variable_name, iteration)
 
                 return ObserveResponseResult(
                     next_prompt=new_prompt,
@@ -414,7 +416,7 @@ class Agent(BaseModel):
         """Extract tool usage from the response content."""
         if not content or not isinstance(content, str):
             return {}
-        
+
         xml_parser = ToleranceXMLParser()
         tool_names = self.tools.tool_names()
         return xml_parser.extract_elements(text=content, element_names=tool_names)
@@ -461,7 +463,7 @@ class Agent(BaseModel):
             answer=None,
         )
 
-    def _handle_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> (str,str):
+    def _handle_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> (str, str):
         """Handle the case where a tool call is repeated."""
         repeat_count = self.last_tool_call.get("count", 0)
         error_message = (
@@ -494,7 +496,9 @@ class Agent(BaseModel):
             answer=None,
         )
 
-    def _format_observation_response(self, response: str, variable_name: str, iteration: int) -> str:
+    def _format_observation_response(
+        self, response: str, last_exectured_tool: str, variable_name: str, iteration: int
+    ) -> str:
         """Format the observation response with the given response, variable name, and iteration."""
         response_display = response
         if len(response) > MAX_RESPONSE_LENGTH:
@@ -504,28 +508,44 @@ class Agent(BaseModel):
             )
 
         # Format the response message
-        formatted_response = (
-            f"Your next step: you Must now plan the next tool call to complete the based on this new observation\n"
-            f"\n--- Observations for iteration {iteration} / max {self.max_iterations} ---\n"
-            f"\n--- Tool execution result in ${variable_name}$ ---\n"
-            f"<{variable_name}>\n{response_display}\n</{variable_name}>\n\n"
-            f"--- Tools ---\n{self._get_tools_names_prompt()}\n"
-            f"--- Variables ---\n{self._get_variable_prompt()}\n"
-            "Analyze this response to determine the next steps. If the step failed, reconsider your approach.\n"
-            f"--- Task to solve summary ---\n{self.task_to_solve_summary}\n"
-            "--- Format ---\n"
-            "Respond only with two XML blocks in markdown as specified in system prompt.\n"
-            "No extra comments must be added.\n"
+        formatted_response = formatted_response = (
+            "# Analysis and Next Action Decision Point\n\n"
+            f"📊 Progress: Iteration {iteration}/{self.max_iterations}\n\n"
+            "## Current Context\n"
+            f"```\n{self.task_to_solve_summary}```\n\n"
+            f"## Latest Tool {last_exectured_tool} Execution Result:\n"
+            f"Variable: ${variable_name}$\n"
+            f"```\n{response_display}```\n\n"
+            "## Available Resources\n"
+            f"🛠️ Tools:\n{self._get_tools_names_prompt()}\n\n"
+            f"📦 Variables:\n{self._get_variable_prompt()}\n\n"
+            "## Your Task\n"
+            "1. Analyze the execution result and progress, formalize if the current step is solved according to the task.\n"
+            "2. Determine the most effective next step\n"
+            "3. Select exactly ONE tool from the available list\n"
+            "4. Utilize variable interpolation where needed\n"
+            "## Response Requirements\n"
+            "Provide TWO markdown-formatted XML blocks:\n"
+            "1. Your analysis of the progression resulting from the execution of the tool in <thinking> tags, don't include <context_analysis/>\n"
+            "2. Your tool execution plan in <tool_name> tags\n\n"
+            "## Response Format\n"
             "```xml\n"
             "<thinking>\n"
-            "...\n"
+            "[Detailed analysis of progress, and reasoning for next step]\n"
             "</thinking>\n"
             "```\n"
             "```xml\n"
-            "< ...tool_name... >\n"
-            "...\n"
-            "</ ...tool_name... >\n"
-            "```"
+            "<action>\n"
+            "<selected_tool_name>\n"
+            "[Precise instruction for tool execution]\n"
+            "</selected_tool_name>\n"
+            "<action/>\n"
+            "```\n\n"
+            "⚠️ Important:\n"
+            "- Respond ONLY with the two XML blocks\n"
+            "- No additional commentary\n"
+            "- If previous step failed, revise approach\n"
+            "- Ensure variable interpolation syntax is correct\n"
         )
 
         return formatted_response
@@ -589,10 +609,10 @@ class Agent(BaseModel):
             arguments_with_values_interpolated = {
                 key: self._interpolate_variables(value) for key, value in arguments_with_values.items()
             }
-            
+
             arguments_with_values_interpolated = arguments_with_values_interpolated
 
-            # test if tool need variables in context 
+            # test if tool need variables in context
             if tool.need_variables:
                 # Inject variables into the tool if needed
                 arguments_with_values_interpolated["variables"] = self.variable_store
@@ -603,8 +623,7 @@ class Agent(BaseModel):
             try:
                 # Convert arguments to proper types
                 converted_args = self.tools.validate_and_convert_arguments(
-                    tool_name, 
-                    arguments_with_values_interpolated
+                    tool_name, arguments_with_values_interpolated
                 )
             except ValueError as e:
                 return "", f"Argument Error: {str(e)}"
@@ -637,9 +656,10 @@ class Agent(BaseModel):
         """Interpolate variables using $var$ syntax in the given text."""
         try:
             import re
+
             for var in self.variable_store.keys():
                 # Escape the variable name for regex, but use raw value for replacement
-                pattern = rf'\${re.escape(var)}\$'
+                pattern = rf"\${re.escape(var)}\$"
                 replacement = self.variable_store[var]
                 text = re.sub(pattern, replacement, text)
             return text
@@ -729,9 +749,7 @@ class Agent(BaseModel):
         # Remove the last assistant / user message
         user_message = memory_copy.pop()
         assistant_message = memory_copy.pop()
-        summary = self.model.generate_with_history(
-            messages_history=memory_copy, prompt=prompt_summary
-        )
+        summary = self.model.generate_with_history(messages_history=memory_copy, prompt=prompt_summary)
         # Remove user message
         memory_copy.pop()
         # Replace by summary

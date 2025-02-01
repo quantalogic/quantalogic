@@ -123,7 +123,8 @@ class GenerativeModel:
 
     # Generate a response with conversation history and optional streaming
     def generate_with_history(
-        self, messages_history: list[Message], prompt: str, image_url: str | None = None, streaming: bool = False
+        self, messages_history: list[Message], prompt: str, image_url: str | None = None, streaming: bool = False,
+        stop_words: list[str] | None = None
     ) -> ResponseStats:
         """Generate a response with conversation history and optional image.
 
@@ -132,6 +133,7 @@ class GenerativeModel:
             prompt: Current user prompt.
             image_url: Optional image URL for visual queries.
             streaming: Whether to stream the response.
+            stop_words: Optional list of stop words for streaming
 
         Returns:
             Detailed response statistics or a generator in streaming mode.
@@ -163,6 +165,7 @@ class GenerativeModel:
                 model=self.model,
                 messages=messages,
                 num_retries=MIN_RETRIES,
+                stop=stop_words,
             )
 
             token_usage = TokenUsage(
@@ -181,7 +184,7 @@ class GenerativeModel:
         except Exception as e:
             self._handle_generation_exception(e)
 
-    def _stream_response(self, messages):
+    def _stream_response(self, messages, stop_words: list[str] | None = None):
         """Private method to handle streaming responses."""
         try:
             for chunk in generate_completion(
@@ -189,7 +192,8 @@ class GenerativeModel:
                 model=self.model,
                 messages=messages,
                 num_retries=MIN_RETRIES,
-                stream=True,  # Enable streaming
+                stream=True,  # Enable streaming,
+                stop=stop_words,
             ):
                 if chunk.choices[0].delta.content is not None:
                     self.event_emitter.emit("stream_chunk", chunk.choices[0].delta.content)
