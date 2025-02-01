@@ -3,64 +3,63 @@ from typing import Any
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
+from rich.text import Text
 from rich.tree import Tree
 
 
 def console_print_events(event: str, data: dict[str, Any] | None = None):
-    """Print events with rich formatting.
-
-    Args:
-        event (str): Name of the event.
-        data (Dict[str, Any], optional): Additional event data. Defaults to None.
-    """
+    """Print events with elegant compact formatting."""
     console = Console()
 
-    # Define panel title with enhanced styling
-    panel_title = f"[bold cyan]Event: {event}[/bold cyan]"
-
+    # Stylish no-data presentation
     if not data:
-        # Display a friendly message when no data is available
         console.print(
-            Panel(
-                "[italic yellow]No additional event data available.[/italic yellow]",
-                title=panel_title,
-                border_style="dim",
-                expand=True,
-                padding=(1, 2),
+            Panel.fit(
+                Text(f"ⓘ No event data", justify="center", style="italic cyan"),
+                title=f"✨ {event}",
+                border_style="cyan",
+                box=box.ROUNDED,
+                padding=(0, 2),
             )
         )
         return
 
-    # Function to render nested dictionaries as a tree
-    def render_tree(data: dict[str, any], tree: Tree):
+    # Enhanced tree rendering with subtle decorations
+    def render_tree(data: dict[str, Any], tree: Tree) -> None:
         for key, value in data.items():
+            key_text = Text(f"◈ {key}", style="bright_magenta")
             if isinstance(value, dict):
-                branch = tree.add(f"[bold magenta]{key}[/bold magenta]")
+                branch = tree.add(key_text)
                 render_tree(value, branch)
             elif isinstance(value, list):
-                branch = tree.add(f"[bold magenta]{key}[/bold magenta]")
-                for index, item in enumerate(value, start=1):
+                branch = tree.add(key_text)
+                for item in value:
                     if isinstance(item, dict):
-                        sub_branch = branch.add(f"[cyan]Item {index}[/cyan]")
+                        sub_branch = branch.add(Text("○", style="cyan"))
                         render_tree(item, sub_branch)
                     else:
-                        branch.add(f"[green]{item}[/green]")
+                        branch.add(Text(f"• {item}", style="dim green"))
             else:
-                tree.add(f"[bold yellow]{key}[/bold yellow]: [white]{value}[/white]")
+                tree.add(Text.assemble(
+                    key_text, 
+                    (" → ", "dim"), 
+                    str(value), style="bright_white"
+                ))
 
-    # Create a Tree to represent nested data
-    tree = Tree(f"[bold blue]{event} Details[/bold blue]", guide_style="bold bright_blue")
-
+    # Create a compact tree with subtle styling
+    tree = Tree("", guide_style="dim cyan", hide_root=True)
     render_tree(data, tree)
 
-    # Create a panel to display the tree
-    panel = Panel(
-        tree,
-        title=panel_title,
-        border_style="bright_blue",
-        padding=(1, 2),
-        box=box.ROUNDED,
-        expand=True,
+    # Elegant panel design
+    console.print(
+        Panel(
+            tree,
+            title=f"🎯 [bold bright_cyan]{event}[/]",
+            border_style="bright_blue",
+            box=box.DOUBLE_EDGE,
+            padding=(0, 1),
+            subtitle=f"[dim]Items: {len(data)}[/dim]",
+            subtitle_align="right",
+        ),
+        no_wrap=True
     )
-
-    console.print(panel)

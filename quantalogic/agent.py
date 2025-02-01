@@ -417,9 +417,18 @@ class Agent(BaseModel):
         if not content or not isinstance(content, str):
             return {}
 
+        # Extract action 
         xml_parser = ToleranceXMLParser()
+        action = xml_parser.extract_elements(text=content, element_names=["action"])
+
         tool_names = self.tools.tool_names()
-        return xml_parser.extract_elements(text=content, element_names=tool_names)
+
+        if action:
+            return xml_parser.extract_elements(text=action["action"], element_names=tool_names)
+        else:
+            # Fallback to extracting tool usage directly
+            return xml_parser.extract_elements(text=content, element_names=tool_names)
+
 
     def _parse_tool_arguments(self, tool, tool_input: str) -> dict:
         """Parse the tool arguments from the tool input."""
@@ -511,11 +520,8 @@ class Agent(BaseModel):
         formatted_response = formatted_response = (
             "# Analysis and Next Action Decision Point\n\n"
             f"📊 Progress: Iteration {iteration}/{self.max_iterations}\n\n"
-            "## Current Context\n"
-            f"```\n{self.task_to_solve_summary}```\n\n"
-            f"## Latest Tool {last_exectured_tool} Execution Result:\n"
-            f"Variable: ${variable_name}$\n"
-            f"```\n{response_display}```\n\n"
+            "## Global Task summary:\n"
+            f"```\n\n{self.task_to_solve_summary}```\n\n"
             "## Available Resources\n"
             f"🛠️ Tools:\n{self._get_tools_names_prompt()}\n\n"
             f"📦 Variables:\n{self._get_variable_prompt()}\n\n"
@@ -528,6 +534,9 @@ class Agent(BaseModel):
             "Provide TWO markdown-formatted XML blocks:\n"
             "1. Your analysis of the progression resulting from the execution of the tool in <thinking> tags, don't include <context_analysis/>\n"
             "2. Your tool execution plan in <tool_name> tags\n\n"
+            "## Last executed action result\n"
+            f"Last executed tool {last_exectured_tool} Execution Result:\n"
+            f"\n<{variable_name}>\n{response_display}\n</{variable_name}>\n"
             "## Response Format\n"
             "```xml\n"
             "<thinking>\n"
@@ -545,8 +554,10 @@ class Agent(BaseModel):
             "- Respond ONLY with the two XML blocks\n"
             "- No additional commentary\n"
             "- If previous step failed, revise approach\n"
-            "- Ensure variable interpolation syntax is correct\n"
-            "- Utilize the <task_complete> tool to indicate task completion, display the result or if the task is deemed unfeasible.")
+            "- Use interpolated variables ($variable_name$) where required in tool calls, to minimize token usage, if possible\n"
+            "- strictly follow the required arguments for each tool as defined in system prompt\n"
+            "- Utilize <action><task_complete><answer>...</answer></task_complete><action> to indicate task completion, display the result or if the task is deemed unfeasible."
+        )
 
         return formatted_response
 

@@ -5,9 +5,9 @@
 
 3. Rewrite the translated poem with the style of: 
 
-    a. Victor Hugo
-    b. Charles de Gaulle
-    c. Albert Camus
+    a. William Shakespeare
+    b. Mark Twain
+    c. Toni Morrison
 
 Write each poem in a different file in ./poems folder in markdown format. You must write the poem.
 

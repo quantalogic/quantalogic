@@ -39,7 +39,7 @@ Task Format: <task>task_description</task>
     <!-- ONGOING OPERATIONS -->
     • 🔄 Analyze Last Operation Results: Result, Impact, Effectiveness
     • 📊 Progress Map: Completed%, Remaining%, Blockers
-    • 💾 Variable State: $var: value pairs
+    • 💾 Variable State: $var: short description of the content of each variable.
     • 📈 Performance Metrics: Speed, Quality, Resource Usage
   </execution_analysis>
 
