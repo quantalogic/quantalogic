@@ -539,7 +539,7 @@ class Agent(BaseModel):
             "<selected_tool_name>\n"
             "[Precise instruction for tool execution]\n"
             "</selected_tool_name>\n"
-            "<action/>\n"
+            "</action>\n"
             "```\n\n"
             "⚠️ Important:\n"
             "- Respond ONLY with the two XML blocks\n"
