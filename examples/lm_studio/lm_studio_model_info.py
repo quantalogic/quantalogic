@@ -15,19 +15,23 @@ from pydantic import BaseModel, Field
 
 
 class ModelType(str, Enum):
+    """Enum representing different types of AI models supported by LM Studio"""
     LLM = "llm"
     EMBEDDINGS = "embeddings"
     VLM = "vlm"
 
 class CompatibilityType(str, Enum):
+    """Enum representing different model compatibility formats"""
     MLX = "mlx"
     GGUF = "gguf"
 
 class ModelState(str, Enum):
+    """Enum representing the loading state of models in LM Studio"""
     LOADED = "loaded"
     NOT_LOADED = "not-loaded"
 
 class ModelInfo(BaseModel):
+    """Pydantic model representing metadata for an AI model in LM Studio"""
     id: str = Field(..., description="Unique model identifier in LM Studio's namespace")
     object: Literal["model"] = Field("model", description="Always 'model' for model objects")
     type: ModelType = Field(..., description="Type of AI model")
@@ -45,6 +49,7 @@ class ModelInfo(BaseModel):
     )
 
 class ModelListResponse(BaseModel):
+    """Pydantic model representing the response from LM Studio's model list API"""
     data: List[ModelInfo] = Field(..., description="List of available models")
     object: Literal["list"] = Field("list", description="Always 'list' for list responses")
 

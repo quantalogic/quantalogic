@@ -546,7 +546,7 @@ class Agent(BaseModel):
             "- No additional commentary\n"
             "- If previous step failed, revise approach\n"
             "- Ensure variable interpolation syntax is correct\n"
-        )
+            "- Utilize the <task_complete> tool to indicate task completion, display the result or if the task is deemed unfeasible.")
 
         return formatted_response
 

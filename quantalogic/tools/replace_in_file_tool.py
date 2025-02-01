@@ -62,6 +62,7 @@ class ReplaceInFileTool(Tool):
         "Updates sections of content in an existing file using SEARCH/REPLACE blocks. "
         "If exact matches are not found, the tool attempts to find similar sections based on similarity. "
         "Returns the updated content or an error."
+        "⚠️ THIS TOOL MUST BE USED IN PRIORITY TO UPDATE AN EXISTING FILE."
     )
     need_validation: bool = True
 
