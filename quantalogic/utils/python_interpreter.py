@@ -1,5 +1,6 @@
 import ast
 from typing import Any, List, Dict, Optional, Tuple
+import builtins  # <-- added to correctly copy builtins
 
 # Exception used to signal a "return" from a function call.
 class ReturnException(Exception):
@@ -30,16 +31,28 @@ class ASTInterpreter:
             # Create a global environment (first frame) with allowed modules.
             self.env_stack: List[Dict[str, Any]] = [{}]
             self.env_stack[0].update(self.modules)
-            # Replace __import__ in __builtins__ with our safe_import.
-            safe_builtins: Dict[str, Any] = {}
-            for name in dir(__builtins__):
-                if name == "__import__":
-                    safe_builtins[name] = self.safe_import
-                else:
-                    safe_builtins[name] = getattr(__builtins__, name)
+            # Use builtins from the builtins module.
+            safe_builtins: Dict[str, Any] = dict(vars(builtins))
+            safe_builtins["__import__"] = self.safe_import
+            if "set" not in safe_builtins:
+                safe_builtins["set"] = builtins.set
             self.env_stack[0]["__builtins__"] = safe_builtins
+            # Make builtins names (like set) directly available.
+            self.env_stack[0].update(safe_builtins)
+            if "set" not in self.env_stack[0]:
+                self.env_stack[0]["set"] = safe_builtins["set"]
         else:
             self.env_stack = env_stack
+            # Ensure global frame has safe builtins.
+            if "__builtins__" not in self.env_stack[0]:
+                safe_builtins: Dict[str, Any] = dict(vars(builtins))
+                safe_builtins["__import__"] = self.safe_import
+                if "set" not in safe_builtins:
+                    safe_builtins["set"] = builtins.set
+                self.env_stack[0]["__builtins__"] = safe_builtins
+                self.env_stack[0].update(safe_builtins)
+            if "set" not in self.env_stack[0]:
+                self.env_stack[0]["set"] = self.env_stack[0]["__builtins__"]["set"]
 
         # Store source code lines for error reporting if provided.
         if source is not None:
@@ -56,8 +69,9 @@ class ASTInterpreter:
         fromlist: Tuple[str, ...] = (),
         level: int = 0
     ) -> Any:
-        if name not in self.modules:
-            raise ImportError(f"Module {name} is not allowed.")
+        if name not in self.allowed_modules:
+            error_msg = f"Import Error: Module '{name}' is not allowed. Only {self.allowed_modules} are permitted."
+            raise ImportError(error_msg)
         return self.modules[name]
 
     # Helper: create a new interpreter instance using a given environment stack.
@@ -88,8 +102,8 @@ class ASTInterpreter:
                 raise TypeError("Can only unpack an iterable")
             if len(target.elts) != len(value):
                 raise ValueError("Unpacking mismatch")
-            for elt, val in zip(target.elts, value):
-                self.assign(elt, val)
+            for i in range(len(target.elts)):
+                self.assign(target.elts[i], value[i])
         elif isinstance(target, ast.Attribute):
             obj = self.visit(target.value)
             setattr(obj, target.attr, value)
@@ -102,11 +116,15 @@ class ASTInterpreter:
         method = getattr(self, method_name, self.generic_visit)
         try:
             return method(node)
+        except (ReturnException, BreakException, ContinueException):
+            raise
         except Exception as e:
             lineno = getattr(node, "lineno", None)
             col = getattr(node, "col_offset", None)
+            lineno = lineno if lineno is not None else 1
+            col = col if col is not None else 0
             context_line = ""
-            if self.source_lines and lineno is not None and 1 <= lineno <= len(self.source_lines):
+            if self.source_lines and 1 <= lineno <= len(self.source_lines):
                 context_line = self.source_lines[lineno - 1]
             raise Exception(
                 f"Error line {lineno}, col {col}:\n{context_line}\nDescription: {str(e)}"
@@ -131,9 +149,21 @@ class ASTInterpreter:
         for alias in node.names:
             module_name: str = alias.name
             asname: str = alias.asname if alias.asname is not None else module_name
-            if module_name not in self.modules:
-                raise ImportError(f"Module {module_name} is not allowed.")
+            if module_name not in self.allowed_modules:
+                raise Exception(f"Import Error: Module '{module_name}' is not allowed. Only {self.allowed_modules} are permitted.")
             self.set_variable(asname, self.modules[module_name])
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if not node.module:
+            raise Exception("Import Error: Missing module name in 'from ... import ...' statement")
+        if node.module not in self.allowed_modules:
+            raise Exception(f"Import Error: Module '{node.module}' is not allowed. Only {self.allowed_modules} are permitted.")
+        for alias in node.names:
+            if alias.name == "*":
+                raise Exception("Import Error: 'from ... import *' is not supported.")
+            asname = alias.asname if alias.asname else alias.name
+            attr = getattr(self.modules[node.module], alias.name)
+            self.set_variable(asname, attr)
 
     # --- Visitor for ListComprehension nodes ---
     def visit_ListComp(self, node: ast.ListComp) -> List[Any]:
@@ -169,7 +199,8 @@ class ASTInterpreter:
     # --- Other node visitors below ---
     def visit_Module(self, node: ast.Module) -> Any:
         result: Any = None
-        for stmt in node.body:
+        body = node.body
+        for stmt in body:
             result = self.visit(stmt)
         return result
 
@@ -238,7 +269,11 @@ class ASTInterpreter:
             self.assign(target, value)
 
     def visit_AugAssign(self, node: ast.AugAssign) -> Any:
-        current_val: Any = self.visit(node.target)
+        # If target is a Name, get its current value from the environment.
+        if isinstance(node.target, ast.Name):
+            current_val: Any = self.get_variable(node.target.id)
+        else:
+            current_val: Any = self.visit(node.target)
         right_val: Any = self.visit(node.value)
         op = node.op
         if isinstance(op, ast.Add):
@@ -323,13 +358,19 @@ class ASTInterpreter:
         else:
             raise Exception("Unsupported boolean operator: " + str(node.op))
 
-    def visit_If(self, node: ast.If) -> None:
+    def visit_If(self, node: ast.If) -> Any:
         if self.visit(node.test):
-            for stmt in node.body:
-                self.visit(stmt)
+            branch = node.body
         else:
-            for stmt in node.orelse:
+            branch = node.orelse
+        result = None
+        if branch:
+            for stmt in branch[:-1]:
+                # Execute all but the last statement
                 self.visit(stmt)
+            # Return value from the last statement
+            result = self.visit(branch[-1])
+        return result
 
     def visit_While(self, node: ast.While) -> None:
         while self.visit(node.test):
@@ -414,6 +455,14 @@ class ASTInterpreter:
     def visit_Index(self, node: ast.Index) -> Any:
         return self.visit(node.value)
 
+    # Visitor for Pass nodes.
+    def visit_Pass(self, node: ast.Pass) -> None:
+        # Simply ignore 'pass' statements.
+        return None
+
+    def visit_TypeIgnore(self, node: ast.TypeIgnore) -> None:
+        pass
+
 # Class to represent a user-defined function.
 class Function:
     def __init__(self, node: ast.FunctionDef, closure: List[Dict[str, Any]], interpreter: ASTInterpreter) -> None:
@@ -427,6 +476,10 @@ class Function:
         # For simplicity, only positional parameters are supported.
         if len(args) < len(self.node.args.args):
             raise TypeError("Not enough arguments provided")
+        if len(args) > len(self.node.args.args):
+            raise TypeError("Too many arguments provided")
+        if kwargs:
+            raise TypeError("Keyword arguments are not supported")
         for i, arg in enumerate(self.node.args.args):
             local_frame[arg.arg] = args[i]
         new_env_stack.append(local_frame)
@@ -450,6 +503,10 @@ class LambdaFunction:
         local_frame: Dict[str, Any] = {}
         if len(args) < len(self.node.args.args):
             raise TypeError("Not enough arguments for lambda")
+        if len(args) > len(self.node.args.args):
+            raise TypeError("Too many arguments for lambda")
+        if kwargs:
+            raise TypeError("Keyword arguments are not supported in lambda")
         for i, arg in enumerate(self.node.args.args):
             local_frame[arg.arg] = args[i]
         new_env_stack.append(local_frame)

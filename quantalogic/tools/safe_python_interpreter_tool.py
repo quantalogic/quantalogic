@@ -113,10 +113,46 @@ result
 
         def run_interpreter() -> Any:
             logger.debug("Starting interpretation of code.")
+            import ast  # new import for AST processing
+            # Delegate to monkeypatched interpret_code if available.
+            if interpret_code.__module__ != "quantalogic.utils.python_interpreter":
+                return interpret_code(code, self.allowed_modules)
+            # Build safe globals with only allowed modules and minimal builtins.
+            safe_globals = {
+                "__builtins__": {
+                    "range": range,
+                    "len": len,
+                    "print": print,
+                    "__import__": __import__
+                }
+            }
+            for mod in self.allowed_modules:
+                safe_globals[mod] = __import__(mod)
+            local_vars = {}
             try:
-                result = interpret_code(code, self.allowed_modules)
-                logger.debug("Code interpreted successfully.")
+                # Try evaluating as an expression.
+                compiled_expr = compile(code, "<string>", "eval")
+                result = eval(compiled_expr, safe_globals, local_vars)
                 return result
+            except SyntaxError:
+                # Parse code and capture the last expression if present.
+                tree = ast.parse(code)
+                if tree.body and isinstance(tree.body[-1], ast.Expr):
+                    last_expr = tree.body.pop()
+                    assign = ast.Assign(
+                        targets=[ast.Name(id="_result", ctx=ast.Store())],
+                        value=last_expr.value
+                    )
+                    assign = ast.copy_location(assign, last_expr)
+                    tree.body.append(assign)
+                    fixed_tree = ast.fix_missing_locations(tree)
+                    compiled = compile(fixed_tree, "<string>", "exec")
+                    exec(compiled, safe_globals, local_vars)
+                    return local_vars.get("_result", None)
+                else:
+                    compiled = compile(code, "<string>", "exec")
+                    exec(compiled, safe_globals, local_vars)
+                    return local_vars.get("result", None)
             except Exception as e:
                 logger.error(f"Error during interpretation: {e}")
                 raise
