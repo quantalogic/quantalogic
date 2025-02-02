@@ -15,6 +15,7 @@ from quantalogic.tools import (
     ReadHTMLTool,
     ReplaceInFileTool,
     RipgrepTool,
+    SafePythonInterpreterTool,
     SearchDefinitionNames,
     TaskCompleteTool,
     WriteFileTool,
@@ -77,7 +78,8 @@ def create_coding_agent(
         DuckDuckGoSearchTool(),
         JinjaTool(),
         ReadHTMLTool(),
-        GrepAppTool()
+        GrepAppTool(),
+       ## SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
     ]
 
     if vision_model_name:

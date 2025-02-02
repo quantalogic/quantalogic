@@ -26,6 +26,7 @@ from quantalogic.tools import (
     ReadHTMLTool,
     ReplaceInFileTool,
     RipgrepTool,
+    SafePythonInterpreterTool,
     SearchDefinitionNames,
     TaskCompleteTool,
     WikipediaSearchTool,
@@ -86,7 +87,8 @@ def create_agent(
                 model_name="openai/dall-e-3",
                 on_token=console_print_token if not no_stream else None
             ),
-        ReadHTMLTool()
+        ReadHTMLTool(),
+       # SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
     ]
 
     if vision_model_name:
@@ -186,6 +188,7 @@ def create_full_agent(
         WikipediaSearchTool(),
         DuckDuckGoSearchTool(),
         ReadHTMLTool(),
+      #  SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
     ]
 
     if vision_model_name:
@@ -236,6 +239,7 @@ def create_basic_agent(
         ExecuteBashCommandTool(),
         LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
         ReadHTMLTool(),
+    #    SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
     ]
 
     if vision_model_name:
