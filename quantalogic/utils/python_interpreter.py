@@ -490,32 +490,54 @@ class ASTInterpreter:
         pass
 
     def visit_Try(self, node: ast.Try) -> Any:
+        result: Any = None
+        exc_info: Optional[tuple] = None
+        
         try:
-            result: Any = None
             for stmt in node.body:
                 result = self.visit(stmt)
-        except Exception as exc:
-            handled = False
+        except Exception as e:
+            # Store the full exception info
+            exc_info = (type(e), e, e.__traceback__)
+            # Handle the exception
             for handler in node.handlers:
-                handler_type = self.visit(handler.type) if handler.type else Exception
-                # Use original exception if wrapped.
-                orig_exc = exc.__cause__ or exc
-                if isinstance(orig_exc, handler_type):
+                if handler.type is None:
+                    # Catch all handler
+                    exc_type = Exception
+                else:
+                    exc_type = self.visit(handler.type)
+                
+                if exc_info and isinstance(exc_info[1], exc_type):
+                    # If handler has a name, bind exception to it
                     if handler.name:
-                        self.set_variable(handler.name, exc)
-                    result = None
+                        self.set_variable(handler.name, exc_info[1])
+                    # Execute handler body
                     for stmt in handler.body:
                         result = self.visit(stmt)
-                    handled = True
+                    exc_info = None  # Mark as handled
                     break
-            if not handled:
-                raise exc
+            
+            # If exception wasn't handled, re-raise it
+            if exc_info:
+                raise exc_info[1]
         else:
+            # No exception occurred, execute else clause
             for stmt in node.orelse:
                 result = self.visit(stmt)
         finally:
+            # Always execute finally clause
             for stmt in node.finalbody:
-                self.visit(stmt)
+                try:
+                    self.visit(stmt)
+                except ReturnException:
+                    # Allow return statements in finally
+                    raise
+                except Exception:
+                    # Don't let finally clause errors mask the original error
+                    if exc_info:
+                        raise exc_info[1]
+                    raise
+        
         return result
 
     def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
