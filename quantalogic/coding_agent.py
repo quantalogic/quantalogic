@@ -79,7 +79,7 @@ def create_coding_agent(
         JinjaTool(),
         ReadHTMLTool(),
         GrepAppTool(),
-       ## SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
+        # SafePythonInterpreterTool(allowed_modules=["math", "numpy","decimal"])
     ]
 
     if vision_model_name:

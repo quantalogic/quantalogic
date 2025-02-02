@@ -61,6 +61,15 @@ class ASTInterpreter:
         else:
             self.source_lines = None
 
+        # NEW: Add standard Decimal features if allowed.
+        if "decimal" in self.modules:
+            dec = self.modules["decimal"]
+            self.env_stack[0]["Decimal"] = dec.Decimal
+            self.env_stack[0]["getcontext"] = dec.getcontext
+            self.env_stack[0]["setcontext"] = dec.setcontext
+            self.env_stack[0]["localcontext"] = dec.localcontext
+            self.env_stack[0]["Context"] = dec.Context
+
     # This safe __import__ only allows modules explicitly provided.
     def safe_import(
         self,
