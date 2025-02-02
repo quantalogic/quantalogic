@@ -70,28 +70,9 @@ Task Format: <task>task_description</task>
 </action>
 ```
 
-### Action Patterns
-1. 🆕 New Task:
-```xml
-<action>
-<analyzer>
-  <input>$data$</input>
-  <mode>initialize</mode>
-</analyzer>
-</action>
-```
+### Example Usage
 
-2. 🔄 Continuation:
-```xml
-<action>
-<processor>
-  <state>$current$</state>
-  <action>optimize</action>
-</processor>
-</action>
-```
-
-3. ✅ Completion:
+ ✅ Completion:
 ```xml
 <action>
 <task_complete>

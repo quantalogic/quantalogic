@@ -780,21 +780,16 @@ class Agent(BaseModel):
             str: Generated task summary
         """
         try:
-            if len(content) < 200:
+            if len(content) < 1024*4:
                 return content
             prompt = (
-                "Create an ultra-concise task summary that captures ONLY: \n"
+                "Create a task summary that captures ONLY: \n"
                 "1. Primary objective/purpose\n"
                 "2. Core actions/requirements\n"
                 "3. Desired end-state/outcome\n\n"
                 "Guidelines:\n"
                 "- Use imperative voice\n"
-                "- Exclude background, explanations, and examples\n"
-                "- Compress information using semantic density\n"
-                "- Strict 2-3 sentence maximum (under 50 words)\n"
-                "- Format: 'Concise Task Summary: [Your summary]'\n\n"
                 f"Input Task Description:\n{content}\n\n"
-                "Concise Task Summary:"
             )
             result = self.model.generate(prompt=prompt)
             logger.debug(f"Generated summary: {result.response}")
