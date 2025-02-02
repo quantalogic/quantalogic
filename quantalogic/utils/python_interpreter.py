@@ -431,8 +431,8 @@ class ASTInterpreter:
         raise ContinueException()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        # Capture the current env_stack for a closure.
-        closure: List[Dict[str, Any]] = [frame.copy() for frame in self.env_stack]
+        # Capture the current env_stack for a closure without copying inner dicts.
+        closure: List[Dict[str, Any]] = self.env_stack[:]  # <-- changed here
         func = Function(node, closure, self)
         self.set_variable(node.name, func)
 
@@ -447,7 +447,7 @@ class ASTInterpreter:
         raise ReturnException(value)
 
     def visit_Lambda(self, node: ast.Lambda) -> Any:
-        closure: List[Dict[str, Any]] = [frame.copy() for frame in self.env_stack]
+        closure: List[Dict[str, Any]] = self.env_stack[:]  # <-- changed here
         return LambdaFunction(node, closure, self)
 
     def visit_List(self, node: ast.List) -> List[Any]:
