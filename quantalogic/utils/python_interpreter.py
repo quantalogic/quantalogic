@@ -96,7 +96,11 @@ class ASTInterpreter:
     # Used for assignment targets. This handles names and destructuring.
     def assign(self, target: ast.AST, value: Any) -> None:
         if isinstance(target, ast.Name):
-            self.set_variable(target.id, value)
+            # If current frame declares the name as global, update global frame.
+            if "__global_names__" in self.env_stack[-1] and target.id in self.env_stack[-1]["__global_names__"]:
+                self.env_stack[0][target.id] = value
+            else:
+                self.env_stack[-1][target.id] = value
         elif isinstance(target, (ast.Tuple, ast.List)):
             # Support single-star unpacking.
             star_index = None
@@ -487,15 +491,16 @@ class ASTInterpreter:
 
     def visit_Try(self, node: ast.Try) -> Any:
         try:
-            result = None
+            result: Any = None
             for stmt in node.body:
                 result = self.visit(stmt)
         except Exception as exc:
             handled = False
             for handler in node.handlers:
-                # Minimal: assume handler.type is a Name
                 handler_type = self.visit(handler.type) if handler.type else Exception
-                if isinstance(exc, handler_type):
+                # Use original exception if wrapped.
+                orig_exc = exc.__cause__ or exc
+                if isinstance(orig_exc, handler_type):
                     if handler.name:
                         self.set_variable(handler.name, exc)
                     result = None
@@ -587,8 +592,7 @@ class ASTInterpreter:
         raise Exception("Raise with no exception specified")
 
     def visit_Global(self, node: ast.Global):
-        # Minimal handling.
-        pass
+        self.env_stack[-1].setdefault("__global_names__", set()).update(node.names)
 
     def visit_IfExp(self, node: ast.IfExp):
         return self.visit(node.body) if self.visit(node.test) else self.visit(node.orelse)
@@ -639,12 +643,19 @@ class ASTInterpreter:
 class Function:
     def __init__(self, node: ast.FunctionDef, closure: List[Dict[str, Any]], interpreter: ASTInterpreter) -> None:
         self.node: ast.FunctionDef = node
-        self.closure: List[Dict[str, Any]] = closure
+        # Shallow copy to support recursion.
+        self.closure: List[Dict[str, Any]] = self.env_stack_reference(closure)
         self.interpreter: ASTInterpreter = interpreter
 
+    # Helper to simply return the given environment stack (shallow copy of list refs).
+    def env_stack_reference(self, env_stack: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return env_stack[:]  # shallow
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        new_env_stack: List[Dict[str, Any]] = [frame.copy() for frame in self.closure]
+        new_env_stack: List[Dict[str, Any]] = self.closure[:]
         local_frame: Dict[str, Any] = {}
+        # Bind the function into its own local frame for recursion.
+        local_frame[self.node.name] = self
         # For simplicity, only positional parameters are supported.
         if len(args) < len(self.node.args.args):
             raise TypeError("Not enough arguments provided")
@@ -664,15 +675,24 @@ class Function:
             return ret.value
         return None
 
+    # Add __get__ to support method binding.
+    def __get__(self, instance: Any, owner: Any):
+        def method(*args: Any, **kwargs: Any) -> Any:
+            return self(instance, *args, **kwargs)
+        return method
+
 # Class to represent a lambda function.
 class LambdaFunction:
     def __init__(self, node: ast.Lambda, closure: List[Dict[str, Any]], interpreter: ASTInterpreter) -> None:
         self.node: ast.Lambda = node
-        self.closure: List[Dict[str, Any]] = closure
+        self.closure: List[Dict[str, Any]] = self.env_stack_reference(closure)
         self.interpreter: ASTInterpreter = interpreter
 
+    def env_stack_reference(self, env_stack: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return env_stack[:]
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        new_env_stack: List[Dict[str, Any]] = [frame.copy() for frame in self.closure]
+        new_env_stack: List[Dict[str, Any]] = self.closure[:]
         local_frame: Dict[str, Any] = {}
         if len(args) < len(self.node.args.args):
             raise TypeError("Not enough arguments for lambda")
