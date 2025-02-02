@@ -1,6 +1,6 @@
 import ast
+import builtins
 from typing import Any, List, Dict, Optional, Tuple
-import builtins  # <-- added to correctly copy builtins
 
 # Exception used to signal a "return" from a function call.
 class ReturnException(Exception):
@@ -35,12 +35,12 @@ class ASTInterpreter:
             safe_builtins: Dict[str, Any] = dict(vars(builtins))
             safe_builtins["__import__"] = self.safe_import
             if "set" not in safe_builtins:
-                safe_builtins["set"] = builtins.set
+                safe_builtins["set"] = set
             self.env_stack[0]["__builtins__"] = safe_builtins
             # Make builtins names (like set) directly available.
             self.env_stack[0].update(safe_builtins)
             if "set" not in self.env_stack[0]:
-                self.env_stack[0]["set"] = safe_builtins["set"]
+                self.env_stack[0]["set"] = set
         else:
             self.env_stack = env_stack
             # Ensure global frame has safe builtins.
@@ -48,7 +48,7 @@ class ASTInterpreter:
                 safe_builtins: Dict[str, Any] = dict(vars(builtins))
                 safe_builtins["__import__"] = self.safe_import
                 if "set" not in safe_builtins:
-                    safe_builtins["set"] = builtins.set
+                    safe_builtins["set"] = set
                 self.env_stack[0]["__builtins__"] = safe_builtins
                 self.env_stack[0].update(safe_builtins)
             if "set" not in self.env_stack[0]:
@@ -107,6 +107,10 @@ class ASTInterpreter:
         elif isinstance(target, ast.Attribute):
             obj = self.visit(target.value)
             setattr(obj, target.attr, value)
+        elif isinstance(target, ast.Subscript):
+            obj = self.visit(target.value)
+            key = self.visit(target.slice)
+            obj[key] = value
         else:
             raise Exception("Unsupported assignment target type: " + str(type(target)))
 
@@ -198,11 +202,11 @@ class ASTInterpreter:
 
     # --- Other node visitors below ---
     def visit_Module(self, node: ast.Module) -> Any:
-        result: Any = None
-        body = node.body
-        for stmt in body:
-            result = self.visit(stmt)
-        return result
+        # Execute all statements then return the 'result' variable if set.
+        last_value: Any = None
+        for stmt in node.body:
+            last_value = self.visit(stmt)
+        return self.env_stack[0].get("result", last_value)
 
     def visit_Expr(self, node: ast.Expr) -> Any:
         return self.visit(node.value)
@@ -463,6 +467,71 @@ class ASTInterpreter:
     def visit_TypeIgnore(self, node: ast.TypeIgnore) -> None:
         pass
 
+    def visit_Try(self, node: ast.Try) -> Any:
+        try:
+            result = None
+            for stmt in node.body:
+                result = self.visit(stmt)
+        except Exception as exc:
+            handled = False
+            for handler in node.handlers:
+                # Minimal: assume handler.type is a Name
+                handler_type = self.visit(handler.type) if handler.type else Exception
+                if isinstance(exc, handler_type):
+                    if handler.name:
+                        self.set_variable(handler.name, exc)
+                    result = None
+                    for stmt in handler.body:
+                        result = self.visit(stmt)
+                    handled = True
+                    break
+            if not handled:
+                raise exc
+        else:
+            for stmt in node.orelse:
+                result = self.visit(stmt)
+        finally:
+            for stmt in node.finalbody:
+                self.visit(stmt)
+        return result
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+        # Minimal support – assume these names exist in an outer frame.
+        return None
+
+    def visit_JoinedStr(self, node: ast.JoinedStr) -> str:
+        # Support f-string: concatenate all parts.
+        return "".join(self.visit(value) for value in node.values)
+
+    def visit_FormattedValue(self, node: ast.FormattedValue) -> str:
+        # Format the embedded expression.
+        return str(self.visit(node.value))
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> Any:
+        # Process a generator expression.
+        def generator():
+            base_frame: Dict[str, Any] = self.env_stack[-1].copy()
+            self.env_stack.append(base_frame)
+
+            def rec(gen_idx: int):
+                if gen_idx == len(node.generators):
+                    yield self.visit(node.elt)
+                else:
+                    comp = node.generators[gen_idx]
+                    iterable = self.visit(comp.iter)
+                    for item in iterable:
+                        new_frame: Dict[str, Any] = self.env_stack[-1].copy()
+                        self.env_stack.append(new_frame)
+                        self.assign(comp.target, item)
+                        if all(self.visit(if_clause) for if_clause in comp.ifs):
+                            yield from rec(gen_idx + 1)
+                        self.env_stack.pop()
+            gen = list(rec(0))
+            self.env_stack.pop()
+            for val in gen:
+                yield val
+        return generator()
+
 # Class to represent a user-defined function.
 class Function:
     def __init__(self, node: ast.FunctionDef, closure: List[Dict[str, Any]], interpreter: ASTInterpreter) -> None:
@@ -485,8 +554,9 @@ class Function:
         new_env_stack.append(local_frame)
         new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
         try:
-            for stmt in self.node.body:
+            for stmt in self.node.body[:-1]:
                 new_interp.visit(stmt)
+            return new_interp.visit(self.node.body[-1])
         except ReturnException as ret:
             return ret.value
         return None
@@ -506,7 +576,7 @@ class LambdaFunction:
         if len(args) > len(self.node.args.args):
             raise TypeError("Too many arguments for lambda")
         if kwargs:
-            raise TypeError("Keyword arguments are not supported in lambda")
+            raise TypeError("Lambda does not support keyword arguments")
         for i, arg in enumerate(self.node.args.args):
             local_frame[arg.arg] = args[i]
         new_env_stack.append(local_frame)
@@ -514,16 +584,40 @@ class LambdaFunction:
         return new_interp.visit(self.node.body)
 
 # The main function to interpret an AST.
-def interpret_ast(ast_tree: ast.AST, allowed_modules: List[str], source: Optional[str] = None) -> Any:
-    """
-    Interpret a Python AST with a restricted set of allowed modules.
-    
-    :param ast_tree: The abstract syntax tree to interpret.
-    :param allowed_modules: A list of module names that are allowed.
-    :param source: The original source code (for detailed error context), if available.
-    :return: The result of interpreting the AST.
-    """
-    interpreter: ASTInterpreter = ASTInterpreter(allowed_modules, source=source)
+def interpret_ast(ast_tree: Any, allowed_modules: list[str], source: str = "") -> Any:
+    import ast
+    # Keep only yield-based nodes in fallback.
+    unsupported = (ast.Yield, ast.YieldFrom)
+    for node in ast.walk(ast_tree):
+        if isinstance(node, unsupported):
+            safe_globals = {
+                "__builtins__": {
+                    "range": range,
+                    "len": len,
+                    "print": print,
+                    "__import__": __import__,
+                    "ZeroDivisionError": ZeroDivisionError,
+                    "ValueError": ValueError,
+                    "NameError": NameError,
+                    "TypeError": TypeError,
+                    "list": list,
+                    "dict": dict,
+                    "tuple": tuple,
+                    "set": set,
+                    "float": float,
+                    "int": int,
+                    "bool": bool,
+                    "Exception": Exception
+                }
+            }
+            for mod in allowed_modules:
+                safe_globals[mod] = __import__(mod)
+            local_vars = {}
+            # ...existing code...
+            exec(compile(ast_tree, "<string>", "exec"), safe_globals, local_vars)
+            return local_vars.get("result", None)
+    # Otherwise, use the custom interpreter.
+    interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source)
     return interpreter.visit(ast_tree)
 
 # A helper function which takes a Python code string and a list of allowed module names,
