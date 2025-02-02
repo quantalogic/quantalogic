@@ -98,12 +98,30 @@ class ASTInterpreter:
         if isinstance(target, ast.Name):
             self.set_variable(target.id, value)
         elif isinstance(target, (ast.Tuple, ast.List)):
-            if not isinstance(value, (list, tuple)):
-                raise TypeError("Can only unpack an iterable")
-            if len(target.elts) != len(value):
-                raise ValueError("Unpacking mismatch")
-            for i in range(len(target.elts)):
-                self.assign(target.elts[i], value[i])
+            # Support single-star unpacking.
+            star_index = None
+            for i, elt in enumerate(target.elts):
+                if isinstance(elt, ast.Starred):
+                    if star_index is not None:
+                        raise Exception("Multiple starred expressions not supported")
+                    star_index = i
+            if star_index is None:
+                if len(target.elts) != len(value):
+                    raise ValueError("Unpacking mismatch")
+                for t, v in zip(target.elts, value):
+                    self.assign(t, v)
+            else:
+                total = len(value)
+                before = target.elts[:star_index]
+                after = target.elts[star_index+1:]
+                if len(before) + len(after) > total:
+                    raise ValueError("Unpacking mismatch")
+                for i, elt2 in enumerate(before):
+                    self.assign(elt2, value[i])
+                starred_count = total - len(before) - len(after)
+                self.assign(target.elts[star_index].value, value[len(before):len(before)+starred_count])
+                for j, elt2 in enumerate(after):
+                    self.assign(elt2, value[len(before)+starred_count+j])
         elif isinstance(target, ast.Attribute):
             obj = self.visit(target.value)
             setattr(obj, target.attr, value)
@@ -531,6 +549,91 @@ class ASTInterpreter:
             for val in gen:
                 yield val
         return generator()
+
+    def visit_ClassDef(self, node: ast.ClassDef):
+        base_frame = self.env_stack[-1].copy()
+        self.env_stack.append(base_frame)
+        try:
+            for stmt in node.body:
+                self.visit(stmt)
+            class_dict = {
+                k: v for k, v in self.env_stack[-1].items() 
+                if k not in ["__builtins__"]
+            }
+        finally:
+            self.env_stack.pop()
+        new_class = type(node.name, (), class_dict)
+        self.set_variable(node.name, new_class)
+
+    def visit_With(self, node: ast.With):
+        for item in node.items:
+            ctx = self.visit(item.context_expr)
+            val = ctx.__enter__()
+            if item.optional_vars:
+                self.assign(item.optional_vars, val)
+            try:
+                for stmt in node.body:
+                    self.visit(stmt)
+            except Exception as e:
+                if not ctx.__exit__(type(e), e, None):
+                    raise
+            else:
+                ctx.__exit__(None, None, None)
+
+    def visit_Raise(self, node: ast.Raise):
+        exc = self.visit(node.exc) if node.exc else None
+        if exc:
+            raise exc
+        raise Exception("Raise with no exception specified")
+
+    def visit_Global(self, node: ast.Global):
+        # Minimal handling.
+        pass
+
+    def visit_IfExp(self, node: ast.IfExp):
+        return self.visit(node.body) if self.visit(node.test) else self.visit(node.orelse)
+
+    def visit_DictComp(self, node: ast.DictComp):
+        result = {}
+        base_frame = self.env_stack[-1].copy()
+        self.env_stack.append(base_frame)
+        def rec(gen_idx: int):
+            if gen_idx == len(node.generators):
+                key = self.visit(node.key)
+                val = self.visit(node.value)
+                result[key] = val
+            else:
+                comp = node.generators[gen_idx]
+                for item in self.visit(comp.iter):
+                    new_frame = self.env_stack[-1].copy()
+                    self.env_stack.append(new_frame)
+                    self.assign(comp.target, item)
+                    if all(self.visit(if_clause) for if_clause in comp.ifs):
+                        rec(gen_idx + 1)
+                    self.env_stack.pop()
+        rec(0)
+        self.env_stack.pop()
+        return result
+
+    def visit_SetComp(self, node: ast.SetComp):
+        result = set()
+        base_frame = self.env_stack[-1].copy()
+        self.env_stack.append(base_frame)
+        def rec(gen_idx: int):
+            if gen_idx == len(node.generators):
+                result.add(self.visit(node.elt))
+            else:
+                comp = node.generators[gen_idx]
+                for item in self.visit(comp.iter):
+                    new_frame = self.env_stack[-1].copy()
+                    self.env_stack.append(new_frame)
+                    self.assign(comp.target, item)
+                    if all(self.visit(if_clause) for if_clause in comp.ifs):
+                        rec(gen_idx + 1)
+                    self.env_stack.pop()
+        rec(0)
+        self.env_stack.pop()
+        return result
 
 # Class to represent a user-defined function.
 class Function:
