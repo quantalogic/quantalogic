@@ -123,8 +123,12 @@ class GenerativeModel:
 
     # Generate a response with conversation history and optional streaming
     def generate_with_history(
-        self, messages_history: list[Message], prompt: str, image_url: str | None = None, streaming: bool = False,
-        stop_words: list[str] | None = None
+        self,
+        messages_history: list[Message],
+        prompt: str,
+        image_url: str | None = None,
+        streaming: bool = False,
+        stop_words: list[str] | None = None,
     ) -> ResponseStats:
         """Generate a response with conversation history and optional image.
 
@@ -166,6 +170,7 @@ class GenerativeModel:
                 messages=messages,
                 num_retries=MIN_RETRIES,
                 stop=stop_words,
+                extra_headers={"X-Title": "quantalogic"},
             )
 
             token_usage = TokenUsage(
