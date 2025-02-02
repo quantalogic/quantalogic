@@ -1,5 +1,6 @@
 import ast
 import builtins
+import textwrap
 from typing import Any, List, Dict, Optional, Tuple
 
 # Exception used to signal a "return" from a function call.
@@ -497,43 +498,37 @@ class ASTInterpreter:
             for stmt in node.body:
                 result = self.visit(stmt)
         except Exception as e:
-            # Store the full exception info
             exc_info = (type(e), e, e.__traceback__)
-            # Handle the exception
             for handler in node.handlers:
+                # Modified resolution for exception type.
                 if handler.type is None:
-                    # Catch all handler
                     exc_type = Exception
+                elif isinstance(handler.type, ast.Constant) and isinstance(handler.type.value, type):
+                    exc_type = handler.type.value
+                elif isinstance(handler.type, ast.Name):
+                    exc_type = self.get_variable(handler.type.id)
                 else:
                     exc_type = self.visit(handler.type)
-                
-                if exc_info and isinstance(exc_info[1], exc_type):
-                    # If handler has a name, bind exception to it
+                # Use issubclass on the exception type rather than isinstance on the exception instance.
+                if exc_info and issubclass(exc_info[0], exc_type):
                     if handler.name:
                         self.set_variable(handler.name, exc_info[1])
-                    # Execute handler body
                     for stmt in handler.body:
                         result = self.visit(stmt)
                     exc_info = None  # Mark as handled
                     break
-            
-            # If exception wasn't handled, re-raise it
             if exc_info:
                 raise exc_info[1]
         else:
-            # No exception occurred, execute else clause
             for stmt in node.orelse:
                 result = self.visit(stmt)
         finally:
-            # Always execute finally clause
             for stmt in node.finalbody:
                 try:
                     self.visit(stmt)
                 except ReturnException:
-                    # Allow return statements in finally
                     raise
                 except Exception:
-                    # Don't let finally clause errors mask the original error
                     if exc_info:
                         raise exc_info[1]
                     raise
@@ -775,8 +770,10 @@ def interpret_code(source_code: str, allowed_modules: List[str]) -> Any:
     :param allowed_modules: A list of module names that are allowed.
     :return: The result of interpreting the source code.
     """
-    tree: ast.AST = ast.parse(source_code)
-    return interpret_ast(tree, allowed_modules, source=source_code)
+    # Dedent the source to normalize its indentation.
+    dedented_source = textwrap.dedent(source_code)
+    tree: ast.AST = ast.parse(dedented_source)
+    return interpret_ast(tree, allowed_modules, source=dedented_source)
 
 if __name__ == "__main__":
     print("Script is running!")
@@ -820,10 +817,10 @@ result
 """
     print("About to parse source code")
     try:
-        tree_2: ast.AST = ast.parse(source_code_2)
+        tree_2: ast.AST = ast.parse(textwrap.dedent(source_code_2))
         print("Source code parsed successfully")
         # Allow both math and numpy.
-        result_2: Any = interpret_ast(tree_2, allowed_modules=["math", "numpy"], source=source_code_2)
+        result_2: Any = interpret_ast(tree_2, allowed_modules=["math", "numpy"], source=textwrap.dedent(source_code_2))
         print("Result:", result_2)
     except Exception as e:
         print("Interpreter error:", e)
