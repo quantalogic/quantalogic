@@ -18,6 +18,10 @@
 - [ ] Add Reflexion after N steps to see if the problem is solvable
 - [X] Add event streaming
 - [ ] Asynchronous execution
+- [ ] Structured Input / Output for Agent for Agent Chaining 
+- [ ] Sequence of actions
+- [ ] Evaluators / Observator of conversation
+- [ ] Add mlx direct support
 
 ## Backlog:
 
@@ -39,6 +43,7 @@
 - [ ] Classify photo in directory
 - [ ] Reorganize files in directory
 - [ ] Slide generator using https://sli.dev/guide/ 
+- [ ] Add a video
 
 
 ## Features:
