@@ -130,9 +130,19 @@ def test_import_multiple():
     assert result == 3.0
 
 def test_try_except_handling():
-    source = "try:\n    a = 1/0\nexcept ZeroDivisionError:\n    result = 'error'"
+    source = """
+try:
+    1/0
+except ZeroDivisionError:
+    result = 'caught zero division'
+except Exception:
+    result = 'caught other'
+else:
+    result = 'no error'
+result
+"""
     result = interpret_code(source, allowed_modules=[])
-    assert result == "error"
+    assert result == "caught zero division"
 
 def test_list_slice():
     source = "lst = [1,2,3,4,5]\nresult = lst[1:4]"
