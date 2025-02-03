@@ -23,7 +23,7 @@ export default function Home() {
 
   const { events, error, isConnected, clearEvents } = useEventSource(
     //process.env.NEXT_PUBLIC_API_URL || 
-    'http://localhost:8000',
+    'http://localhost:8002',
     { taskId: currentTaskId || undefined }
   );
 
@@ -39,7 +39,7 @@ export default function Home() {
       };
 
       console.log('Submitting task:', submission);
-      const response = await fetch('http://localhost:8000/tasks', {
+      const response = await fetch('http://localhost:8002/tasks', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
