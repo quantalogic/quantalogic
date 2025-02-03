@@ -13,6 +13,9 @@ from quantalogic import Agent
 
 # Veirify that is set DEEPSEEK_API_KEY
 
+#MODEL_NAME = "deepseek/deepseek-chat"
+MODEL_NAME = "ovh/DeepSeek-R1-Distill-Llama-70B"
+
 if not os.environ.get("DEEPSEEK_API_KEY"):
     raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
 
@@ -31,7 +34,7 @@ if not os.environ.get("DEEPSEEK_API_KEY"):
 # Initialize the AI agent with default configuration
 # Using DeepSeek as the primary model for this example
 # Configuration can be customized for different use cases
-agent = Agent(model_name="deepseek/deepseek-chat")
+agent = Agent(model_name=MODEL_NAME)
 
 # Execute a sample task to demonstrate agent capabilities
 # This example creates a Fibonacci sequence function
