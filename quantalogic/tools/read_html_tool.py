@@ -113,7 +113,7 @@ class ReadHTMLTool(Tool):
             description="The starting line number (1-based index). Default: 1",
             required=False,
             example="1",
-            default=1
+            default="1"
         ),
         ToolArgument(
             name="line_end",
@@ -121,7 +121,7 @@ class ReadHTMLTool(Tool):
             description="The ending line number (1-based index). Default: 300",
             required=False,
             example="300",
-            default=300
+            default="300"
         )
     ]
 
