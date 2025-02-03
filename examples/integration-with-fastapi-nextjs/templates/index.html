@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>QuantaLogic AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#2563eb',
+                            600: '#1d4ed8',
+                            700: '#1e40af',
+                        },
+                    }
+                }
+            }
+        }
+    </script>
+    <script type="module" src="/static/js/quantalogic.js?v={{ range(1, 100000) | random }}"></script>
+</head>
+<body class="h-full flex flex-col">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 py-2">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <h1 class="text-lg font-semibold text-gray-900">QuantaLogic</h1>
+                    <span class="text-sm text-gray-500">AI Assistant</span>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <select id="modelSelect" class="block w-48 text-sm rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                        <option value="openrouter/deepseek/deepseek-chat">DeepSeek Chat</option>
+                        <option value="ollama/qwen2.5-coder:14b">Qwen Coder</option>
+                        <option value="gpt-4o-mini">gpt-4o-mini</option>
+                    </select>
+                    <div id="connectionStatus" class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex min-h-0">
+        <!-- Left Panel - Task Input -->
+        <div class="w-1/2 p-4 flex flex-col min-h-0">
+            <div class="bg-white rounded-lg shadow-sm p-4 flex flex-col flex-1">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-semibold text-gray-900">Task Input</h2>
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center space-x-2">
+                            <span class="text-sm text-gray-600">Max Iterations:</span>
+                            <input type="number" id="maxIterations" 
+                                class="w-20 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                                value="30" min="1" max="100">
+                        </label>
+                    </div>
+                </div>
+                <textarea id="taskInput"
+                    class="flex-1 p-4 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm resize-none"
+                    placeholder="Describe your task here..."></textarea>
+                <div class="mt-4 flex justify-end">
+                    <button id="submitTask"
+                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span>Submit Task</span>
+                        <div class="loading-indicator hidden ml-2">
+                            <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel - Events and Results -->
+        <div class="w-1/2 p-4 flex flex-col min-h-0">
+            <div class="bg-white rounded-lg shadow-sm p-4 flex flex-col flex-1 overflow-hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-900">Events & Results</h2>
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="autoScroll" checked
+                                class="rounded text-primary-600 focus:ring-primary-500">
+                            <span class="text-sm text-gray-600">Auto-scroll</span>
+                        </label>
+                        <button id="clearEvents"
+                            class="inline-flex items-center px-3 py-1 text-sm text-gray-600 hover:text-gray-900 focus:outline-none">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+                <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <!-- Events Container -->
+                    <div id="eventsContainer" class="flex-1 overflow-y-auto space-y-2 min-h-0 mb-4">
+                        <!-- Events will be inserted here -->
+                    </div>
+                    
+                    <!-- Final Answer Section (Initially Hidden) -->
+                    <div id="finalAnswer" class="hidden border-t border-gray-200 pt-4 overflow-y-auto">
+                        <div class="bg-green-50 rounded-lg p-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <h3 class="text-lg font-semibold text-green-800">Final Answer</h3>
+                                <button id="copyAnswer" class="inline-flex items-center px-3 py-1 text-sm font-medium rounded-md text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                                    <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                    </svg>
+                                    <span>Copy</span>
+                                </button>
+                            </div>
+                            <div class="prose prose-sm max-w-none">
+                                <div class="answer-content"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+</body>
+</html>

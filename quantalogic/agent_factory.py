@@ -7,6 +7,7 @@ from quantalogic.agent_config import (
     create_basic_agent,
     create_full_agent,
     create_interpreter_agent,
+    create_minimal_agent,
 )
 from quantalogic.coding_agent import create_coding_agent
 from quantalogic.search_agent import create_search_agent  # noqa: E402
@@ -152,6 +153,15 @@ def create_agent_for_mode(
         agent = create_search_agent(
             model_name,
             mode_full=True,
+            no_stream=no_stream,
+            compact_every_n_iteration=compact_every_n_iteration,
+            max_tokens_working_memory=max_tokens_working_memory
+        )
+        return agent
+    if mode == "minimal":
+        agent = create_minimal_agent(
+            model_name,
+            vision_model_name,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory
