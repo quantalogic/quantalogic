@@ -26,6 +26,7 @@ from quantalogic.tools import (
     ReadHTMLTool,
     ReplaceInFileTool,
     RipgrepTool,
+    SafePythonInterpreterTool,
     SearchDefinitionNames,
     TaskCompleteTool,
     WikipediaSearchTool,
@@ -86,7 +87,8 @@ def create_agent(
                 model_name="openai/dall-e-3",
                 on_token=console_print_token if not no_stream else None
             ),
-        ReadHTMLTool()
+        ReadHTMLTool(),
+       # SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
     ]
 
     if vision_model_name:
@@ -186,6 +188,7 @@ def create_full_agent(
         WikipediaSearchTool(),
         DuckDuckGoSearchTool(),
         ReadHTMLTool(),
+      #  SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
     ]
 
     if vision_model_name:
@@ -236,6 +239,52 @@ def create_basic_agent(
         ExecuteBashCommandTool(),
         LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
         ReadHTMLTool(),
+    #    SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
+    ]
+
+    if vision_model_name:
+        tools.append(LLMVisionTool(model_name=vision_model_name, on_token=console_print_token if not no_stream else None))
+
+    return Agent(
+        model_name=model_name,
+        tools=tools,
+        compact_every_n_iterations=compact_every_n_iteration,
+        max_tokens_working_memory=max_tokens_working_memory,
+    )
+
+def create_minimal_agent(
+    model_name: str, 
+    vision_model_name: str | None = None, 
+    no_stream: bool = False, 
+    compact_every_n_iteration: int | None = None,
+    max_tokens_working_memory: int | None = None
+) -> Agent:
+    """Create an agent with the specified model and tools.
+
+    Args:
+        model_name (str): Name of the model to use
+        vision_model_name (str | None): Name of the vision model to use
+        no_stream (bool, optional): If True, the agent will not stream results.
+        compact_every_n_iteration (int | None, optional): Frequency of memory compaction.
+        max_tokens_working_memory (int | None, optional): Maximum tokens for working memory.
+
+    Returns:
+        Agent: An agent with the specified model and tools
+    """
+    # Rebuild AgentTool to resolve forward references
+    AgentTool.model_rebuild()
+
+    tools = [
+        LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
+        DownloadHttpFileTool(),
+        WikipediaSearchTool(),
+        DuckDuckGoSearchTool(),
+        ReadHTMLTool(),
+        SearchDefinitionNames(),  
+        ReadFileBlockTool(),
+        WriteFileTool(),
+        ReadFileTool(),
+        TaskCompleteTool(), 
     ]
 
     if vision_model_name:

@@ -6,6 +6,7 @@ from .get_environment import get_environment
 from .get_coding_environment import get_coding_environment
 from .get_quantalogic_rules_content import get_quantalogic_rules_file_content
 from .lm_studio_model_info import get_model_list
+from .python_interpreter import interpret_ast
 
 __all__ = [
     "download_http_file",

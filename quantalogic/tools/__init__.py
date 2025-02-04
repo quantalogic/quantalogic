@@ -22,7 +22,9 @@ from .read_file_tool import ReadFileTool
 from .read_html_tool import ReadHTMLTool
 from .replace_in_file_tool import ReplaceInFileTool
 from .ripgrep_tool import RipgrepTool
+from .safe_python_interpreter_tool import SafePythonInterpreterTool
 from .search_definition_names import SearchDefinitionNames
+from .sequence_tool import SequenceTool
 from .serpapi_search_tool import SerpApiSearchTool
 from .sql_query_tool import SQLQueryTool
 from .task_complete_tool import TaskCompleteTool
@@ -62,5 +64,8 @@ __all__ = [
     "ReadHTMLTool",
     "GrepAppTool",
     "GenerateDatabaseReportTool",
-    'SQLQueryTool'
+    'SQLQueryTool',
+    'SafePythonInterpreterTool'
+    'LLMGenerationTool',
+    'SequenceTool'
 ]

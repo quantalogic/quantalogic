@@ -105,21 +105,23 @@ class ReadHTMLTool(Tool):
             description="Convert input to 'text' (Markdown) or 'html'. Default is 'text'",
             default='text',
             required=False,
-            example="'text' or 'html'"
+            example="'text' or 'html'",
         ),
         ToolArgument(
             name="line_start",
             arg_type="int",
             description="The starting line number (1-based index). Default: 1",
             required=False,
-            example="1"
+            example="1",
+            default="1"
         ),
         ToolArgument(
             name="line_end",
             arg_type="int",
             description="The ending line number (1-based index). Default: 300",
             required=False,
-            example="300"
+            example="300",
+            default="300"
         )
     ]
 
