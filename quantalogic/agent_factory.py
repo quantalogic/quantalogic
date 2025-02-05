@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from loguru import logger
 
@@ -69,7 +69,8 @@ def create_agent_for_mode(
     vision_model_name: Optional[str],
     no_stream: bool = False,
     compact_every_n_iteration: Optional[int] = None,
-    max_tokens_working_memory: Optional[int] = None
+    max_tokens_working_memory: Optional[int] = None,
+    event_emitter: Any = None
 ) -> Agent:
     """Create an agent based on the specified mode.
     

@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
+import uuid
 
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, PrivateAttr
@@ -192,9 +193,13 @@ class Agent(BaseModel):
         if not self.memory.memory or self.memory.memory[0].role != "system":
             self.memory.add(Message(role="system", content=self.config.system_prompt))
 
+        # Set task ID in event emitter context using UUID
+        task_id = str(uuid.uuid4())  # Generate a UUID for task ID
+        self.event_emitter.context['task_id'] = task_id
+
         self._emit_event(
             "session_start",
-            {"system_prompt": self.config.system_prompt, "content": task},
+            {"system_prompt": self.config.system_prompt, "content": task, "task_id": task_id},
         )
 
         self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
@@ -306,6 +311,8 @@ class Agent(BaseModel):
             self.memory.reset()
             self.variable_store.reset()
             self.total_tokens = 0
+            # Clear task ID from event emitter context
+            self.event_emitter.context.clear()
         self.current_iteration = 0
         self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
         self.max_input_tokens = self.model.get_model_max_input_tokens() or DEFAULT_MAX_INPUT_TOKENS

@@ -15,6 +15,7 @@ class EventEmitter:
         self._listeners: dict[str, list[Callable[..., Any]]] = {}
         self._wildcard_listeners: list[Callable[..., Any]] = []
         self._lock = threading.RLock()
+        self.context: dict[str, Any] = {}  # Store context data like task_id
 
     def on(self, event: str | list[str], listener: Callable[..., Any]) -> None:
         """Register an event listener for one or more events.

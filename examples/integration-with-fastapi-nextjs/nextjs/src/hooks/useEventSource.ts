@@ -74,6 +74,9 @@ export const useEventSource = (baseUrl: string, options: EventSourceOptions = {}
         'error_max_iterations_reached',
         'error_tool_execution',
         'error_model_response',
+        'stream_chunk',
+        'stream_end',
+        'stream_start'
       ];
 
       eventTypes.forEach((eventType) => {

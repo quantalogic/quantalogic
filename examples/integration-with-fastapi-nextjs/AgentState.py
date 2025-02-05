@@ -63,7 +63,10 @@ class AgentState:
             "task_solve_end",
             "error_tool_execution",
             "error_max_iterations_reached",
-            "error_model_response"
+            "error_model_response",
+            "stream_chunk",
+            "stream_end",
+            "stream_start"
         ]
 
     async def initialize_agent_with_sse_validation(self, model_name: str = MODEL_NAME, mode: str = "minimal") -> Agent:
@@ -119,8 +122,10 @@ class AgentState:
         self._event_handlers = {}
         
         def create_event_handler(event_type: str):
-            def handler(event: str, data: Dict[str, Any]):
-                logger.debug(f"Received agent event: {event_type} with data: {data}")
+            def handler(event: str, *args: Any, **kwargs: Any):
+                logger.debug(f"Received agent event: {event_type} with args: {args} kwargs: {kwargs}")
+                # Get data from args or kwargs
+                data = args[0] if args else kwargs
                 # Add task_id to the event data if it's not there
                 if isinstance(data, dict) and "task_id" not in data:
                     current_task_id = next(
@@ -139,7 +144,7 @@ class AgentState:
             self._event_handlers[event] = handler
             agent.event_emitter.on(event, handler)
 
-        agent.event_emitter.on(event=["stream_chunk"], listener=console_print_token)
+        # agent.event_emitter.on(event=["stream_chunk"], listener=console_print_token)
 
     def _handle_event(self, event_type: str, data: Dict[str, Any]) -> None:
         """Handle agent events with rich console output."""
