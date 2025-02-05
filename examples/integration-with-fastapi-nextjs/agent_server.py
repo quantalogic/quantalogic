@@ -4,6 +4,8 @@
 import asyncio
 import functools
 import json
+import os
+import shutil
 import signal
 import sys
 import time
@@ -15,7 +17,7 @@ from threading import Lock
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -47,6 +49,10 @@ logger.add(
 # Constants
 SHUTDOWN_TIMEOUT = 5.0  # seconds
 VALIDATION_TIMEOUT = 30.0  # seconds
+UPLOAD_DIR = "/tmp/data"  # Directory for file uploads
+
+# Create upload directory if it doesn't exist
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 signal.signal(signal.SIGTERM, handle_sigterm)
 
@@ -206,6 +212,29 @@ async def get_index(request: Request) -> HTMLResponse:
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)) -> Dict[str, str]:
+    """Handle file uploads."""
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        random_suffix = str(uuid.uuid4())[:8]
+        file_extension = os.path.splitext(file.filename)[1]
+        new_filename = f"{timestamp}_{random_suffix}{file_extension}"
+        file_path = os.path.join(UPLOAD_DIR, new_filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        return {
+            "status": "success",
+            "filename": new_filename,
+            "path": file_path
+        }
+    except Exception as e:
+        logger.error(f"Error uploading file: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/tasks")

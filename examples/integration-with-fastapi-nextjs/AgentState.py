@@ -24,6 +24,7 @@ from loguru import logger
 from pydantic import BaseModel
 from rich.console import Console
 
+from quantalogic import console_print_token
 from quantalogic.agent import Agent
 from quantalogic.agent_config import (
     MODEL_NAME,
@@ -137,6 +138,8 @@ class AgentState:
             handler = create_event_handler(event)
             self._event_handlers[event] = handler
             agent.event_emitter.on(event, handler)
+
+        agent.event_emitter.on(event=["stream_chunk"], listener=console_print_token)
 
     def _handle_event(self, event_type: str, data: Dict[str, Any]) -> None:
         """Handle agent events with rich console output."""

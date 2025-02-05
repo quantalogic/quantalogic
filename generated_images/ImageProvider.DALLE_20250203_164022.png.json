@@ -1,0 +1,18 @@
+{
+  "filename": "ImageProvider.DALLE_20250203_164022.png",
+  "prompt": "Chapter 2: Mochi and Luna in the Singing Crystal Cave, surrounded by glowing crystals and vibrant colors.",
+  "revised_prompt": "Create an enchanting scene depicting a second chapter of a whimsical story. Let's call the central characters Mochi and Luna. The setting is a magical cavern named the Singing Crystal Cave. Embellish the cave with radiant, luminescent crystals of various shapes and sizes offering a kaleidoscope of intense, dynamic colors. The luminous reflections from these crystals bathe Mochi and Luna in a mesmerizing spectrum of vibrant hues. Mochi and Luna, full of awe and wonder, bask in the ethereal splendor of the cave, adding a sense of serenity to the beautifully lit surroundings.",
+  "provider": "ImageProvider.DALLE",
+  "model": "dall-e-3",
+  "created": "2025-02-03T16:40:22",
+  "parameters": {
+    "model": "dall-e-3",
+    "size": "1024x1024",
+    "quality": "standard",
+    "style": "vivid",
+    "response_format": "url",
+    "prompt": "Chapter 2: Mochi and Luna in the Singing Crystal Cave, surrounded by glowing crystals and vibrant colors."
+  },
+  "image_url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-7L4b41fUDYyYwcZmoo8L2h3w/user-JQG4dqDZbtFvdmZrgF0XWjLd/img-teovYxNpv4ASldawuJP8yMgk.png?st=2025-02-03T14%3A40%3A21Z&se=2025-02-03T16%3A40%3A21Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-02-03T01%3A21%3A46Z&ske=2025-02-04T01%3A21%3A46Z&sks=b&skv=2024-08-04&sig=SVNLR0617PeckNRwTJnFrdi4M70x5rG5pQTKxPlYkQU%3D",
+  "local_path": "generated_images/ImageProvider.DALLE_20250203_164022.png"
+}

@@ -1,0 +1,18 @@
+{
+  "filename": "ImageProvider.DALLE_20250203_160445.png",
+  "prompt": "A cute anime panda on an adventure in a mystical forest, surrounded by magical creatures",
+  "revised_prompt": "Imagine a delightful, charming panda character in the style of classic anime, on a quest in an enchanting forest realm. This forest brims with mystery, with verdant trees growing to impossible heights and flowers that appear to be made entirely out of moonlight. The panda is not alone on this adventure; it's accompanied and surrounded by an assortment of fantastical creatures. Think of unicorns with rainbow-colored fur, playful pixies leaving trails of stardust in their wake, and large-eyed, gentle owlets peeping from the grand trees. These elements compose an imagery-rich warm mixed-media tableau",
+  "provider": "ImageProvider.DALLE",
+  "model": "dall-e-3",
+  "created": "2025-02-03T16:04:45",
+  "parameters": {
+    "model": "dall-e-3",
+    "size": "1024x1024",
+    "quality": "standard",
+    "style": "vivid",
+    "response_format": "url",
+    "prompt": "A cute anime panda on an adventure in a mystical forest, surrounded by magical creatures"
+  },
+  "image_url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-7L4b41fUDYyYwcZmoo8L2h3w/user-JQG4dqDZbtFvdmZrgF0XWjLd/img-HIAo3WXG9SgOGqt0ly7eCATD.png?st=2025-02-03T14%3A04%3A45Z&se=2025-02-03T16%3A04%3A45Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-02-03T01%3A07%3A48Z&ske=2025-02-04T01%3A07%3A48Z&sks=b&skv=2024-08-04&sig=vD3/%2BVgDkF1M2svHGZtTmlgoBdC44RKhqQcIpasH/Y8%3D",
+  "local_path": "generated_images/ImageProvider.DALLE_20250203_160445.png"
+}

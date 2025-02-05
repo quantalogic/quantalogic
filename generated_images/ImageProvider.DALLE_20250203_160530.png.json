@@ -1,0 +1,18 @@
+{
+  "filename": "ImageProvider.DALLE_20250203_160530.png",
+  "prompt": "A cute anime panda named Pandy exploring a vibrant village filled with friendly creatures.",
+  "revised_prompt": "A cuddly, cartoon-styled panda, who we'll refer to as Plushy, is adventuring through a lively hamlet teeming with amiable, fantastical beings. The panda's soft black and white fur contrasts strikingly against the colourful backdrop of intricately designed huts, blooming flowers, and verdant, emerald-green trees. All around, you can see whimsical creatures of various shapes and sizes, some flying, some hopping, living harmoniously with each other in this pulsing, animated world.",
+  "provider": "ImageProvider.DALLE",
+  "model": "dall-e-3",
+  "created": "2025-02-03T16:05:30",
+  "parameters": {
+    "model": "dall-e-3",
+    "size": "1024x1024",
+    "quality": "standard",
+    "style": "vivid",
+    "response_format": "url",
+    "prompt": "A cute anime panda named Pandy exploring a vibrant village filled with friendly creatures."
+  },
+  "image_url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-7L4b41fUDYyYwcZmoo8L2h3w/user-JQG4dqDZbtFvdmZrgF0XWjLd/img-MwsYfJ5wHx8DoMpbapRYH3H0.png?st=2025-02-03T14%3A05%3A30Z&se=2025-02-03T16%3A05%3A30Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-02-03T00%3A45%3A37Z&ske=2025-02-04T00%3A45%3A37Z&sks=b&skv=2024-08-04&sig=57H6u1VoqnhI96qpLvkvleHXo59qlfeddbRc3oLt5MI%3D",
+  "local_path": "generated_images/ImageProvider.DALLE_20250203_160530.png"
+}

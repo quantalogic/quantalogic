@@ -1,0 +1,18 @@
+{
+  "filename": "ImageProvider.DALLE_20250203_234854.png",
+  "prompt": "Old Parisian library interior with people reading, 1900s style",
+  "revised_prompt": "Visualize an antique Parisian library interior from the 1900s. In this setting, meticulously display the vintage wooden bookshelves overflowing with hardcover books of varied sizes, and the carpeted floor patterned in intricate designs. You can see an imposing antique chandelier casting a soft glow that highlights the worn-out texture of the books and the hushed ambiance. Several persons of different descents such as Middle-Eastern, Black, Hispanic, South Asian, Caucasian, and White, of varying genders, are sitting at the reading tables, immersed in their books. The harmony of this diverse group of bibliophiles perfectly encapsulates the timeless allure of literature.",
+  "provider": "ImageProvider.DALLE",
+  "model": "dall-e-3",
+  "created": "2025-02-03T23:48:53",
+  "parameters": {
+    "model": "dall-e-3",
+    "size": "1024x1024",
+    "quality": "standard",
+    "style": "natural",
+    "response_format": "url",
+    "prompt": "Old Parisian library interior with people reading, 1900s style"
+  },
+  "image_url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-7L4b41fUDYyYwcZmoo8L2h3w/user-JQG4dqDZbtFvdmZrgF0XWjLd/img-tzCVYZMPraeiAgaRqEHSEtpg.png?st=2025-02-03T21%3A48%3A53Z&se=2025-02-03T23%3A48%3A53Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-02-03T00%3A21%3A59Z&ske=2025-02-04T00%3A21%3A59Z&sks=b&skv=2024-08-04&sig=x6Lms7CdmfIRWbJnbU%2BXJXHPq%2BHWMHlxZWa5Uog0nK8%3D",
+  "local_path": "generated_images/ImageProvider.DALLE_20250203_234854.png"
+}

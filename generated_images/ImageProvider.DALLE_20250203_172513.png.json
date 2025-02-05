@@ -1,0 +1,18 @@
+{
+  "filename": "ImageProvider.DALLE_20250203_172513.png",
+  "prompt": "A hidden clearing in an enchanted forest, anime style, vibrant colors, glowing plants, and a small panda discovering it. The scene should be warm, magical, and inviting.",
+  "revised_prompt": "Visualize an isolated glade embedded deep within a mystical woodland. The overall style should reflect the detailed line work typical of traditional Japanese animated films. Infuse the scene with intense hues to establish the atmosphere. Luminescent flora illuminates the landscape, casting a soft, radiating glow. Occupying the heart of the scene, a petite panda experiences this new surrounding with wide-eyed wonder. This landscape should project a sense of warmth, enchantment, and hospitality, encouraging an observer's desire to explore alongside the panda.",
+  "provider": "ImageProvider.DALLE",
+  "model": "dall-e-3",
+  "created": "2025-02-03T17:25:13",
+  "parameters": {
+    "model": "dall-e-3",
+    "size": "1024x1024",
+    "quality": "standard",
+    "style": "vivid",
+    "response_format": "url",
+    "prompt": "A hidden clearing in an enchanted forest, anime style, vibrant colors, glowing plants, and a small panda discovering it. The scene should be warm, magical, and inviting."
+  },
+  "image_url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-7L4b41fUDYyYwcZmoo8L2h3w/user-JQG4dqDZbtFvdmZrgF0XWjLd/img-aenIE3N9mgE7zDCOw2Cvujcv.png?st=2025-02-03T15%3A25%3A13Z&se=2025-02-03T17%3A25%3A13Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-02-03T01%3A53%3A47Z&ske=2025-02-04T01%3A53%3A47Z&sks=b&skv=2024-08-04&sig=NviquwOvo0cQKl6eGJil2Pp%2By6BKaKL3GXeaAlB/vzg%3D",
+  "local_path": "generated_images/ImageProvider.DALLE_20250203_172513.png"
+}
