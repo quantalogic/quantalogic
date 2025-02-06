@@ -1,40 +1,42 @@
+# TODO 🎉
+
 ## Ideas of future features:
 
-- [ ] Implement session token tracking
-- [ ] Add document to memory storage
-- [ ] Query stored document
-- [ ] Add MCP Anthropic client/server support
-- [ ] Add model list name 
-- [ ] Add cost tracking
-- [ ] Improve interactive session
-    - [X] Thinking indicator
-    - [X] Don't quit session after a task has completed 
-        - [X] Ask for a new task / another question or quit 
-    - [ ] Add commands 
-        - [ ] /list of commands
-        - [ ] /tools list of tools
-        - [ ] /help
-        - [ ] /exit
-- [ ] Add Reflexion after N steps to see if the problem is solvable
-- [X] Add event streaming
-- [ ] Asynchronous execution
-- [ ] Structured Input / Output for Agent for Agent Chaining 
-- [ ] Sequence of actions
-- [ ] Evaluators / Observator of conversation
-- [ ] Add mlx direct support
+- [ ] Implement session token tracking ⚙️
+- [ ] Add document to memory storage 📚
+- [ ] Query stored document ❓
+- [ ] Add MCP Anthropic client/server support 🤝
+- [ ] Add model list name 🏷️ 
+- [ ] Add cost tracking 💰
+- [ ] Improve interactive session 💬
+    - [X] Thinking indicator 💡
+    - [X] Don't quit session after a task has completed ✅
+        - [X] Ask for a new task / another question or quit 🔄
+    - [ ] Add commands ⌨️
+        - [ ] /list of commands 📜
+        - [ ] /tools list of tools 🛠️
+        - [ ] /help 🆘
+        - [ ] /exit 🚪
+- [ ] Add Reflexion after N steps to see if the problem is solvable 🤔
+- [X] Add event streaming 📡
+- [ ] Asynchronous execution ⏳
+- [ ] Structured Input / Output for Agent for Agent Chaining 🔗 
+- [ ] Sequence of actions 🎬
+- [ ] Evaluators / Observator of conversation 👀
+- [ ] Add mlx direct support 🚀
 
 ## Backlog:
 
-- [ ] Different strategy of function calling: actually we use XML function calling that are good for coding agent, we can add 2 new paradigam: JSON Tool function calling or Python Function Calling (as Pydantic) to use specific fined tuned LLM such as driaforall Dria-Agent-a-3B
-- Memory Handling 
-- [ ] Add integration with Composio https://app.composio.dev/, and create a pull request in https://docs.composio.dev/framework/ 
+- [ ] Different strategy of function calling: actually we use XML function calling that are good for coding agent, we can add 2 new paradigam: JSON Tool function calling or Python Function Calling (as Pydantic) to use specific fined tuned LLM such as driaforall Dria-Agent-a-3B 🤖
+- Memory Handling 🧠 
+- [ ] Add integration with Composio https://app.composio.dev/, and create a pull request in https://docs.composio.dev/framework/ 🌐 
 
 
-## Demo:
+## Demo: 🚀
 
-- [ ] Create a knwoledge base using https://github.com/BuilderIO/gpt-crawler 
-- [ ] Search from RAG
-- [ ] Browse code 
+- [ ] Create a knwoledge base using https://github.com/BuilderIO/gpt-crawler 🕷️ 
+- [ ] Search from RAG 🔍
+- [ ] Browse code 💻 
 - [ ] Analyze code and generate diagram
 - [ ] Coding assistant with DeepSeek V3
 - [ ] Query a SQL Database

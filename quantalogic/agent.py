@@ -669,8 +669,9 @@ class Agent(BaseModel):
             import re
 
             for var in self.variable_store.keys():
-                # Escape the variable name for regex, but use raw value for replacement
-                pattern = rf"\${re.escape(var)}\$"
+                # Create safe pattern without double-escaping backslashes
+                safe_var = re.sub(r"([\\\.\^\$\*\+\?\{\}\[\]\|\(\)])", r"\\\1", var)
+                pattern = rf"\${safe_var}\$"
                 replacement = self.variable_store[var]
                 text = re.sub(pattern, replacement, text)
             return text
