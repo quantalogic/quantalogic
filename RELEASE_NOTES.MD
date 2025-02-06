@@ -1,3 +1,9 @@
+## [v.0.35.0] (2025-02-06)
+
+- Add support of openrouter/google/gemini-2.0-flash-001    
+- Add support of gemini/gemini-2.0-flash
+- Add support of ovh/DeepSeek-R1-Distill-Llama-70B	 DeepSeek R1 support with OVH (France)
+
 ## [v.0.33.1] (2025-02-01)
 
 ### Fix
