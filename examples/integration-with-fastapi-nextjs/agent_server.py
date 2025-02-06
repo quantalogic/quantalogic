@@ -33,10 +33,10 @@ from quantalogic.agent_config import (
 from quantalogic.agent_factory import AgentRegistry, create_agent_for_mode
 from quantalogic.console_print_events import console_print_events
 from quantalogic.task_runner import configure_logger
-from .utils import handle_sigterm, get_version
-from .ServerState import ServerState
-from .models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
-from .AgentState import AgentState
+from utils import handle_sigterm, get_version
+from ServerState import ServerState
+from models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
+from AgentState import AgentState
 
 # Configure logger
 logger.remove()
@@ -107,10 +107,10 @@ app.add_middleware(
 )
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="quantalogic/server/static"), name="static")
+# app.mount("/static", StaticFiles(directory="quantalogic/server/static"), name="static")
 
 # Configure Jinja2 templates
-templates = Jinja2Templates(directory="quantalogic/server/templates")
+# templates = Jinja2Templates(directory="quantalogic/server/templates")
 
 
 # Middleware to log requests
@@ -207,11 +207,12 @@ async def event_stream(request: Request, task_id: Optional[str] = None) -> Strea
 @app.get("/")
 async def get_index(request: Request) -> HTMLResponse:
     """Serve the main application page."""
-    response = templates.TemplateResponse("index.html", {"request": request})
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
+    # response = templates.TemplateResponse("index.html", {"request": request})
+    # response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    # response.headers["Pragma"] = "no-cache"
+    # response.headers["Expires"] = "0"
+    # return response
+    return HTMLResponse(content="")
 
 
 @app.post("/upload")

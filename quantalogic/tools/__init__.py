@@ -32,6 +32,7 @@ from .tool import Tool, ToolArgument
 from .unified_diff_tool import UnifiedDiffTool
 from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
+from .google_news_tool import GoogleNewsTool
 
 __all__ = [
     "WikipediaSearchTool",
@@ -67,5 +68,6 @@ __all__ = [
     'SQLQueryTool',
     'SafePythonInterpreterTool'
     'LLMGenerationTool',
+    'GoogleNewsTool',
     'SequenceTool'
 ]

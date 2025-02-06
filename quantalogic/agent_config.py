@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 from quantalogic.agent import Agent
 from quantalogic.console_print_token import console_print_token
+from quantalogic.event_emitter import EventEmitter
 from quantalogic.tools import (
     AgentTool,
     DownloadHttpFileTool,
@@ -31,6 +32,7 @@ from quantalogic.tools import (
     TaskCompleteTool,
     WikipediaSearchTool,
     WriteFileTool,
+    GoogleNewsTool
 )
 
 load_dotenv()
@@ -274,8 +276,15 @@ def create_minimal_agent(
     # Rebuild AgentTool to resolve forward references
     AgentTool.model_rebuild()
 
+    # Create event emitter
+    event_emitter = EventEmitter()
+
     tools = [
-        LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
+        LLMTool(
+            model_name=model_name, 
+            on_token=console_print_token if not no_stream else None,
+            event_emitter=event_emitter
+        ),
         DownloadHttpFileTool(),
         WikipediaSearchTool(),
         DuckDuckGoSearchTool(),
@@ -288,16 +297,23 @@ def create_minimal_agent(
     ]
 
     if vision_model_name:
-        tools.append(LLMVisionTool(model_name=vision_model_name, on_token=console_print_token if not no_stream else None))
+        tools.append(
+            LLMVisionTool(
+                model_name=vision_model_name, 
+                on_token=console_print_token if not no_stream else None,
+                event_emitter=event_emitter
+            )
+        )
 
     return Agent(
         model_name=model_name,
         tools=tools,
+        event_emitter=event_emitter,  # Pass the event emitter to the agent
         compact_every_n_iterations=compact_every_n_iteration,
         max_tokens_working_memory=max_tokens_working_memory,
     )
 
-def create_minimal_agent(
+def create_news_agent(
     model_name: str, 
     vision_model_name: str | None = None, 
     no_stream: bool = False, 
@@ -319,11 +335,19 @@ def create_minimal_agent(
     # Rebuild AgentTool to resolve forward references
     AgentTool.model_rebuild()
 
+    # Create event emitter
+    event_emitter = EventEmitter()
+
     tools = [
-        LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
+        LLMTool(
+            model_name=model_name, 
+            on_token=console_print_token if not no_stream else None,
+            event_emitter=event_emitter
+        ),
         DownloadHttpFileTool(),
         WikipediaSearchTool(),
         DuckDuckGoSearchTool(),
+        GoogleNewsTool(),
         ReadHTMLTool(),
         SearchDefinitionNames(),  
         ReadFileBlockTool(),
@@ -333,11 +357,18 @@ def create_minimal_agent(
     ]
 
     if vision_model_name:
-        tools.append(LLMVisionTool(model_name=vision_model_name, on_token=console_print_token if not no_stream else None))
+        tools.append(
+            LLMVisionTool(
+                model_name=vision_model_name, 
+                on_token=console_print_token if not no_stream else None,
+                event_emitter=event_emitter
+            )
+        )
 
     return Agent(
         model_name=model_name,
         tools=tools,
+        event_emitter=event_emitter,  # Pass the event emitter to the agent
         compact_every_n_iterations=compact_every_n_iteration,
         max_tokens_working_memory=max_tokens_working_memory,
     )

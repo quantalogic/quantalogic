@@ -194,6 +194,7 @@ class GenerativeModel:
         try:
             # The task_id will be added by the AgentState._handle_event method
             # We don't need to handle it here
+            self.event_emitter.emit("stream_start", {})
             for chunk in generate_completion(
                 temperature=self.temperature,
                 model=self.model,

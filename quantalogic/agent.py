@@ -88,13 +88,15 @@ class Agent(BaseModel):
         get_environment: Callable[[], str] = get_environment,
         compact_every_n_iterations: int | None = None,
         max_tokens_working_memory: int | None = None,
+        event_emitter: EventEmitter | None = None,
     ):
         """Initialize the agent with model, memory, tools, and configurations."""
         try:
             logger.debug("Initializing agent...")
 
-            # Create event emitter
-            event_emitter = EventEmitter()
+            # Create or use provided event emitter
+            if event_emitter is None:
+                event_emitter = EventEmitter()
 
             # Add TaskCompleteTool to the tools list if not already present
             if not any(isinstance(t, TaskCompleteTool) for t in tools):
@@ -830,3 +832,75 @@ class Agent(BaseModel):
         """Update the model name and recreate the model instance."""
         self.model_name = new_model_name
         self.model = GenerativeModel(model=new_model_name, event_emitter=self.event_emitter)
+
+    def add_tool(self, tool: Tool) -> None:
+        """Add a new tool to the agent's tool manager.
+        
+        Args:
+            tool (Tool): The tool instance to add
+            
+        Raises:
+            ValueError: If a tool with the same name already exists
+        """
+        if tool.name in self.tools.tool_names():
+            raise ValueError(f"Tool with name '{tool.name}' already exists")
+            
+        self.tools.add(tool)
+        # Update tools markdown in config
+        self.config = AgentConfig(
+            environment_details=self.config.environment_details,
+            tools_markdown=self.tools.to_markdown(),
+            system_prompt=self.config.system_prompt,
+        )
+        logger.debug(f"Added tool: {tool.name}")
+        
+    def remove_tool(self, tool_name: str) -> None:
+        """Remove a tool from the agent's tool manager.
+        
+        Args:
+            tool_name (str): Name of the tool to remove
+            
+        Raises:
+            ValueError: If tool doesn't exist or is TaskCompleteTool
+        """
+        if tool_name not in self.tools.tool_names():
+            raise ValueError(f"Tool '{tool_name}' does not exist")
+            
+        tool = self.tools.get(tool_name)
+        if isinstance(tool, TaskCompleteTool):
+            raise ValueError("Cannot remove TaskCompleteTool as it is required")
+            
+        self.tools.remove(tool_name)
+        # Update tools markdown in config
+        self.config = AgentConfig(
+            environment_details=self.config.environment_details,
+            tools_markdown=self.tools.to_markdown(),
+            system_prompt=self.config.system_prompt,
+        )
+        logger.debug(f"Removed tool: {tool_name}")
+        
+    def set_tools(self, tools: list[Tool]) -> None:
+        """Set/replace all tools for the agent.
+        
+        Args:
+            tools (list[Tool]): List of tool instances to set
+            
+        Note:
+            TaskCompleteTool will be automatically added if not present
+        """
+        # Ensure TaskCompleteTool is present
+        if not any(isinstance(t, TaskCompleteTool) for t in tools):
+            tools.append(TaskCompleteTool())
+            
+        # Create new tool manager and add tools
+        tool_manager = ToolManager()
+        tool_manager.add_list(tools)
+        self.tools = tool_manager
+        
+        # Update config with new tools markdown
+        self.config = AgentConfig(
+            environment_details=self.config.environment_details,
+            tools_markdown=self.tools.to_markdown(),
+            system_prompt=self.config.system_prompt,
+        )
+        logger.debug(f"Set {len(tools)} tools")
