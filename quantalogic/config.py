@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-
+from typing import Optional
 
 @dataclass
 class QLConfig:
@@ -8,8 +8,10 @@ class QLConfig:
     verbose: bool
     mode: str
     log: str
-    vision_model_name: str | None
+    vision_model_name: Optional[str]
     max_iterations: int
-    compact_every_n_iteration: int | None
-    max_tokens_working_memory: int | None
+    compact_every_n_iteration: Optional[int]
+    max_tokens_working_memory: Optional[int]
     no_stream: bool
+    thinking_model_name: str
+
