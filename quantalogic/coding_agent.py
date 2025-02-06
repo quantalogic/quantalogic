@@ -15,7 +15,9 @@ from quantalogic.tools import (
     ReadHTMLTool,
     ReplaceInFileTool,
     RipgrepTool,
+    SafePythonInterpreterTool,
     SearchDefinitionNames,
+    SequenceTool,
     TaskCompleteTool,
     WriteFileTool,
 )
@@ -79,9 +81,11 @@ def create_coding_agent(
         DuckDuckGoSearchTool(),
         JinjaTool(),
         ReadHTMLTool(),
-        GrepAppTool()
+        GrepAppTool(),
+        # SafePythonInterpreterTool(allowed_modules=["math", "numpy","decimal"])
     ]
-
+    
+   
     if vision_model_name:
         tools.append(LLMVisionTool(model_name=vision_model_name, on_token=console_print_token if not no_stream else None))
 
@@ -117,6 +121,8 @@ def create_coding_agent(
                 on_token=console_print_token if not no_stream else None,
             )
         )
+        
+
 
     return Agent(
         model_name=model_name,
