@@ -2,7 +2,7 @@ import loguru
 
 from quantalogic.model_info_list import model_info
 from quantalogic.model_info_litellm import litellm_get_model_max_input_tokens, litellm_get_model_max_output_tokens
-from quantalogic.utils.lm_studio_model_info import ModelInfo, get_model_list
+from quantalogic.utils.lm_studio_model_info import get_model_list
 
 DEFAULT_MAX_OUTPUT_TOKENS = 4 * 1024  # Reasonable default for most models
 DEFAULT_MAX_INPUT_TOKENS = 32 * 1024  # Reasonable default for most models
