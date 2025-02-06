@@ -163,6 +163,7 @@ def task_runner(
         mode=config.mode,
         model_name=config.model_name,
         vision_model_name=config.vision_model_name,
+        thinking_model_name=config.thinking_model_name,
         compact_every_n_iteration=config.compact_every_n_iteration,
         max_tokens_working_memory=config.max_tokens_working_memory
     )

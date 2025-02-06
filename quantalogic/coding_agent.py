@@ -28,6 +28,7 @@ from quantalogic.utils.get_quantalogic_rules_content import get_quantalogic_rule
 def create_coding_agent(
     model_name: str, 
     vision_model_name: str | None = None, 
+    thinking_model_name: str | None = None,
     basic: bool = False, 
     no_stream: bool = False, 
     compact_every_n_iteration: int | None = None,
@@ -38,6 +39,7 @@ def create_coding_agent(
     Args:
         model_name (str): Name of the language model to use for the agent's core capabilities
         vision_model_name (str | None): Name of the vision model to use for the agent's core capabilities
+        thinking_model_name (str | None): Name of the thinking model to use for the agent's core capabilities
         basic (bool, optional): If True, the agent will be configured with a basic set of tools.
         no_stream (bool, optional): If True, the agent will not stream results.
         compact_every_n_iteration (int | None, optional): Frequency of memory compaction.
@@ -86,6 +88,10 @@ def create_coding_agent(
    
     if vision_model_name:
         tools.append(LLMVisionTool(model_name=vision_model_name, on_token=console_print_token if not no_stream else None))
+
+
+    if thinking_model_name:
+        tools.append(LLMTool(model_name=thinking_model_name,name="smartest_code_expert", on_token=console_print_token if not no_stream else None))
 
     if not basic:
         tools.append(

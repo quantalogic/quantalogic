@@ -125,6 +125,9 @@ See our [Release Notes](RELEASE_NOTES.MD) for detailed version history and chang
 | openrouter/mistralai/mistral-large-2411 | OPENROUTER_API_KEY | Mistral's large model optimized for complex reasoning tasks, available through OpenRouter with enhanced multilingual capabilities. |
 | mistral/mistral-large-2407 | MISTRAL_API_KEY | Mistral's high-performance model designed for enterprise-grade applications, offering advanced reasoning and multilingual support. |
 | nvidia/deepseek-ai/deepseek-r1 | NVIDIA_API_KEY | NVIDIA's DeepSeek R1 model optimized for high-performance AI tasks and advanced reasoning capabilities. |
+| gemini/gemini-2.0-flash | GEMINI_API_KEY | Google's Gemini Flash 2.0 model offering a balance of speed and performance for various tasks. |
+| openrouter/google/gemini-2.0-flash-001 | OPENROUTER_API_KEY | Google's Gemini Flash 2.0 model offering a balance of speed and performance for various tasks through the OpenRouter platform. |
+| ovh/DeepSeek-R1-Distill-Llama-70B	 | OVH_API_KEY | DeepSeek's R1 model optimized for research and development tasks hosted on OVH in France. |
 | lm_studio/mistral-small-24b-instruct-2501 | LM_STUDIO_API_KEY | LM Studio's Mistral Small model optimized for local inference with advanced reasoning capabilities. |
 | dashscope/qwen-max | DASHSCOPE_API_KEY | Alibaba's Qwen-Max model optimized for maximum performance and extensive reasoning capabilities. |
 | dashscope/qwen-plus | DASHSCOPE_API_KEY | Alibaba's Qwen-Plus model offering balanced performance and cost-efficiency for a variety of tasks. |

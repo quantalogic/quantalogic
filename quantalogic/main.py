@@ -122,6 +122,12 @@ def restore_terminal(old_settings):
     default=None,
     help="Set the maximum number of tokens allowed in the working memory.",
 )
+@click.option(
+    "--thinking-model",
+    type=str,
+    default="default",
+    help="The thinking model to use",
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -134,6 +140,7 @@ def cli(
     max_iterations: int,
     compact_every_n_iteration: int | None,
     max_tokens_working_memory: int | None,
+    thinking_model: str,
 ) -> None:
     """QuantaLogic AI Assistant - A powerful AI tool for various tasks.
 
@@ -161,7 +168,8 @@ def cli(
             max_iterations=max_iterations,
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory,
-            no_stream=False  # Default value for backward compatibility
+            no_stream=False,  # Default value for backward compatibility
+            thinking_model_name=thinking_model,
         )
         ctx.invoke(
             task,
@@ -173,6 +181,7 @@ def cli(
             max_iterations=config.max_iterations,
             compact_every_n_iteration=config.compact_every_n_iteration,
             max_tokens_working_memory=config.max_tokens_working_memory,
+            thinking_model=thinking_model,
         )
 
 
@@ -219,6 +228,12 @@ def cli(
     is_flag=True,
     help="Disable streaming output (default: streaming enabled).",
 )
+@click.option(
+    "--thinking-model",
+    type=str,
+    default="default",
+    help="The thinking model to use",
+)
 @click.argument("task", required=False)
 def task(
     file: Optional[str],
@@ -232,6 +247,7 @@ def task(
     compact_every_n_iteration: int | None,
     max_tokens_working_memory: int | None,
     no_stream: bool,
+    thinking_model: str,
 ) -> None:
     console = Console()
 
@@ -246,8 +262,9 @@ def task(
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory,
             no_stream=no_stream,
+            thinking_model_name=thinking_model,
         )
-        
+
         task_runner(
             console,
             file,

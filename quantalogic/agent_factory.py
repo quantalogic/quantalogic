@@ -67,6 +67,7 @@ def create_agent_for_mode(
     mode: str,
     model_name: str,
     vision_model_name: Optional[str],
+    thinking_model_name: Optional[str],
     no_stream: bool = False,
     compact_every_n_iteration: Optional[int] = None,
     max_tokens_working_memory: Optional[int] = None
@@ -77,6 +78,7 @@ def create_agent_for_mode(
         mode: The mode of operation for the agent
         model_name: The name of the language model to use
         vision_model_name: Optional name of the vision model
+        thinking_model_name: Optional name for a thinking model
         no_stream: Whether to disable streaming mode
         compact_every_n_iteration: Optional number of iterations before compacting memory
         max_tokens_working_memory: Optional maximum tokens for working memory
@@ -98,6 +100,7 @@ def create_agent_for_mode(
         agent = create_coding_agent(
             model_name,
             vision_model_name,
+            thinking_model_name,
             basic=False,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
@@ -108,6 +111,7 @@ def create_agent_for_mode(
         agent = create_coding_agent(
             model_name,
             vision_model_name,
+
             basic=True,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
