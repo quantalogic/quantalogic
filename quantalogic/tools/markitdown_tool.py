@@ -72,7 +72,18 @@ class MarkitdownTool(Tool):
 
             from markitdown import MarkItDown
             md = MarkItDown()
-            result = md.convert(file_path)
+
+            # Detect file type if possible
+            file_extension = os.path.splitext(file_path)[1].lower()
+            supported_extensions = ['.pdf', '.pptx', '.docx', '.xlsx', '.html', '.htm']
+            
+            if not file_extension or file_extension not in supported_extensions:
+                return f"Error: Unsupported file format. Supported formats are: {', '.join(supported_extensions)}"
+
+            try:
+                result = md.convert(file_path)
+            except Exception as e:
+                return f"Error converting file to Markdown: {str(e)}"
 
             if output_file_path:
                 # Ensure output directory exists
@@ -92,7 +103,7 @@ class MarkitdownTool(Tool):
             return result.text_content
 
         except Exception as e:
-            return f"Error converting file to Markdown: {str(e)}"
+            return f"Error processing file: {str(e)}"
         finally:
             if is_temp_file and os.path.exists(file_path):
                 os.remove(file_path)
