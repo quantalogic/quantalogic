@@ -533,13 +533,13 @@ def create_custom_agent(
         "sequence": lambda params: SequenceTool(
             model_name=params.get("model_name", model_name),
             on_token=console_print_token if not no_stream else None,
-            event_emitter=event_emitter
+            # event_emitter=event_emitter
         ),
         "sql_query": lambda params: SQLQueryTool(
             connection_string=params.get("connection_string", ""),
             model_name=params.get("model_name", model_name),
             on_token=console_print_token if not no_stream else None,
-            event_emitter=event_emitter
+            # event_emitter=event_emitter
         ),
         "task_complete": lambda params: TaskCompleteTool()
     }
