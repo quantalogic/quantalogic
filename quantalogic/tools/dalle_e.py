@@ -236,7 +236,7 @@ class LLMImageGenerationTool(Tool):
                 raise ValueError("No image URL in response")
 
             # Save image locally
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{provider}_{timestamp}.png"
             local_path = self._save_image(image_url, filename)
 
@@ -255,7 +255,7 @@ class LLMImageGenerationTool(Tool):
             self._save_metadata(metadata)
 
             logger.info(f"Image generated and saved at: {local_path}")
-            return str(local_path)
+            return str(metadata)
 
         except Exception as e:
             logger.error(f"Error generating image with {provider}: {e}")

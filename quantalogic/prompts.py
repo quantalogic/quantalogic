@@ -81,13 +81,6 @@ Task Format: <task>task_description</task>
 </action>
 ```
 
-## final response
-```xml
-<response>
-  <!-- Direct content return, in format if applicable   -->
-</response>
-```
-
 ### Operational Parameters
 🛠️ Tools: {tools}
 🌐 Environment: {environment}
@@ -101,6 +94,17 @@ Task Format: <task>task_description</task>
 6. 🛑 Fail fast and adapt when encountering blockers
 7. ✅ Verify completion criteria rigorously
 8. ✅ Return complete, usable results
+
+
+ ✅ final response:
+
+- if a tool for presentation (like presentation_llm_tool) is available, always use it, and format the response accordingly.
+```xml
+<final_response>
+  <!-- Direct content return, in format if applicable   -->
+</final_response>
+```
+
 
 """
 

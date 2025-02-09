@@ -32,9 +32,9 @@ from quantalogic.agent_config import (
 from quantalogic.agent_factory import AgentRegistry, create_agent_for_mode
 from quantalogic.console_print_events import console_print_events
 from quantalogic.task_runner import configure_logger
-from utils import handle_sigterm, get_version
-from ServerState import ServerState
-from models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
+from .utils import handle_sigterm, get_version
+from .ServerState import ServerState
+from .models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
 
 
 class AgentState:
@@ -64,22 +64,42 @@ class AgentState:
             "error_tool_execution",
             "error_max_iterations_reached",
             "error_model_response",
-            "stream_chunk",
-            "stream_end",
-            "stream_start"
+            # "stream_chunk",
+            # "stream_end",
+            # "stream_start"
         ]
 
-    async def initialize_agent_with_sse_validation(self, model_name: str = MODEL_NAME, mode: str = "minimal") -> Agent:
-        """Initialize agent with SSE-based user validation."""
+    async def initialize_agent_with_sse_validation(
+        self, 
+        model_name: str = MODEL_NAME, 
+        mode: str = "minimal",
+        tools: Optional[List[Dict[str, Any]]] = None,
+        expertise: str = ""
+    ) -> Agent:
+        """Initialize agent with SSE-based user validation.
+        
+        Args:
+            model_name: Name of the model to use
+            mode: Mode for agent creation (minimal, custom, etc.)
+            tools: Optional list of tools for custom agents
+            expertise: Optional expertise for custom agents
+        """
         try:
             logger.info(f"Initializing agent with model: {model_name}")
             
             if "default" not in self.agent_registry._agents:
-                self.agent = self._create_minimal_agent(model_name, mode)
+                self.agent = create_agent_for_mode(
+                    mode=mode,
+                    model_name=model_name,
+                    vision_model_name=None,
+                    no_stream=False,
+                    tools=tools,
+                    specific_expertise=expertise
+                )
                 # Set up event handlers before registering the agent
                 self._setup_agent_events(self.agent)
                 self.agent_registry.register_agent("default", self.agent)
-                logger.info("Agent initialized successfully with minimal mode")
+                logger.info(f"Agent initialized successfully with {mode} mode")
 
             agent = self.agent_registry.get_agent("default")
             # Ensure events are set up even for existing agent
@@ -90,12 +110,14 @@ class AgentState:
             logger.error(f"Failed to initialize agent: {e}", exc_info=True)
             raise
 
-    def _create_minimal_agent(self, model_name: str, mode: str) -> Agent:
+    def _create_minimal_agent(self, model_name: str, mode: str, tools: List[str] = None, expertise: str = "") -> Agent:
         """Create a minimal agent with the specified model.
         
         Args:
             model_name: Name of the model to use
             mode: Mode for agent creation
+            tools: List of tools to use for custom mode
+            expertise: Expertise to use for custom mode
             
         Returns:
             The created agent instance
@@ -104,7 +126,9 @@ class AgentState:
             mode=mode,
             model_name=model_name,
             vision_model_name=None,
-            no_stream=False
+            no_stream=False,
+            tools=tools,
+            specific_expertise=expertise
         )
 
     def _setup_agent_events(self, agent: Agent) -> None:
@@ -195,9 +219,21 @@ class AgentState:
 
         try:
             logger.info(f"Starting task execution: {task_id}")
+            request = task_info.get("request", {})
+            model_name = request.get("model_name", MODEL_NAME)
+            mode = request.get("mode", "minimal")
+            expertise = request.get("expertise", "")
+            tools = request.get("tools", None)
+
+            # If tools are provided, use custom mode
+            if tools:
+                mode = "custom"
+                
             agent = await self.initialize_agent_with_sse_validation(
-                task_info.get("request", {}).get("model_name", MODEL_NAME),
-                task_info.get("request", {}).get("mode", "minimal")
+                model_name=model_name,
+                mode=mode,
+                tools=tools,
+                expertise=expertise
             )
             
             # Create event for task start

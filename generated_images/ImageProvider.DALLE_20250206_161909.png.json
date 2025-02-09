@@ -1,0 +1,18 @@
+{
+  "filename": "ImageProvider.DALLE_20250206_161909.png",
+  "prompt": "Create a new avatar for QuantaLogic agents, featuring a vibrant color scheme with green and yellow accents, cartoonish design, a futuristic spacesuit aesthetic, inquisitive expression, and engaging pose with outstretched hands.",
+  "revised_prompt": "Design a new avatar for futuristic logic agents characterized by a vibrant color scheme. Key features include dominant hues of green and yellow. The design should exhibit a cartoonish style, portraying an inquisitive expression on the character's face. The agent should be donned in a futuristic spacesuit and maintain an engaging pose where their hands are stretching outwards, seeming ready to interact with the viewer.",
+  "provider": "ImageProvider.DALLE",
+  "model": "dall-e-3",
+  "created": "2025-02-06T16:19:09",
+  "parameters": {
+    "model": "dall-e-3",
+    "size": "1024x1024",
+    "quality": "standard",
+    "style": "vivid",
+    "response_format": "url",
+    "prompt": "Create a new avatar for QuantaLogic agents, featuring a vibrant color scheme with green and yellow accents, cartoonish design, a futuristic spacesuit aesthetic, inquisitive expression, and engaging pose with outstretched hands."
+  },
+  "image_url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-7L4b41fUDYyYwcZmoo8L2h3w/user-cPc54DrmgZqPw1d3n0yqp2uf/img-7jeaKYVwwROITHzlHyFxY13S.png?st=2025-02-06T14%3A19%3A09Z&se=2025-02-06T16%3A19%3A09Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-02-06T00%3A36%3A04Z&ske=2025-02-07T00%3A36%3A04Z&sks=b&skv=2024-08-04&sig=wmIgDQk/CaOlElFtZsZSI/LGoBBj562t%2B7NA/fESBJw%3D",
+  "local_path": "generated_images/ImageProvider.DALLE_20250206_161909.png"
+}

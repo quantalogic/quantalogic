@@ -1,0 +1,18 @@
+{
+  "filename": "ImageProvider.DALLE_20250206_154554.png",
+  "prompt": "An intelligent and futuristic avatar representing the QuantaLogic agent, with a sleek design, glowing elements, and a digital aesthetic, suitable for use in a virtual environment like Syntheia.",
+  "revised_prompt": "Imagine a futuristic, intelligent avatar representing a virtual assistant named QuantaLogic. The avatar has a sleek and modern design that includes glowing elements, giving it a digital aesthetic. This character should be perfectly suited for use in a virtual environment, similar to a place known as Syntheia. It should embody intelligence and futuristic technology through its appearance. The colors should predominantly be cool shades like blues or greens to emphasize a digital feel.",
+  "provider": "ImageProvider.DALLE",
+  "model": "dall-e-3",
+  "created": "2025-02-06T15:45:54",
+  "parameters": {
+    "model": "dall-e-3",
+    "size": "1024x1024",
+    "quality": "standard",
+    "style": "vivid",
+    "response_format": "url",
+    "prompt": "An intelligent and futuristic avatar representing the QuantaLogic agent, with a sleek design, glowing elements, and a digital aesthetic, suitable for use in a virtual environment like Syntheia."
+  },
+  "image_url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-7L4b41fUDYyYwcZmoo8L2h3w/user-cPc54DrmgZqPw1d3n0yqp2uf/img-6t4bb1LTFqRAaX9GL53DZv1x.png?st=2025-02-06T13%3A45%3A54Z&se=2025-02-06T15%3A45%3A54Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-02-06T00%3A31%3A26Z&ske=2025-02-07T00%3A31%3A26Z&sks=b&skv=2024-08-04&sig=vQCPcMEv4qdnL4/JWQTKB7H6UTjJBZocNEOPIlfC5LI%3D",
+  "local_path": "generated_images/ImageProvider.DALLE_20250206_154554.png"
+}

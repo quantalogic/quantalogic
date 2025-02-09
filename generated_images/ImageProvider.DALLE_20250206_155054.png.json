@@ -1,0 +1,18 @@
+{
+  "filename": "ImageProvider.DALLE_20250206_155054.png",
+  "prompt": "A futuristic avatar representing the QuantaLogic AI agent, with a sleek design, glowing accents, and a digital interface, set against a high-tech background.",
+  "revised_prompt": "A futuristic avatar represents the QuantumLogic Artificial Intelligence agent. This avatar is visually sleek, with design elements that signify advanced technology, like edges that look sharp and polished. The avatar has glowing accents that add to its futuristic appeal. A distinctive feature of this avatar is its digital interface, signifying its AI nature. This avatar is set against a high-tech, advanced background that complements it perfectly. The backdrop could have different elements like a matrix of neon grids, binary codes, or abstract digital patterns to highlight the AI theme.",
+  "provider": "ImageProvider.DALLE",
+  "model": "dall-e-3",
+  "created": "2025-02-06T15:50:53",
+  "parameters": {
+    "model": "dall-e-3",
+    "size": "1024x1024",
+    "quality": "standard",
+    "style": "vivid",
+    "response_format": "url",
+    "prompt": "A futuristic avatar representing the QuantaLogic AI agent, with a sleek design, glowing accents, and a digital interface, set against a high-tech background."
+  },
+  "image_url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-7L4b41fUDYyYwcZmoo8L2h3w/user-cPc54DrmgZqPw1d3n0yqp2uf/img-3hP8n7gOZM226QCQXckn8aMA.png?st=2025-02-06T13%3A50%3A53Z&se=2025-02-06T15%3A50%3A53Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-02-06T00%3A51%3A28Z&ske=2025-02-07T00%3A51%3A28Z&sks=b&skv=2024-08-04&sig=t/3xhUinTThs6CM%2BijNiA1Uy0NKpFWGY/5XQ8cVVsn0%3D",
+  "local_path": "generated_images/ImageProvider.DALLE_20250206_155054.png"
+}

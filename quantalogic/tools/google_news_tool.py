@@ -13,12 +13,14 @@ import aiohttp
 from bs4 import BeautifulSoup
 from gnews import GNews
 from loguru import logger
-from pydantic import Field, validator
+from pydantic import Field, validator, ConfigDict
 import nltk
 from nltk.sentiment import SentimentIntensityAnalyzer
 import html2text
 
 from quantalogic.tools.tool import Tool, ToolArgument
+from quantalogic.tools.llm_tool import LLMTool
+from quantalogic.event_emitter import EventEmitter
 
 
 class NewsArticle:
@@ -158,20 +160,169 @@ class GoogleNewsTool(Tool):
         ),
     ]
 
-    def __init__(self):
-        """Initialize the tool and download required NLTK data."""
+    def __init__(
+        self,
+        model_name: str | None = None,
+        on_token: Any | None = None,
+        event_emitter: EventEmitter | None = None,
+    ):
+        """Initialize the GoogleNewsTool.
+        
+        Args:
+            model_name (str | None): Name of the LLM model to use for summarization
+            on_token (Any | None): Token callback for streaming
+            event_emitter (EventEmitter | None): Event emitter for the tool
+        """
         super().__init__()
-        try:
-            nltk.download('vader_lexicon', quiet=True)
-        except Exception as e:
-            logger.warning(f"Failed to download NLTK data: {str(e)}")
+        self.model_name = model_name
+        self.on_token = on_token
+        self.event_emitter = event_emitter
+        if model_name:
+            self.llm_tool = LLMTool(
+                model_name=model_name,
+                on_token=on_token,
+                event_emitter=event_emitter,
+            )
 
-    async def _fetch_article_data(self, articles: List[NewsArticle]) -> List[NewsArticle]:
-        """Fetch detailed data for multiple articles concurrently."""
-        async with aiohttp.ClientSession() as session:
-            tasks = [article.enrich(session) for article in articles]
-            await asyncio.gather(*tasks)
-        return articles
+    def _summarize_article(self, article: Dict[str, Any]) -> str:
+        """Summarize a news article using LLM.
+        
+        Args:
+            article (Dict[str, Any]): Article data including title and description
+            
+        Returns:
+            str: Summarized article content
+        """
+        if not hasattr(self, 'llm_tool'):
+            return article.get('description', '')
+
+        prompt = f"""
+        Summarize this news article concisely and professionally:
+        
+        Title: {article.get('title', '')}
+        Description: {article.get('description', '')}
+        
+        Provide a 2-3 sentence summary that captures the key points.
+        """
+
+        try:
+            summary = self.llm_tool.execute(
+                system_prompt="You are a professional news summarizer. Create clear, accurate, and concise summaries.",
+                prompt=prompt,
+                temperature="0.3"
+            )
+            return summary
+        except Exception as e:
+            logger.error(f"Error summarizing article: {e}")
+            return article.get('description', '')
+
+    def _format_html_output(self, articles: List[Dict[str, Any]], query: str) -> str:
+        """Format articles as HTML with a modern, clean design."""
+        css_styles = """
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                line-height: 1.6;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+                background-color: #f5f5f5;
+            }
+            .header {
+                background-color: #2c3e50;
+                color: white;
+                padding: 20px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+            }
+            .article {
+                background-color: white;
+                padding: 20px;
+                margin-bottom: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .article h2 {
+                color: #2c3e50;
+                margin-top: 0;
+            }
+            .article-meta {
+                color: #666;
+                font-size: 0.9em;
+                margin-bottom: 10px;
+            }
+            .summary {
+                border-left: 4px solid #2c3e50;
+                padding-left: 15px;
+                margin: 15px 0;
+            }
+            .source-link {
+                display: inline-block;
+                margin-top: 10px;
+                color: #3498db;
+                text-decoration: none;
+            }
+            .source-link:hover {
+                text-decoration: underline;
+            }
+        """
+
+        articles_html = []
+        for article in articles:
+            article_html = f"""
+                <div class="article">
+                    <h2>{article.get('title', 'No Title')}</h2>
+                    <div class="article-meta">
+                        <span>Source: {article.get('source', {}).get('title', 'Unknown')}</span>
+                        <span> • </span>
+                        <span>Published: {article.get('published_date', 'Unknown date')}</span>
+                    </div>
+                    <div class="summary">
+                        {article.get('summary', 'No summary available')}
+                    </div>
+                    <a href="{article.get('link', '#')}" class="source-link" target="_blank">Read full article →</a>
+                </div>
+            """
+            articles_html.append(article_html)
+
+        html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    {css_styles}
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>News Results for: {query}</h1>
+                    <p>Found {len(articles)} articles</p>
+                </div>
+                {''.join(articles_html)}
+            </body>
+            </html>
+        """
+        
+        return html_content.strip()
+
+    def _fetch_article_data(self, articles: List[NewsArticle]) -> List[NewsArticle]:
+        """Fetch detailed data for multiple articles."""
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        async def fetch_all():
+            tasks = []
+            async with aiohttp.ClientSession() as session:
+                for article in articles:
+                    tasks.append(article.enrich(session))
+                await asyncio.gather(*tasks)
+            return articles
+
+        return loop.run_until_complete(fetch_all())
 
     def _format_results(self, articles: List[NewsArticle], analyze: bool) -> str:
         """Format news results with optional analysis data."""
@@ -236,78 +387,86 @@ class GoogleNewsTool(Tool):
         self,
         query: str,
         language: str = "en",
-        period: str = "1d",
-        max_results: int = 10,
+        period: str = "1m",
+        max_results: int = 30,
         country: str = "US",
         sort_by: str = "relevance",
         analyze: bool = True,
     ) -> str:
-        """Execute an advanced news search with analysis.
+        """Execute the Google News search with summarization and HTML formatting.
 
         Args:
-            query: The news search query
-            language: Language code
-            period: Time period for news
-            max_results: Maximum number of results
-            country: Country code for news sources
-            sort_by: Sort method (relevance/date)
-            analyze: Whether to perform detailed analysis
+            query (str): Search query
+            language (str, optional): Language code. Defaults to "en".
+            period (str, optional): Time period. Defaults to "1m".
+            max_results (int, optional): Maximum results. Defaults to 30.
+            country (str, optional): Country code. Defaults to "US".
+            sort_by (str, optional): Sort method. Defaults to "relevance".
+            analyze (bool, optional): Whether to analyze results. Defaults to True.
 
         Returns:
-            Formatted news results with optional analysis data
-
-        Raises:
-            ValueError: If parameters are invalid
-            RuntimeError: If the operation fails
+            str: HTML formatted news results with summaries
         """
         try:
             # Input validation
             if not query:
-                raise ValueError("Query must be a non-empty string")
-            if max_results < 1 or max_results > 100:
-                raise ValueError("max_results must be between 1 and 100")
-            
+                raise ValueError("Query cannot be empty")
+
             # Configure GNews
             google_news = GNews(
                 language=language,
                 country=country,
-                max_results=max_results,
                 period=period,
-                exclude_websites=None
+                max_results=max_results,
             )
-            
-            # Fetch initial news data
+
+            # Fetch news
             logger.info(f"Fetching news for query: {query}")
-            news_items = google_news.get_news(query)
-            
-            if not news_items:
-                return "No news articles found for the given query."
-            
-            # Create NewsArticle objects
-            articles = [
-                NewsArticle(
-                    title=item['title'],
-                    url=item['url'],
-                    source=item.get('publisher', 'Unknown'),
-                    date=item.get('published date', 'Date not available')
-                )
-                for item in news_items
-            ]
-            
+            articles = []
+            try:
+                raw_articles = google_news.get_news(query)
+                for article_data in raw_articles:
+                    articles.append(
+                        NewsArticle(
+                            title=article_data.get("title", ""),
+                            url=article_data.get("url", ""),
+                            source=article_data.get("publisher", {}).get("title", ""),
+                            date=article_data.get("published date", ""),
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"Error fetching articles: {e}")
+                raise RuntimeError(f"Failed to fetch articles: {str(e)}")
+
             # Enrich articles with additional data if requested
             if analyze:
                 logger.info("Performing detailed analysis of articles...")
-                asyncio.run(self._fetch_article_data(articles))
+                articles = self._fetch_article_data(articles)
             
             # Sort results if needed
             if sort_by == "date":
-                articles.sort(key=lambda x: x.date if isinstance(x.date, datetime) else datetime.min, reverse=True)
+                articles.sort(key=lambda x: x.date if x.date else "", reverse=True)
             
-            return self._format_results(articles, analyze)
+            # Process and summarize each article
+            processed_articles = []
+            for article in articles:
+                article_copy = {
+                    'title': article.title,
+                    'link': article.url,
+                    'source': {'title': article.source},
+                    'published_date': article.date,
+                    'description': article.full_text if hasattr(article, 'full_text') else '',
+                }
+                article_copy['summary'] = self._summarize_article(article_copy)
+                processed_articles.append(article_copy)
+
+            # Format results as HTML
+            html_output = self._format_html_output(processed_articles, query)
+            return html_output
 
         except Exception as e:
-            logger.error(f"Error in news search: {str(e)}")
-            raise RuntimeError(f"Failed to fetch or analyze news: {str(e)}")
+            logger.error(f"Error in GoogleNewsTool: {e}")
+            raise Exception(f"Failed to fetch news: {str(e)}")
 
 
 if __name__ == "__main__":

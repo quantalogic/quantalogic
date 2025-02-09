@@ -33,6 +33,7 @@ from .unified_diff_tool import UnifiedDiffTool
 from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
 from .google_news_tool import GoogleNewsTool
+from .presentation_llm_tool import PresentationLLMTool 
 
 __all__ = [
     "WikipediaSearchTool",
@@ -66,8 +67,9 @@ __all__ = [
     "GrepAppTool",
     "GenerateDatabaseReportTool",
     'SQLQueryTool',
-    'SafePythonInterpreterTool'
+    'SafePythonInterpreterTool',
     'LLMGenerationTool',
     'GoogleNewsTool',
+    "PresentationLLMTool", 
     'SequenceTool'
 ]

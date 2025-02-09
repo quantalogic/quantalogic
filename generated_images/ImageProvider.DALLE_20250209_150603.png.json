@@ -1,0 +1,18 @@
+{
+  "filename": "ImageProvider.DALLE_20250209_150603.png",
+  "prompt": "A simple Japanese garden",
+  "revised_prompt": "Visualize an enchanting Japanese garden filled with tranquility and beauty. Let it be crafted carefully wherein varied elements of nature harmoniously coexist. Stay true to traditional aesthetics, picturing a large pond filled with koi fish swimming gently, edged with smooth pebbles. Beside it, a red, arched wooden bridge crosses over the waters leading to a tea house hidden among bamboo trees. Next to these, a dominating cherry blossom tree stands, shedding its delicate pink petals on a Zen rock garden enclosed with neatly trimmed shrubs. Finish it with stone lanterns emitting a soft glow under the pale twilight sky.",
+  "provider": "ImageProvider.DALLE",
+  "model": "dall-e-3",
+  "created": "2025-02-09T15:06:02",
+  "parameters": {
+    "model": "dall-e-3",
+    "size": "1024x1024",
+    "quality": "standard",
+    "style": "natural",
+    "response_format": "url",
+    "prompt": "A simple Japanese garden"
+  },
+  "image_url": "https://oaidalleapiprodscus.blob.core.windows.net/private/org-7L4b41fUDYyYwcZmoo8L2h3w/user-cPc54DrmgZqPw1d3n0yqp2uf/img-GC89S383B5DVN6hXHebGdDZ1.png?st=2025-02-09T13%3A06%3A02Z&se=2025-02-09T15%3A06%3A02Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-02-09T01%3A46%3A49Z&ske=2025-02-10T01%3A46%3A49Z&sks=b&skv=2024-08-04&sig=sK2uKd2XPmsStYwM8Qa/hxM6Xb4pt0NRMbKWNvqhG78%3D",
+  "local_path": "generated_images/ImageProvider.DALLE_20250209_150603.png"
+}

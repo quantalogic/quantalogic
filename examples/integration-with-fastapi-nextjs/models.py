@@ -1,6 +1,6 @@
 """Pydantic models for the QuantaLogic API."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from pydantic import BaseModel
 
@@ -42,6 +42,9 @@ class TaskSubmission(BaseModel):
     task: str
     model_name: Optional[str] = MODEL_NAME
     max_iterations: Optional[int] = 30
+    mode: Optional[str] = "minimal"
+    expertise: Optional[str] = None
+    tools: Optional[List[Dict[str, Any]]] = None
 
     model_config = {"extra": "forbid"}
 
@@ -58,12 +61,6 @@ class TaskStatus(BaseModel):
     error: Optional[str] = None
     total_tokens: Optional[int] = None
     model_name: Optional[str] = None
-
-
-
-
-
-
 
 # Models
 class EventMessage(BaseModel):
@@ -102,7 +99,6 @@ class TaskSubmission(BaseModel):
     model_name: Optional[str] = MODEL_NAME
     max_iterations: Optional[int] = 30
     mode: Optional[str] = "minimal"
-
     model_config = {"extra": "forbid"}
 
 
@@ -118,4 +114,3 @@ class TaskStatus(BaseModel):
     error: Optional[str] = None
     total_tokens: Optional[int] = None
     model_name: Optional[str] = None
-
