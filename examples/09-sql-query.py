@@ -81,7 +81,7 @@ console = Console()
 # db_conn = os.environ.get("DB_CONNECTION_STRING") or Prompt.ask(
 #     "[bold]Enter database connection string[/bold]", default="sqlite:///sample.db", console=console
 # )
-db_conn = 'postgresql://quantadbu:azerty1234@db:5432/quanta_db'
+db_conn = 'postgresql://quantadbu:azerty1234@localhost:5432/quanta_db'
 
 def get_database_report():
     """Generate a database report using the GenerateDatabaseReportTool."""

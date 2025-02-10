@@ -720,7 +720,9 @@ class Agent(BaseModel):
             "1. Select ONE tool per message\n"
             "2. You will receive the tool's output in the next user response\n"
             "3. Choose the most appropriate tool for each step\n"
-            "4. Use task_complete tool to confirm task completion\n"
+            "4. If a tool of websearch or google news is called, present the different sources well in the final answer. \n"
+            "5. Use presentation_llm_tool if available to give a presentation of the full answer \n"
+            "6. Use task_complete tool to confirm task completion with the content of the final answer retrieved from presentation_llm_tool if used\n"
         )
         return prompt_use_tools
 

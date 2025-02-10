@@ -34,6 +34,7 @@ from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
 from .google_news_tool import GoogleNewsTool
 from .presentation_llm_tool import PresentationLLMTool 
+from .composio import ComposioTool 
 
 __all__ = [
     "WikipediaSearchTool",
@@ -71,5 +72,6 @@ __all__ = [
     'LLMGenerationTool',
     'GoogleNewsTool',
     "PresentationLLMTool", 
-    'SequenceTool'
+    'SequenceTool',
+    'ComposioTool'
 ]
