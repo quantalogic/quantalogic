@@ -31,11 +31,13 @@ from quantalogic.agent_config import (
 )
 from quantalogic.agent_factory import AgentRegistry, create_agent_for_mode
 from quantalogic.console_print_events import console_print_events
+from quantalogic.memory import AgentMemory
 from quantalogic.task_runner import configure_logger
 from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
 from .models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
 
+memory = AgentMemory()
 
 class AgentState:
     """Manages agent state and event queues."""
@@ -94,7 +96,8 @@ class AgentState:
                     vision_model_name=None,
                     no_stream=False,
                     tools=tools,
-                    specific_expertise=expertise
+                    specific_expertise=expertise,
+                    memory=memory
                 )
                 # Set up event handlers before registering the agent
                 self._setup_agent_events(self.agent)

@@ -1,6 +1,7 @@
 """Specialized LLM Tool for formatting and structuring content presentations."""
 
 from typing import Callable, Literal, ClassVar, Dict
+import json
 
 from loguru import logger
 from pydantic import ConfigDict, Field
@@ -39,7 +40,9 @@ class PresentationLLMTool(Tool):
                 description=(
                     "The desired presentation format. Options: "
                     "'technical_doc', 'executive_summary', 'markdown', "
-                    "'bullet_points', 'tutorial', 'api_doc'"
+                    "'bullet_points', 'tutorial', 'api_doc', 'article', "
+                    "'html_doc', 'slide_deck', 'code_review', 'release_notes', "
+                    "'user_guide', 'research_paper', 'database_doc', 'analytics_report'"
                 ),
                 required=True,
                 example="technical_doc",
@@ -52,52 +55,167 @@ class PresentationLLMTool(Tool):
                 default="0.3",
                 example="0.3",
             ),
+            ToolArgument(
+                name="additional_info",
+                arg_type="string",
+                description=(
+                    "Optional additional notes or requirements for formatting. "
+                    "These will be added as extra instructions to the formatter."
+                ),
+                required=False,
+                example="Please make it concise and focus on technical accuracy."
+            ),
         ]
     )
 
     model_name: str = Field(..., description="The name of the language model to use")
     system_prompt: str = Field(
         default=(
-            "You are an expert content formatter specializing in creating clear, "
-            "well-structured, and professional presentations. Your role is to take "
-            "raw content and transform it into the requested format while maintaining "
-            "accuracy and improving clarity. Focus on:"
-            "\n- Clear hierarchical structure"
-            "\n- Consistent formatting"
-            "\n- Professional tone"
-            "\n- Logical flow"
-            "\n- Emphasis on key points"
-            "\n- Appropriate level of detail for the format"
+            "You are an expert content formatter and technical writer specializing in creating "
+            "clear, well-structured, and professional presentations. Your role is to take "
+            "raw content and transform it into the requested format while:"
+            "\n- Maintaining accuracy and technical precision"
+            "\n- Ensuring clear hierarchical structure"
+            "\n- Following consistent formatting standards"
+            "\n- Using appropriate professional tone"
+            "\n- Creating logical information flow"
+            "\n- Emphasizing key points effectively"
+            "\n- Adapting detail level to format and audience"
+            "\n- Incorporating relevant examples and references"
+            "\n- Following industry best practices for each format"
         )
     )
+    additional_info: str | None = Field(default=None, description="Default additional formatting instructions")
     on_token: Callable | None = Field(default=None, exclude=True)
     generative_model: GenerativeModel | None = Field(default=None, exclude=True)
     event_emitter: EventEmitter | None = Field(default=None, exclude=True)
 
     FORMAT_PROMPTS: ClassVar[Dict[str, str]] = {
         "technical_doc": (
-            "Format this as a technical documentation with clear sections, "
-            "code examples properly formatted, and technical details preserved."
+            "Format this as a comprehensive technical documentation with:"
+            "\n- Clear hierarchical sections and subsections"
+            "\n- Properly formatted code examples and technical details"
+            "\n- Implementation details and considerations"
+            "\n- Prerequisites and dependencies"
+            "\n- Troubleshooting guidelines"
         ),
         "executive_summary": (
-            "Create a concise executive summary highlighting key points, "
-            "decisions, and outcomes in a business-friendly format."
+            "Create a concise executive summary that:"
+            "\n- Highlights key points, decisions, and outcomes"
+            "\n- Uses business-friendly language"
+            "\n- Includes actionable insights"
+            "\n- Provides clear recommendations"
+            "\n- Summarizes impact and value"
         ),
         "markdown": (
-            "Convert this content into well-structured markdown format with "
-            "appropriate headers, lists, code blocks, and emphasis."
+            "Convert this content into well-structured markdown with:"
+            "\n- Appropriate heading levels"
+            "\n- Properly formatted lists and tables"
+            "\n- Code blocks with language specification"
+            "\n- Links and references"
+            "\n- Emphasis and formatting for readability"
         ),
         "bullet_points": (
-            "Transform this into a clear bullet-point format with main points "
-            "and sub-points properly organized and hierarchical."
+            "Transform this into a clear hierarchical bullet-point format with:"
+            "\n- Main points and key takeaways"
+            "\n- Organized sub-points and details"
+            "\n- Consistent formatting and indentation"
+            "\n- Clear relationships between points"
         ),
         "tutorial": (
-            "Structure this as a step-by-step tutorial with clear instructions, "
-            "examples, and explanations suitable for learning."
+            "Structure this as a comprehensive tutorial with:"
+            "\n- Clear prerequisites and setup instructions"
+            "\n- Step-by-step guidance with examples"
+            "\n- Common pitfalls and solutions"
+            "\n- Practice exercises or challenges"
+            "\n- Further learning resources"
         ),
         "api_doc": (
-            "Format this as API documentation with clear endpoint descriptions, "
-            "parameters, response formats, and examples."
+            "Format this as detailed API documentation including:"
+            "\n- Endpoint descriptions and URLs"
+            "\n- Request/response formats and examples"
+            "\n- Authentication requirements"
+            "\n- Error handling and status codes"
+            "\n- Usage examples and best practices"
+        ),
+        "article": (
+            "Format this as an engaging article with:"
+            "\n- Compelling introduction and conclusion"
+            "\n- Clear sections and transitions"
+            "\n- Supporting examples and evidence"
+            "\n- Engaging writing style"
+            "\n- Key takeaways or summary"
+        ),
+        "html_doc": (
+            "Format this as HTML documentation with:"
+            "\n- Semantic HTML structure"
+            "\n- Navigation and table of contents"
+            "\n- Code examples with syntax highlighting"
+            "\n- Cross-references and links"
+            "\n- Responsive layout considerations"
+        ),
+        "slide_deck": (
+            "Structure this as presentation slides with:"
+            "\n- Clear title and agenda"
+            "\n- One main point per slide"
+            "\n- Supporting visuals or diagrams"
+            "\n- Speaker notes or talking points"
+            "\n- Call to action or next steps"
+        ),
+        "code_review": (
+            "Format this as a detailed code review with:"
+            "\n- Code quality assessment"
+            "\n- Performance considerations"
+            "\n- Security implications"
+            "\n- Suggested improvements"
+            "\n- Best practices alignment"
+        ),
+        "release_notes": (
+            "Structure this as release notes with:"
+            "\n- Version and date information"
+            "\n- New features and enhancements"
+            "\n- Bug fixes and improvements"
+            "\n- Breaking changes"
+            "\n- Upgrade instructions"
+        ),
+        "user_guide": (
+            "Format this as a user guide with:"
+            "\n- Getting started instructions"
+            "\n- Feature explanations and use cases"
+            "\n- Configuration options"
+            "\n- Troubleshooting steps"
+            "\n- FAQs and support information"
+        ),
+        "research_paper": (
+            "Structure this as a research paper with:"
+            "\n- Abstract and introduction"
+            "\n- Methodology and approach"
+            "\n- Results and analysis"
+            "\n- Discussion and implications"
+            "\n- References and citations"
+        ),
+        "database_doc": (
+            "Format this as a comprehensive database documentation with:"
+            "\n- Schema overview and ER diagrams (in text/ascii format)"
+            "\n- Table descriptions and relationships"
+            "\n- Column details (name, type, constraints, indexes)"
+            "\n- Primary and foreign key relationships"
+            "\n- Common queries and use cases"
+            "\n- Performance considerations"
+            "\n- Data integrity rules"
+            "\n- Security and access control"
+        ),
+        "analytics_report": (
+            "Structure this as a data analytics report with:"
+            "\n- Key metrics and KPIs"
+            "\n- Data summary and statistics"
+            "\n- Trend analysis and patterns"
+            "\n- Visual representations (in text/ascii format)"
+            "\n- Correlations and relationships"
+            "\n- Insights and findings"
+            "\n- Recommendations based on data"
+            "\n- Data quality notes"
+            "\n- Methodology and data sources"
         ),
     }
 
@@ -108,6 +226,7 @@ class PresentationLLMTool(Tool):
         name: str = "presentation_llm_tool",
         generative_model: GenerativeModel | None = None,
         event_emitter: EventEmitter | None = None,
+        additional_info: str | None = None,
     ):
         """Initialize the Presentation LLM tool.
         
@@ -117,6 +236,7 @@ class PresentationLLMTool(Tool):
             name (str): Name of the tool
             generative_model (GenerativeModel | None): Optional pre-configured model
             event_emitter (EventEmitter | None): Optional event emitter
+            additional_info (str | None): Default additional formatting instructions
         """
         super().__init__(
             **{
@@ -125,6 +245,7 @@ class PresentationLLMTool(Tool):
                 "name": name,
                 "generative_model": generative_model,
                 "event_emitter": event_emitter,
+                "additional_info": additional_info,
             }
         )
         self.model_post_init(None)
@@ -152,8 +273,18 @@ class PresentationLLMTool(Tool):
             "bullet_points",
             "tutorial",
             "api_doc",
+            "article",
+            "html_doc",
+            "slide_deck",
+            "code_review",
+            "release_notes",
+            "user_guide",
+            "research_paper",
+            "database_doc",
+            "analytics_report",
         ],
         temperature: str = "0.3",
+        additional_info: str | None = None,
     ) -> str:
         """Execute the tool to format the content according to the specified style.
 
@@ -161,6 +292,9 @@ class PresentationLLMTool(Tool):
             content (str): The raw content to be formatted
             format_style (str): The desired presentation format
             temperature (str): Sampling temperature, defaults to "0.3"
+            additional_info (str | None): Optional additional notes or requirements for formatting.
+                If not provided, will use the default additional_info set during initialization.
+                Example: "Please make it concise and focus on technical accuracy."
 
         Returns:
             str: The formatted content
@@ -181,12 +315,20 @@ class PresentationLLMTool(Tool):
 
         format_prompt = self.FORMAT_PROMPTS[format_style]
         
+        # Use provided additional_info or fall back to default
+        info_to_use = additional_info if additional_info is not None else self.additional_info
+        
+        # Add additional formatting instructions if provided
+        additional_instructions = ""
+        if info_to_use:
+            additional_instructions = f"\n\nAdditional requirements:\n{info_to_use}"
+        
         messages_history = [
             Message(role="system", content=self.system_prompt),
             Message(
                 role="user",
                 content=(
-                    f"{format_prompt}\n\n"
+                    f"{format_prompt}\n{additional_instructions}\n\n"
                     f"Here's the content to format:\n\n{content}"
                 ),
             ),

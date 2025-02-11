@@ -13,6 +13,7 @@ from quantalogic.agent_config import (
     create_news_agent,
 )
 from quantalogic.coding_agent import create_coding_agent
+from quantalogic.memory import AgentMemory
 from quantalogic.search_agent import create_search_agent  # noqa: E402
 
 
@@ -76,6 +77,7 @@ def create_agent_for_mode(
     tools: Optional[List[Any]] = None,
     event_emitter: Any = None,
     specific_expertise: str = "",
+    memory: AgentMemory | None = None
 ) -> Agent:
     """Create an agent based on the specified mode.
     
@@ -89,6 +91,7 @@ def create_agent_for_mode(
         tools: Optional list of tools to include in the agent
         event_emitter: Optional event emitter to use in the agent
         specific_expertise: Optional specific expertise for the agent
+        memory: Optional AgentMemory instance to use in the agent
         
     Returns:
         Agent: The created agent instance
@@ -202,7 +205,8 @@ def create_agent_for_mode(
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory,
             specific_expertise=specific_expertise,
-            tools=tools
+            tools=tools,
+            memory=memory
         )
         return agent
     else:

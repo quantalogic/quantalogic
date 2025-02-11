@@ -44,8 +44,7 @@ class TaskSubmission(BaseModel):
     max_iterations: Optional[int] = 30
     mode: Optional[str] = "minimal"
     expertise: Optional[str] = None
-    tools: Optional[List[Dict[str, Any]]] = None
-
+    tools: Optional[List[Dict[str, Any]]] = None 
     model_config = {"extra": "forbid"}
 
 

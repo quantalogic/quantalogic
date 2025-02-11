@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from quantalogic.agent import Agent
 from quantalogic.console_print_token import console_print_token
 from quantalogic.event_emitter import EventEmitter
+from quantalogic.memory import AgentMemory
 from quantalogic.tools import (
     AgentTool,
     DownloadHttpFileTool,
@@ -460,6 +461,7 @@ def create_custom_agent(
     max_tokens_working_memory: int | None = None,
     specific_expertise: str = "",
     tools: list[Any] | None = None,
+    memory: AgentMemory | None = None
 ) -> Agent:
     """Create an agent with the specified model and tools.
 
@@ -492,10 +494,10 @@ def create_custom_agent(
             event_emitter=event_emitter
         ),
         "llm_vision": lambda params: LLMVisionTool(
-            model_name=params.get("vision_model_name", vision_model_name),
+            model_name=params.get("vision_model_name") or vision_model_name,
             on_token=console_print_token if not no_stream else None,
             event_emitter=event_emitter
-        ) if vision_model_name else None,
+        ),
         "llm_image_generation": lambda params: LLMImageGenerationTool(
             provider=params.get("provider", "dall-e"),
             model_name=params.get("model_name", "openai/dall-e-3"),
@@ -527,6 +529,7 @@ def create_custom_agent(
         ),
         "presentation_llm": lambda params: PresentationLLMTool(
             model_name=params.get("model_name", model_name),
+            additional_info=params.get("additional_info", ""),
             on_token=console_print_token if not no_stream else None,
             event_emitter=event_emitter
         ),
@@ -551,12 +554,14 @@ def create_custom_agent(
     if tools:
         for tool_config in tools:
             tool_type = tool_config.get("type")
+            print("tool_type : ", tool_type)
             if tool_type in tool_mapping:
                 # Get tool parameters or empty dict if not provided
                 tool_params = tool_config.get("parameters", {})
                 
                 # Create tool instance with parameters
                 tool = tool_mapping[tool_type](tool_params)
+                print(" tool : ", tool)
                 
                 if tool:  # Some tools (like llm_vision) might return None
                     agent_tools.append(tool)
@@ -570,7 +575,6 @@ def create_custom_agent(
         event_emitter=event_emitter,
         compact_every_n_iterations=compact_every_n_iteration,
         max_tokens_working_memory=max_tokens_working_memory,
-        specific_expertise=specific_expertise
+        specific_expertise=specific_expertise,
+        memory=memory,
     )
-
-
