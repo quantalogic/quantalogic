@@ -6,8 +6,7 @@
 #     "loguru",
 #     "pydantic",
 #     "litellm",
-#     "PyYAML",
-#     "google-search-results",
+#     "google-search-results"  # SerpApi package
 # ]
 # ///
 
@@ -17,13 +16,23 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict
 
 from loguru import logger
-from qflow_pydantic import BaseNode, Flow, LLMParams, NodeParams, call_llm
+
+# Import pydantic base node and flow components from qflow_pydantic
+from qflow_pydantic import BaseNode, Flow, SharedContext, call_llm
 from serpapi import GoogleSearch
+from pydantic import BaseModel, Field
+from qflow_pydantic import BaseNode, NodeParams, SharedContext
 
+# Parameter models
+class SearchParams(NodeParams):
+    query: str = ""
+    max_results: int = Field(default=10, gt=0)
 
-# Reuse search_web logic
+class DecideParams(NodeParams):
+    threshold: float = Field(default=0.5, ge=0, le=1.0)
+
+# --- Utility Function ---
 def search_web(search_term: str) -> Dict[str, Any]:
-    logger.info(f"Searching web for: {search_term}")
     try:
         api_key = os.getenv("SERPAPI_API_KEY")
         if not api_key:
@@ -34,131 +43,109 @@ def search_web(search_term: str) -> Dict[str, Any]:
             "num": 3
         })
         results = search.get_dict()
-        logger.debug(f"Results: {len(results.get('organic_results', []))} items")
-        if "organic_results" in results:
-            return {
-                "results": [
-                    {
-                        "title": r.get("title"),
-                        "snippet": r.get("snippet"),
-                        "link": r.get("link")
-                    } for r in results["organic_results"][:3]
-                ]
-            }
-        return {"results": "No results found"}
+        organic = results.get("organic_results", [])
+        return {"results": [
+            {"title": r.get("title"), "snippet": r.get("snippet"), "link": r.get("link")}
+            for r in organic[:3]
+        ]}
     except Exception as e:
-        logger.error(f"Search failed: {str(e)}")
-        return {"error": f"Search failed: {str(e)}"}
+        logger.error(f"Web search failed: {str(e)}")
+        return {"error": str(e)}
 
-# DecideAction node using BaseNode
-class DecideAction(BaseNode[LLMParams]):
-    def prep(self, shared: Dict[str, Any]) -> Any:
-        logger.info(f"Deciding next action for query: {shared['query']}")
-        return (shared["query"], shared.get("context", "No previous search"))
-    
-    def exec(self, inputs: Any) -> Any:
-        query, context = inputs
-        prompt = f"""
-Given input: {query}
-Previous search results: {context}
+# --- Node Implementations ---
+class DecideActionPydantic(BaseNode[DecideParams, SharedContext]):
+    _params_model = DecideParams  # Specify the params model
 
-Respond with a decision in XML format between ```xml markers.
-Required fields:
-- action: exactly "search" or "answer"
-- reason: brief explanation
-- search_term: only for search action
+    def prep(self, context: SharedContext) -> Any:
+        query = context.data.get("query")
+        prev_context = context.data.get("context", "No previous search")
+        logger.info(f"Deciding action for query: {query}")
+        return (query, prev_context)
 
-Your response MUST start with ```xml and end with ```. Example:
+    def exec(self, prep_result: Any) -> Any:
+        query, prev_context = prep_result
+        prompt = f"""Given input: {query}
+Previous search results: {prev_context}
+
+Respond with XML in the following format:
 ```xml
 <decision>
     <action>search</action>
-    <reason>Need current details</reason>
-    <search_term>Nobel Prize Physics 2023</search_term>
+    <reason>Explanation</reason>
+    <search_term>Term if needed</search_term>
 </decision>
-```
-
-Generate your response in the same format:
-```xml"""
-        # Call LLM using default LLMParams
-        response = call_llm(prompt, self.params)
-        content = response if isinstance(response, str) else str(response)
-        logger.debug(f"LLM raw response:\n{content}")
-        try:
-            match = re.search(r"```xml\s*(<decision>.*?</decision>)\s*```", content, re.DOTALL)
+```"""
+        # For simplicity, using empty dict as parameters
+        response = call_llm(prompt, {})
+        match = re.search(r"```xml\s*(<decision>.*?</decision>)\s*```", response, re.DOTALL)
+        if not match:
+            match = re.search(r"(<decision>.*?</decision>)", response, re.DOTALL)
             if not match:
-                match = re.search(r"(<decision>.*?</decision>)", content, re.DOTALL)
-                if not match:
-                    raise ValueError("No valid XML section found")
-            xml_content = match.group(1) if match.lastindex else match.group(0)
-            xml_content = re.sub(r'>\s+<', '><', xml_content.strip())
-            try:
-                root = ET.fromstring(xml_content)
-            except ET.ParseError:
-                xml_content = f"<decision>{xml_content}</decision>" if not xml_content.startswith('<decision>') else xml_content
-                root = ET.fromstring(xml_content)
-            result = { child.tag: (child.text or "").strip() for child in root }
+                return {"action": "answer", "reason": "Failed to parse decision"}
+        xml_content = match.group(1).strip()
+        try:
+            root = ET.fromstring(xml_content)
+            result = {child.tag: (child.text or "").strip() for child in root}
             if "action" not in result or "reason" not in result:
-                raise ValueError("Missing required fields")
-            if result["action"] not in ["search", "answer"]:
-                raise ValueError("Invalid action type")
-            if result["action"] == "search" and "search_term" not in result:
-                raise ValueError("Missing search_term for search")
-            logger.info(f"Decision: {result['action']} - {result['reason']}")
+                return {"action": "answer", "reason": "Missing fields in decision"}
             return result
         except Exception as e:
-            logger.error(f"Decision parsing failed: {str(e)}")
-            return {"action": "answer", "reason": f"Failed to parse: {str(e)}"}
-    
-    def post(self, shared: Dict[str, Any], prep_res: Any, exec_res: Any) -> Any:
-        if exec_res.get("action") == "search":
-            shared["search_term"] = exec_res["search_term"]
-        return exec_res["action"]
+            return {"action": "answer", "reason": f"XML parsing error: {str(e)}"}
 
-# SearchWeb node using BaseNode
-class SearchWeb(BaseNode[NodeParams]):
-    def prep(self, shared: Dict[str, Any]) -> Any:
-        logger.info(f"Preparing web search for: {shared['search_term']}")
-        return shared["search_term"]
-    
-    def exec(self, search_term: Any) -> Any:
-        return search_web(search_term)
-    
-    def post(self, shared: Dict[str, Any], prep_res: Any, exec_res: Any) -> Any:
-        prev = shared.get("context", [])
-        shared["context"] = prev + [{"term": shared["search_term"], "result": exec_res}]
+    def post(self, context: SharedContext, exec_result: Any) -> Any:
+        if exec_result.get("action") == "search":
+            context.data["search_term"] = exec_result.get("search_term")
+        return exec_result.get("action")
+
+class SearchWebPydantic(BaseNode[SearchParams, SharedContext]):
+    _params_model = SearchParams  # Specify the params model
+
+    def prep(self, context: SharedContext) -> Any:
+        term = context.data.get("search_term")
+        logger.info(f"Preparing web search for term: {term}")
+        return term
+
+    def exec(self, prep_result: Any) -> Any:
+        return search_web(prep_result)
+
+    def post(self, context: SharedContext, exec_result: Any) -> Any:
+        prev = context.data.get("context", [])
+        context.data["context"] = prev + [{"term": context.data.get("search_term"), "result": exec_result}]
         return "decide"
 
-# DirectAnswer node using LLMNode behavior by extending call_llm logic
-class DirectAnswer(BaseNode[LLMParams]):
-    def prep(self, shared: Dict[str, Any]) -> Any:
+class DirectAnswerPydantic(BaseNode):
+    def prep(self, context: SharedContext) -> Any:
+        query = context.data.get("query")
+        prev_context = context.data.get("context", "")
         logger.info("Generating direct answer")
-        return f"Context: {shared.get('context', '')}\nAnswer: {shared['query']}"
-    
-    def exec(self, prompt: Any) -> Any:
-        return call_llm(prompt, self.params)  # self.params holds LLMParams
-    
-    def post(self, shared: Dict[str, Any], prep_res: Any, exec_res: Any) -> Any:
-        answer = exec_res.strip()
-        logger.info(f"Answer generated: {answer}")
+        return (query, prev_context)
+
+    def exec(self, prep_result: Any) -> Any:
+        query, ctx = prep_result
+        prompt = f"Context: {ctx}\nAnswer: {query}"
+        return call_llm(prompt, {})
+
+    def post(self, context: SharedContext, exec_result: Any) -> Any:
+        answer = exec_result.strip()
+        logger.info(f"Answer generated: {answer[:100]}...")
         print(answer)
-        shared["answer"] = answer
-        return "end"
+        context.data["answer"] = answer
+        return None
 
-# Connect nodes
+# --- Node Chaining ---
+decide = DecideActionPydantic({"threshold": 0.7})
+search = SearchWebPydantic({"query": "python examples", "max_results": 5})
+answer = DirectAnswerPydantic({})
 
-llm_params = LLMParams(model_name="gemini/gemini-2.0-flash")
+decide.add_successor(search, "search")
+decide.add_successor(answer, "answer")
+search.add_successor(decide, "decide")
 
-decide = DecideAction(llm_params)
-search = SearchWeb(NodeParams())
-# Use default LLMParams for DirectAnswer
-direct = DirectAnswer(llm_params)
-
-decide - "search" >> search
-decide - "answer" >> direct
-search - "decide" >> decide  # Loop back
-
-logger.add("workflow.log", rotation="500 MB", level="INFO")
-flow = Flow(start_node=decide)
-logger.info("Starting pydantic workflow execution")
-flow.exec({"query": "Who won the Nobel Prize in Physics 2024?"})
-logger.info("Pydantic workflow completed")
+# --- Flow Execution ---
+if __name__ == "__main__":
+    # Initialize shared context with initial data
+    initial_data = {"query": "Who won the Nobel Prize in Physics 2024?", "context": []}
+    context = SharedContext(data=initial_data)
+    flow = Flow(start_node=decide)
+    # Flow.exec expects a dict; it wraps it into its own SharedContext
+    flow.exec(context.data)
