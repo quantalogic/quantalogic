@@ -219,3 +219,27 @@ async def call_llm_async(prompt: str, model_name: str = "gemini/gemini-2.0-flash
         raise ImportError("litellm is not installed. Please install litellm to use this function.")
     response = await acompletion(model=model_name, messages=[{"role": "user", "content": prompt}])
     return response.choices[0].message.content
+
+
+def call_llm_message(messages: List[Dict[str, str]], model_name: str = "gemini/gemini-2.0-flash") -> Any:
+    """
+    A simple helper to call an LLM using litellm.
+    Ensure your API key is set appropriately.
+    """
+    try:
+        from litellm import completion
+    except ImportError:
+        raise ImportError("litellm is not installed. Please install litellm to use this function.")
+    return completion(model=model_name, messages=messages)
+
+async def call_llm_message_async(messages: List[Dict[str, str]], model_name: str = "gemini/gemini-2.0-flash") -> Any:
+    """
+    A simple async helper to call an LLM using litellm.
+    Ensure your API key is set appropriately.
+    """
+    try:
+        from litellm import acompletion
+    except ImportError:
+        raise ImportError("litellm is not installed. Please install litellm to use this function.")
+    response = await acompletion(model=model_name, messages=messages)
+    return response.choices[0].message.content

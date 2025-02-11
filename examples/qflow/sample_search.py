@@ -11,14 +11,13 @@
 # ]
 # ///
 
-import asyncio
 import os
 import re  # added import for regex
 import xml.etree.ElementTree as ET  # Add this import
 from typing import Any, Dict
 
 from loguru import logger
-from qflow import AsyncFlow, AsyncNode, Flow, Node, call_llm
+from qflow import Flow, Node, call_llm
 from serpapi import GoogleSearch
 
 MODEL_NAME = "gemini/gemini-2.0-flash"
