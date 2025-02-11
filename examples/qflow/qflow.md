@@ -12,6 +12,7 @@ This documentation covers the Qflow library and demonstrates how to design, exec
 7. [Mermaid Diagram](#mermaid-diagram)
 8. [Comprehensive Example with Different Node Types](#comprehensive-example-with-different-node-types)
 9. [Additional Node Types Examples](#additional-node-types-examples)
+10. [Decision Flow Pattern](#decision-flow-pattern)
 
 ## Introduction
 
@@ -262,6 +263,105 @@ async def run_async_parallel_batch():
     print("Final AsyncParallelBatchFlow result:", result)
 
 asyncio.run(run_async_parallel_batch())
+```
+
+## Decision Flow Pattern
+
+The decision flow pattern allows for dynamic flow control based on LLM responses. This pattern is useful for creating interactive agents that can make decisions about next steps and execute different actions based on context.
+
+### Example: Web Search Agent
+
+The following example demonstrates a decision flow that:
+1. Takes a user query
+2. Decides whether to search or answer directly
+3. Performs web searches when needed
+4. Provides final answers using context from searches
+
+```python
+from qflow import Node, Flow
+
+class DecideAction(Node):
+    def exec(self, inputs):
+        query, context = inputs
+        # Ask LLM to decide next action
+        decision = call_llm("""
+        Given input: {query}
+        Previous search results: {context}
+        
+        Decide whether to:
+        1. Search for more information
+        2. Answer with current context
+        """)
+        return {"action": "search"} # or {"action": "answer"}
+
+class SearchWeb(Node):
+    def exec(self, search_term):
+        # Perform web search
+        results = search_web(search_term)
+        return results
+
+class DirectAnswer(Node):
+    def exec(self, inputs):
+        query, context = inputs
+        # Generate answer using context
+        return call_llm(f"Answer {query} using {context}")
+
+# Connect nodes with conditions
+decide = DecideAction()
+search = SearchWeb()
+answer = DirectAnswer()
+
+decide - "search" >> search
+decide - "answer" >> answer
+search - "decide" >> decide  # Loop back for multiple searches
+
+flow = Flow(start=decide)
+```
+
+### Key Components of Decision Flows
+
+1. **Decision Node**
+   - Takes current state/context
+   - Uses LLM to decide next action
+   - Returns action identifier
+
+2. **Action Nodes**
+   - Implement specific behaviors (search, answer, etc.)
+   - Update shared context
+   - Can loop back to decision node
+
+3. **Context Management**
+   - Maintains history of actions and results
+   - Informs future decisions
+   - Provides background for final answers
+
+### Best Practices
+
+1. **Structured Decisions**
+   - Use XML or JSON format for LLM decisions
+   - Include reasoning with decisions
+   - Validate decision structure
+
+2. **Error Handling**
+   - Provide fallback behaviors
+   - Handle API failures gracefully
+   - Log decision process
+
+3. **Context Management**
+   - Limit context size
+   - Keep relevant information
+   - Structure context for LLM consumption
+
+### Mermaid Diagram: Decision Flow
+
+```mermaid
+flowchart TD
+    A[Query Input] --> B[Decision Node]
+    B -->|search| C[Search Node]
+    B -->|answer| D[Answer Node]
+    C --> E[Update Context]
+    E --> B
+    D --> F[Final Answer]
 ```
 
 ## Summary
