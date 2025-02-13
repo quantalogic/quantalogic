@@ -61,13 +61,19 @@ class ComposioTool(Tool):
             action: Name of the Composio action to initialize with
             **data: Additional data for tool initialization
         """
+        logger.info(f"Initializing ComposioTool with action: {action}")
+        logger.debug(f"Additional data: {data}")
+        
         super().__init__(**data)
         if not self.api_key:
+            logger.error("COMPOSIO_API_KEY environment variable is missing")
             raise ValueError("COMPOSIO_API_KEY environment variable is required")
         
+        logger.info("Creating ComposioToolSet with API key")
         self.toolset = ComposioToolSet(api_key=self.api_key)
         
         if action:
+            logger.info(f"Setting up action: {action}")
             self._setup_action(action)
 
     def _setup_action(self, action_name: str) -> None:
@@ -76,36 +82,56 @@ class ComposioTool(Tool):
         Args:
             action_name: Name of the action to set up
         """
+        logger.info(f"Setting up Composio action: {action_name}")
+        
         # Convert to Action if string
         action = Action(action_name) if isinstance(action_name, str) else action_name
+        logger.debug(f"Action object: {action}")
         
         # Check connected account
         if not action.no_auth:
+            logger.info(f"Checking connected accounts for app: {action.app}")
             connections = self.toolset.client.connected_accounts.get()
-            if action.app not in [conn.appUniqueId for conn in connections]:
+            connected_apps = [conn.appUniqueId.lower() for conn in connections]
+            logger.debug(f"Found connected accounts: {connected_apps}")
+            
+            if action.app.lower() not in connected_apps:
+                logger.error(f"No connected account found for app: {action.app}")
                 raise RuntimeError(
                     f"No connected account found for app `{action.app}`; "
                     f"Run `composio add {action.app}` to fix this"
                 )
+            logger.info(f"Found connected account for app: {action.app}")
 
         # Get action schema
-        (action_schema,) = self.toolset.get_action_schemas(actions=[action])
-        schema = action_schema.model_dump(exclude_none=True)
+        logger.info("Fetching action schema")
+        try:
+            (action_schema,) = self.toolset.get_action_schemas(actions=[action])
+            schema = action_schema.model_dump(exclude_none=True)
+            logger.debug(f"Action schema: {schema}")
+        except Exception as e:
+            logger.error(f"Error getting action schema: {str(e)}")
+            raise RuntimeError(f"Failed to get action schema. Make sure the action name is correct: {str(e)}")
         
         # Update tool properties
+        logger.info("Updating tool properties")
         self.name = schema["name"]
         self.description = schema["description"]
         self.actions = [action_name]
+        logger.debug(f"Updated tool properties - name: {self.name}, actions: {self.actions}")
         
         # Create function wrapper
+        logger.info("Creating action execution wrapper")
         def execute_action(**kwargs: Any) -> Dict:
             """Execute the Composio action."""
+            logger.debug(f"Executing action with parameters: {kwargs}")
             return self.toolset.execute_action(
                 action=Action(schema["name"]),
                 params=kwargs
             )
         
         self.composio_action = execute_action
+        logger.info("Action setup completed successfully")
 
     def execute(self, **kwargs: Any) -> str:
         """Execute a Composio action with the given parameters.
@@ -121,28 +147,60 @@ class ComposioTool(Tool):
             ValueError: If required parameters are missing or invalid
             RuntimeError: If action execution fails
         """
+        logger.info(f"Executing Composio action with kwargs: {kwargs}")
+        
         try:
-            action_name = kwargs.get("action_name")
+            action_name = kwargs.get("action_name", "").lower()
             parameters = kwargs.get("parameters")
+            logger.info(f"Action name: {action_name}")
+            logger.debug(f"Parameters: {parameters}")
 
             if not action_name or not parameters:
+                logger.error("Missing required parameters")
                 raise ValueError("Both action_name and parameters are required")
 
-            if self.actions and action_name not in self.actions:
-                raise ValueError(f"Action {action_name} not in allowed actions: {self.actions}")
+            # Action name mapping for common aliases
+            action_mapping = {
+                'send_email': 'gmail_send_email',
+                'email': 'gmail_send_email',
+                'gmail': 'gmail_send_email'
+            }
+            
+            # Try to map the action name if it's an alias
+            if action_name in action_mapping:
+                original_name = action_name
+                action_name = action_mapping[action_name]
+                logger.info(f"Mapped action name from '{original_name}' to '{action_name}'")
+
+            allowed_actions = [a.lower() for a in self.actions]
+            if action_name not in allowed_actions:
+                logger.error(f"Invalid action name. Allowed actions: {self.actions}")
+                suggestions = [a for a in self.actions if action_name in a.lower()]
+                suggestion_msg = f" Did you mean '{suggestions[0]}'?" if suggestions else ""
+                raise ValueError(
+                    f"Action '{action_name}' not in allowed actions: {self.actions}.{suggestion_msg}"
+                )
 
             logger.info(f"Executing Composio action: {action_name}")
             
             # Set up action if not already set
-            if not self.composio_action or action_name not in self.actions:
+            if not self.composio_action or action_name not in [a.lower() for a in self.actions]:
+                logger.info("Action not set up, initializing...")
                 self._setup_action(action_name)
             
             # Execute action
-            result = self.composio_action(**eval(parameters))
+            logger.info("Executing action with parameters")
+            parameters_dict = eval(parameters)
+            logger.debug(f"Evaluated parameters: {parameters_dict}")
+            
+            result = self.composio_action(**parameters_dict)
+            logger.info("Action executed successfully")
+            logger.debug(f"Action result: {result}")
+            
             return str(result)
 
         except Exception as e:
-            logger.error(f"Error executing Composio action: {str(e)}")
+            logger.error(f"Error executing Composio action: {str(e)}", exc_info=True)
             raise RuntimeError(f"Failed to execute Composio action: {str(e)}")
 
 

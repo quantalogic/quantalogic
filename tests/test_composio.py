@@ -1,39 +1,72 @@
 """Test module for Composio tool integration with QuantaLogic agent."""
 
 import os
-import asyncio
-from dotenv import load_dotenv 
-
-from typing import Any, Dict
 from dotenv import load_dotenv
 
 from quantalogic.agent import Agent
 from quantalogic.console_print_token import console_print_token
 from quantalogic.event_emitter import EventEmitter
+from quantalogic.memory import AgentMemory
+from quantalogic.tools.composio import ComposioTool 
+
+from typing import Any
+from dotenv import load_dotenv
+
+from quantalogic.agent import Agent
+from quantalogic.console_print_token import console_print_token
+from quantalogic.event_emitter import EventEmitter
+from quantalogic.memory import AgentMemory
 from quantalogic.tools import (
-    AgentTool, 
-    TaskCompleteTool, 
-    ComposioTool
+    AgentTool,
+    DownloadHttpFileTool,
+    DuckDuckGoSearchTool,
+    EditWholeContentTool,
+    ExecuteBashCommandTool,
+    InputQuestionTool,
+    ListDirectoryTool,
+    LLMImageGenerationTool,
+    LLMTool,
+    LLMVisionTool,
+    MarkitdownTool,
+    NodeJsTool,
+    PythonTool,
+    ReadFileBlockTool,
+    ReadFileTool,
+    ReadHTMLTool,
+    ReplaceInFileTool,
+    RipgrepTool,
+    SafePythonInterpreterTool, 
+    SearchDefinitionNames,
+    TaskCompleteTool,
+    WikipediaSearchTool,
+    WriteFileTool,
+    GoogleNewsTool,
+    PresentationLLMTool,
+    SequenceTool,
+    SQLQueryTool,
+    SQLQueryToolAdvanced
 )
-from quantalogic.tools.llm_tool import LLMTool
+
+
 # Load environment variables
 load_dotenv()
 
 
 def create_basic_composio_agent(
-    model_name: str,   
+    model_name: str, 
+    vision_model_name: str | None = None, 
     no_stream: bool = False, 
     compact_every_n_iteration: int | None = None,
-    max_tokens_working_memory: int | None = None, 
+    max_tokens_working_memory: int | None = None
 ) -> Agent:
     """Create an agent with the specified model and tools.
 
     Args:
         model_name (str): Name of the model to use
-        tools (list | None): Optional list of tools to add
-        no_stream (bool): If True, the agent will not stream results
-        compact_every_n_iteration (int | None): Frequency of memory compaction
-        max_tokens_working_memory (int | None): Maximum tokens for working memory
+        vision_model_name (str | None): Name of the vision model to use
+        no_stream (bool, opional): If True, the agent will not stream results.
+        compact_every_n_iteration (int | None, optional): Frequency of memory compaction.
+        max_tokens_working_memory (int | None, optional): Maximum tokens for working memory.
 
     Returns:
         Agent: An agent with the specified model and tools
@@ -41,48 +74,41 @@ def create_basic_composio_agent(
     # Rebuild AgentTool to resolve forward references
     AgentTool.model_rebuild()
 
-    composio_tool = ComposioTool(action="WEATHERMAP_WEATHER") 
-    composio_tool.name = "weather_tool"
-    composio_tool.description = "This tool allows you to get the weather in a given location."
+    composio_tool = ComposioTool(action="WEATHERMAP_WEATHER")
 
-    # Create base tools list
-    base_tools = [
+    tools = [
         TaskCompleteTool(),
-        LLMTool(
-            model_name=model_name, 
-            on_token=console_print_token if not no_stream else None, 
-        ),
-        composio_tool
-    ] 
+        composio_tool, 
+    ]
+
     return Agent(
         model_name=model_name,
-        tools=base_tools, 
+        tools=tools,
         compact_every_n_iterations=compact_every_n_iteration,
         max_tokens_working_memory=max_tokens_working_memory,
     )
+
 
 
 def test_composio_weather():
     """Test Composio weather integration with the agent."""
     # Create agent with Composio tool
     agent = create_basic_composio_agent(
-        model_name="openai/gpt-4o-mini",  
+        model_name="openai/gpt-4o-mini", 
+        vision_model_name=None
     )
     
     # Test weather query
-    task = "What's the current weather in ALGERIA?"
-    try:
-        response = agent.solve_task(task)
-        print(f"\nTask: {task}")
-        print(f"Response: {response}")
-    except Exception as e:
-        print(f"Error occurred: {e}")
+    task = "What's the current weather in Paris?"
+    response = agent.solve_task(task)
+    
+    print(f"\nTask: {task}")
+    print(f"Response: {response}")
+    
+    assert response is not None
+    assert isinstance(response, str)
+    assert len(response) > 0
 
 
 if __name__ == "__main__":
-    try:
-        test_composio_weather()
-    except KeyboardInterrupt:
-        print("\nTest interrupted by user")
-    except Exception as e:
-        print(f"Test failed with error: {e}")
+    test_composio_weather()

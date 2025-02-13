@@ -37,8 +37,11 @@ from quantalogic.tools import (
     GoogleNewsTool,
     PresentationLLMTool,
     SequenceTool,
-    SQLQueryTool
+    SQLQueryTool,
+    ComposioTool,
+    SQLQueryToolAdvanced
 )
+from composio import Action, ComposioToolSet
 
 load_dotenv()
 
@@ -452,6 +455,7 @@ def create_image_generation_agent(
         specific_expertise=specific_expertise
     )
 
+memory = AgentMemory()
 
 def create_custom_agent(
     model_name: str, 
@@ -461,7 +465,7 @@ def create_custom_agent(
     max_tokens_working_memory: int | None = None,
     specific_expertise: str = "",
     tools: list[Any] | None = None,
-    memory: AgentMemory | None = None
+    # memory: AgentMemory | None = None
 ) -> Agent:
     """Create an agent with the specified model and tools.
 
@@ -544,11 +548,24 @@ def create_custom_agent(
             on_token=console_print_token if not no_stream else None,
             # event_emitter=event_emitter
         ),
+        "sql_query_advanced": lambda params: SQLQueryToolAdvanced(
+            connection_string=params.get("connection_string", ""),
+            model_name=params.get("model_name", model_name),
+            on_token=console_print_token if not no_stream else None,
+            # event_emitter=event_emitter
+        ),
         "task_complete": lambda params: TaskCompleteTool()
     }
     
     # Initialize empty tools list
-    agent_tools = []
+    composio_tool = ComposioTool(action="WEATHERMAP_WEATHER")
+    composio_tool_callendar = ComposioTool(action="SQLTOOL_SQL_QUERY")  
+    email_tool = ComposioTool(action="gmail_send_email")
+
+    agent_tools = [ email_tool, composio_tool, composio_tool_callendar
+        # composio_tool, 
+        # composio_tool_callendar, email_tool
+    ]
 
     # Add tools only if they are provided
     if tools:

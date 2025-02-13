@@ -97,7 +97,7 @@ class AgentState:
                     no_stream=False,
                     tools=tools,
                     specific_expertise=expertise,
-                    memory=memory
+                    # memory=memory
                 )
                 # Set up event handlers before registering the agent
                 self._setup_agent_events(self.agent)
