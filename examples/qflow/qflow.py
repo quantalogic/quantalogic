@@ -653,3 +653,36 @@ async def call_llm_message_async(messages: List[Dict[str, str]], model_name: str
         raise ImportError("litellm is not installed. Please install litellm to use this function.")
     response = await acompletion(model=model_name, messages=messages)
     return response
+
+class FluentBuilder:
+    """A convenient Fluent interface to build a workflow."""
+    def __init__(self) -> None:
+        self.start: Optional[BaseNode] = None
+        self.current: Optional[BaseNode] = None
+
+    def set_start(self, node: BaseNode) -> 'FluentBuilder':
+        """Set the starting node of the workflow."""
+        self.start = node
+        self.current = node
+        return self
+
+    def then(self, node: BaseNode, action: str = "default") -> 'FluentBuilder':
+        """Chain the next node to the current node with an optional action."""
+        if not self.current:
+            raise ValueError("Start node not set. Call set_start() first.")
+        self.current.add_successor(node, action)
+        self.current = node
+        return self
+
+    def branch(self, action: str, node: BaseNode) -> 'FluentBuilder':
+        """Add an alternative branch from the current node without moving the current pointer."""
+        if not self.current:
+            raise ValueError("Start node not set. Call set_start() first.")
+        self.current.add_successor(node, action)
+        return self
+
+    def build(self) -> 'Flow':
+        """Build and return the workflow Flow object."""
+        if not self.start:
+            raise ValueError("Start node not set. Call set_start() first.")
+        return Flow(self.start)

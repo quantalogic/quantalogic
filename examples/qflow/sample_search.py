@@ -18,7 +18,7 @@ import xml.etree.ElementTree as ET  # Add this import
 from typing import Any, Dict
 
 from loguru import logger
-from qflow import AsyncFlow, AsyncNode, Flow, Node, call_llm
+from qflow import AsyncFlow, AsyncNode, Flow, Node, call_llm, FluentBuilder  # Added FluentBuilder import
 from serpapi import GoogleSearch
 
 MODEL_NAME = "gemini/gemini-2.0-flash"
@@ -212,19 +212,23 @@ class DirectAnswer(Node):
         print(f"{clean_response}")  # Simplified output
         shared["answer"] = clean_response
 
-# Connect nodes
+# Define nodes
 decide = DecideAction()
 search = SearchWeb()
 answer = DirectAnswer()
 
-decide - "search" >> search
-decide - "answer" >> answer
-search - "decide" >> decide  # Loop back
+# Build workflow using FluentBuilder
+builder = FluentBuilder()
+builder.set_start(decide)                          # Set starting node
+builder.branch("answer", answer)                   # Add "answer" branch from decide
+builder.then(search, action="search")              # Chain "search" branch (updates current to search)
+builder.then(decide, action="decide")              # Loop back from search to decide
+
+flow = builder.build()
 
 # Configure logger
 logger.add("workflow.log", rotation="500 MB", level="INFO")
 
-flow = Flow(start=decide)
 logger.info("Starting workflow execution")
 flow.run({"query": "Who won the Nobel Prize in Physics 2024?"})
 logger.info("Workflow execution completed")
