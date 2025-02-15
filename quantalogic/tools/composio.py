@@ -1,21 +1,27 @@
-"""Tool for interacting with Composio API services.
-
-This tool provides a wrapper around Composio's API functionality, allowing
-integration with various Composio services while maintaining type safety
-and proper error handling.
-"""
+"""Tool for interacting with Composio API services."""
 
 import os
-from typing import Any, Dict, Optional, List, Callable
+from typing import Any, Dict, Optional, List, Union
+from datetime import datetime, timedelta
+import json
 
 from loguru import logger
-from pydantic import ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from composio import Action, ComposioToolSet
-from composio.client.collections import ConnectedAccountModel
-from composio.constants import DEFAULT_ENTITY_ID
-from composio.utils.shared import json_schema_to_model
 from quantalogic.tools.tool import Tool, ToolArgument
+
+
+class ActionSchema(BaseModel):
+    """Schema for Composio actions with validation."""
+    name: str
+    description: str
+    parameters: Dict[str, Any]
+    response: Dict[str, Any]
+    version: str
+    enabled: bool = True
+
+    model_config = ConfigDict(extra="allow")
 
 
 class ComposioTool(Tool):
@@ -23,188 +29,189 @@ class ComposioTool(Tool):
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
 
+    # Tool configuration
     name: str = Field(default="composio_tool")
-    description: str = Field(
-        default="Executes Composio actions with proper validation and error handling"
+    description: str = Field(default="")
+    need_validation: bool = False
+    arguments: list = Field(default_factory=list)
+
+    # Composio-specific fields
+    api_key: Optional[str] = Field(
+        default_factory=lambda: os.getenv("COMPOSIO_API_KEY"),
+        description="Composio API key for authentication",
     )
-    arguments: list = Field(
-        default=[
+    action: str = Field(default="")  # Single action per tool instance
+    schema: Optional[ActionSchema] = None
+    toolset: Optional[ComposioToolSet] = None
+
+    def __init__(
+        self,
+        action: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        need_validation: Optional[bool] = None,
+        **data: Any
+    ):
+        """Initialize a Composio tool for a specific action.
+        
+        Args:
+            action: Name of the Composio action to handle
+            name: Custom name for this tool instance
+            description: Custom description for this tool instance
+            need_validation: Whether this specific instance needs validation
+            **data: Additional data for tool initialization
+        """
+        logger.info(f"Initializing ComposioTool for action: {action}")
+        
+        # Set instance-specific attributes
+        super().__init__(**data)
+        self.action = action.upper()
+        
+        if name:
+            self.name = name
+        else:
+            self.name = f"composio_{self.action.lower()}"
+            
+        # Validate API key
+        if not self.api_key:
+            logger.error("COMPOSIO_API_KEY environment variable is missing")
+            raise ValueError("COMPOSIO_API_KEY environment variable is required")
+            
+        # Initialize toolset and get action schema
+        self.toolset = ComposioToolSet(api_key=self.api_key)
+        self._setup_action()
+        
+        # Set description if not provided
+        if description:
+            self.description = description
+        
+        if need_validation is not None:
+            self.need_validation = need_validation
+
+    def _setup_action(self) -> None:
+        """Set up the Composio action with its schema and parameters."""
+        try:
+            # Get action schema
+            (schema,) = self.toolset.get_action_schemas(actions=[self.action])
+            schema_dict = schema.model_dump()
+            
+            # Store schema
+            self.schema = ActionSchema(**schema_dict)
+            
+            # Set up tool description and arguments
+            self._update_tool_info()
+            
+        except Exception as e:
+            logger.error(f"Error setting up action {self.action}: {str(e)}")
+            raise RuntimeError(f"Failed to set up action: {str(e)}")
+
+    def _update_tool_info(self) -> None:
+        """Update tool description and arguments based on the action schema."""
+        if not self.schema:
+            return
+            
+        # Get parameters info
+        schema_dict = self.schema.model_dump()
+        parameters = schema_dict.get("parameters", {})
+        required_params = parameters.get("required", [])
+        properties = parameters.get("properties", {})
+        
+        # Build parameter details
+        param_details = []
+        for param, param_info in properties.items():
+            is_required = param in required_params
+            param_type = param_info.get("type", "any")
+            param_desc = param_info.get("description", "").split(".")[0]
+            param_details.append(f"- {param}: ({param_type}{'*' if is_required else ''}) {param_desc}")
+        
+        # Update description if not explicitly set
+        if not self.description:
+            self.description = (
+                f"Execute Composio action {self.action}:\n"
+                f"Description: {self.schema.description}\n"
+                f"Parameters:\n    " + "\n    ".join(param_details)
+            )
+        
+        # Update arguments
+        example_params = {}
+        if properties:
+            first_param = next(iter(properties))
+            example = properties[first_param].get("examples", [""])[0]
+            if example:
+                example_params = {first_param: example}
+        
+        self.arguments = [
             ToolArgument(
                 name="action_name",
                 arg_type="string",
-                description="Name of the Composio action to execute",
+                description=f"Name of the action to execute (must be {self.action})",
                 required=True,
-                example="WEATHERMAP_WEATHER",
+                example=self.action,
             ),
             ToolArgument(
                 name="parameters",
                 arg_type="string",
                 description="JSON string of parameters for the action",
                 required=True,
-                example='{"city": "Paris"}',
+                example=json.dumps(example_params),
             ),
         ]
-    )
-
-    api_key: Optional[str] = Field(
-        default_factory=lambda: os.getenv("COMPOSIO_API_KEY"),
-        description="Composio API key for authentication",
-    )
-    toolset: Optional[ComposioToolSet] = None
-    actions: List[str] = Field(default_factory=list)
-    composio_action: Optional[Callable] = None
-
-    def __init__(self, action: str | None = None, **data: Any):
-        """Initialize the Composio tool with a specific action.
-        
-        Args:
-            action: Name of the Composio action to initialize with
-            **data: Additional data for tool initialization
-        """
-        logger.info(f"Initializing ComposioTool with action: {action}")
-        logger.debug(f"Additional data: {data}")
-        
-        super().__init__(**data)
-        if not self.api_key:
-            logger.error("COMPOSIO_API_KEY environment variable is missing")
-            raise ValueError("COMPOSIO_API_KEY environment variable is required")
-        
-        logger.info("Creating ComposioToolSet with API key")
-        self.toolset = ComposioToolSet(api_key=self.api_key)
-        
-        if action:
-            logger.info(f"Setting up action: {action}")
-            self._setup_action(action)
-
-    def _setup_action(self, action_name: str) -> None:
-        """Set up a specific Composio action.
-        
-        Args:
-            action_name: Name of the action to set up
-        """
-        logger.info(f"Setting up Composio action: {action_name}")
-        
-        # Convert to Action if string
-        action = Action(action_name) if isinstance(action_name, str) else action_name
-        logger.debug(f"Action object: {action}")
-        
-        # Check connected account
-        if not action.no_auth:
-            logger.info(f"Checking connected accounts for app: {action.app}")
-            connections = self.toolset.client.connected_accounts.get()
-            connected_apps = [conn.appUniqueId.lower() for conn in connections]
-            logger.debug(f"Found connected accounts: {connected_apps}")
-            
-            if action.app.lower() not in connected_apps:
-                logger.error(f"No connected account found for app: {action.app}")
-                raise RuntimeError(
-                    f"No connected account found for app `{action.app}`; "
-                    f"Run `composio add {action.app}` to fix this"
-                )
-            logger.info(f"Found connected account for app: {action.app}")
-
-        # Get action schema
-        logger.info("Fetching action schema")
-        try:
-            (action_schema,) = self.toolset.get_action_schemas(actions=[action])
-            schema = action_schema.model_dump(exclude_none=True)
-            logger.debug(f"Action schema: {schema}")
-        except Exception as e:
-            logger.error(f"Error getting action schema: {str(e)}")
-            raise RuntimeError(f"Failed to get action schema. Make sure the action name is correct: {str(e)}")
-        
-        # Update tool properties
-        logger.info("Updating tool properties")
-        self.name = schema["name"]
-        self.description = schema["description"]
-        self.actions = [action_name]
-        logger.debug(f"Updated tool properties - name: {self.name}, actions: {self.actions}")
-        
-        # Create function wrapper
-        logger.info("Creating action execution wrapper")
-        def execute_action(**kwargs: Any) -> Dict:
-            """Execute the Composio action."""
-            logger.debug(f"Executing action with parameters: {kwargs}")
-            return self.toolset.execute_action(
-                action=Action(schema["name"]),
-                params=kwargs
-            )
-        
-        self.composio_action = execute_action
-        logger.info("Action setup completed successfully")
 
     def execute(self, **kwargs: Any) -> str:
-        """Execute a Composio action with the given parameters.
-
-        Args:
-            action_name: Name of the Composio action to execute
-            parameters: JSON string containing action parameters
-
-        Returns:
-            Response from the Composio action execution
-
-        Raises:
-            ValueError: If required parameters are missing or invalid
-            RuntimeError: If action execution fails
-        """
+        """Execute the Composio action with the given parameters."""
         logger.info(f"Executing Composio action with kwargs: {kwargs}")
         
         try:
-            action_name = kwargs.get("action_name", "").lower()
+            action_name = kwargs.get("action_name", "").upper()
             parameters = kwargs.get("parameters")
-            logger.info(f"Action name: {action_name}")
-            logger.debug(f"Parameters: {parameters}")
-
+            
             if not action_name or not parameters:
-                logger.error("Missing required parameters")
                 raise ValueError("Both action_name and parameters are required")
-
-            # Action name mapping for common aliases
-            action_mapping = {
-                'send_email': 'gmail_send_email',
-                'email': 'gmail_send_email',
-                'gmail': 'gmail_send_email'
-            }
+                
+            # Validate action name
+            if action_name != self.action:
+                raise ValueError(f"This tool only handles the {self.action} action")
             
-            # Try to map the action name if it's an alias
-            if action_name in action_mapping:
-                original_name = action_name
-                action_name = action_mapping[action_name]
-                logger.info(f"Mapped action name from '{original_name}' to '{action_name}'")
-
-            allowed_actions = [a.lower() for a in self.actions]
-            if action_name not in allowed_actions:
-                logger.error(f"Invalid action name. Allowed actions: {self.actions}")
-                suggestions = [a for a in self.actions if action_name in a.lower()]
-                suggestion_msg = f" Did you mean '{suggestions[0]}'?" if suggestions else ""
-                raise ValueError(
-                    f"Action '{action_name}' not in allowed actions: {self.actions}.{suggestion_msg}"
-                )
-
-            logger.info(f"Executing Composio action: {action_name}")
+            # Convert parameters to dict if string
+            try:
+                parameters_dict = json.loads(parameters) if isinstance(parameters, str) else parameters
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON parameters: {str(e)}")
             
-            # Set up action if not already set
-            if not self.composio_action or action_name not in [a.lower() for a in self.actions]:
-                logger.info("Action not set up, initializing...")
-                self._setup_action(action_name)
+            # Validate parameters if needed
+            if self.need_validation and self.schema:
+                schema_dict = self.schema.model_dump()
+                parameters_data = schema_dict.get("parameters", {})
+                required_params = parameters_data.get("required", [])
+                missing_params = [p for p in required_params if p not in parameters_dict]
+                if missing_params:
+                    raise ValueError(f"Missing required parameters: {', '.join(missing_params)}")
             
             # Execute action
-            logger.info("Executing action with parameters")
-            parameters_dict = eval(parameters)
-            logger.debug(f"Evaluated parameters: {parameters_dict}")
+            logger.info(f"Executing {self.action} with parameters: {parameters_dict}")
+            result = self.toolset.execute_action(
+                action=Action(self.action),
+                params=parameters_dict
+            )
             
-            result = self.composio_action(**parameters_dict)
-            logger.info("Action executed successfully")
-            logger.debug(f"Action result: {result}")
+            return json.dumps(result, indent=2)
             
-            return str(result)
-
         except Exception as e:
-            logger.error(f"Error executing Composio action: {str(e)}", exc_info=True)
-            raise RuntimeError(f"Failed to execute Composio action: {str(e)}")
+            logger.error(f"Error executing action: {str(e)}")
+            raise RuntimeError(f"Failed to execute action: {str(e)}")
 
 
 if __name__ == "__main__":
-    # Example usage
-    tool = ComposioTool(action="WEATHERMAP_WEATHER")
-    print(tool.to_markdown())
+    # Example usage with custom settings
+    weather_tool = ComposioTool(
+        action="WEATHERMAP_WEATHER",
+        name="weather_tool",
+        description="Get weather information for a location"
+    )
+    
+    email_tool = ComposioTool(
+        action="GMAIL_SEND_EMAIL",
+        name="email_tool",
+        description="Send emails via Gmail",
+        need_validation=True
+    )

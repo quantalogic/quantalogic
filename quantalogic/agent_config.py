@@ -3,7 +3,9 @@
 # Standard library imports
 
 # Local application imports
+import os
 from typing import Any
+import json
 from dotenv import load_dotenv
 
 from quantalogic.agent import Agent
@@ -41,7 +43,7 @@ from quantalogic.tools import (
     ComposioTool,
     SQLQueryToolAdvanced
 )
-from composio import Action, ComposioToolSet
+from composio import ComposioToolSet, Action
 
 load_dotenv()
 
@@ -321,6 +323,7 @@ def create_minimal_agent(
         max_tokens_working_memory=max_tokens_working_memory,
     )
 
+
 def create_news_agent(
     model_name: str, 
     vision_model_name: str | None = None, 
@@ -386,6 +389,7 @@ def create_news_agent(
         max_tokens_working_memory=max_tokens_working_memory,
         specific_expertise=specific_expertise
     )
+
 
 def create_image_generation_agent(
     model_name: str, 
@@ -455,7 +459,19 @@ def create_image_generation_agent(
         specific_expertise=specific_expertise
     )
 
+
 memory = AgentMemory()
+api_key = os.getenv("COMPOSIO_API_KEY", "1ybjuym00vgj0aybpe202")
+composio_toolset = ComposioToolSet(api_key=api_key)
+
+def get_action_details(action: Action):
+    """Get detailed information about a specific action."""
+    print(f"\n=== Action Details for {action} ===")
+    try:
+        schemas = composio_toolset.get_action_schemas(actions=[action])
+        return schemas[0]
+    except Exception as e:
+        print(f"Error getting action details: {str(e)}")
 
 def create_custom_agent(
     model_name: str, 
@@ -554,19 +570,23 @@ def create_custom_agent(
             on_token=console_print_token if not no_stream else None,
             # event_emitter=event_emitter
         ),
-        "task_complete": lambda params: TaskCompleteTool()
+        # "task_complete": lambda params: TaskCompleteTool()
     }
     
-    # Initialize empty tools list
-    composio_tool = ComposioTool(action="WEATHERMAP_WEATHER")
-    composio_tool_callendar = ComposioTool(action="SQLTOOL_SQL_QUERY")  
-    email_tool = ComposioTool(action="gmail_send_email")
-
-    agent_tools = [ email_tool, composio_tool, composio_tool_callendar
-        # composio_tool, 
-        # composio_tool_callendar, email_tool
-    ]
-
+    # Initialize tools with unique names for each action
+    weather_tool = ComposioTool(
+        action="WEATHERMAP_WEATHER",
+        name="weather_tool",
+        description="Get weather information for a location"
+    )
+    
+    email_tool = ComposioTool(
+        action="GMAIL_SEND_EMAIL",
+        name="email_tool",
+        description="Send emails via Gmail",
+        need_validation=True
+    )
+    agent_tools = []
     # Add tools only if they are provided
     if tools:
         for tool_config in tools:
@@ -585,6 +605,10 @@ def create_custom_agent(
 
     # Always add TaskCompleteTool as it's required for the agent to function
     agent_tools.append(TaskCompleteTool())
+
+    # Add Composio tools with unique names
+    agent_tools.append(weather_tool)
+    agent_tools.append(email_tool)
 
     return Agent(
         model_name=model_name,

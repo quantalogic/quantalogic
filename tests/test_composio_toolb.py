@@ -9,7 +9,7 @@ def main():
     """Demonstrate ComposioTool usage with a weather API example."""
     try:
         # Initialize the tool
-        tool = ComposioTool()
+        tool = ComposioTool(action="WEATHERMAP_WEATHER")
         
         # Example: Get weather for Paris
         action_name = "WEATHERMAP_WEATHER"
