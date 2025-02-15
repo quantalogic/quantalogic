@@ -61,6 +61,8 @@ class AgentState:
             "task_think_end",
             "tool_execution_start",
             "tool_execution_end",
+            "tool_execute_validation_start",  # Add validation events
+            "tool_execute_validation_end",    # Add validation events
             "task_complete",
             "task_solve_end",
             "error_tool_execution",
