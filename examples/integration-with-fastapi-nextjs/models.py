@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, List
 from pydantic import BaseModel
 
 from quantalogic.agent_config import MODEL_NAME
+from datetime import datetime
 
 
 class EventMessage(BaseModel):
@@ -37,15 +38,40 @@ class UserValidationResponse(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class ToolParameters(BaseModel):
+    """Parameters for a tool configuration."""
+    connection_string: Optional[str] = None
+    model_name: Optional[str] = None
+
+
+class ToolConfig(BaseModel):
+    """Configuration for a single tool."""
+    type: str
+    parameters: ToolParameters
+
+
+class AgentConfig(BaseModel):
+    """Configuration for creating a new agent."""
+    id: str
+    name: str
+    description: str
+    expertise: str
+    mode: str = "custom"
+    model_name: str
+    tools: List[ToolConfig]
+
+
 class TaskSubmission(BaseModel):
     """Request model for task submission."""
 
     task: str
+    agent_id: str
     model_name: Optional[str] = MODEL_NAME
     max_iterations: Optional[int] = 30
     mode: Optional[str] = "minimal"
     expertise: Optional[str] = None
     tools: Optional[List[Dict[str, Any]]] = None 
+
     model_config = {"extra": "forbid"}
 
 

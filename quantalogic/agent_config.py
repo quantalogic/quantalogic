@@ -459,8 +459,6 @@ def create_image_generation_agent(
         specific_expertise=specific_expertise
     )
 
-
-memory = AgentMemory()
 api_key = os.getenv("COMPOSIO_API_KEY", "1ybjuym00vgj0aybpe202")
 composio_toolset = ComposioToolSet(api_key=api_key)
 
@@ -481,7 +479,7 @@ def create_custom_agent(
     max_tokens_working_memory: int | None = None,
     specific_expertise: str = "",
     tools: list[Any] | None = None,
-    # memory: AgentMemory | None = None
+    memory: AgentMemory | None = None
 ) -> Agent:
     """Create an agent with the specified model and tools.
 
@@ -574,18 +572,18 @@ def create_custom_agent(
     }
     
     # Initialize tools with unique names for each action
-    weather_tool = ComposioTool(
-        action="WEATHERMAP_WEATHER",
-        name="weather_tool",
-        description="Get weather information for a location"
-    )
-    
-    email_tool = ComposioTool(
-        action="GMAIL_SEND_EMAIL",
-        name="email_tool",
-        description="Send emails via Gmail",
-        need_validation=True
-    )
+    # weather_tool = ComposioTool(
+    #     action="WEATHERMAP_WEATHER",
+    #     name="weather_tool",
+    #     description="Get weather information for a location"
+    # )
+    # 
+    # email_tool = ComposioTool(
+    #     action="GMAIL_SEND_EMAIL",
+    #     name="email_tool",
+    #     description="Send emails via Gmail",
+    #     need_validation=True
+    # )
     agent_tools = []
     # Add tools only if they are provided
     if tools:
@@ -607,8 +605,8 @@ def create_custom_agent(
     agent_tools.append(TaskCompleteTool())
 
     # Add Composio tools with unique names
-    agent_tools.append(weather_tool)
-    agent_tools.append(email_tool)
+    # agent_tools.append(weather_tool)
+    # agent_tools.append(email_tool)
 
     return Agent(
         model_name=model_name,

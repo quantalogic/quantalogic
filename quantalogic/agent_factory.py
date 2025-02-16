@@ -206,7 +206,7 @@ def create_agent_for_mode(
             max_tokens_working_memory=max_tokens_working_memory,
             specific_expertise=specific_expertise,
             tools=tools,
-            # memory=memory
+            memory=memory
         )
         return agent
     else:

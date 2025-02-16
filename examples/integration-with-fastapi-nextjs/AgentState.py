@@ -35,7 +35,7 @@ from quantalogic.memory import AgentMemory
 from quantalogic.task_runner import configure_logger
 from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
-from .models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
+from .models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus, AgentConfig
 
 memory = AgentMemory()
 SHUTDOWN_TIMEOUT = 10.0  # seconds
@@ -54,6 +54,7 @@ class AgentState:
         self.client_counter = 0
         self.agent = None
         self.agent_registry = AgentRegistry()
+        self.agent_configs: Dict[str, AgentConfig] = {}  # Store agent configurations
         # Add validation-related attributes
         self.validation_requests: Dict[str, UserValidationRequest] = {}
         self.validation_responses: Dict[str, asyncio.Queue] = {}
@@ -66,17 +67,110 @@ class AgentState:
             "task_think_end",
             "tool_execution_start",
             "tool_execution_end",
-            "tool_execute_validation_start",  # Add validation events
-            "tool_execute_validation_end",    # Add validation events
+            "tool_execute_validation_start",
+            "tool_execute_validation_end",
             "task_complete",
             "task_solve_end",
             "error_tool_execution",
             "error_max_iterations_reached",
             "error_model_response",
-            # "stream_chunk",
-            # "stream_end",
-            # "stream_start"
         ]
+
+    async def create_agent(self, config: AgentConfig) -> bool:
+        """Create a new agent with the given configuration.
+        
+        Args:
+            config: Agent configuration
+            
+        Returns:
+            bool: True if agent was created successfully
+        """
+        try:
+            if config.id in self.agent_configs:
+                raise ValueError(f"Agent with ID {config.id} already exists")
+            
+            # Store the configuration
+            self.agent_configs[config.id] = config
+            
+            # Convert tools to dict format expected by create_agent_for_mode
+            tools_dict = []
+            for tool in config.tools:
+                tool_dict = {
+                    "type": tool.type,
+                    "parameters": {}
+                }
+                if tool.parameters:
+                    # Convert Pydantic model to dict and remove None values
+                    params = tool.parameters.dict(exclude_none=True)
+                    tool_dict["parameters"] = params
+                tools_dict.append(tool_dict)
+            
+            logger.debug(f"Converted tools configuration: {tools_dict}")
+            
+            # Create the agent
+            agent = create_agent_for_mode(
+                mode=config.mode,
+                model_name=config.model_name,
+                vision_model_name=None,
+                no_stream=False,
+                tools=tools_dict,
+                specific_expertise=config.expertise,
+                memory=AgentMemory()
+            )
+            
+            # Set up event handlers
+            self._setup_agent_events(agent)
+            
+            # Register the agent
+            self.agent_registry.register_agent(config.id, agent)
+            
+            logger.info(f"Created agent {config.id} with name: {config.name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to create agent: {e}", exc_info=True)
+            raise
+
+    def get_agent_config(self, agent_id: str) -> Optional[AgentConfig]:
+        """Get the configuration for an agent.
+        
+        Args:
+            agent_id: ID of the agent
+            
+        Returns:
+            Optional[AgentConfig]: Agent configuration if found
+        """
+        return self.agent_configs.get(agent_id)
+
+    def list_agents(self) -> List[AgentConfig]:
+        """List all available agents.
+        
+        Returns:
+            List[AgentConfig]: List of agent configurations
+        """
+        return list(self.agent_configs.values())
+
+    async def get_agent(self, agent_id: str) -> Agent:
+        """Get an agent instance by ID.
+        
+        Args:
+            agent_id: ID of the agent to get
+            
+        Returns:
+            Agent: The agent instance
+            
+        Raises:
+            ValueError: If agent not found
+        """
+        if agent_id not in self.agent_configs:
+            raise ValueError(f"Agent {agent_id} not found")
+            
+        if agent_id not in self.agent_registry._agents:
+            # Recreate the agent if it doesn't exist
+            config = self.agent_configs[agent_id]
+            await self.create_agent(config)
+            
+        return self.agent_registry.get_agent(agent_id)
 
     async def initialize_agent_with_sse_validation(
         self, 
@@ -258,25 +352,18 @@ class AgentState:
         try:
             logger.info(f"Starting task execution: {task_id}")
             request = task_info.get("request", {})
-            model_name = request.get("model_name", MODEL_NAME)
-            mode = request.get("mode", "minimal")
-            expertise = request.get("expertise", "")
-            tools = request.get("tools", None)
-
-            # If tools are provided, use custom mode
-            if tools:
-                mode = "custom"
+            agent_id = request.get("agent_id")
+            
+            if not agent_id:
+                raise ValueError("agent_id is required for task execution")
                 
-            agent = await self.initialize_agent_with_sse_validation(
-                model_name=model_name,
-                mode=mode,
-                tools=tools,
-                expertise=expertise
-            )
+            # Get the agent for this task
+            agent = await self.get_agent(agent_id)
             
             # Create event for task start
             self._handle_event("task_solve_start", {
                 "task_id": task_id,
+                "agent_id": agent_id,
                 "message": "Task execution started"
             })
             
@@ -288,7 +375,7 @@ class AgentState:
                     task=task_info["request"]["task"],
                     max_iterations=task_info["request"].get("max_iterations", 30),
                     streaming=True,  # Enable streaming for more events
-                    clear_memory=True
+                    clear_memory=False  # Keep memory between tasks
                 )
             )
 
@@ -297,6 +384,7 @@ class AgentState:
             # Create event for task completion
             self._handle_event("task_solve_end", {
                 "task_id": task_id,
+                "agent_id": agent_id,
                 "message": "Task execution completed",
                 "result": result
             })

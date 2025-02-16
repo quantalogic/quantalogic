@@ -45,6 +45,27 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
     level="INFO",
 )
+class ToolParameters(BaseModel):
+    """Parameters for a tool configuration."""
+    connection_string: Optional[str] = None
+    model_name: Optional[str] = None
+
+
+class ToolConfig(BaseModel):
+    """Configuration for a single tool."""
+    type: str
+    parameters: ToolParameters
+
+
+class AgentConfig(BaseModel):
+    """Configuration for creating a new agent."""
+    id: str
+    name: str
+    description: str
+    expertise: str
+    mode: str = "custom"
+    model_name: str
+    tools: List[ToolConfig]
 
 # Constants
 SHUTDOWN_TIMEOUT = 10.0  # seconds
@@ -272,6 +293,27 @@ async def list_tasks(status: Optional[str] = None, limit: int = 10, offset: int 
             tasks.append(TaskStatus(task_id=task_id, **task))
 
     return tasks[offset : offset + limit]
+
+
+# Agent management endpoints
+@app.post("/agents")
+async def create_agent(config: AgentConfig) -> Dict[str, bool]:
+    """Create a new agent with the given configuration."""
+    success = await agent_state.create_agent(config)
+    return {"success": success}
+
+@app.get("/agents")
+async def list_agents() -> List[AgentConfig]:
+    """List all available agents."""
+    return agent_state.list_agents()
+
+@app.get("/agents/{agent_id}")
+async def get_agent(agent_id: str) -> AgentConfig:
+    """Get agent configuration by ID."""
+    config = agent_state.get_agent_config(agent_id)
+    if not config:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+    return config
 
 
 if __name__ == "__main__":
