@@ -22,8 +22,9 @@ class EventMessage(BaseModel):
 class UserValidationRequest(BaseModel):
     """Request model for user validation."""
 
-    question: str
-    validation_id: str | None = None
+    validation_id: str
+    tool_name: str
+    arguments: Dict[str, Any]
 
     model_config = {"extra": "forbid"}
 
@@ -31,7 +32,7 @@ class UserValidationRequest(BaseModel):
 class UserValidationResponse(BaseModel):
     """Response model for user validation."""
 
-    response: bool
+    approved: bool
 
     model_config = {"extra": "forbid"}
 

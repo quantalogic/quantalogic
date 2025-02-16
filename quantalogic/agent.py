@@ -592,8 +592,9 @@ class Agent(BaseModel):
         """
         # Handle tool validation if required
         if tool.need_validation:
-            logger.debug(f"Tool '{tool_name}' requires validation.")
+            logger.info(f"Tool '{tool_name}' requires validation.")
             validation_id = str(uuid.uuid4())
+            logger.info(f"Validation ID: {validation_id}")
             
             self._emit_event(
                 "tool_execute_validation_start",

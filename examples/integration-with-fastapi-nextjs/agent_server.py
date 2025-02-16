@@ -47,7 +47,7 @@ logger.add(
 )
 
 # Constants
-SHUTDOWN_TIMEOUT = 5.0  # seconds
+SHUTDOWN_TIMEOUT = 10.0  # seconds
 VALIDATION_TIMEOUT = 30.0  # seconds
 UPLOAD_DIR = "/tmp/data"  # Directory for file uploads
 
@@ -131,18 +131,24 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-@app.post("/validate_response/{validation_id}")
+@app.post("/validation/{validation_id}")
 async def submit_validation_response(validation_id: str, response: UserValidationResponse):
     """Submit a validation response."""
+    logger.info(f"Received validation response for ID: {validation_id}")
+    logger.info(f"Current validation responses: {list(agent_state.validation_responses.keys())}")
+    
     if validation_id not in agent_state.validation_responses:
+        logger.error(f"Validation request {validation_id} not found")
+        logger.error(f"Available validation IDs: {list(agent_state.validation_responses.keys())}")
         raise HTTPException(status_code=404, detail="Validation request not found")
 
     try:
         response_queue = agent_state.validation_responses[validation_id]
-        await response_queue.put(response.response)
+        logger.info(f"Validation response received: {response.approved}")
+        await response_queue.put(response.approved)
         return JSONResponse(content={"status": "success"})
     except Exception as e:
-        logger.error(f"Error processing validation response: {e}")
+        logger.error(f"Error processing validation response: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to process validation response")
 
 
@@ -277,7 +283,7 @@ if __name__ == "__main__":
         log_level="info",
         timeout_keep_alive=5,
         access_log=True,
-        timeout_graceful_shutdown=5,  # Reduced from 10 to 5 seconds
+        timeout_graceful_shutdown=10,  # Increased from 5 to 10 seconds
     )
     server = uvicorn.Server(config)
     server_state.server = server

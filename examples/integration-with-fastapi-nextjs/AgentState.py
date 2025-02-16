@@ -38,6 +38,8 @@ from .ServerState import ServerState
 from .models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
 
 memory = AgentMemory()
+SHUTDOWN_TIMEOUT = 10.0  # seconds
+
 
 class AgentState:
     """Manages agent state and event queues."""
@@ -52,6 +54,9 @@ class AgentState:
         self.client_counter = 0
         self.agent = None
         self.agent_registry = AgentRegistry()
+        # Add validation-related attributes
+        self.validation_requests: Dict[str, UserValidationRequest] = {}
+        self.validation_responses: Dict[str, asyncio.Queue] = {}
         
         # List of events to listen for
         self.agent_events = [
@@ -181,6 +186,29 @@ class AgentState:
             # Use console_print_events for consistent event formatting
             console_print_events(event_type, data)
             
+            # Handle validation events
+            if event_type == "tool_execute_validation_start":
+                validation_id = data.get("validation_id")
+                if validation_id:
+                    logger.info(f"Creating validation response queue for validation_id: {validation_id}")
+                    logger.info(f"Current validation queues before creation: {list(self.validation_responses.keys())}")
+                    self.validation_responses[validation_id] = asyncio.Queue()
+                    self.validation_requests[validation_id] = UserValidationRequest(
+                        validation_id=validation_id,
+                        tool_name=data.get("tool_name", ""),
+                        arguments=data.get("arguments", {})
+                    )
+                    logger.info(f"Validation queue created. Current queues: {list(self.validation_responses.keys())}")
+            elif event_type == "tool_execute_validation_end":
+                validation_id = data.get("validation_id")
+                if validation_id and validation_id in self.validation_responses:
+                    logger.info(f"Cleaning up validation response queue for validation_id: {validation_id}")
+                    logger.info(f"Current validation queues before cleanup: {list(self.validation_responses.keys())}")
+                    del self.validation_responses[validation_id]
+                    if validation_id in self.validation_requests:
+                        del self.validation_requests[validation_id]
+                    logger.info(f"Validation queue cleaned up. Current queues: {list(self.validation_responses.keys())}")
+            
             # Create event message
             event = EventMessage(
                 id=str(uuid.uuid4()),
@@ -188,6 +216,11 @@ class AgentState:
                 data=data,
                 timestamp=datetime.utcnow().isoformat()
             )
+            
+            # Add validation_id to event data if it's a validation event
+            if event_type in ["tool_execute_validation_start", "tool_execute_validation_end"]:
+                if "validation_id" in data:
+                    event.data["validation_id"] = data["validation_id"]
             
             logger.debug(f"Broadcasting event: {event_type} - {data}")
             
