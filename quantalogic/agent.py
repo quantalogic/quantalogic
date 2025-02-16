@@ -593,9 +593,15 @@ class Agent(BaseModel):
         # Handle tool validation if required
         if tool.need_validation:
             logger.debug(f"Tool '{tool_name}' requires validation.")
+            validation_id = str(uuid.uuid4())
+            
             self._emit_event(
                 "tool_execute_validation_start",
-                {"tool_name": tool_name, "arguments": arguments_with_values},
+                {
+                    "validation_id": validation_id,
+                    "tool_name": tool_name, 
+                    "arguments": arguments_with_values
+                },
             )
 
             question_validation: str = (
@@ -611,7 +617,12 @@ class Agent(BaseModel):
 
             self._emit_event(
                 "tool_execute_validation_end",
-                {"tool_name": tool_name, "arguments": arguments_with_values},
+                {
+                    "validation_id": validation_id,
+                    "tool_name": tool_name,
+                    "arguments": arguments_with_values,
+                    "granted": permission_granted
+                },
             )
 
             if not permission_granted:
