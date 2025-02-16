@@ -44,8 +44,12 @@ SHUTDOWN_TIMEOUT = 10.0  # seconds
 class AgentState:
     """Manages agent state and event queues."""
 
-    def __init__(self):
-        """Initialize the AgentState."""
+    def __init__(self, use_default_agent: bool = True):
+        """Initialize the AgentState.
+        
+        Args:
+            use_default_agent: If True, will use default agent when specified agent is not found
+        """
         self.tasks: Dict[str, Dict[str, Any]] = {}
         self.task_queues: Dict[str, Queue] = {}
         self.event_queues: Dict[str, Dict[str, Queue]] = {}
@@ -58,7 +62,7 @@ class AgentState:
         # Add validation-related attributes
         self.validation_requests: Dict[str, UserValidationRequest] = {}
         self.validation_responses: Dict[str, asyncio.Queue] = {}
-        
+        self.use_default_agent = use_default_agent  # Flag to control default agent usage
         # List of events to listen for
         self.agent_events = [
             "session_start",
@@ -74,6 +78,16 @@ class AgentState:
             "error_tool_execution",
             "error_max_iterations_reached",
             "error_model_response",
+            # "stream_event",
+            # "stream_chunk",
+            # "final_result",
+            # "error",
+            # "stream_start",
+            # "stream_end",
+            # "memory_full",
+            # "memory_compacted",
+            # "memory_summary",
+            # "error_agent_not_found",
         ]
 
     async def create_agent(self, config: AgentConfig) -> bool:
@@ -117,7 +131,10 @@ class AgentState:
                 specific_expertise=config.expertise,
                 memory=AgentMemory()
             )
-            
+             
+            # Override ask_for_user_validation with SSE-based method
+            # agent.ask_for_user_validation = self.sse_ask_for_user_validation
+
             # Set up event handlers
             self._setup_agent_events(agent)
             
@@ -160,17 +177,34 @@ class AgentState:
             Agent: The agent instance
             
         Raises:
-            ValueError: If agent not found
+            ValueError: If agent not found and use_default_agent is False
         """
-        if agent_id not in self.agent_configs:
-            raise ValueError(f"Agent {agent_id} not found")
+        try:
+            # If agent_id is 'default' or (agent doesn't exist and use_default_agent is True)
+            if agent_id == "default" or (agent_id not in self.agent_configs and self.use_default_agent):
+                if "default" not in self.agent_registry._agents:
+                    # Initialize default agent if it doesn't exist
+                    await self.initialize_agent_with_sse_validation()
+                return self.agent_registry.get_agent("default")
+                
+            # Normal case - get specified agent
+            if agent_id not in self.agent_configs:
+                raise ValueError(f"Agent {agent_id} not found")
+                
+            if agent_id not in self.agent_registry._agents:
+                # Recreate the agent if it doesn't exist
+                config = self.agent_configs[agent_id]
+                await self.create_agent(config)
+                
+            return self.agent_registry.get_agent(agent_id)
             
-        if agent_id not in self.agent_registry._agents:
-            # Recreate the agent if it doesn't exist
-            config = self.agent_configs[agent_id]
-            await self.create_agent(config)
-            
-        return self.agent_registry.get_agent(agent_id)
+        except Exception as e:
+            if self.use_default_agent:
+                logger.warning(f"Failed to get agent {agent_id}, falling back to default agent: {str(e)}")
+                if "default" not in self.agent_registry._agents:
+                    await self.initialize_agent_with_sse_validation()
+                return self.agent_registry.get_agent("default")
+            raise
 
     async def initialize_agent_with_sse_validation(
         self, 
@@ -354,11 +388,15 @@ class AgentState:
             request = task_info.get("request", {})
             agent_id = request.get("agent_id")
             
-            if not agent_id:
-                raise ValueError("agent_id is required for task execution")
-                
-            # Get the agent for this task
-            agent = await self.get_agent(agent_id)
+            try:
+                # Get the agent for this task
+                agent = await self.get_agent(agent_id)
+            except ValueError as e:
+                if self.use_default_agent:
+                    logger.warning(f"Using default agent due to: {str(e)}")
+                    agent = await self.get_agent("default")
+                else:
+                    raise
             
             # Create event for task start
             self._handle_event("task_solve_start", {
