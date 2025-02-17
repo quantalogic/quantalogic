@@ -1,6 +1,0 @@
-#!/home/yarab/Bureau/trash_agents_tests/test/new_env/bin/python
-import sys
-from quantalogic.docs_cli import serve_docs
-
-if __name__ == '__main__':
-    sys.exit(serve_docs())
