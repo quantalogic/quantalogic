@@ -1,688 +1,283 @@
-import asyncio
-import copy
-import time
-import warnings
-from typing import Any, Dict, List, Optional
+from __future__ import annotations
+
+import inspect
+import traceback
+import uuid
+from datetime import datetime
+from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+
+import anyio
+from loguru import logger
+from pydantic import BaseModel, Field, validator
 
 
-class BaseNode:
-    def __init__(self) -> None:
-        """
-        Initialize a BaseNode with empty parameters and successors.
+class NodeStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    RETRYING = "retrying"
 
-        This method sets up the foundational structure for nodes in a flow,
-        allowing for dynamic parameter setting and node connections.
-        """
-        self.params: Dict[str, Any] = {}
-        self.successors: Dict[str, 'BaseNode'] = {}
 
-    def set_params(self, params: Dict[str, Any]) -> None:
-        """
-        Set parameters for the node.
+class WorkflowError(Exception):
+    """Base exception for workflow-related errors"""
 
-        Args:
-            params (Dict[str, Any]): A dictionary of parameters to configure the node's behavior.
-        """
-        self.params = params
+    pass
 
-    def add_successor(self, node: 'BaseNode', action: str = "default") -> 'BaseNode':
-        """
-        Add a successor node with an optional action.
 
-        Args:
-            node (BaseNode): The node to be added as a successor.
-            action (str, optional): The action that triggers this successor. Defaults to "default".
+class MissingInputsError(WorkflowError):
+    """Raised when required inputs are missing for a node"""
 
-        Returns:
-            BaseNode: The added successor node.
+    pass
 
-        Warns:
-            Warns if overwriting an existing successor for the same action.
-        """
-        if action in self.successors:
-            warnings.warn(f"Overwriting successor for action '{action}'")
-        self.successors[action] = node
-        return node
 
-    def prep(self, shared: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        Prepare the node for execution by processing shared context.
+class NodeExecutionError(WorkflowError):
+    """Raised when a node fails after maximum retries"""
 
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary for the node's execution.
+    pass
 
-        Returns:
-            Optional[Dict[str, Any]]: Prepared data for node execution, or None.
-        """
-        pass
 
-    def exec(self, prep_res: Any) -> Any:
-        """
-        Execute the node's core logic using prepared results.
+class WorkflowState(BaseModel):
+    """Represents the current state of a workflow execution"""
 
-        Args:
-            prep_res (Any): Prepared results from the prep method.
+    execution_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    current_node: str
+    node_status: Dict[str, Tuple[NodeStatus, str]] = Field(default_factory=dict)
+    context: Dict[str, Any] = Field(default_factory=dict)
+    execution_log: List[Dict[str, Any]] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now())
+    updated_at: datetime = Field(default_factory=lambda: datetime.now())
 
-        Returns:
-            Any: Execution result.
-        """
-        pass
+    @validator("current_node")
+    def validate_current_node(cls, v):  # noqa: N805
+        if not v:
+            raise ValueError("Current node cannot be empty")
+        return v
 
-    def post(self, shared: Dict[str, Any], prep_res: Any, exec_res: Any) -> Any:
-        """
-        Post-process the node's execution, potentially modifying shared context.
 
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-            prep_res (Any): Results from the prep method.
-            exec_res (Any): Results from the exec method.
+class NodeSpec(BaseModel):
+    """Specification for a workflow node"""
 
-        Returns:
-            Any: Post-processing result.
-        """
-        pass
+    name: str
+    inputs: Set[str]
+    output: str
+    max_retries: int = 3
+    retry_delay: float = 1.0
+    timeout: Optional[float] = None
+    description: Optional[str] = None
 
-    def _exec(self, prep_res: Any) -> Any:
-        """
-        Internal method to execute the node's logic.
 
-        Args:
-            prep_res (Any): Prepared results from the prep method.
+class TransitionSpec(BaseModel):
+    """Specification for a workflow transition"""
 
-        Returns:
-            Any: Execution result.
-        """
-        return self.exec(prep_res)
+    source: str
+    condition: str
+    target: str
 
-    def _run(self, shared: Dict[str, Any]) -> Any:
-        """
-        Run the node by executing preparation, execution, and post-processing steps.
 
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
+class Workflow(BaseModel):
+    """Complete workflow definition"""
 
-        Returns:
-            Any: Result of the node's execution.
-        """
-        p = self.prep(shared)
-        e = self._exec(p)
-        return self.post(shared, p, e)
+    nodes: Dict[str, Tuple[Callable, NodeSpec]] = Field(default_factory=dict)
+    transitions: List[TransitionSpec] = Field(default_factory=list)
+    entry_node: Optional[str] = None
+    version: str = "1.0.0"
 
-    def run(self, shared: Dict[str, Any]) -> Any:
-        """
-        Run the node and warn if successors are present.
+    def add_node(
+        self,
+        name: str,
+        func: Callable,
+        inputs: List[str],
+        output: str,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        timeout: Optional[float] = None,
+        description: Optional[str] = None,
+    ):
+        """Add a new node to the workflow with parameter validation"""
+        sig = inspect.signature(func)
+        parameters = sig.parameters
 
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
+        # Analyze function parameters
+        relevant_params = []
+        required_params = []
+        for param_name, param in parameters.items():
+            if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+                continue  # Skip *args and **kwargs
+            relevant_params.append(param_name)
+            if param.default is inspect.Parameter.empty:
+                required_params.append(param_name)
 
-        Returns:
-            Any: Result of the node's execution.
+        # Check for **kwargs
+        has_kwargs = any(p.kind == p.VAR_KEYWORD for p in parameters.values())
 
-        Warns:
-            Warns that successors won't be run. Use Flow for multi-node execution.
-        """
-        if self.successors:
-            warnings.warn("Node won't run successors. Use Flow.")
-        return self._run(shared)
+        # Validate inputs against parameters unless **kwargs exists
+        if not has_kwargs:
+            invalid_inputs = set(inputs) - set(relevant_params)
+            if invalid_inputs:
+                raise ValueError(
+                    f"Node '{name}' has invalid inputs {invalid_inputs} "
+                    f"not present in function '{func.__name__}' parameters"
+                )
 
-    def __rshift__(self, other: 'BaseNode') -> 'BaseNode':
-        """
-        Overload the right-shift operator to add a successor node.
+        # Validate required parameters
+        missing_required = set(required_params) - set(inputs)
+        if missing_required:
+            raise ValueError(
+                f"Node '{name}' missing required inputs {missing_required} " f"for function '{func.__name__}'"
+            )
 
-        Args:
-            other (BaseNode): The node to be added as a successor.
+        node_spec = NodeSpec(
+            name=name,
+            inputs=set(inputs),
+            output=output,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            timeout=timeout,
+            description=description,
+        )
+        self.nodes[name] = (func, node_spec)
 
-        Returns:
-            BaseNode: The added successor node.
-        """
-        return self.add_successor(other)
+    def add_transition(self, source: str, condition: str, target: str):
+        """Add a transition between nodes"""
+        self.transitions.append(TransitionSpec(source=source, condition=condition, target=target))
 
-    def __sub__(self, action: str) -> '_ConditionalTransition':
-        """
-        Create a conditional transition with a specific action.
 
-        Args:
-            action (str): The action that triggers the transition.
+class WorkflowEngine:
+    """Execution engine for workflows"""
 
-        Returns:
-            _ConditionalTransition: A transition object for connecting nodes.
+    def __init__(self, workflow: Workflow):
+        self.workflow = workflow
+        self.state: Optional[WorkflowState] = None
 
-        Raises:
-            TypeError: If the action is not a string.
-        """
-        if isinstance(action, str):
-            return _ConditionalTransition(self, action)
-        raise TypeError("Action must be a string")
+    async def execute(self, initial_context: Dict[str, Any]) -> WorkflowState:
+        """Execute the workflow with the provided initial context"""
+        if not self.workflow.entry_node:
+            raise ValueError("Workflow has no entry node defined")
 
-class _ConditionalTransition:
-    def __init__(self, src: BaseNode, action: str) -> None:
-        """
-        Initialize a conditional transition.
+        self.state = WorkflowState(current_node=self.workflow.entry_node, context=initial_context.copy())
 
-        Args:
-            src (BaseNode): The source node for the transition.
-            action (str): The action that triggers the transition.
-        """
-        self.src = src
-        self.action = action
+        while True:
+            node_name = self.state.current_node
+            logger.info(f"Executing node: {node_name}")
 
-    def __rshift__(self, tgt: BaseNode) -> BaseNode:
-        """
-        Connect the transition to a target node.
+            if node_name not in self.workflow.nodes:
+                raise ValueError(f"Undefined node: {node_name}")
 
-        Args:
-            tgt (BaseNode): The target node for the transition.
+            func, node_spec = self.workflow.nodes[node_name]
+            self._update_node_status(node_name, NodeStatus.RUNNING)
 
-        Returns:
-            BaseNode: The target node.
-        """
-        return self.src.add_successor(tgt, self.action)
-
-class Node(BaseNode):
-    def __init__(self, max_retries: int = 1, wait: float = 0) -> None:
-        """
-        Initialize a Node with retry and wait settings.
-
-        Args:
-            max_retries (int, optional): Maximum number of retries. Defaults to 1.
-            wait (float, optional): Wait time between retries. Defaults to 0.
-        """
-        super().__init__()
-        self.max_retries: int = max_retries
-        self.wait: float = wait
-
-    def exec_fallback(self, prep_res: Any, exc: Exception) -> Any:
-        """
-        Execute a fallback action when an exception occurs.
-
-        Args:
-            prep_res (Any): Prepared results from the prep method.
-            exc (Exception): The exception that occurred.
-
-        Returns:
-            Any: Fallback result.
-        """
-        raise exc
-
-    def _exec(self, prep_res: Any) -> Any:
-        """
-        Execute the node's logic with retries.
-
-        Args:
-            prep_res (Any): Prepared results from the prep method.
-
-        Returns:
-            Any: Execution result.
-        """
-        for self.cur_retry in range(self.max_retries):
             try:
-                return self.exec(prep_res)
+                result = await self._execute_node(func, node_spec)
+                self._update_context(node_spec.output, result)
+
+                # Use node output as transition condition if available
+                transition_condition = "success"
+                if isinstance(result, str) and result in ["next", "complete"]:
+                    transition_condition = result
+
+                next_node = self._get_next_node(node_name, transition_condition)
+                self._update_node_status(node_name, NodeStatus.SUCCESS)
             except Exception as e:
-                if self.cur_retry == self.max_retries - 1:
-                    return self.exec_fallback(prep_res, e)
-                if self.wait > 0:
-                    time.sleep(self.wait)
+                logger.error(
+                    "Node execution failed",
+                    node=node_name,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    context=self.state.context,
+                    state=self.state.dict(),
+                )
+                self._handle_node_error(node_name, e)
+                next_node = self._get_next_node(node_name, "failed")
+                if not next_node:
+                    raise WorkflowError(f"Workflow failed at node {node_name}") from e
 
-class BatchNode(Node):
-    def _exec(self, items: List[Any]) -> List[Any]:
-        """
-        Execute the node's logic on a batch of items.
+            if not next_node:
+                logger.success("Workflow completed successfully")
+                break
 
-        Args:
-            items (List[Any]): List of items to process.
+            self._advance_to_node(next_node)
 
-        Returns:
-            List[Any]: List of execution results.
-        """
-        return [super(BatchNode, self)._exec(i) for i in (items or [])]
+        return self.state
 
-class Flow(BaseNode):
-    def __init__(self, start: BaseNode) -> None:
-        """
-        Initialize a Flow with a starting node.
+    def _update_context(self, output_key: str, value: Any) -> None:
+        """Update workflow context with node output"""
+        logger.debug(f"Updating context with {output_key}={value}")
+        self.state.context[output_key] = value
+        self.state.updated_at = datetime.now()
 
-        Args:
-            start (BaseNode): The starting node for the flow.
-        """
-        super().__init__()
-        self.start = start
+    def _advance_to_node(self, next_node: str):
+        """Move workflow to the next node"""
+        self.state.current_node = next_node
+        self.state.updated_at = datetime.now()
 
-    def get_next_node(self, curr: BaseNode, action: Optional[str]) -> Optional[BaseNode]:
-        """
-        Get the next node in the flow based on the current node and action.
+    def _update_node_status(self, node_name: str, status: NodeStatus, message: str = ""):
+        """Update the status of a node in the workflow state"""
+        self.state.node_status[node_name] = (status, message)
+        self.state.execution_log.append(
+            {"timestamp": datetime.now(), "node": node_name, "status": status, "message": message}
+        )
 
-        Args:
-            curr (BaseNode): The current node.
-            action (Optional[str]): The action that triggers the transition.
+    def _handle_node_error(self, node_name: str, error: Exception):
+        """Handle node execution errors and update state"""
+        error_info = {
+            "error_type": type(error).__name__,
+            "message": str(error),
+            "node": node_name,
+            "timestamp": datetime.now().isoformat(),
+            "context": self.state.context,
+            "stack_trace": traceback.format_exc(),
+        }
 
-        Returns:
-            Optional[BaseNode]: The next node in the flow, or None.
-        """
-        nxt = curr.successors.get(action or "default")
-        if not nxt and curr.successors:
-            warnings.warn(f"Flow ends: '{action}' not found in {list(curr.successors)}")
-        return nxt
+        logger.error("Node execution failed", **error_info, state=self.state.dict(exclude={"context"}))
 
-    def _orch(self, shared: Dict[str, Any], params: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Orchestrate the flow by executing nodes in sequence.
+        self._update_node_status(node_name, NodeStatus.FAILED, f"{error_info['error_type']}: {error_info['message']}")
 
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-            params (Optional[Dict[str, Any]], optional): Parameters for the flow. Defaults to None.
-        """
-        current_node: Optional[BaseNode] = copy.copy(self.start)
-        p = params or {**self.params}
-        while current_node:
-            current_node.set_params(p)
-            action_result = current_node._run(shared)
-            current_node = copy.copy(self.get_next_node(current_node, action_result))
+    async def _execute_node(self, func: Callable, node_spec: NodeSpec) -> Any:
+        """Execute a node with retry logic and timeout handling"""
+        self._validate_node_inputs(node_spec)
+        args = self._prepare_node_arguments(node_spec)
 
-    def _run(self, shared: Dict[str, Any]) -> Any:
-        """
-        Run the flow by executing the orchestration method.
-
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-
-        Returns:
-            Any: Result of the flow's execution.
-        """
-        pr = self.prep(shared)
-        self._orch(shared)
-        return self.post(shared, pr, None)
-
-    def exec(self, prep_res: Any) -> Any:
-        """
-        Execute the flow's core logic.
-
-        Args:
-            prep_res (Any): Prepared results from the prep method.
-
-        Raises:
-            RuntimeError: Flow cannot be executed directly.
-        """
-        raise RuntimeError("Flow can't exec.")
-
-class BatchFlow(Flow):
-    def _run(self, shared: Dict[str, Any]) -> Any:
-        """
-        Run the batch flow by executing the orchestration method for each batch.
-
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-
-        Returns:
-            Any: Result of the batch flow's execution.
-        """
-        pr = self.prep(shared) or []
-        for bp in pr:
-            self._orch(shared, {**self.params, **bp})
-        return self.post(shared, pr, None)
-
-class AsyncNode(Node):
-    def prep(self, shared: Dict[str, Any]) -> Any:
-        """
-        Prepare the node for asynchronous execution.
-
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-
-        Raises:
-            RuntimeError: Use prep_async instead.
-        """
-        raise RuntimeError("Use prep_async.")
-
-    def exec(self, prep_res: Any) -> Any:
-        """
-        Execute the node's core logic asynchronously.
-
-        Args:
-            prep_res (Any): Prepared results from the prep method.
-
-        Raises:
-            RuntimeError: Use exec_async instead.
-        """
-        raise RuntimeError("Use exec_async.")
-
-    def post(self, shared: Dict[str, Any], prep_res: Any, exec_res: Any) -> Any:
-        """
-        Post-process the node's asynchronous execution.
-
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-            prep_res (Any): Results from the prep method.
-            exec_res (Any): Results from the exec method.
-
-        Raises:
-            RuntimeError: Use post_async instead.
-        """
-        raise RuntimeError("Use post_async.")
-
-    def exec_fallback(self, prep_res: Any, exc: Exception) -> Any:
-        """
-        Execute a fallback action when an exception occurs during asynchronous execution.
-
-        Args:
-            prep_res (Any): Prepared results from the prep method.
-            exc (Exception): The exception that occurred.
-
-        Raises:
-            RuntimeError: Use exec_fallback_async instead.
-        """
-        raise RuntimeError("Use exec_fallback_async.")
-
-    def _run(self, shared: Dict[str, Any]) -> Any:
-        """
-        Run the node asynchronously.
-
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-
-        Raises:
-            RuntimeError: Use run_async instead.
-        """
-        raise RuntimeError("Use run_async.")
-
-    async def prep_async(self, shared: Dict[str, Any]) -> Any:
-        """
-        Prepare the node for asynchronous execution.
-
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-
-        Returns:
-            Any: Prepared data for asynchronous execution.
-        """
-        pass
-
-    async def exec_async(self, prep_res: Any) -> Any:
-        """
-        Execute the node's core logic asynchronously.
-
-        Args:
-            prep_res (Any): Prepared results from the prep method.
-
-        Returns:
-            Any: Asynchronous execution result.
-        """
-        pass
-
-    async def exec_fallback_async(self, prep_res: Any, exc: Exception) -> Any:
-        """
-        Execute a fallback action when an exception occurs during asynchronous execution.
-
-        Args:
-            prep_res (Any): Prepared results from the prep method.
-            exc (Exception): The exception that occurred.
-
-        Returns:
-            Any: Fallback result.
-        """
-        raise exc
-
-    async def post_async(self, shared: Dict[str, Any], prep_res: Any, exec_res: Any) -> Any:
-        """
-        Post-process the node's asynchronous execution.
-
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-            prep_res (Any): Results from the prep method.
-            exec_res (Any): Results from the exec method.
-
-        Returns:
-            Any: Post-processing result.
-        """
-        pass
-
-    async def _exec(self, prep_res: Any) -> Any:
-        """
-        Execute the node's logic asynchronously with retries.
-
-        Args:
-            prep_res (Any): Prepared results from the prep method.
-
-        Returns:
-            Any: Asynchronous execution result.
-        """
-        for i in range(self.max_retries):
+        for attempt in range(node_spec.max_retries + 1):
             try:
-                return await self.exec_async(prep_res)
+                return await self._run_node_with_timeout(func, args, node_spec.timeout)
             except Exception as e:
-                if i == self.max_retries - 1:
-                    return await self.exec_fallback_async(prep_res, e)
-                if self.wait > 0:
-                    await asyncio.sleep(self.wait)
+                if attempt == node_spec.max_retries:
+                    raise NodeExecutionError(
+                        f"Node {node_spec.name} failed after {node_spec.max_retries} attempts"
+                    ) from e
+                await self._handle_retry(node_spec, attempt, e)
 
-    async def run_async(self, shared: Dict[str, Any]) -> Any:
-        """
-        Run the node asynchronously and warn if successors are present.
+        raise RuntimeError("Unreachable code")
 
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
+    def _validate_node_inputs(self, node_spec: NodeSpec):
+        """Validate that all required inputs are present in the context"""
+        missing = node_spec.inputs - self.state.context.keys()
+        if missing:
+            raise MissingInputsError(f"Missing inputs for {node_spec.name}: {missing}")
 
-        Returns:
-            Any: Result of the node's asynchronous execution.
+    def _prepare_node_arguments(self, node_spec: NodeSpec) -> Dict[str, Any]:
+        """Prepare arguments for node execution from context"""
+        return {k: self.state.context[k] for k in node_spec.inputs}
 
-        Warns:
-            Warns that successors won't be run. Use AsyncFlow for multi-node execution.
-        """
-        if self.successors:
-            warnings.warn("Node won't run successors. Use AsyncFlow.")
-        return await self._run_async(shared)
+    async def _run_node_with_timeout(self, func: Callable, args: Dict[str, Any], timeout: Optional[float]):
+        """Execute node function with optional timeout"""
+        if timeout:
+            with anyio.fail_after(timeout):
+                return await func(**args)
+        return await func(**args)
 
-    async def _run_async(self, shared: Dict[str, Any]) -> Any:
-        """
-        Run the node asynchronously by executing preparation, execution, and post-processing steps.
+    async def _handle_retry(self, node_spec: NodeSpec, attempt: int, error: Exception):
+        """Handle retry logic with exponential backoff"""
+        self._update_node_status(node_spec.name, NodeStatus.RETRYING, str(error))
+        delay = node_spec.retry_delay * (2**attempt)
+        logger.warning(f"Retry {attempt+1}/{node_spec.max_retries} for {node_spec.name}")
+        await anyio.sleep(delay)
 
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-
-        Returns:
-            Any: Result of the node's asynchronous execution.
-        """
-        p = await self.prep_async(shared)
-        e = await self._exec(p)
-        return await self.post_async(shared, p, e)
-
-class AsyncBatchNode(AsyncNode, BatchNode):
-    async def _exec(self, items: List[Any]) -> List[Any]:
-        """
-        Execute the node's logic asynchronously on a batch of items.
-
-        Args:
-            items (List[Any]): List of items to process.
-
-        Returns:
-            List[Any]: List of asynchronous execution results.
-        """
-        return [await super(AsyncBatchNode, self)._exec(i) for i in items]
-
-class AsyncParallelBatchNode(AsyncNode, BatchNode):
-    async def _exec(self, items: List[Any]) -> List[Any]:
-        """
-        Execute the node's logic asynchronously on a batch of items in parallel.
-
-        Args:
-            items (List[Any]): List of items to process.
-
-        Returns:
-            List[Any]: List of asynchronous execution results.
-        """
-        return await asyncio.gather(*(super(AsyncParallelBatchNode, self)._exec(i) for i in items))
-
-class AsyncFlow(Flow, AsyncNode):
-    async def _orch_async(self, shared: Dict[str, Any], params: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Orchestrate the asynchronous flow by executing nodes in sequence.
-
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-            params (Optional[Dict[str, Any]], optional): Parameters for the flow. Defaults to None.
-        """
-        current_node: Optional[BaseNode] = copy.copy(self.start)
-        p = params or {**self.params}
-        while current_node:
-            current_node.set_params(p)
-            action_result = await current_node._run_async(shared) if isinstance(current_node, AsyncNode) else current_node._run(shared)
-            current_node = copy.copy(self.get_next_node(current_node, action_result))
-
-    async def _run_async(self, shared: Dict[str, Any]) -> Any:
-        """
-        Run the asynchronous flow by executing the orchestration method.
-
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-
-        Returns:
-            Any: Result of the asynchronous flow's execution.
-        """
-        p = await self.prep_async(shared)
-        await self._orch_async(shared)
-        return await self.post_async(shared, p, None)
-
-class AsyncBatchFlow(AsyncFlow, BatchFlow):
-    async def _run_async(self, shared: Dict[str, Any]) -> Any:
-        """
-        Run the asynchronous batch flow by executing the orchestration method for each batch.
-
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-
-        Returns:
-            Any: Result of the asynchronous batch flow's execution.
-        """
-        pr = await self.prep_async(shared) or []
-        for bp in pr:
-            await self._orch_async(shared, {**self.params, **bp})
-        return await self.post_async(shared, pr, None)
-
-class AsyncParallelBatchFlow(AsyncFlow, BatchFlow):
-    async def _run_async(self, shared: Dict[str, Any]) -> Any:
-        """
-        Run the asynchronous parallel batch flow by executing the orchestration method for each batch in parallel.
-
-        Args:
-            shared (Dict[str, Any]): Shared context dictionary.
-
-        Returns:
-            Any: Result of the asynchronous parallel batch flow's execution.
-        """
-        pr = await self.prep_async(shared) or []
-        await asyncio.gather(*(self._orch_async(shared, {**self.params, **bp}) for bp in pr))
-        return await self.post_async(shared, pr, None)
-
-def call_llm(prompt: str, model_name: str = "gemini/gemini-2.0-flash") -> Any:
-    """
-    A simple helper to call an LLM using litellm.
-
-    Args:
-        prompt (str): The prompt to pass to the LLM.
-        model_name (str, optional): The name of the LLM model. Defaults to "gemini/gemini-2.0-flash".
-
-    Returns:
-        Any: The response from the LLM.
-
-    Raises:
-        ImportError: If litellm is not installed.
-    """
-    try:
-        from litellm import completion
-    except ImportError:
-        raise ImportError("litellm is not installed. Please install litellm to use this function.")
-    return completion(model=model_name, messages=[{"role": "user", "content": prompt}])
-
-async def call_llm_async(prompt: str, model_name: str = "gemini/gemini-2.0-flash") -> Any:
-    """
-    A simple async helper to call an LLM using litellm.
-
-    Args:
-        prompt (str): The prompt to pass to the LLM.
-        model_name (str, optional): The name of the LLM model. Defaults to "gemini/gemini-2.0-flash".
-
-    Returns:
-        Any: The response from the LLM.
-
-    Raises:
-        ImportError: If litellm is not installed.
-    """
-    try:
-        from litellm import acompletion
-    except ImportError:
-        raise ImportError("litellm is not installed. Please install litellm to use this function.")
-    response = await acompletion(model=model_name, messages=[{"role": "user", "content": prompt}])
-    return response
-
-def call_llm_message(messages: List[Dict[str, str]], model_name: str = "gemini/gemini-2.0-flash") -> Any:
-    """
-    A simple helper to call an LLM using litellm with a list of messages.
-
-    Args:
-        messages (List[Dict[str, str]]): A list of messages to pass to the LLM.
-        model_name (str, optional): The name of the LLM model. Defaults to "gemini/gemini-2.0-flash".
-
-    Returns:
-        Any: The response from the LLM.
-
-    Raises:
-        ImportError: If litellm is not installed.
-    """
-    try:
-        from litellm import completion
-    except ImportError:
-        raise ImportError("litellm is not installed. Please install litellm to use this function.")
-    return completion(model=model_name, messages=messages)
-
-async def call_llm_message_async(messages: List[Dict[str, str]], model_name: str = "gemini/gemini-2.0-flash") -> Any:
-    """
-    A simple async helper to call an LLM using litellm with a list of messages.
-
-    Args:
-        messages (List[Dict[str, str]]): A list of messages to pass to the LLM.
-        model_name (str, optional): The name of the LLM model. Defaults to "gemini/gemini-2.0-flash".
-
-    Returns:
-        Any: The response from the LLM.
-
-    Raises:
-        ImportError: If litellm is not installed.
-    """
-    try:
-        from litellm import acompletion
-    except ImportError:
-        raise ImportError("litellm is not installed. Please install litellm to use this function.")
-    response = await acompletion(model=model_name, messages=messages)
-    return response
-
-class FluentBuilder:
-    """A convenient Fluent interface to build a workflow."""
-    def __init__(self) -> None:
-        self.start: Optional[BaseNode] = None
-        self.current: Optional[BaseNode] = None
-
-    def set_start(self, node: BaseNode) -> 'FluentBuilder':
-        """Set the starting node of the workflow."""
-        self.start = node
-        self.current = node
-        return self
-
-    def then(self, node: BaseNode, action: str = "default") -> 'FluentBuilder':
-        """Chain the next node to the current node with an optional action."""
-        if not self.current:
-            raise ValueError("Start node not set. Call set_start() first.")
-        self.current.add_successor(node, action)
-        self.current = node
-        return self
-
-    def branch(self, action: str, node: BaseNode) -> 'FluentBuilder':
-        """Add an alternative branch from the current node without moving the current pointer."""
-        if not self.current:
-            raise ValueError("Start node not set. Call set_start() first.")
-        self.current.add_successor(node, action)
-        return self
-
-    def build(self) -> 'Flow':
-        """Build and return the workflow Flow object."""
-        if not self.start:
-            raise ValueError("Start node not set. Call set_start() first.")
-        return Flow(self.start)
+    def _get_next_node(self, current: str, outcome: str) -> Optional[str]:
+        """Determine the next node based on current node and outcome"""
+        for transition in self.workflow.transitions:
+            if transition.source == current and transition.condition == outcome:
+                return transition.target
+        return None
