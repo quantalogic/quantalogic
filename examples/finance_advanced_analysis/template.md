@@ -1,6 +1,6 @@
 
 
-as an expert crypto analyst, Provide a deep, well-structured and well-researched article on the topic of advanced crypto analysis,
+as an expert index finance analyst, Provide a deep, well-structured and well-researched article on the topic of advanced index finance analysis,
  
 detailedly explaining the analysis process in a professional tone.
 
@@ -10,7 +10,7 @@ and different analysis structures,
 
 📋 ANALYSIS PARAMETERS
 ---------------------
-💰 Asset: XRP
+💰 Asset: UB (Ultra U.S. Treasury Bond Future)
 📅 Timeframe: from the 01 december 2024 untill now 
 
 🎨 ANALYSIS STRUCTURE
@@ -135,4 +135,4 @@ and different analysis structures,
 
 The generated article should be well-structured and well-researched,
 including a detailed analysis of the market, technical analysis, market sentiment, news analysis, and price projections.
-it should be written in a professional tone and include all the parts and reflexions of the expert crypto analyst.
+it should be written in a professional tone and include all the parts and reflexions of the expert index finance analyst.

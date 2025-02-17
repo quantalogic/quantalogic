@@ -239,6 +239,9 @@ class AgentState:
                 self.agent_registry.register_agent("default", self.agent)
                 logger.info(f"Agent initialized successfully with {mode} mode")
 
+                # Add validation-related attributes
+                # self.agent.ask_for_user_validation = self.sse_ask_for_user_validation
+
             agent = self.agent_registry.get_agent("default")
             # Ensure events are set up even for existing agent
             self._setup_agent_events(agent)
