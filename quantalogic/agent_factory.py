@@ -6,11 +6,8 @@ from quantalogic.agent import Agent
 from quantalogic.agent_config import (
     create_basic_agent,
     create_custom_agent,
-    create_full_agent,
-    create_image_generation_agent,
-    create_interpreter_agent,
-    create_minimal_agent,
-    create_news_agent,
+    create_full_agent, 
+    create_interpreter_agent, 
 )
 from quantalogic.coding_agent import create_coding_agent
 from quantalogic.memory import AgentMemory
@@ -165,33 +162,6 @@ def create_agent_for_mode(
         agent = create_search_agent(
             model_name,
             mode_full=True,
-            no_stream=no_stream,
-            compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory
-        )
-        return agent
-    if mode == "minimal":
-        agent = create_minimal_agent(
-            model_name,
-            vision_model_name,
-            no_stream=no_stream,
-            compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory
-        )
-        return agent
-    if mode == "news-agent":
-        agent = create_news_agent(
-            model_name,
-            vision_model_name,
-            no_stream=no_stream,
-            compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory
-        )
-        return agent
-    if mode == "image-generation":
-        agent = create_image_generation_agent(
-            model_name,
-            vision_model_name,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
             max_tokens_working_memory=max_tokens_working_memory
