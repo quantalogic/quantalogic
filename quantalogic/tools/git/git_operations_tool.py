@@ -1,10 +1,13 @@
 """Tool for performing Git operations like creating branches and making commits."""
 
 import os
+import re
+from typing import ClassVar, Dict
+from urllib.parse import urlparse
 from git import Repo
 from git.exc import GitCommandError
 from loguru import logger
-from pydantic import Field
+from pydantic import Field, validator
 
 from quantalogic.tools.tool import Tool, ToolArgument
 
@@ -13,12 +16,13 @@ class GitOperationsTool(Tool):
     """Tool for Git operations including branch creation and commits.
     
     This tool provides a simple interface for common Git operations like creating branches,
-    making commits, pushing changes, and more.
+    making commits, pushing changes, and more. It handles both public and private repositories
+    through token-based authentication.
 
     Examples:
         Create a new branch and switch to it:
         ```python
-        tool = GitOperationsTool()
+        tool = GitOperationsTool(auth_token="your_github_token")
         tool.execute(
             repo_path="/path/to/repo",
             operation="create_branch",
@@ -69,17 +73,104 @@ class GitOperationsTool(Tool):
         "Automatically handles authentication for private repositories using the provided token."
     )
     need_validation: bool = False
-    auth_token: str = Field(default=None, description="GitHub authentication token for private repositories")
+    auth_token: str = Field(default=None, description="Authentication token for private repositories")
+    provider_urls: ClassVar[Dict[str, str]] = {
+        "github.com": "https://github.com",
+        "gitlab.com": "https://gitlab.com",
+        "bitbucket.org": "https://bitbucket.org",
+        "dev.azure.com": "https://dev.azure.com"
+    }
 
     def __init__(self, auth_token: str = None, **data):
         """Initialize the tool with an optional auth token.
         
         Args:
-            auth_token: GitHub authentication token for private repositories
+            auth_token: Authentication token for private repositories
             **data: Additional tool configuration data
         """
         super().__init__(**data)
         self.auth_token = auth_token
+
+    @validator('auth_token')
+    def validate_auth_token(cls, v):
+        """Validate the authentication token format.
+        
+        Args:
+            v: The token value to validate
+            
+        Returns:
+            The validated token
+            
+        Raises:
+            ValueError: If the token format is invalid
+        """
+        if v is not None:
+            if not isinstance(v, str):
+                raise ValueError("Authentication token must be a string")
+            if len(v.strip()) < 8:
+                raise ValueError("Authentication token seems too short")
+            if not re.match(r'^[a-zA-Z0-9_\-]+$', v):
+                raise ValueError("Authentication token contains invalid characters")
+        return v
+
+    def _get_provider_from_url(self, url: str) -> str:
+        """Determine the Git provider from the repository URL.
+        
+        Args:
+            url: Repository URL
+            
+        Returns:
+            str: Provider name or 'unknown'
+        """
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            for provider, base_url in self.provider_urls.items():
+                if provider in domain:
+                    return provider
+            return 'unknown'
+        except Exception:
+            return 'unknown'
+
+    def _setup_auth_for_remote(self, repo: Repo) -> tuple[str, bool]:
+        """Setup authentication for remote operations if needed.
+        
+        Args:
+            repo: Git repository instance
+        
+        Returns:
+            tuple: Original remote URL and whether URL was modified
+            
+        Raises:
+            ValueError: If remote URL is invalid or authentication setup fails
+        """
+        try:
+            original_url = repo.remote().url
+            if not original_url:
+                raise ValueError("No remote URL found in repository")
+
+            # Only modify HTTPS URLs
+            if not self.auth_token or not original_url.startswith('https://'):
+                return original_url, False
+
+            provider = self._get_provider_from_url(original_url)
+            if provider == 'unknown':
+                logger.warning(f"Unknown Git provider for URL: {original_url}")
+
+            # Remove any existing credentials from URL
+            url_parts = original_url.split('@')
+            if len(url_parts) > 1:
+                base_url = url_parts[-1]
+                new_url = f"https://{self.auth_token}@{base_url}"
+            else:
+                new_url = original_url.replace("https://", f"https://{self.auth_token}@")
+
+            repo.remote().set_url(new_url)
+            logger.debug("Successfully configured authentication for remote operations")
+            return original_url, True
+
+        except Exception as e:
+            raise ValueError(f"Failed to setup authentication: {str(e)}")
 
     arguments: list = [
         ToolArgument(
@@ -109,7 +200,7 @@ class GitOperationsTool(Tool):
                 "Usage examples:\n"
                 "- operation='create_branch' + branch_name='feature/new-feature'\n"
                 "- operation='commit' + commit_message='Add new feature' + files_to_commit='file1.py,file2.py'\n"
-                "- operation='push' (pushes current branch)\n"
+                "- operation='push' + branch_name='feature/new-feature' (pushes specified branch)\n"
                 "- operation='checkout' + branch_name='main'"
             ),
             required=True,
@@ -174,22 +265,6 @@ class GitOperationsTool(Tool):
         ),
     ]
 
-    def _setup_auth_for_remote(self, repo: Repo) -> tuple[str, str]:
-        """Setup authentication for remote operations if needed.
-        
-        Args:
-            repo: Git repository instance
-        
-        Returns:
-            tuple: Original remote URL and whether URL was modified
-        """
-        original_url = repo.remote().url
-        if self.auth_token and original_url.startswith("https://"):
-            new_url = original_url.replace("https://", f"https://{self.auth_token}@")
-            repo.remote().set_url(new_url)
-            return original_url, True
-        return original_url, False
-
     def execute(
         self,
         repo_path: str,
@@ -217,12 +292,26 @@ class GitOperationsTool(Tool):
         try:
             if not os.path.exists(repo_path):
                 raise ValueError(f"Repository path does not exist: {repo_path}")
+            if not os.path.isdir(os.path.join(repo_path, '.git')):
+                raise ValueError(f"Not a valid Git repository: {repo_path}")
 
             repo = Repo(repo_path)
             
+            # Validate remote configuration for operations that need it
+            if operation in ['push', 'pull']:
+                if not repo.remotes:
+                    raise ValueError("Repository has no configured remotes")
+                remote = repo.remote()
+                if not remote.url:
+                    raise ValueError("Remote URL is not configured")
+
             if operation == "create_branch":
                 if not branch_name:
                     raise ValueError("branch_name is required for create_branch operation")
+                
+                # Check if branch already exists
+                if branch_name in repo.heads:
+                    raise ValueError(f"Branch '{branch_name}' already exists")
                 
                 # Create and checkout new branch
                 current = repo.create_head(branch_name)
@@ -231,69 +320,39 @@ class GitOperationsTool(Tool):
                 return f"Successfully created and checked out branch: {branch_name}"
 
             elif operation == "commit":
-                # Handle default commit behavior
-                if files_to_commit == ".":
-                    # Stage all changes
-                    repo.git.add(A=True)
+                # Validate repository state
+                if repo.is_dirty(untracked_files=True):
+                    # Handle default commit behavior
+                    if files_to_commit == ".":
+                        # Stage all changes
+                        repo.git.add(A=True)
+                    else:
+                        # Stage specific files
+                        for file in files_to_commit.split(","):
+                            file = file.strip()
+                            file_path = os.path.join(repo_path, file)
+                            if os.path.exists(file_path):
+                                repo.git.add(file)
+                            else:
+                                logger.warning(f"File not found: {file}")
+
+                    # Get list of staged files
+                    staged_files = repo.index.diff("HEAD")
+                    if not staged_files:
+                        return "No changes to commit"
+
+                    # Generate default commit message if none provided
+                    if not commit_message:
+                        status = repo.git.status('--porcelain')
+                        changes = self._analyze_changes(status)
+                        commit_message = self._generate_commit_message(changes)
+
+                    # Create commit
+                    commit = repo.index.commit(commit_message)
+                    logger.info(f"Created commit: {commit.hexsha[:8]}")
+                    return f"Successfully created commit: {commit.hexsha[:8]}\n{commit_message}"
                 else:
-                    # Stage specific files
-                    for file in files_to_commit.split(","):
-                        file = file.strip()
-                        if os.path.exists(os.path.join(repo_path, file)):
-                            repo.git.add(file)
-                        else:
-                            logger.warning(f"File not found: {file}")
-
-                # Get list of staged files
-                staged_files = repo.index.diff("HEAD")
-                if not staged_files:
                     return "No changes to commit"
-
-                # Generate default commit message if none provided
-                if not commit_message:
-                    # Get status of staged files
-                    status = repo.git.status('--porcelain')
-                    added = []
-                    modified = []
-                    deleted = []
-                    
-                    for line in status.split('\n'):
-                        if line:
-                            status_code = line[:2]
-                            file_path = line[3:]
-                            if status_code.startswith('A'):
-                                added.append(file_path)
-                            elif status_code.startswith('M'):
-                                modified.append(file_path)
-                            elif status_code.startswith('D'):
-                                deleted.append(file_path)
-                    
-                    # Build commit message
-                    message_parts = []
-                    if added:
-                        message_parts.append(f"Add {len(added)} file(s)")
-                    if modified:
-                        message_parts.append(f"Update {len(modified)} file(s)")
-                    if deleted:
-                        message_parts.append(f"Remove {len(deleted)} file(s)")
-                    
-                    commit_message = " & ".join(message_parts)
-                    
-                    # Add file details
-                    details = []
-                    if added:
-                        details.append("\nAdded files:\n- " + "\n- ".join(added))
-                    if modified:
-                        details.append("\nModified files:\n- " + "\n- ".join(modified))
-                    if deleted:
-                        details.append("\nDeleted files:\n- " + "\n- ".join(deleted))
-                    
-                    commit_message += "".join(details)
-
-                # Create commit
-                commit = repo.index.commit(commit_message)
-                logger.info(f"Created commit: {commit_message}")
-                return f"Successfully created commit: {commit.hexsha[:8]}\n{commit_message}"
 
             elif operation in ["push", "pull"]:
                 # Setup authentication if needed
@@ -301,18 +360,18 @@ class GitOperationsTool(Tool):
                 
                 try:
                     if operation == "push":
+                        current_branch = repo.active_branch
                         try:
-                            repo.remote().push()
+                            # Try to push with current configuration
+                            repo.remote().push(current_branch)
                         except GitCommandError as e:
                             if "no upstream branch" in str(e).lower():
-                                # Get current branch name
-                                current_branch = repo.active_branch.name
                                 # Set upstream and push
-                                repo.git.push('--set-upstream', 'origin', current_branch)
+                                repo.git.push('--set-upstream', 'origin', current_branch.name)
                             else:
                                 raise
-                        logger.info("Pushed changes to remote repository")
-                        result = "Successfully pushed changes to remote repository"
+                        logger.info(f"Pushed changes to remote repository on branch: {current_branch.name}")
+                        result = f"Successfully pushed changes to remote repository on branch: {current_branch.name}"
                     else:  # pull
                         repo.remote().pull()
                         logger.info("Pulled latest changes from remote repository")
@@ -330,6 +389,9 @@ class GitOperationsTool(Tool):
                 
                 # Check if branch exists
                 if branch_name in repo.heads:
+                    # Check if there are uncommitted changes
+                    if repo.is_dirty():
+                        raise ValueError("Cannot checkout branch: You have uncommitted changes")
                     # Checkout existing branch
                     repo.heads[branch_name].checkout()
                     logger.info(f"Checked out existing branch: {branch_name}")
@@ -346,11 +408,69 @@ class GitOperationsTool(Tool):
             if self.auth_token:
                 error_msg = error_msg.replace(self.auth_token, "***")
             logger.error(f"Git operation failed: {error_msg}")
-            raise GitCommandError(f"Git operation failed: {error_msg}", e.status)
+            raise GitCommandError("Git operation failed", e.status)
         
         except Exception as e:
             logger.error(f"An error occurred during Git operation: {str(e)}")
             raise ValueError(f"An error occurred during Git operation: {str(e)}")
+
+    def _analyze_changes(self, status: str) -> dict:
+        """Analyze Git status output to categorize changes.
+        
+        Args:
+            status: Git status porcelain output
+            
+        Returns:
+            dict: Categorized changes
+        """
+        changes = {
+            'added': [],
+            'modified': [],
+            'deleted': []
+        }
+        
+        for line in status.split('\n'):
+            if line:
+                status_code = line[:2]
+                file_path = line[3:]
+                if status_code.startswith('A'):
+                    changes['added'].append(file_path)
+                elif status_code.startswith('M'):
+                    changes['modified'].append(file_path)
+                elif status_code.startswith('D'):
+                    changes['deleted'].append(file_path)
+        
+        return changes
+
+    def _generate_commit_message(self, changes: dict) -> str:
+        """Generate a descriptive commit message from changes.
+        
+        Args:
+            changes: Dictionary of categorized changes
+            
+        Returns:
+            str: Generated commit message
+        """
+        message_parts = []
+        if changes['added']:
+            message_parts.append(f"Add {len(changes['added'])} file(s)")
+        if changes['modified']:
+            message_parts.append(f"Update {len(changes['modified'])} file(s)")
+        if changes['deleted']:
+            message_parts.append(f"Remove {len(changes['deleted'])} file(s)")
+        
+        commit_message = " & ".join(message_parts)
+        
+        # Add file details
+        details = []
+        if changes['added']:
+            details.append("\nAdded files:\n- " + "\n- ".join(changes['added']))
+        if changes['modified']:
+            details.append("\nModified files:\n- " + "\n- ".join(changes['modified']))
+        if changes['deleted']:
+            details.append("\nDeleted files:\n- " + "\n- ".join(changes['deleted']))
+        
+        return commit_message + "".join(details)
 
 
 if __name__ == "__main__":
@@ -399,8 +519,9 @@ if __name__ == "__main__":
                 operation="pull"
             )
 
-        except (GitCommandError, ValueError) as e:
-            logger.error(f"Error during Git operations: {str(e)}")
+        except Exception as e:
+            logger.error(f"Example failed: {str(e)}")
+            raise
 
     # To run the example, uncomment and modify the path:
     # run_example("/path/to/your/repo")

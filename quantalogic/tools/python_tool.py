@@ -43,7 +43,7 @@ class PythonTool(Tool):
         "print('Hello, World!')  # ✓ Valid\n"
         "plt.show()             # ✗ Invalid\n"
     )
-    need_validation: bool = True
+    need_validation: bool = False
     arguments: list[ToolArgument] = [
         ToolArgument(
             name="install_commands",

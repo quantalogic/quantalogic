@@ -10,7 +10,7 @@ class EditWholeContentTool(Tool):
 
     name: str = "edit_whole_content_tool"
     description: str = "Edits the whole content of an existing file."
-    need_validation: bool = True
+    need_validation: bool = False
     arguments: list = [
         ToolArgument(
             name="file_path",

@@ -41,7 +41,16 @@ from quantalogic.tools import (
     SequenceTool,
     SQLQueryTool,
     ComposioTool,
-    SQLQueryToolAdvanced
+    CloneRepoTool,
+    GitOperationsTool,
+    SQLQueryToolAdvanced,
+    MarkdownToPdfTool,
+    MarkdownToPptxTool,
+    MarkdownToHtmlTool,
+    MarkdownToEpubTool,
+    MarkdownToIpynbTool,
+    MarkdownToLatexTool,
+    MarkdownToDocxTool,
 )
 from composio import ComposioToolSet, Action
 
@@ -568,22 +577,37 @@ def create_custom_agent(
             on_token=console_print_token if not no_stream else None,
             # event_emitter=event_emitter
         ),
+        "clone_repo_tool": lambda params: CloneRepoTool(auth_token=params.get("auth_token", "")),
+        "git_operations_tool": lambda params: GitOperationsTool(auth_token=params.get("auth_token", "")),
+        "markdown_to_pdf": lambda params: MarkdownToPdfTool(),
+        "markdown_to_pptx": lambda params: MarkdownToPptxTool(),
+        "markdown_to_html": lambda params: MarkdownToHtmlTool(),
+        "markdown_to_epub": lambda params: MarkdownToEpubTool(),
+        "markdown_to_ipynb": lambda params: MarkdownToIpynbTool(),
+        "markdown_to_latex": lambda params: MarkdownToLatexTool(),
+        "markdown_to_docx": lambda params: MarkdownToDocxTool(),
+        "email_tool": lambda params: ComposioTool(
+            action="GMAIL_SEND_EMAIL",
+            name="email_tool",
+            description="Send emails via Gmail",
+            need_validation=False
+        ),
+        "callendar_tool": lambda params: ComposioTool(
+            action="GOOGLECALENDAR_CREATE_EVENT",
+            name="callendar_tool",
+            description="Create events in Google Calendar",
+            need_validation=False
+        ),
+        "weather_tool": lambda params: ComposioTool(
+            action="WEATHERMAP_WEATHER",
+            name="weather_tool",
+            description="Get weather information for a location"
+        ),
         # "task_complete": lambda params: TaskCompleteTool()
     }
-    
-    # Initialize tools with unique names for each action
-    # weather_tool = ComposioTool(
-    #     action="WEATHERMAP_WEATHER",
-    #     name="weather_tool",
-    #     description="Get weather information for a location"
-    # )
-    # 
-    # email_tool = ComposioTool(
-    #     action="GMAIL_SEND_EMAIL",
-    #     name="email_tool",
-    #     description="Send emails via Gmail",
-    #     need_validation=True
-    # )
+        
+     
+
     agent_tools = []
     # Add tools only if they are provided
     if tools:
@@ -600,13 +624,13 @@ def create_custom_agent(
                 
                 if tool:  # Some tools (like llm_vision) might return None
                     agent_tools.append(tool)
-
-    # Always add TaskCompleteTool as it's required for the agent to function
+                    
     agent_tools.append(TaskCompleteTool())
 
-    # Add Composio tools with unique names
-    # agent_tools.append(weather_tool)
-    # agent_tools.append(email_tool)
+    # Always add TaskCompleteTool as it's required for the agent to function
+    # auth_token = "****"
+    # agent_tools.append(CloneRepoTool(auth_token=auth_token))
+    # agent_tools.append(GitOperationsTool(auth_token=auth_token))   
 
     return Agent(
         model_name=model_name,

@@ -9,7 +9,7 @@ Why this tool:
 """
 
 import os
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, ClassVar, Union, Any
 import json
 from pathlib import Path
 import shutil
@@ -30,14 +30,18 @@ from quantalogic.tools.tool import Tool, ToolArgument
 class MarkdownToHtmlTool(Tool):
     """Converts markdown to professional HTML documents with advanced formatting."""
 
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
+    
     name: str = "markdown_to_html_tool"
     description: str = (
         "Converts markdown to HTML with support for images, Mermaid diagrams, "
         "code blocks, tables, and advanced styling."
     )
-    need_validation: bool = True
+    need_validation: bool = False
     
-    arguments: list = [
+    arguments: List[ToolArgument] = [
         ToolArgument(
             name="markdown_content",
             arg_type="string",
@@ -76,7 +80,7 @@ class MarkdownToHtmlTool(Tool):
     ]
 
     # Default style configuration
-    DEFAULT_STYLES: Dict[str, str] = {
+    DEFAULT_STYLES: ClassVar[Dict[str, str]] = {
         "theme": "light",
         "font_family": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Ubuntu, sans-serif",
         "code_font": "Consolas, 'Source Code Pro', monospace",
@@ -90,7 +94,7 @@ class MarkdownToHtmlTool(Tool):
     }
 
     # Default HTML template
-    DEFAULT_TEMPLATE = """
+    DEFAULT_TEMPLATE: ClassVar[str] = """
     <!DOCTYPE html>
     <html lang="en">
     <head>

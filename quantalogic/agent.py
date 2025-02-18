@@ -19,6 +19,7 @@ from quantalogic.utils import get_environment
 from quantalogic.utils.ask_user_validation import console_ask_for_user_validation
 from quantalogic.xml_parser import ToleranceXMLParser
 from quantalogic.xml_tool_parser import ToolParser
+import json
 
 # Maximum ratio occupancy of the occupied memory
 MAX_OCCUPANCY = 90.0
@@ -688,11 +689,15 @@ class Agent(BaseModel):
         """Interpolate variables using $var$ syntax in the given text."""
         try:
             import re
-
             for var in self.variable_store.keys():
                 # Escape the variable name for regex, but use raw value for replacement
                 pattern = rf"\${re.escape(var)}\$"
-                replacement = self.variable_store[var]
+                value = self.variable_store[var]
+                # Convert dictionary values to JSON strings
+                if isinstance(value, dict):
+                    replacement = json.dumps(value)
+                else:
+                    replacement = str(value)
                 text = re.sub(pattern, replacement, text)
             return text
         except Exception as e:

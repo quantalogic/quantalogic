@@ -38,7 +38,7 @@ class NodeJsTool(Tool):
         "console.log('Hello, World!')  # ✓ Valid\n"
         "window.alert()                # ✗ Invalid\n"
     )
-    need_validation: bool = True
+    need_validation: bool = False
     arguments: list[ToolArgument] = [
         ToolArgument(
             name="install_commands",

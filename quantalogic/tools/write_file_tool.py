@@ -10,7 +10,7 @@ class WriteFileTool(Tool):
 
     name: str = "write_file_tool"
     description: str = "Writes a file with the given content. The tool will fail if the file already exists when not used in append mode."
-    need_validation: bool = True
+    need_validation: bool = False
     arguments: list = [
         ToolArgument(
             name="file_path",

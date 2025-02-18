@@ -35,7 +35,7 @@ class MarkdownToIpynbTool(Tool):
         "Converts markdown to Jupyter Notebook format with support for "
         "executable code cells, rich media, and interactive elements."
     )
-    need_validation: bool = True
+    need_validation: bool = False
     
     arguments: list = [
         ToolArgument(

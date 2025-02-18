@@ -9,7 +9,7 @@ Why this tool:
 """
 
 import os
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, ClassVar, Union, Any
 import json
 from pathlib import Path
 import re
@@ -27,16 +27,20 @@ from quantalogic.tools.tool import Tool, ToolArgument
 
 
 class MarkdownToLatexTool(Tool):
-    """Converts markdown to professional LaTeX documents with academic formatting."""
+    """Converts markdown to professional LaTeX documents with advanced formatting."""
 
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
+    
     name: str = "markdown_to_latex_tool"
     description: str = (
-        "Converts markdown to LaTeX with support for equations, citations, "
-        "figures, tables, and academic formatting."
+        "Converts markdown to LaTeX with support for images, Mermaid diagrams, "
+        "code blocks, tables, and advanced formatting."
     )
-    need_validation: bool = True
+    need_validation: bool = False
     
-    arguments: list = [
+    arguments: List[ToolArgument] = [
         ToolArgument(
             name="markdown_content",
             arg_type="string",
@@ -74,62 +78,75 @@ class MarkdownToLatexTool(Tool):
         ),
     ]
 
-    # Default style configuration
-    DEFAULT_STYLES: Dict[str, any] = {
-        "font_size": "11pt",
-        "paper_size": "a4paper",
-        "margin": "1in",
-        "font_package": "times",
-        "packages": [
-            "amsmath",
-            "amssymb",
-            "graphicx",
-            "hyperref",
-            "caption",
-            "subcaption",
-            "float",
-            "booktabs",
-            "listings",
-            "xcolor",
-        ],
-        "bibliography_style": "plain",
-        "line_spacing": "1.5",
-    }
-
-    # LaTeX document template
-    DOCUMENT_TEMPLATE = """\\documentclass[{font_size},{paper_size}]{{article}}
+    DOCUMENT_TEMPLATE: ClassVar[str] = r"""\documentclass[{font_size},{paper_size}]{article}
 
 % Packages
 {packages}
 
 % Document settings
-\\usepackage[{margin}]{{geometry}}
-\\usepackage{{{font_package}}}
-\\usepackage[utf8]{{inputenc}}
-\\usepackage[T1]{{fontenc}}
+\usepackage[{margin}]{geometry}
+\usepackage{{font_package}}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
 
 % Hyperref settings
-\\hypersetup{{
+\hypersetup{
     colorlinks=true,
     linkcolor=blue,
     filecolor=magenta,
     urlcolor=cyan,
-    pdftitle={{{title}}}
-}}
+    pdftitle={{title}}
+}
 
-\\setlength{{\\parskip}}{{1em}}
-\\renewcommand{{\\baselinestretch}}{{{line_spacing}}}
+\setlength{\parskip}{1em}
+\renewcommand{\baselinestretch}{line_spacing}
 
 {extra_preamble}
 
-\\begin{{document}}
+\begin{document}
 
 {content}
 
 {bibliography}
 
-\\end{{document}}
+\end{document}
 """
+
+    DEFAULT_PACKAGES: ClassVar[List[str]] = [
+        "graphicx",
+        "hyperref",
+        "listings",
+        "xcolor",
+        "amsmath",
+        "amssymb",
+        "booktabs",
+        "float",
+        "caption",
+        "subcaption",
+        "fancyhdr",
+        "titlesec",
+        "enumitem",
+        "microtype",
+    ]
+
+    DEFAULT_STYLES: ClassVar[Dict[str, Union[str, float, List[str]]]] = {
+        "font_size": "12pt",
+        "paper_size": "a4paper",
+        "margin": "margin=1in",
+        "font_package": "lmodern",
+        "line_spacing": 1.15,
+        "code_style": {
+            "basicstyle": r"\ttfamily\small",
+            "breaklines": "true",
+            "commentstyle": r"\color{gray}",
+            "keywordstyle": r"\color{blue}",
+            "stringstyle": r"\color{green!50!black}",
+            "numberstyle": r"\tiny\color{gray}",
+            "frame": "single",
+            "rulecolor": r"\color{black!30}",
+            "backgroundcolor": r"\color{gray!5}",
+        }
+    }
 
     def _normalize_path(self, path: str) -> Path:
         """Convert path string to normalized Path object."""
@@ -137,7 +154,7 @@ class MarkdownToLatexTool(Tool):
             path = os.path.expanduser(path)
         return Path(path).resolve()
 
-    def _parse_style_config(self, style_config: Optional[str]) -> Dict[str, any]:
+    def _parse_style_config(self, style_config: Optional[str]) -> Dict[str, Any]:
         """Parse and validate style configuration."""
         try:
             if not style_config:
@@ -338,7 +355,7 @@ class MarkdownToLatexTool(Tool):
             content = re.sub(r'\[([^\]]+)\]\(([^\)]+)\)', r'\\href{\2}{\1}', content)
 
             # Generate package includes
-            packages = '\n'.join(f"\\usepackage{{{pkg}}}" for pkg in styles['packages'])
+            packages = '\n'.join(f"\\usepackage{{{pkg}}}" for pkg in self.DEFAULT_PACKAGES)
 
             # Generate bibliography settings
             bibliography = ""

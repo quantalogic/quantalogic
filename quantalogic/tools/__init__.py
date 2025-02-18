@@ -1,13 +1,13 @@
 """Tools for the QuantaLogic agent."""
 
 from .agent_tool import AgentTool
-from .dalle_e import LLMImageGenerationTool
+from .image_generation.dalle_e import LLMImageGenerationTool
 from .download_http_file_tool import DownloadHttpFileTool
 from .duckduckgo_search_tool import DuckDuckGoSearchTool
 from .edit_whole_content_tool import EditWholeContentTool
 from .elixir_tool import ElixirTool
 from .execute_bash_command_tool import ExecuteBashCommandTool
-from .generate_database_report_tool import GenerateDatabaseReportTool
+from .database.generate_database_report_tool import GenerateDatabaseReportTool
 from .grep_app_tool import GrepAppTool
 from .input_question_tool import InputQuestionTool
 from .jinja_tool import JinjaTool
@@ -27,15 +27,24 @@ from .search_definition_names import SearchDefinitionNames
 from .sequence_tool import SequenceTool
 from .serpapi_search_tool import SerpApiSearchTool
 from .sql_query_tool import SQLQueryTool
-from .sql_query_tool_advanced import SQLQueryToolAdvanced
+from .database.sql_query_tool_advanced import SQLQueryToolAdvanced
 from .task_complete_tool import TaskCompleteTool
 from .tool import Tool, ToolArgument
 from .unified_diff_tool import UnifiedDiffTool
 from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
-from .google_news_tool import GoogleNewsTool
-from .presentation_llm_tool import PresentationLLMTool 
-from .composio import ComposioTool 
+from .google_packages.google_news_tool import GoogleNewsTool
+from .presentation_tools.presentation_llm_tool import PresentationLLMTool 
+from .composio.composio import ComposioTool 
+from .git.clone_repo_tool import CloneRepoTool 
+from .git.git_operations_tool import GitOperationsTool
+from .document_tools.markdown_to_pdf_tool import MarkdownToPdfTool
+from .document_tools.markdown_to_pptx_tool import MarkdownToPptxTool
+from .document_tools.markdown_to_html_tool import MarkdownToHtmlTool
+from .document_tools.markdown_to_epub_tool import MarkdownToEpubTool
+from .document_tools.markdown_to_ipynb_tool import MarkdownToIpynbTool
+from .document_tools.markdown_to_latex_tool import MarkdownToLatexTool
+from .document_tools.markdown_to_docx_tool import MarkdownToDocxTool
 
 __all__ = [
     "WikipediaSearchTool",
@@ -71,9 +80,17 @@ __all__ = [
     'SQLQueryTool',
     'SQLQueryToolAdvanced',
     'SafePythonInterpreterTool',
-    'LLMGenerationTool',
     'GoogleNewsTool',
     "PresentationLLMTool", 
     'SequenceTool',
-    'ComposioTool'
+    'CloneRepoTool',
+    'GitOperationsTool',
+    'ComposioTool',
+    'MarkdownToPdfTool',
+    'MarkdownToPptxTool',
+    'MarkdownToHtmlTool',
+    'MarkdownToEpubTool',
+    'MarkdownToIpynbTool',
+    'MarkdownToLatexTool',
+    'MarkdownToDocxTool',
 ]

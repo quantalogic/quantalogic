@@ -7,9 +7,12 @@ from git import Repo
 from git.exc import GitCommandError
 from loguru import logger
 from pydantic import Field
+from pathlib import Path
 
 from quantalogic.tools.tool import Tool, ToolArgument
 
+# Base directory for all cloned repositories
+GITHUB_REPOS_BASE_DIR = "/tmp/github_repos"
 
 class CloneRepoTool(Tool):
     """Tool for cloning Git repositories."""
@@ -43,9 +46,9 @@ class CloneRepoTool(Tool):
         ToolArgument(
             name="target_path",
             arg_type="string",
-            description="The local path where the repository should be cloned",
+            description="The local path where the repository should be cloned (must be within /tmp/github_repos)",
             required=True,
-            example="/path/to/clone/directory",
+            example="/tmp/github_repos/repo_name",
         ),
         ToolArgument(
             name="branch",
@@ -91,12 +94,22 @@ class CloneRepoTool(Tool):
     def _prepare_target_directory(self, target_path: str) -> None:
         """Prepare the target directory for cloning.
         
-        If the directory exists, it will be removed. Then a new empty directory
-        will be created.
+        Ensures the target directory is within GITHUB_REPOS_BASE_DIR and prepares it for cloning.
         
         Args:
             target_path: Path where the repository will be cloned
+            
+        Raises:
+            ValueError: If the target path is not within GITHUB_REPOS_BASE_DIR
         """
+        # Ensure base directory exists
+        os.makedirs(GITHUB_REPOS_BASE_DIR, exist_ok=True)
+        
+        # Convert to absolute path and ensure it's within GITHUB_REPOS_BASE_DIR
+        abs_target = os.path.abspath(target_path)
+        if not abs_target.startswith(GITHUB_REPOS_BASE_DIR):
+            raise ValueError(f"Target directory must be within {GITHUB_REPOS_BASE_DIR}")
+        
         if os.path.exists(target_path):
             logger.info(f"Target directory exists, removing: {target_path}")
             try:
@@ -111,11 +124,11 @@ class CloneRepoTool(Tool):
         logger.info(f"Created clean target directory: {target_path}")
 
     def execute(self, repo_url: str, target_path: str, branch: str = "main") -> str:
-        """Clones a Git repository to the specified path.
+        """Clones a Git repository to the specified path within GITHUB_REPOS_BASE_DIR.
 
         Args:
             repo_url: URL of the Git repository
-            target_path: Local path where to clone the repository
+            target_path: Local path where to clone the repository (must be within GITHUB_REPOS_BASE_DIR)
             branch: Branch to clone (defaults to main)
 
         Returns:
@@ -123,9 +136,14 @@ class CloneRepoTool(Tool):
 
         Raises:
             GitCommandError: If there's an error during cloning
-            ValueError: If the parameters are invalid
+            ValueError: If the parameters are invalid or target_path is outside GITHUB_REPOS_BASE_DIR
         """
         try:
+            # Ensure target_path is within GITHUB_REPOS_BASE_DIR
+            if not os.path.abspath(target_path).startswith(GITHUB_REPOS_BASE_DIR):
+                target_path = os.path.join(GITHUB_REPOS_BASE_DIR, os.path.basename(target_path))
+                logger.info(f"Adjusting target path to: {target_path}")
+
             # Prepare target directory (remove if exists and create new)
             self._prepare_target_directory(target_path)
 

@@ -8,16 +8,16 @@ Why this tool:
 """
 
 import os
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Union, Any
 import json
 from pathlib import Path
 
 from loguru import logger
 from pydantic import Field
-from python_pptx import Presentation
-from python_pptx.util import Pt, Inches
-from python_pptx.dml.color import RGBColor
-from python_pptx.enum.text import PP_ALIGN
+from pptx import Presentation
+from pptx.util import Pt, Inches
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN
 import markdown
 import mermaid
 from bs4 import BeautifulSoup, Tag
@@ -30,20 +30,57 @@ from quantalogic.tools.tool import Tool, ToolArgument
 class MarkdownToPptxTool(Tool):
     """Converts markdown to professional PowerPoint presentations with advanced formatting."""
 
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
+    
     name: str = "markdown_to_pptx_tool"
     description: str = (
         "Converts markdown to PPTX with support for images, Mermaid diagrams, "
         "code blocks, and advanced slide formatting."
     )
-    need_validation: bool = True
+    need_validation: bool = False
     
-    arguments: list = [
+    arguments: List[ToolArgument] = [
         ToolArgument(
             name="markdown_content",
             arg_type="string",
-            description="Markdown content with slide separators (---) and support for Mermaid, images, code blocks",
+            description="Markdown content where slides are separated by '---'. Supports headers, bullet points, numbered lists, bold/italic text, code blocks, and Mermaid diagrams.",
             required=True,
-            example="# Title Slide\n\nSubtitle\n\n---\n\n# Content Slide\n\n- Bullet points\n- With **bold** text\n\n```mermaid\ngraph TD\nA-->B\n```",
+            example='''# Project Overview
+Quarterly Update Q1 2024
+
+---
+
+# Key Achievements
+- **Revenue Growth**: 25% YoY increase
+- **New Features**: 
+  - AI-powered recommendations
+  - Real-time analytics
+- **Customer Satisfaction**: 4.8/5
+
+---
+
+# Technical Architecture
+```mermaid
+graph TD
+    A[Frontend] --> B[API Gateway]
+    B --> C[Microservices]
+    C --> D[Database]
+```
+
+---
+
+# Next Steps
+1. Launch mobile app
+2. Expand to new markets
+3. Enhance AI capabilities
+
+---
+
+# Questions?
+Thank you for your attention!
+''',
         ),
         ToolArgument(
             name="output_path",
@@ -69,7 +106,7 @@ class MarkdownToPptxTool(Tool):
     ]
 
     # Default style configuration
-    DEFAULT_STYLES: Dict[str, any] = {
+    DEFAULT_STYLES: Dict[str, Union[str, int, List[int]]] = {
         "font_name": "Calibri",
         "title_size": 44,
         "body_size": 24,
@@ -123,29 +160,75 @@ class MarkdownToPptxTool(Tool):
         layout = prs.slide_layouts[0]  # Title slide layout
         slide = prs.slides.add_slide(layout)
         
-        title_shape = slide.shapes.title
-        title_shape.text = title
+        # Add title
+        if slide.shapes.title:
+            title_shape = slide.shapes.title
+            title_shape.text = title
         
-        if subtitle and slide.placeholders.get(1):  # Subtitle placeholder
-            subtitle_shape = slide.placeholders[1]
-            subtitle_shape.text = subtitle
+        # Add subtitle if it exists and there's a subtitle placeholder
+        if subtitle:
+            try:
+                subtitle_shape = slide.placeholders[1]  # Index 1 is typically the subtitle placeholder
+                subtitle_shape.text = subtitle
+            except (KeyError, IndexError):
+                logger.warning("No subtitle placeholder found in the slide layout")
 
     def _add_content_slide(self, prs: Presentation, title: str, content: str, styles: Dict):
         """Add a content slide with formatted text and elements."""
         layout = prs.slide_layouts[1]  # Content slide layout
         slide = prs.slides.add_slide(layout)
         
-        # Add title
-        title_shape = slide.shapes.title
-        title_shape.text = title
+        # Add title if title placeholder exists
+        if slide.shapes.title:
+            title_shape = slide.shapes.title
+            title_shape.text = title
+            self._apply_text_style(
+                title_shape.text_frame.paragraphs[0],
+                styles["font_name"],
+                styles["title_size"],
+                styles["primary_color"]
+            )
         
-        # Add content
-        content_shape = slide.placeholders[1]
-        tf = content_shape.text_frame
-        
-        # Process markdown content
-        # TODO: Implement markdown parsing and element handling
-        tf.text = content  # Placeholder implementation
+        try:
+            # Get content placeholder
+            content_shape = slide.placeholders[1]
+            tf = content_shape.text_frame
+            tf.clear()  # Clear existing content
+            
+            # Convert markdown to HTML for better parsing
+            html_content = markdown.markdown(content)
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # Process content
+            for element in soup.children:
+                if isinstance(element, str):
+                    continue
+                    
+                if element.name == 'ul':
+                    # Handle bullet points
+                    for li in element.find_all('li'):
+                        p = tf.add_paragraph()
+                        p.level = 0
+                        p.text = li.get_text().strip()
+                        self._apply_text_style(p, styles["font_name"], styles["body_size"], styles["text_color"])
+                elif element.name == 'p':
+                    # Handle paragraphs
+                    p = tf.add_paragraph()
+                    p.text = element.get_text().strip()
+                    self._apply_text_style(p, styles["font_name"], styles["body_size"], styles["text_color"])
+                
+        except (KeyError, IndexError) as e:
+            logger.warning(f"Error adding content to slide: {str(e)}")
+            # Fallback to basic text box if no content placeholder
+            left = Inches(1)
+            top = Inches(2)
+            width = Inches(8)
+            height = Inches(5)
+            txBox = slide.shapes.add_textbox(left, top, width, height)
+            tf = txBox.text_frame
+            p = tf.add_paragraph()
+            p.text = content
+            self._apply_text_style(p, styles["font_name"], styles["body_size"], styles["text_color"])
 
     def execute(self, **kwargs) -> Dict:
         """Convert markdown content to a PowerPoint presentation."""

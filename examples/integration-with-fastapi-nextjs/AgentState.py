@@ -44,7 +44,7 @@ SHUTDOWN_TIMEOUT = 10.0  # seconds
 class AgentState:
     """Manages agent state and event queues."""
 
-    def __init__(self, use_default_agent: bool = True):
+    def __init__(self, use_default_agent: bool = False):
         """Initialize the AgentState.
         
         Args:

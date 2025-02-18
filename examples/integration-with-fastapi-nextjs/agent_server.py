@@ -152,7 +152,7 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-@app.post("/validation/{validation_id}")
+@app.post("/api/agent/validation/{validation_id}")
 async def submit_validation_response(validation_id: str, response: UserValidationResponse):
     """Submit a validation response."""
     logger.info(f"Received validation response for ID: {validation_id}")
@@ -173,7 +173,7 @@ async def submit_validation_response(validation_id: str, response: UserValidatio
         raise HTTPException(status_code=500, detail="Failed to process validation response")
 
 
-@app.get("/events")
+@app.get("/api/agent/events")
 async def event_stream(request: Request, task_id: Optional[str] = None) -> StreamingResponse:
     """SSE endpoint for streaming agent events."""
 
@@ -231,7 +231,7 @@ async def event_stream(request: Request, task_id: Optional[str] = None) -> Strea
     )
 
 
-@app.get("/")
+@app.get("/api/agent/")
 async def get_index(request: Request) -> HTMLResponse:
     """Serve the main application page."""
     # response = templates.TemplateResponse("index.html", {"request": request})
@@ -242,7 +242,7 @@ async def get_index(request: Request) -> HTMLResponse:
     return HTMLResponse(content="")
 
 
-@app.post("/upload")
+@app.post("/api/agent/upload")
 async def upload_file(file: UploadFile = File(...)) -> Dict[str, str]:
     """Handle file uploads."""
     try:
@@ -265,7 +265,7 @@ async def upload_file(file: UploadFile = File(...)) -> Dict[str, str]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/tasks")
+@app.post("/api/agent/tasks")
 async def submit_task(request: TaskSubmission) -> Dict[str, str]:
     """Submit a new task and return its ID."""
     task_id = await agent_state.submit_task(request)
@@ -274,7 +274,7 @@ async def submit_task(request: TaskSubmission) -> Dict[str, str]:
     return {"task_id": task_id}
 
 
-@app.get("/tasks/{task_id}")
+@app.get("/api/agent/tasks/{task_id}")
 async def get_task_status(task_id: str) -> TaskStatus:
     """Get the status of a specific task."""
     if task_id not in agent_state.tasks:
@@ -284,7 +284,7 @@ async def get_task_status(task_id: str) -> TaskStatus:
     return TaskStatus(task_id=task_id, **task)
 
 
-@app.get("/tasks")
+@app.get("/api/agent/tasks")
 async def list_tasks(status: Optional[str] = None, limit: int = 10, offset: int = 0) -> List[TaskStatus]:
     """List all tasks with optional filtering."""
     tasks = []
@@ -296,18 +296,18 @@ async def list_tasks(status: Optional[str] = None, limit: int = 10, offset: int 
 
 
 # Agent management endpoints
-@app.post("/agents")
+@app.post("/api/agent/agents")
 async def create_agent(config: AgentConfig) -> Dict[str, bool]:
     """Create a new agent with the given configuration."""
     success = await agent_state.create_agent(config)
     return {"success": success}
 
-@app.get("/agents")
+@app.get("/api/agent/agents")
 async def list_agents() -> List[AgentConfig]:
     """List all available agents."""
     return agent_state.list_agents()
 
-@app.get("/agents/{agent_id}")
+@app.get("/api/agent/agents/{agent_id}")
 async def get_agent(agent_id: str) -> AgentConfig:
     """Get agent configuration by ID."""
     config = agent_state.get_agent_config(agent_id)
@@ -321,11 +321,11 @@ if __name__ == "__main__":
         "quantalogic.agent_server:app",
         host="0.0.0.0",
         port=8002,
-        reload=True,
+        #reload=True,
         log_level="info",
-        timeout_keep_alive=5,
+        #timeout_keep_alive=5,
         access_log=True,
-        timeout_graceful_shutdown=10,  # Increased from 5 to 10 seconds
+        #timeout_graceful_shutdown=10,  # Increased from 5 to 10 seconds
     )
     server = uvicorn.Server(config)
     server_state.server = server

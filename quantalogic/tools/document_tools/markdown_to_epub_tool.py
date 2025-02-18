@@ -9,7 +9,7 @@ Why this tool:
 """
 
 import os
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, ClassVar, Union, Any
 import json
 from pathlib import Path
 import uuid
@@ -30,16 +30,20 @@ from quantalogic.tools.tool import Tool, ToolArgument
 
 
 class MarkdownToEpubTool(Tool):
-    """Converts markdown to professional ePub books with rich formatting."""
+    """Converts markdown to professional EPUB documents with advanced formatting."""
 
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
+    
     name: str = "markdown_to_epub_tool"
     description: str = (
-        "Converts markdown to ePub with support for chapters, images, "
-        "interactive elements, and custom styling."
+        "Converts markdown to EPUB with support for images, Mermaid diagrams, "
+        "code blocks, tables, and advanced styling."
     )
-    need_validation: bool = True
+    need_validation: bool = False
     
-    arguments: list = [
+    arguments: List[ToolArgument] = [
         ToolArgument(
             name="markdown_content",
             arg_type="string",
@@ -50,7 +54,7 @@ class MarkdownToEpubTool(Tool):
         ToolArgument(
             name="output_path",
             arg_type="string",
-            description="Path for saving the ePub file",
+            description="Path for saving the EPUB file",
             required=True,
             example="/path/to/output.epub",
         ),
@@ -78,21 +82,7 @@ class MarkdownToEpubTool(Tool):
     ]
 
     # Default style configuration
-    DEFAULT_STYLES: Dict[str, str] = {
-        "theme": "light",
-        "font_family": "Literata, serif",
-        "heading_font": "Literata, serif",
-        "code_font": "Source Code Pro, monospace",
-        "text_color": "#333333",
-        "background_color": "#ffffff",
-        "link_color": "#0366d6",
-        "heading_color": "#1a1a1a",
-        "line_height": "1.6",
-        "max_width": "40em",
-    }
-
-    # Default CSS template
-    DEFAULT_CSS = """
+    DEFAULT_CSS: ClassVar[str] = """
         @import url('https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,400;0,600;1,400&family=Source+Code+Pro&display=swap');
 
         :root {
@@ -198,6 +188,19 @@ class MarkdownToEpubTool(Tool):
         }
     """
 
+    DEFAULT_STYLES: ClassVar[Dict[str, str]] = {
+        "theme": "light",
+        "font_family": "'Literata', Georgia, serif",
+        "heading_font": "'Literata', Georgia, serif",
+        "code_font": "'Source Code Pro', monospace",
+        "line_height": "1.6",
+        "max_width": "45em",
+        "text_color": "#333333",
+        "heading_color": "#222222",
+        "link_color": "#0366d6",
+        "background_color": "#ffffff"
+    }
+
     def _normalize_path(self, path: str) -> Path:
         """Convert path string to normalized Path object."""
         if path.startswith("~"):
@@ -293,7 +296,7 @@ class MarkdownToEpubTool(Tool):
         return nav
 
     def execute(self, **kwargs) -> str:
-        """Execute the markdown to ePub conversion.
+        """Execute the markdown to EPUB conversion.
         
         Args:
             **kwargs: Tool arguments including markdown_content, output_path,
@@ -316,7 +319,7 @@ class MarkdownToEpubTool(Tool):
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
 
-                # Initialize epub book
+                # Initialize EPUB book
                 book = epub.EpubBook()
 
                 # Set metadata
@@ -391,13 +394,13 @@ class MarkdownToEpubTool(Tool):
                         )
                         book.add_item(epub_image)
 
-                # Write epub file
+                # Write EPUB file
                 epub.write_epub(str(output_path), book, {})
 
-            return f"Successfully created ePub at: {output_path}"
+            return f"Successfully created EPUB at: {output_path}"
 
         except Exception as e:
-            error_msg = f"Error converting markdown to ePub: {str(e)}"
+            error_msg = f"Error converting markdown to EPUB: {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
