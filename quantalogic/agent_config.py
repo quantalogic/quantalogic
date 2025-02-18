@@ -51,6 +51,8 @@ from quantalogic.tools import (
     MarkdownToIpynbTool,
     MarkdownToLatexTool,
     MarkdownToDocxTool,
+    BitbucketCloneTool,
+    BitbucketOperationsTool
 )
 from composio import ComposioToolSet, Action
 
@@ -578,6 +580,8 @@ def create_custom_agent(
             # event_emitter=event_emitter
         ),
         "clone_repo_tool": lambda params: CloneRepoTool(auth_token=params.get("auth_token", "")),
+        "bitbucket_clone_repo_tool": lambda params: BitbucketCloneTool(access_token=params.get("access_token", "")),
+        "bitbucket_operations_tool": lambda params: BitbucketOperationsTool(access_token=params.get("access_token", "")),
         "git_operations_tool": lambda params: GitOperationsTool(auth_token=params.get("auth_token", "")),
         "markdown_to_pdf": lambda params: MarkdownToPdfTool(),
         "markdown_to_pptx": lambda params: MarkdownToPptxTool(),
@@ -624,7 +628,7 @@ def create_custom_agent(
                 
                 if tool:  # Some tools (like llm_vision) might return None
                     agent_tools.append(tool)
-                    
+
     agent_tools.append(TaskCompleteTool())
 
     # Always add TaskCompleteTool as it's required for the agent to function

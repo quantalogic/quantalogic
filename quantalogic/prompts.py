@@ -93,18 +93,6 @@ Task Format: <task>task_description</task>
 5. 🔍 Monitor and validate each action's impact
 6. 🛑 Fail fast and adapt when encountering blockers
 7. ✅ Verify completion criteria rigorously
-8. ✅ Return complete, usable results
-
-
- ✅ final response:
-
-- if a tool for presentation (like presentation_llm_tool) is available, always use it, and format the response accordingly.
-```xml
-<final_response>
-  <!-- Direct content return, in format if applicable   -->
-</final_response>
-```
-
+8. ✅ Return complete, full and usable results.
 
 """
-

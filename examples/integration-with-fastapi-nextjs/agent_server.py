@@ -46,10 +46,27 @@ logger.add(
     level="INFO",
 )
 class ToolParameters(BaseModel):
-    """Parameters for a tool configuration."""
-    connection_string: Optional[str] = None
+    """Parameters for tool configurations.
+    
+    This class defines all possible parameters that can be passed to different tools.
+    Each tool will only use the parameters it needs.
+    """
+    # LLM and Model related parameters
     model_name: Optional[str] = None
+    vision_model_name: Optional[str] = None
+    provider: Optional[str] = None
+    additional_info: Optional[str] = None
 
+    # Database related parameters
+    connection_string: Optional[str] = None
+
+    # Git related parameters
+    access_token: Optional[str] = None  # For Bitbucket
+    auth_token: Optional[str] = None    # For GitHub and other git operations
+
+    class Config:
+        """Pydantic config for ToolParameters."""
+        extra = "allow"  # Allow extra fields for future extensibility
 
 class ToolConfig(BaseModel):
     """Configuration for a single tool."""

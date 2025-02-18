@@ -13,7 +13,7 @@ from .input_question_tool import InputQuestionTool
 from .jinja_tool import JinjaTool
 from .list_directory_tool import ListDirectoryTool
 from .llm_tool import LLMTool
-from .llm_vision_tool import LLMVisionTool
+from .llm_vision_tool import LLMVisionTool 
 from .markitdown_tool import MarkitdownTool
 from .nodejs_tool import NodeJsTool
 from .python_tool import PythonTool
@@ -37,6 +37,8 @@ from .google_packages.google_news_tool import GoogleNewsTool
 from .presentation_tools.presentation_llm_tool import PresentationLLMTool 
 from .composio.composio import ComposioTool 
 from .git.clone_repo_tool import CloneRepoTool 
+from .git.bitbucket_clone_repo_tool import BitbucketCloneTool 
+from .git.bitbucket_operations_tool import BitbucketOperationsTool 
 from .git.git_operations_tool import GitOperationsTool
 from .document_tools.markdown_to_pdf_tool import MarkdownToPdfTool
 from .document_tools.markdown_to_pptx_tool import MarkdownToPptxTool
@@ -93,4 +95,6 @@ __all__ = [
     'MarkdownToIpynbTool',
     'MarkdownToLatexTool',
     'MarkdownToDocxTool',
+    "BitbucketCloneTool",
+    "BitbucketOperationsTool"
 ]
