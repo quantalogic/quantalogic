@@ -49,6 +49,7 @@ llmlingua = "^0.2.2"
 jinja2 = "^3.1.5"
 beautifulsoup4 = "^4.12.3"
 markdownify = "^0.14.1"
+tvDatafeed = { git = "https://github.com/rongardF/tvdatafeed.git" }
 requests = "^2.32.3"
 sqlalchemy = "^2.0.37"
 python-dotenv = "^1.0.1"
@@ -71,6 +72,10 @@ pygments = "^2.19.1"
 bibtexparser = "^1.4.3"
 ebooklib = "^0.18"
 nbformat = "^5.10.4"
+ta = "^0.11.0"
+pandas = "^2.2.3"
+numpy = "^2.2.3"
+yfinance = "^0.2.53"
 
 [tool.poetry.scripts]
 quantalogic = "quantalogic.main:cli"
