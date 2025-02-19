@@ -52,7 +52,8 @@ from quantalogic.tools import (
     MarkdownToLatexTool,
     MarkdownToDocxTool,
     BitbucketCloneTool,
-    BitbucketOperationsTool
+    BitbucketOperationsTool,
+    CSVProcessorTool
 )
 from composio import ComposioToolSet, Action
 
@@ -384,6 +385,7 @@ def create_custom_agent(
         "markdown_to_ipynb": lambda params: MarkdownToIpynbTool(),
         "markdown_to_latex": lambda params: MarkdownToLatexTool(),
         "markdown_to_docx": lambda params: MarkdownToDocxTool(),
+        "csv_processor": lambda params: CSVProcessorTool(),
         "email_tool": lambda params: ComposioTool(
             action="GMAIL_SEND_EMAIL",
             name="email_tool",

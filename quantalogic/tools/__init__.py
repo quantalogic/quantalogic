@@ -47,6 +47,7 @@ from .document_tools.markdown_to_epub_tool import MarkdownToEpubTool
 from .document_tools.markdown_to_ipynb_tool import MarkdownToIpynbTool
 from .document_tools.markdown_to_latex_tool import MarkdownToLatexTool
 from .document_tools.markdown_to_docx_tool import MarkdownToDocxTool
+from .utilities.csv_processor_tool import CSVProcessorTool
 
 __all__ = [
     "WikipediaSearchTool",
@@ -96,5 +97,6 @@ __all__ = [
     'MarkdownToLatexTool',
     'MarkdownToDocxTool',
     "BitbucketCloneTool",
-    "BitbucketOperationsTool"
+    "BitbucketOperationsTool",
+    "CSVProcessorTool"
 ]
