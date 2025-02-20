@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union, ClassVar, Tuple
+from typing import Dict, List, Optional, Union, ClassVar, Tuple, Any
 import pandas as pd
 import numpy as np
 from loguru import logger
@@ -10,8 +10,8 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
+from pydantic import model_validator
 
-from quantalogic import Agent
 from quantalogic.tools import Tool, ToolArgument
 
 @dataclass
@@ -28,8 +28,8 @@ class MarketData:
 class TradingViewTool(Tool):
     """Advanced TradingView data retrieval and analysis tool with real-time capabilities."""
 
-    name: str = "tradingview_tool"
-    description: str = "Enhanced financial data and analysis tool using TradingView"
+    name: ClassVar[str] = "tradingview_tool"
+    description: ClassVar[str] = "Enhanced financial data and analysis tool using TradingView"
 
     # Mapping intervals to tvDatafeed format
     INTERVAL_MAPPING: ClassVar[Dict[str, Interval]] = {
@@ -48,48 +48,73 @@ class TradingViewTool(Tool):
         '1M': Interval.in_monthly
     }
 
-    arguments: list[ToolArgument] = [
+    arguments: ClassVar[list[ToolArgument]] = [
         ToolArgument(
             name="symbols",
-            arg_type="list",
-            description="List of symbols to analyze (e.g., ['BTCUSDT', 'ETHUSDT'])",
+            arg_type="string",
+            description="Comma-separated list of symbols (e.g., 'AAPL,MSFT,GOOGL')",
             required=True
         ),
         ToolArgument(
             name="exchanges",
-            arg_type="list",
-            description="List of exchanges (e.g., ['BINANCE', 'COINBASE'])",
+            arg_type="string",
+            description="Comma-separated list of exchanges (e.g., 'NASDAQ,NYSE')",
             required=True
         ),
         ToolArgument(
             name="interval",
             arg_type="string",
-            description="Timeframe (1m/3m/5m/15m/30m/45m/1h/2h/3h/4h/1d/1w/1M)",
+            description="Time interval (1m/3m/5m/15m/30m/1h/2h/4h/1d/1w/1M)",
             required=False,
             default="1h"
         ),
         ToolArgument(
-            name="lookback_days",
-            arg_type="integer",
-            description="Number of days to look back",
+            name="lookback_periods",
+            arg_type="string",
+            description="Number of periods to look back",
             required=False,
-            default=30
+            default="500"
         ),
         ToolArgument(
             name="analysis_types",
-            arg_type="list",
-            description="Types of analysis to perform (technical/patterns/support_resistance/volume/all)",
+            arg_type="string",
+            description="Comma-separated analysis types (technical,patterns,volume,all)",
             required=False,
-            default=["all"]
+            default="all"
         ),
         ToolArgument(
             name="credentials_path",
             arg_type="string",
-            description="Path to TradingView credentials file",
+            description="Path to credentials file",
             required=False,
             default="config/tradingview_credentials.json"
         )
     ]
+
+    @model_validator(mode='before')
+    def validate_arguments(cls, values):
+        """Validate tool arguments."""
+        try:
+            # Validate interval
+            if 'interval' in values and values['interval'] not in cls.INTERVAL_MAPPING:
+                raise ValueError(f"Invalid interval: {values['interval']}")
+
+            # Validate symbols format
+            if 'symbols' in values:
+                symbols = values['symbols'].split(',')
+                if not all(symbol.strip() for symbol in symbols):
+                    raise ValueError("Invalid symbols format")
+
+            # Validate exchanges format
+            if 'exchanges' in values:
+                exchanges = values['exchanges'].split(',')
+                if not all(exchange.strip() for exchange in exchanges):
+                    raise ValueError("Invalid exchanges format")
+
+            return values
+        except Exception as e:
+            logger.error(f"Error validating arguments: {e}")
+            raise
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -232,20 +257,24 @@ class TradingViewTool(Tool):
             logger.error(f"Error calculating support/resistance: {e}")
             raise
 
-    async def execute(self, agent: Agent, **kwargs) -> Dict:
+    async def execute(self,  **kwargs) -> Dict:
         """Execute the TradingView tool with enhanced analysis capabilities."""
         try:
+            # Validate arguments
+            if not self.validate_arguments(**kwargs):
+                raise ValueError("Invalid arguments")
+
             # Initialize client
             self._initialize_client(kwargs.get('credentials_path', 'config/tradingview_credentials.json'))
             
-            symbols = kwargs['symbols']
-            exchanges = kwargs['exchanges']
+            symbols = [symbol.strip() for symbol in kwargs['symbols'].split(',')]
+            exchanges = [exchange.strip() for exchange in kwargs['exchanges'].split(',')]
             interval = self.INTERVAL_MAPPING[kwargs.get('interval', '1h')]
-            lookback_days = kwargs.get('lookback_days', 30)
-            analysis_types = kwargs.get('analysis_types', ['all'])
+            lookback_periods = int(kwargs.get('lookback_periods', '500'))  # Convert to int
+            analysis_types = [analysis_type.strip() for analysis_type in kwargs.get('analysis_types', 'all').split(',')]
             
             # Calculate number of bars based on interval and lookback
-            n_bars = self._calculate_n_bars(interval, lookback_days)
+            n_bars = self._calculate_n_bars(interval, lookback_periods)
             
             # Fetch data for all symbol-exchange pairs concurrently
             tasks = []
@@ -281,7 +310,7 @@ class TradingViewTool(Tool):
             logger.error(f"Error executing TradingView tool: {e}")
             raise
 
-    def _calculate_n_bars(self, interval: Interval, lookback_days: int) -> int:
+    def _calculate_n_bars(self, interval: Interval, lookback_periods: int) -> int:
         """Calculate number of bars needed based on interval and lookback period."""
         interval_minutes = {
             Interval.in_1_minute: 1,
@@ -299,24 +328,9 @@ class TradingViewTool(Tool):
             Interval.in_monthly: 43200
         }
         
-        minutes_in_lookback = lookback_days * 24 * 60
+        minutes_in_lookback = lookback_periods * interval_minutes[interval]
         return minutes_in_lookback // interval_minutes[interval]
 
     def validate_arguments(self, **kwargs) -> bool:
         """Validate the provided arguments."""
-        try:
-            required_args = [arg.name for arg in self.arguments if arg.required]
-            for arg in required_args:
-                if arg not in kwargs:
-                    raise ValueError(f"Missing required argument: {arg}")
-
-            if 'interval' in kwargs and kwargs['interval'] not in self.INTERVAL_MAPPING:
-                raise ValueError(f"Invalid interval: {kwargs['interval']}")
-
-            if len(kwargs.get('symbols', [])) != len(kwargs.get('exchanges', [])):
-                raise ValueError("Number of symbols must match number of exchanges")
-
-            return True
-        except Exception as e:
-            logger.error(f"Argument validation error: {e}")
-            return False
+        return super().validate_arguments(**kwargs)

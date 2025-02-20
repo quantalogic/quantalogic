@@ -5,8 +5,7 @@ import pandas as pd
 import numpy as np
 from loguru import logger
 import requests
-
-from quantalogic import Agent
+ 
 from quantalogic.tools import Tool, ToolArgument
 
 class GFinanceTool(Tool):
@@ -137,7 +136,7 @@ class GFinanceTool(Tool):
             logger.error(f"Error fetching fundamental data: {e}")
             return {}
 
-    def execute(self, agent: Agent, **kwargs) -> Dict:
+    def execute(self,  **kwargs) -> Dict:
         """Execute the Google Finance tool with the provided parameters."""
         ticker = kwargs.get('ticker')
         start_date = kwargs.get('start_date')

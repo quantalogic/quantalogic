@@ -6,7 +6,6 @@ import pandas as pd
 import yfinance as yf
 from loguru import logger
 
-from quantalogic import Agent
 from quantalogic.tools import Tool, ToolArgument
 
 class YFinanceTool(Tool):

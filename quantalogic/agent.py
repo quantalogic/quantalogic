@@ -738,8 +738,9 @@ class Agent(BaseModel):
             "2. You will receive the tool's output in the next user response\n"
             "3. Choose the most appropriate tool for each step\n"
             "4. If it's not asked to write on files, don't use write_file tool\n"
-            "5. Give the final full answer using all the variables\n"
-            "6. Use task_complete tool to confirm task completion with the content of the final answer\n"
+            "5. If files are writter, then use tool to display the prepared download link\n"
+            "6. Give the final full answer using all the variables\n"
+            "7. Use task_complete tool to confirm task completion with the full content of the final answer\n"
         )
         return prompt_use_tools
 

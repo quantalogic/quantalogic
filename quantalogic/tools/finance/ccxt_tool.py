@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, Union, Any, ClassVar
 import pandas as pd
 import numpy as np
 from loguru import logger
@@ -13,8 +13,8 @@ import hmac
 import hashlib
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pydantic import field_validator
 
-from quantalogic import Agent
 from quantalogic.tools import Tool, ToolArgument
 
 @dataclass
@@ -32,47 +32,46 @@ class MarketData:
 class CCXTTool(Tool):
     """Advanced cryptocurrency trading and analysis tool using CCXT."""
 
-    name: str = "ccxt_tool"
-    description: str = "Enhanced cryptocurrency trading and analysis tool using CCXT"
-
-    # Common timeframes across exchanges
-    TIMEFRAMES = [
+    name: ClassVar[str] = "ccxt_tool"
+    description: ClassVar[str] = "Enhanced cryptocurrency trading and analysis tool using CCXT"
+    
+    TIMEFRAMES: ClassVar[List[str]] = [
         '1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M'
     ]
 
-    arguments: list[ToolArgument] = [
+    arguments: ClassVar[list[ToolArgument]] = [
         ToolArgument(
             name="exchange_ids",
-            arg_type="list",
-            description="List of exchange IDs (e.g., ['binance', 'kucoin'])",
+            arg_type="string",
+            description="Comma-separated exchange IDs (e.g., 'binance,kucoin')",
             required=True
         ),
         ToolArgument(
             name="symbols",
-            arg_type="list",
-            description="List of trading pairs (e.g., ['BTC/USDT', 'ETH/USDT'])",
+            arg_type="string",
+            description="Comma-separated trading pairs (e.g., 'BTC/USDT,ETH/USDT')",
             required=True
         ),
         ToolArgument(
             name="timeframe",
             arg_type="string",
-            description="Timeframe for data (1m/5m/15m/1h/4h/1d/1w)",
+            description="Time interval for data",
             required=False,
             default="1h"
         ),
         ToolArgument(
             name="lookback_periods",
-            arg_type="integer",
-            description="Number of candles to look back",
+            arg_type="string",
+            description="Number of periods to analyze",
             required=False,
-            default=500
+            default="500"
         ),
         ToolArgument(
             name="analysis_types",
-            arg_type="list",
-            description="Types of analysis (technical/patterns/orderbook/volume/all)",
+            arg_type="string",
+            description="Comma-separated analysis types (technical,patterns,volume,all)",
             required=False,
-            default=["all"]
+            default="all"
         ),
         ToolArgument(
             name="credentials_path",
@@ -88,6 +87,36 @@ class CCXTTool(Tool):
         self.exchanges: Dict[str, ccxt.Exchange] = {}
         self.cache = {}
         self.executor = ThreadPoolExecutor(max_workers=4)
+
+    def validate_arguments(self, **kwargs) -> bool:
+        """Validate tool arguments."""
+        try:
+            # Validate required arguments
+            required_args = [arg.name for arg in self.arguments if arg.required]
+            for arg in required_args:
+                if arg not in kwargs:
+                    raise ValueError(f"Missing required argument: {arg}")
+
+            # Validate timeframe
+            if 'timeframe' in kwargs and kwargs['timeframe'] not in self.TIMEFRAMES:
+                raise ValueError(f"Invalid timeframe: {kwargs['timeframe']}")
+
+            # Validate exchange IDs format
+            if 'exchange_ids' in kwargs:
+                exchange_ids = kwargs['exchange_ids'].split(',')
+                if not all(exchange_id.strip() for exchange_id in exchange_ids):
+                    raise ValueError("Invalid exchange IDs format")
+
+            # Validate trading pairs format
+            if 'symbols' in kwargs:
+                symbols = kwargs['symbols'].split(',')
+                if not all('/' in symbol for symbol in symbols):
+                    raise ValueError("Invalid trading pair format. Must be in format BASE/QUOTE")
+
+            return True
+        except Exception as e:
+            logger.error(f"Error validating arguments: {e}")
+            raise
 
     async def _initialize_exchanges(self, exchange_ids: List[str], credentials_path: str) -> None:
         """Initialize exchange instances with credentials if available."""
@@ -289,14 +318,16 @@ class CCXTTool(Tool):
             logger.error(f"Error analyzing volume profile: {e}")
             raise
 
-    async def execute(self, agent: Agent, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> Dict[str, Any]:
         """Execute the CCXT tool with comprehensive analysis."""
         try:
-            exchange_ids = kwargs['exchange_ids']
-            symbols = kwargs['symbols']
+            self.validate_arguments(**kwargs)
+            
+            exchange_ids = kwargs['exchange_ids'].split(',')  # Split comma-separated string
+            symbols = kwargs['symbols'].split(',')  # Split comma-separated string
             timeframe = kwargs.get('timeframe', '1h')
-            lookback_periods = kwargs.get('lookback_periods', 500)
-            analysis_types = kwargs.get('analysis_types', ['all'])
+            lookback_periods = int(kwargs.get('lookback_periods', '500'))  # Convert to int
+            analysis_types = kwargs.get('analysis_types', 'all').split(',')  # Split comma-separated string
             credentials_path = kwargs.get('credentials_path', 'config/exchange_credentials.json')
             
             # Initialize exchanges
@@ -345,19 +376,3 @@ class CCXTTool(Tool):
         except Exception as e:
             logger.error(f"Error executing CCXT tool: {e}")
             raise
-
-    def validate_arguments(self, **kwargs) -> bool:
-        """Validate the provided arguments."""
-        try:
-            required_args = [arg.name for arg in self.arguments if arg.required]
-            for arg in required_args:
-                if arg not in kwargs:
-                    raise ValueError(f"Missing required argument: {arg}")
-
-            if 'timeframe' in kwargs and kwargs['timeframe'] not in self.TIMEFRAMES:
-                raise ValueError(f"Invalid timeframe: {kwargs['timeframe']}")
-
-            return True
-        except Exception as e:
-            logger.error(f"Argument validation error: {e}")
-            return False

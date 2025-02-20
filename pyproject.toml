@@ -76,6 +76,7 @@ ta = "^0.11.0"
 pandas = "^2.2.3"
 numpy = "^2.2.3"
 yfinance = "^0.2.53"
+ccxt = "^4.4.61"
 
 [tool.poetry.scripts]
 quantalogic = "quantalogic.main:cli"

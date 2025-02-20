@@ -19,7 +19,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from loguru import logger
@@ -172,22 +172,17 @@ async def log_requests(request: Request, call_next):
 @app.post("/api/agent/validation/{validation_id}")
 async def submit_validation_response(validation_id: str, response: UserValidationResponse):
     """Submit a validation response."""
-    logger.info(f"Received validation response for ID: {validation_id}")
-    logger.info(f"Current validation responses: {list(agent_state.validation_responses.keys())}")
-    
     if validation_id not in agent_state.validation_responses:
-        logger.error(f"Validation request {validation_id} not found")
-        logger.error(f"Available validation IDs: {list(agent_state.validation_responses.keys())}")
         raise HTTPException(status_code=404, detail="Validation request not found")
 
     try:
         response_queue = agent_state.validation_responses[validation_id]
-        logger.info(f"Validation response received: {response.approved}")
-        await response_queue.put(response.approved)
+        await response_queue.put(response.response)
         return JSONResponse(content={"status": "success"})
     except Exception as e:
-        logger.error(f"Error processing validation response: {e}", exc_info=True)
+        logger.error(f"Error processing validation response: {e}")
         raise HTTPException(status_code=500, detail="Failed to process validation response")
+    
 
 
 @app.get("/api/agent/events")
@@ -204,6 +199,9 @@ async def event_stream(request: Request, task_id: Optional[str] = None) -> Strea
                 if await request.is_disconnected():
                     logger.debug(f"Client {client_id} disconnected")
                     break
+
+                #logger.info(f"Client {client_id} connected")
+                #logger.info("agent_state.event_queues: " + str(agent_state.event_queues))
 
                 try:
                     # Prioritize task-specific queue if task_id is provided
@@ -331,6 +329,18 @@ async def get_agent(agent_id: str) -> AgentConfig:
     if not config:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
     return config
+
+@app.get("/api/agent/download/{filename}")
+async def download_file(filename: str):
+    """Download a file from the upload directory."""
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type='application/octet-stream'
+    )
 
 
 if __name__ == "__main__":

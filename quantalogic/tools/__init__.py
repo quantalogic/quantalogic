@@ -48,6 +48,17 @@ from .document_tools.markdown_to_ipynb_tool import MarkdownToIpynbTool
 from .document_tools.markdown_to_latex_tool import MarkdownToLatexTool
 from .document_tools.markdown_to_docx_tool import MarkdownToDocxTool
 from .utilities.csv_processor_tool import CSVProcessorTool
+from .utilities.download_file_tool import PrepareDownloadTool
+from .utilities.mermaid_validator_tool import MermaidValidatorTool
+
+# from .finance.yahoo_finance import YFinanceTool
+# from .finance.finance_llm_tool import FinanceLLMTool
+# from .finance.google_finance import GFinanceTool
+# from .finance.alpha_vantage_tool import AlphaVantageTool
+# from .finance.ccxt_tool import CCXTTool
+# from .finance.market_intelligence_tool import MarketIntelligenceTool
+# from .finance.tradingview_tool import TradingViewTool
+# from .finance.technical_analysis_tool import TechnicalAnalysisTool
 
 __all__ = [
     "WikipediaSearchTool",
@@ -98,5 +109,15 @@ __all__ = [
     'MarkdownToDocxTool',
     "BitbucketCloneTool",
     "BitbucketOperationsTool",
-    "CSVProcessorTool"
+    "CSVProcessorTool",
+    "PrepareDownloadTool",
+    "MermaidValidatorTool"
+    # "YFinanceTool",
+    # "FinanceLLMTool",
+    # "GFinanceTool",
+    # "AlphaVantageTool",
+    # "CCXTTool",
+    # "MarketIntelligenceTool",
+    # "TradingViewTool",
+    # "TechnicalAnalysisTool"
 ]

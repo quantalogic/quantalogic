@@ -4,6 +4,7 @@
 
 # Local application imports
 import os
+import logging
 from typing import Any
 import json
 from dotenv import load_dotenv
@@ -53,7 +54,17 @@ from quantalogic.tools import (
     MarkdownToDocxTool,
     BitbucketCloneTool,
     BitbucketOperationsTool,
-    CSVProcessorTool
+    CSVProcessorTool,
+    PrepareDownloadTool,
+    MermaidValidatorTool,
+    # YFinanceTool,
+    # FinanceLLMTool,
+    # AlphaVantageTool,
+    # CCXTTool,
+    # GFinanceTool,
+    # MarketIntelligenceTool,
+    # TradingViewTool,
+    # TechnicalAnalysisTool
 )
 from composio import ComposioToolSet, Action
 
@@ -61,6 +72,7 @@ load_dotenv()
 
 MODEL_NAME = "deepseek/deepseek-chat"
 
+logger = logging.getLogger(__name__)
 
 _current_model_name: str = ""
 
@@ -92,26 +104,26 @@ def create_agent(
         Agent: An agent with the specified model and tools
     """
     tools = [
-        TaskCompleteTool(),
-        ReadFileTool(),
-        ReadFileBlockTool(),
+        # TaskCompleteTool(),
+        # ReadFileTool(),
+        # ReadFileBlockTool(),
         WriteFileTool(),
-        EditWholeContentTool(),
-        InputQuestionTool(),
-        ListDirectoryTool(),
-        ExecuteBashCommandTool(),
-        ReplaceInFileTool(),
-        RipgrepTool(),
-        SearchDefinitionNames(),
-        MarkitdownTool(),
-        LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
-        DownloadHttpFileTool(), 
-        LLMImageGenerationTool(
-                provider="dall-e",
-                model_name="openai/dall-e-3",
-                on_token=console_print_token if not no_stream else None
-            ),
-        ReadHTMLTool(),
+        # EditWholeContentTool(),
+        # InputQuestionTool(),
+        # ListDirectoryTool(),
+        # ExecuteBashCommandTool(),
+        # ReplaceInFileTool(),
+        # RipgrepTool(),
+        # SearchDefinitionNames(),
+        # MarkitdownTool(),
+        # LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
+        # DownloadHttpFileTool(), 
+        # LLMImageGenerationTool(
+        #         provider="dall-e",
+        #         model_name="openai/dall-e-3",
+        #         on_token=console_print_token if not no_stream else None
+        #     ),
+        # ReadHTMLTool(),
        # SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
     ]
 
@@ -323,8 +335,10 @@ def create_custom_agent(
             event_emitter=event_emitter
         ),
         "llm_image_generation": lambda params: LLMImageGenerationTool(
-            provider=params.get("provider", "dall-e"),
-            model_name=params.get("model_name", "openai/dall-e-3"),
+            # provider=params.get("provider", "dall-e"),
+            provider="dall-e",
+            # model_name=params.get("model_name", "openai/dall-e-3"),
+            model_name="openai/dall-e-3",
             on_token=console_print_token if not no_stream else None,
             # event_emitter=event_emitter
         ),
@@ -386,6 +400,8 @@ def create_custom_agent(
         "markdown_to_latex": lambda params: MarkdownToLatexTool(),
         "markdown_to_docx": lambda params: MarkdownToDocxTool(),
         "csv_processor": lambda params: CSVProcessorTool(),
+        "mermaid_validator_tool": lambda params: MermaidValidatorTool(),
+        # "download_file_tool": lambda params: PrepareDownloadTool(),
         "email_tool": lambda params: ComposioTool(
             action="GMAIL_SEND_EMAIL",
             name="email_tool",
@@ -403,27 +419,54 @@ def create_custom_agent(
             name="weather_tool",
             description="Get weather information for a location"
         ),
+        # "YFinanceTool": lambda params: YFinanceTool(),
+        # "FinanceLLMTool": lambda params: FinanceLLMTool(),
+        # "AlphaVantageTool": lambda params: AlphaVantageTool(),
+        # "CCXTTool": lambda params: CCXTTool(),
+        # "GFinanceTool": lambda params: GFinanceTool(),
+        # "MarketIntelligenceTool": lambda params: MarketIntelligenceTool(),
+        # "TradingViewTool": lambda params: TradingViewTool(),
+        # "TechnicalAnalysisTool": lambda params: TechnicalAnalysisTool(),
         # "task_complete": lambda params: TaskCompleteTool()
     }
-        
-     
 
+    # Define write tools that should trigger automatic download tool addition
+    WRITE_TOOLS = {"write_file", "edit_whole_content", "replace_in_file"}
+    
     agent_tools = []
+    has_write_tool = any(
+        tool_config.get("type") in WRITE_TOOLS 
+        for tool_config in (tools or [])
+    )
+
     # Add tools only if they are provided
     if tools:
         for tool_config in tools:
             tool_type = tool_config.get("type")
-            print("tool_type : ", tool_type)
+            logger.debug(f"Processing tool type: {tool_type}")
+            
             if tool_type in tool_mapping:
-                # Get tool parameters or empty dict if not provided
-                tool_params = tool_config.get("parameters", {})
-                
-                # Create tool instance with parameters
-                tool = tool_mapping[tool_type](tool_params)
-                print(" tool : ", tool)
-                
-                if tool:  # Some tools (like llm_vision) might return None
-                    agent_tools.append(tool)
+                try:
+                    # Get tool parameters or empty dict if not provided
+                    tool_params = tool_config.get("parameters", {})
+                    
+                    # Create tool instance with parameters
+                    tool = tool_mapping[tool_type](tool_params)
+                    logger.debug(f"Created tool instance: {tool}")
+                    
+                    if tool:  # Some tools (like llm_vision) might return None
+                        agent_tools.append(tool)
+                        logger.info(f"Added tool: {tool_type}")
+                except Exception as e:
+                    logger.error(f"Failed to create tool {tool_type}: {str(e)}")
+
+    # If any write tool was added, also add the download tool
+    if has_write_tool:
+        try:
+            agent_tools.append(PrepareDownloadTool())
+            logger.info("Added download tool automatically")
+        except Exception as e:
+            logger.error(f"Failed to add download tool: {str(e)}")
 
     agent_tools.append(TaskCompleteTool())
 
@@ -431,7 +474,6 @@ def create_custom_agent(
     # auth_token = "****"
     # agent_tools.append(CloneRepoTool(auth_token=auth_token))
     # agent_tools.append(GitOperationsTool(auth_token=auth_token))   
-
     return Agent(
         model_name=model_name,
         tools=agent_tools,

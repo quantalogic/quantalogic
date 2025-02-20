@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union, Any, Literal
+from typing import Dict, List, Optional, Union, Any, Literal, ClassVar
 import pandas as pd
 import numpy as np
 from loguru import logger
@@ -12,8 +12,8 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 import time
+from pydantic import model_validator
 
-from quantalogic import Agent
 from quantalogic.tools import Tool, ToolArgument
 
 class AssetType(str, Enum):
@@ -51,56 +51,86 @@ class MarketData:
 class AlphaVantageTool(Tool):
     """Advanced multi-asset financial data and analysis tool using Alpha Vantage."""
 
-    name: str = "alpha_vantage_tool"
-    description: str = "Enhanced multi-asset financial data and analysis tool using Alpha Vantage API"
+    name: ClassVar[str] = "alpha_vantage_tool"
+    description: ClassVar[str] = "Enhanced multi-asset financial data and analysis tool using Alpha Vantage API"
 
-    INTERVALS = ['1min', '5min', '15min', '30min', '60min', 'daily', 'weekly', 'monthly']
+    INTERVALS: ClassVar[List[str]] = ['1min', '5min', '15min', '30min', '60min', 'daily', 'weekly', 'monthly']
     
     # Rate limiting settings
-    MAX_REQUESTS_PER_MINUTE = 5
-    last_request_time = 0
+    MAX_REQUESTS_PER_MINUTE: ClassVar[int] = 5
+    last_request_time: float = 0
 
-    arguments: list[ToolArgument] = [
+    arguments: ClassVar[list[ToolArgument]] = [
         ToolArgument(
             name="symbols",
-            arg_type="list",
-            description="List of symbols to analyze",
+            arg_type="string",
+            description="Comma-separated list of symbols (e.g., 'AAPL,MSFT,GOOGL')",
             required=True
         ),
         ToolArgument(
-            name="asset_types",
-            arg_type="list",
-            description="List of asset types (stock/forex/crypto/commodity/etf/index)",
+            name="asset_type",
+            arg_type="string",
+            description="Type of asset (stock/forex/crypto)",
             required=True
         ),
         ToolArgument(
-            name="data_types",
-            arg_type="list",
-            description="Types of data to fetch (intraday/daily/weekly/monthly/quote/fundamental/economic/news)",
+            name="function",
+            arg_type="string",
+            description="Alpha Vantage function (TIME_SERIES_INTRADAY/DAILY/WEEKLY/MONTHLY)",
             required=True
         ),
         ToolArgument(
             name="interval",
             arg_type="string",
-            description="Time interval for data (1min/5min/15min/30min/60min/daily/weekly/monthly)",
+            description="Time interval (1min/5min/15min/30min/60min) - only for intraday",
             required=False,
-            default="daily"
+            default="5min"
         ),
         ToolArgument(
-            name="output_size",
+            name="outputsize",
             arg_type="string",
-            description="Amount of data to retrieve (compact/full)",
+            description="Output size (compact/full)",
             required=False,
             default="compact"
         ),
         ToolArgument(
-            name="api_key_path",
+            name="api_key",
             arg_type="string",
-            description="Path to Alpha Vantage API key file",
+            description="Alpha Vantage API key",
+            required=True
+        ),
+        ToolArgument(
+            name="indicators",
+            arg_type="string",
+            description="Comma-separated technical indicators to calculate (e.g., 'SMA,RSI,MACD')",
             required=False,
-            default="config/alphavantage_config.json"
+            default="all"
+        ),
+        ToolArgument(
+            name="lookback_periods",
+            arg_type="string",
+            description="Number of periods to analyze",
+            required=False,
+            default="500"
         )
     ]
+
+    @model_validator(mode='before')
+    def validate_arguments(cls, values):
+        """Validate tool arguments."""
+        try:
+            # Validate interval format
+            if 'interval' in values and values['interval'] not in cls.INTERVALS:
+                raise ValueError(f"Invalid interval: {values['interval']}")
+
+            # Validate symbols and asset types match
+            if len(values.get('symbols', '').split(',')) != len(values.get('asset_type', '').split(',')):
+                raise ValueError("Number of symbols must match number of asset types")
+
+            return values
+        except Exception as e:
+            logger.error(f"Error validating arguments: {e}")
+            raise
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -336,32 +366,34 @@ class AlphaVantageTool(Tool):
         else:
             return f'TIME_SERIES{suffix}'
 
-    async def execute(self, agent: Agent, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> Dict[str, Any]:
         """Execute the Alpha Vantage tool with comprehensive analysis."""
         try:
             # Load API key
             self._load_api_key(kwargs.get('api_key_path', 'config/alphavantage_config.json'))
             
-            symbols = kwargs['symbols']
-            asset_types = [AssetType(at) for at in kwargs['asset_types']]
-            data_types = [DataType(dt) for dt in kwargs['data_types']]
-            interval = kwargs.get('interval', 'daily')
-            output_size = kwargs.get('output_size', 'compact')
+            symbols = kwargs['symbols'].split(',')
+            asset_type = AssetType(kwargs['asset_type'])
+            function = kwargs['function']
+            interval = kwargs.get('interval', '5min')
+            outputsize = kwargs.get('outputsize', 'compact')
+            lookback_periods = int(kwargs.get('lookback_periods', '500'))
+            indicators = kwargs.get('indicators', 'all').split(',')
             
             results = {}
             
             # Fetch time series data for each symbol
-            for symbol, asset_type in zip(symbols, asset_types):
-                if any(dt in [DataType.INTRADAY, DataType.DAILY, DataType.WEEKLY, DataType.MONTHLY] for dt in data_types):
+            for symbol in symbols:
+                if any(dt in [DataType.INTRADAY, DataType.DAILY, DataType.WEEKLY, DataType.MONTHLY] for dt in [DataType(function)]):
                     market_data = await self._fetch_time_series(
-                        symbol, asset_type, interval, output_size
+                        symbol, asset_type, interval, outputsize
                     )
                     
                     # Calculate technical indicators
                     self._calculate_technical_indicators(market_data)
                     
                     # Fetch fundamental data for stocks
-                    if asset_type == AssetType.STOCK and DataType.FUNDAMENTAL in data_types:
+                    if asset_type == AssetType.STOCK and function == 'FUNDAMENTAL':
                         market_data.fundamental_data = await self._fetch_fundamental_data(symbol)
                     
                     results[symbol] = {
@@ -372,14 +404,14 @@ class AlphaVantageTool(Tool):
                     }
             
             # Fetch news sentiment if requested
-            if DataType.NEWS in data_types:
+            if function == 'NEWS':
                 news_data = await self._fetch_news_sentiment(symbols)
                 for symbol in symbols:
                     if symbol in results:
                         results[symbol]['news_sentiment'] = news_data
             
             # Fetch economic data if requested
-            if DataType.ECONOMIC in data_types:
+            if function == 'ECONOMIC':
                 economic_indicators = [
                     'REAL_GDP',
                     'REAL_GDP_PER_CAPITA',
@@ -404,19 +436,4 @@ class AlphaVantageTool(Tool):
 
     def validate_arguments(self, **kwargs) -> bool:
         """Validate the provided arguments."""
-        try:
-            required_args = [arg.name for arg in self.arguments if arg.required]
-            for arg in required_args:
-                if arg not in kwargs:
-                    raise ValueError(f"Missing required argument: {arg}")
-
-            if 'interval' in kwargs and kwargs['interval'] not in self.INTERVALS:
-                raise ValueError(f"Invalid interval: {kwargs['interval']}")
-
-            if len(kwargs.get('symbols', [])) != len(kwargs.get('asset_types', [])):
-                raise ValueError("Number of symbols must match number of asset types")
-
-            return True
-        except Exception as e:
-            logger.error(f"Argument validation error: {e}")
-            return False
+        return super().validate_arguments(**kwargs)

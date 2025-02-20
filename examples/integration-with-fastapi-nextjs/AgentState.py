@@ -39,6 +39,7 @@ from .models import EventMessage, UserValidationRequest, UserValidationResponse,
 
 memory = AgentMemory()
 SHUTDOWN_TIMEOUT = 10.0  # seconds
+VALIDATION_TIMEOUT = 30.0  # seconds
 
 
 class AgentState:
@@ -57,11 +58,12 @@ class AgentState:
         self.queue_lock = Lock()
         self.client_counter = 0
         self.agent = None
+        self.validation_requests: Dict[str, Dict[str, Any]] = {}
+        self.validation_responses: Dict[str, asyncio.Queue] = {}
         self.agent_registry = AgentRegistry()
         self.agent_configs: Dict[str, AgentConfig] = {}  # Store agent configurations
         # Add validation-related attributes
-        self.validation_requests: Dict[str, UserValidationRequest] = {}
-        self.validation_responses: Dict[str, asyncio.Queue] = {}
+        
         self.use_default_agent = use_default_agent  # Flag to control default agent usage
         # List of events to listen for
         self.agent_events = [
@@ -78,16 +80,16 @@ class AgentState:
             "error_tool_execution",
             "error_max_iterations_reached",
             "error_model_response",
-            # "stream_event",
-            # "stream_chunk",
-            # "final_result",
-            # "error",
-            # "stream_start",
-            # "stream_end",
-            # "memory_full",
-            # "memory_compacted",
-            # "memory_summary",
-            # "error_agent_not_found",
+            "stream_event",
+            # "stream_chunk",
+            # "final_result",
+            # "error",
+            # "stream_start",
+            # "stream_end",
+            # "memory_full",
+            # "memory_compacted",
+            # "memory_summary",
+            # "error_agent_not_found",
         ]
 
     async def create_agent(self, config: AgentConfig) -> bool:
@@ -132,8 +134,8 @@ class AgentState:
                 memory=AgentMemory()
             )
              
-            # Override ask_for_user_validation with SSE-based method
-            # agent.ask_for_user_validation = self.sse_ask_for_user_validation
+            # Override ask_for_user_validation with SSE-based method 
+            agent.ask_for_user_validation = self.sse_ask_for_user_validation
 
             # Set up event handlers
             self._setup_agent_events(agent)
@@ -147,6 +149,35 @@ class AgentState:
         except Exception as e:
             logger.error(f"Failed to create agent: {e}", exc_info=True)
             raise
+
+    
+    async def sse_ask_for_user_validation(self, question: str = "Do you want to continue?") -> bool:
+        """SSE-based user validation method."""
+        validation_id = str(uuid.uuid4())
+        response_queue = asyncio.Queue()
+
+        # Store validation request and response queue
+        self.validation_requests[validation_id] = {"question": question, "timestamp": datetime.now().isoformat()}
+        self.validation_responses[validation_id] = response_queue
+
+        # Broadcast validation request
+        self.broadcast_event("user_validation_request", {"validation_id": validation_id, "question": question})
+
+        try:
+            # Wait for response with timeout
+            async with asyncio.timeout(VALIDATION_TIMEOUT):
+                response = await response_queue.get()
+                return response
+        except TimeoutError:
+            logger.warning(f"Validation request timed out: {validation_id}")
+            return False
+        finally:
+            # Cleanup
+            if validation_id in self.validation_requests:
+                del self.validation_requests[validation_id]
+            if validation_id in self.validation_responses:
+                del self.validation_responses[validation_id]
+
 
     def get_agent_config(self, agent_id: str) -> Optional[AgentConfig]:
         """Get the configuration for an agent.
@@ -251,27 +282,6 @@ class AgentState:
             logger.error(f"Failed to initialize agent: {e}", exc_info=True)
             raise
 
-    def _create_minimal_agent(self, model_name: str, mode: str, tools: List[str] = None, expertise: str = "") -> Agent:
-        """Create a minimal agent with the specified model.
-        
-        Args:
-            model_name: Name of the model to use
-            mode: Mode for agent creation
-            tools: List of tools to use for custom mode
-            expertise: Expertise to use for custom mode
-            
-        Returns:
-            The created agent instance
-        """
-        return create_agent_for_mode(
-            mode=mode,
-            model_name=model_name,
-            vision_model_name=None,
-            no_stream=False,
-            tools=tools,
-            specific_expertise=expertise
-        )
-
     def _setup_agent_events(self, agent: Agent) -> None:
         """Set up event handlers for the agent."""
         # Instead of removing all listeners, we'll track our handlers
@@ -317,29 +327,6 @@ class AgentState:
             # Use console_print_events for consistent event formatting
             console_print_events(event_type, data)
             
-            # Handle validation events
-            if event_type == "tool_execute_validation_start":
-                validation_id = data.get("validation_id")
-                if validation_id:
-                    logger.info(f"Creating validation response queue for validation_id: {validation_id}")
-                    logger.info(f"Current validation queues before creation: {list(self.validation_responses.keys())}")
-                    self.validation_responses[validation_id] = asyncio.Queue()
-                    self.validation_requests[validation_id] = UserValidationRequest(
-                        validation_id=validation_id,
-                        tool_name=data.get("tool_name", ""),
-                        arguments=data.get("arguments", {})
-                    )
-                    logger.info(f"Validation queue created. Current queues: {list(self.validation_responses.keys())}")
-            elif event_type == "tool_execute_validation_end":
-                validation_id = data.get("validation_id")
-                if validation_id and validation_id in self.validation_responses:
-                    logger.info(f"Cleaning up validation response queue for validation_id: {validation_id}")
-                    logger.info(f"Current validation queues before cleanup: {list(self.validation_responses.keys())}")
-                    del self.validation_responses[validation_id]
-                    if validation_id in self.validation_requests:
-                        del self.validation_requests[validation_id]
-                    logger.info(f"Validation queue cleaned up. Current queues: {list(self.validation_responses.keys())}")
-            
             # Create event message
             event = EventMessage(
                 id=str(uuid.uuid4()),
@@ -348,10 +335,6 @@ class AgentState:
                 timestamp=datetime.utcnow().isoformat()
             )
             
-            # Add validation_id to event data if it's a validation event
-            if event_type in ["tool_execute_validation_start", "tool_execute_validation_end"]:
-                if "validation_id" in data:
-                    event.data["validation_id"] = data["validation_id"]
             
             logger.debug(f"Broadcasting event: {event_type} - {data}")
             
