@@ -1,0 +1,32 @@
+functions:
+  greet:
+    type: embedded
+    code: 'def greet(user_name): return f''Hello, {user_name}!'''
+    module: null
+    function: null
+  farewell:
+    type: embedded
+    code: 'def farewell(user_name): return f''Goodbye, {user_name}!'''
+    module: null
+    function: null
+nodes:
+  start:
+    function: greet
+    output: start_result
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+  end:
+    function: farewell
+    output: end_result
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+workflow:
+  start: start
+  transitions:
+  - from_: start
+    to: end
+    condition: null

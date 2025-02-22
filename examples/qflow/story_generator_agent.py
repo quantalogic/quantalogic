@@ -1,122 +1,31 @@
 #!/usr/bin/env -S uv run
 
 # /// script
-# # requires-python = ">=3.12"
+# requires-python = ">=3.12"
 # dependencies = [
 #     "loguru",
 #     "litellm",
 #     "pydantic>=2.0",
-#     "anyio"
+#     "anyio",
+#     "quantalogic>=0.35"
 # ]
 # ///
-from qflow import Workflow, WorkflowEngine, NodeStatus
+from typing import Any, Dict, List
+
+import anyio
 from litellm import acompletion
 from loguru import logger
-import anyio
-from typing import List, Dict, Optional
-from pydantic import BaseModel
 
+from quantalogic.flow import Nodes, Workflow, WorkflowEngine
+
+# Constants for LLM configuration
 MODEL = "gemini/gemini-2.0-flash"
 DEFAULT_PARAMS = {
     "temperature": 0.7,
     "max_tokens": 2000
 }
 
-class ChapterRequest(BaseModel):
-    genre: str
-    num_chapters: int = 5
-    style: str = "cinematic, technical prose"
-    theme: Optional[str] = None
-    target_audience: str = "young adults"
-
-def create_workflow() -> Workflow:
-    wf = Workflow(
-        entry_node="validate_input",
-        version="1.2.0"
-    )
-
-    # Nodes
-    wf.add_node(
-        name="validate_input",
-        func=validate_input,
-        inputs=["genre", "num_chapters"],
-        output="validation_result",
-        description="Validate input parameters"
-    )
-
-    wf.add_node(
-        name="generate_title",
-        func=generate_title,
-        inputs=["genre", "theme", "target_audience"],
-        output="title",
-        max_retries=3,
-        description="Generate novel title"
-    )
-
-    wf.add_node(
-        name="generate_outline",
-        func=generate_outline,
-        inputs=["genre", "title", "num_chapters"],
-        output="outline",
-        timeout=30.0,
-        description="Generate chapter outline"
-    )
-
-    wf.add_node(
-        name="chapter_loop",
-        func=chapter_loop,
-        inputs=["total_chapters", "completed_chapters"],
-        output="loop_status"
-    )
-
-    wf.add_node(
-        name="generate_chapter",
-        func=generate_chapter,
-        inputs=["title", "outline", "current_chapter", "total_chapters", "style"],
-        output="chapter_content",
-        max_retries=3,
-        description="Generate chapter content"
-    )
-
-    wf.add_node(
-        name="update_chapter_progress",
-        func=update_chapter_progress,
-        inputs=["completed_chapters", "chapter_content", "chapters"],
-        output="completed_chapters",
-        description="Track chapter completion"
-    )
-
-    wf.add_node(
-        name="compile_book",
-        func=compile_book,
-        inputs=["title", "outline", "chapters"],
-        output="manuscript",
-        description="Compile final manuscript"
-    )
-
-    wf.add_node(
-        name="quality_check",
-        func=quality_check,
-        inputs=["manuscript"],
-        output="quality_report",
-        description="Quality assurance check"
-    )
-
-    wf.add_node("end",func=end,description="End node",inputs=[],output="")
-
-    # Transitions
-    wf.add_transition("validate_input", "success", "generate_title")
-    wf.add_transition("generate_title", "success", "generate_outline")
-    wf.add_transition("generate_outline", "success", "chapter_loop")
-    wf.add_transition("chapter_loop", "next", "generate_chapter")
-    wf.add_transition("chapter_loop", "complete", "compile_book")
-    wf.add_transition("generate_chapter", "success", "update_chapter_progress")
-    wf.add_transition("update_chapter_progress", "success", "chapter_loop")
-    wf.add_transition("compile_book", "success", "quality_check")
-    wf.add_transition("quality_check", "success", "end")
-
-    return wf
-
+# Helper function for LLM content generation
 async def generate_content(prompt: str, **kwargs) -> str:
     params = {**DEFAULT_PARAMS, **kwargs}
     response = await acompletion(
@@ -126,117 +35,94 @@ async def generate_content(prompt: str, **kwargs) -> str:
     )
     return response.choices[0].message.content.strip()
 
+# Node definitions using quantalogic.flow.Nodes
+@Nodes.define(output="validation_result")
 async def validate_input(genre: str, num_chapters: int) -> str:
+    """Validate input parameters."""
     if num_chapters < 1 or num_chapters > 20:
         raise ValueError("Number of chapters must be between 1 and 20")
-    
     valid_genres = ["science fiction", "fantasy", "mystery", "romance"]
     if genre.lower() not in valid_genres:
         raise ValueError(f"Invalid genre. Supported genres: {', '.join(valid_genres)}")
-    
     return "Input validation passed"
 
-async def generate_title(genre: str, theme: Optional[str], target_audience: str) -> str:
-    prompt = f"""Generate a {genre} novel title suitable for {target_audience}.
-    Theme: {theme or 'general'}
-    Return only the title without any additional text."""
-    return await generate_content(prompt, temperature=0.8)
+@Nodes.define(output="title")
+async def generate_title(genre: str) -> str:
+    """Generate a title based on the genre."""
+    prompt = f"Generate a creative title for a {genre} story"
+    return await generate_content(prompt)
 
+@Nodes.define(output="outline")
 async def generate_outline(genre: str, title: str, num_chapters: int) -> str:
-    prompt = f"""Create a {num_chapters}-chapter outline for {title}
-    Genre: {genre}
-    Include:
-    - Chapter titles
-    - 3-5 key plot points per chapter
-    - Character development milestones
-    - Avoid spoilers in chapter titles"""
-    return await generate_content(prompt, temperature=0.7)
+    """Generate a chapter outline for the story."""
+    prompt = f"Create a detailed outline for a {genre} story titled '{title}' with {num_chapters} chapters"
+    return await generate_content(prompt)
 
-async def generate_chapter(
-    title: str,
-    outline: str,
-    current_chapter: int,
-    total_chapters: int,
-    style: str
-) -> str:
-    prompt = f"""Write Chapter {current_chapter}/{total_chapters} of {title}
-    Style: {style}
-    Outline: {outline}
-    Current Chapter Requirements:
-    - Include dialogue and descriptions
-    - Maintain consistent character voices
-    - Progress overarching plot
-    - 800-1200 words"""
-    return await generate_content(prompt, temperature=0.8)
+@Nodes.define(output="chapter_content")
+async def generate_chapter(title: str, outline: str, completed_chapters: int, num_chapters: int, style: str = "descriptive") -> str:
+    """Generate content for a specific chapter."""
+    prompt = f"Write chapter {completed_chapters + 1} of {num_chapters} for the story '{title}'. Story outline: {outline}. Writing style: {style}"
+    return await generate_content(prompt)
 
-async def update_chapter_progress(
-    completed_chapters: int,
-    chapter_content: str,
-    chapters: List[str]
-) -> int:
-    chapters.append(chapter_content)
+@Nodes.define(output="completed_chapters")
+async def update_chapter_progress(chapters: List[str], chapter_content: str, completed_chapters: int) -> int:
+    """Update the chapter list and completion count."""
+    chapters.append(chapter_content)  # Modify the list in place
     return completed_chapters + 1
 
-async def chapter_loop(total_chapters: int, completed_chapters: int) -> str:
-    if completed_chapters < total_chapters:
-        return "next"
-    return "complete"
-
+@Nodes.define(output="manuscript")
 async def compile_book(title: str, outline: str, chapters: List[str]) -> str:
-    manuscript = [
-        f"# {title}\n",
-        "## Outline\n",
-        outline,
-        "\n## Chapters\n"
-    ]
-    for idx, content in enumerate(chapters, 1):
-        manuscript.append(f"\n### Chapter {idx}\n\n{content}")
-    return "\n".join(manuscript)
+    """Compile the full manuscript from title, outline, and chapters."""
+    manuscript = f"Title: {title}\n\nOutline:\n{outline}\n\n"
+    for i, chapter in enumerate(chapters, 1):
+        manuscript += f"Chapter {i}:\n{chapter}\n\n"
+    return manuscript
 
+@Nodes.define(output="quality_check_result")
 async def quality_check(manuscript: str) -> str:
-    prompt = f"""Analyze this manuscript for quality issues:
-    {manuscript}
-    Check for:
-    - Consistency in plot and characters
-    - Pacing issues
-    - Grammar and style problems
-    - Logical inconsistencies
-    Provide detailed feedback in bullet points"""
-    return await generate_content(prompt, temperature=0.2)
+    """Perform a quality check on the compiled manuscript."""
+    prompt = f"Review this manuscript for coherence, grammar, and storytelling quality:\n\n{manuscript}"
+    return await generate_content(prompt)
 
-async def end() -> None:
-    logger.info("End of course generation.")
+@Nodes.define()
+async def end(quality_check_result: str) -> None:
+    """Log the end of the workflow."""
+    logger.info(f"Story generation completed. Quality check: {quality_check_result}")
 
+# Define the workflow using quantalogic.flow.Workflow
+workflow = (
+    Workflow("validate_input")
+    .node("validate_input")            # Start: Validate inputs
+    .then("generate_title")
+    .node("generate_title")            # Generate the story title
+    .then("generate_outline")
+    .node("generate_outline")          # Generate the outline
+    .then("generate_chapter")
+    .node("generate_chapter")          # Generate the first chapter
+    .then("update_chapter_progress")
+    .node("update_chapter_progress")   # Update progress
+    .then("generate_chapter", condition=lambda ctx: ctx['completed_chapters'] < ctx['num_chapters'])  # Loop if more chapters needed
+    .then("compile_book", condition=lambda ctx: ctx['completed_chapters'] >= ctx['num_chapters'])     # Proceed when all chapters done
+    .node("compile_book")              # Compile the book
+    .then("quality_check")
+    .node("quality_check")             # Perform quality check
+    .then("end")
+    .node("end")                       # End the workflow
+)
 
 async def main():
-    wf = create_workflow()
-    engine = WorkflowEngine(wf)
+    """Main function to run the story generation workflow."""
+    initial_context = {
+        "genre": "science fiction",
+        "num_chapters": 3,
+        "chapters": [],
+        "completed_chapters": 0,
+        "style": "descriptive"
+    }
 
-    try:
-        state = await engine.execute({
-            "genre": "science fiction",
-            "num_chapters": 5,
-            "style": "cinematic, technical prose",
-            "theme": "interstellar diplomacy",
-            "target_audience": "young adults",
-            "current_chapter": 1,
-            "total_chapters": 5,
-            "completed_chapters": 0,
-            "chapters": []
-        })
-
-        if manuscript := state.context.get("manuscript"):
-            logger.success("Manuscript generated successfully!")
-            print("\n" + "=" * 40 + " MANUSCRIPT " + "=" * 40)
-            print(manuscript[:2000] + "\n[...truncated...]")
-        else:
-            logger.error("Workflow failed to generate manuscript")
-            logger.debug("Workflow state: {}", state.model_dump())
-
-    except Exception as e:
-        logger.critical("Workflow execution failed: {}", e)
-        if engine.state:
-            logger.error("Failed state: {}", engine.state.model_dump())
+    engine = workflow.build()  # Create the WorkflowEngine correctly
+    result = await engine.run(initial_context)
+    logger.info(f"Workflow result: {result}")
 
 if __name__ == "__main__":
     anyio.run(main)

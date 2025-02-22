@@ -27,5 +27,5 @@ __all__ = [
     "console_print_token",
     "generate_completion",
     "generate_image",
-    "count_tokens"
+    "count_tokens",
 ]
