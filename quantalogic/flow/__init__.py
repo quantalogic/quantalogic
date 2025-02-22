@@ -8,11 +8,11 @@ from loguru import logger
 
 # Expose key components for easy importing
 from .flow import Nodes, Workflow, WorkflowEngine
-from .flow_manager import WorkflowManager  # Changed from FlowManager to WorkflowManager
+from .flow_manager import WorkflowManager
 
 # Define which symbols are exported when using `from flow import *`
 __all__ = [
-    'WorkflowManager',  # Changed from FlowManager to WorkflowManager
+    'WorkflowManager',
     'Nodes',
     'Workflow',
     'WorkflowEngine',

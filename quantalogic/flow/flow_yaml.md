@@ -1,59 +1,68 @@
 # YAML Workflow DSL Specification
 
-This document provides a full specification for a YAML-based Domain-Specific Language (DSL) designed to define workflows. The DSL enables users to describe workflows consisting of nodes, Python functions, and transitions, supporting sequential, conditional, and parallel executions. Python functions can either be embedded directly within the YAML file or referenced from external sources, such as GitHub repositories. This specification outlines the structure, fields, syntax, and behavior of the DSL, accompanied by multiple examples to illustrate its usage.
+This document outlines the YAML-based Domain-Specific Language (DSL) for defining workflows in the Quantalogic Flow system. The DSL supports nodes, asynchronous Python functions, and transitions for sequential, conditional, and parallel execution, with functions either embedded in the YAML or referenced externally.
 
-## Overview
+## Table of Contents
 
-The YAML Workflow DSL aims to provide a structured, human-readable format for defining workflows that can be saved, loaded, and executed by a workflow engine. A workflow consists of:
+1.  [Introduction](#introduction)
+2.  [Workflow Structure](#workflow-structure)
+3.  [Functions](#functions)
+4.  [Nodes](#nodes)
+5.  [Workflow](#workflow)
+6.  [Context](#context)
+7.  [Execution Flow](#execution-flow)
+8.  [WorkflowManager](#workflowmanager)
+9.  [Examples](#examples)
+10. [Conclusion](#conclusion)
 
-*   **Nodes**: Individual tasks or steps in the workflow, each associated with a Python function.
-*   **Functions**: The executable logic for nodes, which can be embedded or externally referenced.
-*   **Transitions**: Rules defining the flow between nodes, supporting sequential, conditional, and parallel execution.
-*   **Context**: A shared dictionary (`ctx`) that stores the workflow's state and node outputs.
+## Introduction
 
-The DSL is organized into three top-level sections: `functions`, `nodes`, and `workflow`.
+The Quantalogic Flow YAML DSL enables users to define workflows in a human-readable format, supporting:
 
-## Top-Level Structure
+*   Embedded or external async Python functions.
+*   Sequential, conditional, and parallel node transitions.
+*   Context management for workflow state.
+*   Retry and timeout configurations.
+*   Programmatic management via WorkflowManager.
 
-A valid YAML workflow file must contain the following top-level keys:
+This specification aligns with the system's implementation as of February 22, 2025.
 
-*   `functions`: Defines the Python functions available to nodes.
-*   `nodes`: Configures the nodes, linking them to functions and specifying execution parameters.
-*   `workflow`: Defines the workflow’s starting point and transitions between nodes.
+## Workflow Structure
 
-Here’s the basic structure:
+A YAML workflow file consists of three sections:
+
+*   `functions`: Defines Python functions.
+*   `nodes`: Configures nodes with execution details.
+*   `workflow`: Specifies the start node and transitions.
 
 ```yaml
 functions:
-  # Function definitions or references
+  # Function definitions
 nodes:
   # Node configurations
 workflow:
-  # Workflow structure with start node and transitions
+  # Start node and transitions
 ```
 
-## `functions` Section
+## Functions
 
-The `functions` section is a dictionary where each key is a unique function name, and the value describes the function’s implementation. Functions can be defined in two ways:
+The `functions` section maps function names to their implementations, either embedded or external.
 
-*   **Embedded Code**: The Python code is included directly in the YAML as a multi-line string.
-*   **External Reference**: The function is referenced from an external module (e.g., a GitHub URL or local file).
+### Fields
 
-### Fields for `functions`
-
-*   `code` (string, optional): A multi-line string containing the Python code for an `async` function. Required if the function is embedded.
-*   `module` (string, optional): The path or URL to an external Python module. Required if the function is external.
-*   `function` (string, optional): The name of the function within the external module. Required if `module` is used.
+*   `code` (string, optional): Multi-line async Python code. Required for embedded functions.
+*   `module` (string, optional): External module path (e.g., GitHub URL). Required for external functions.
+*   `function` (string, optional): Function name in the module. Required with `module`.
 
 ### Rules
 
-*   Each function must be asynchronous (defined with `async def`).
-*   For embedded functions, the function name in the code must match the key in the `functions` section.
-*   Either `code` or both `module` and `function` must be provided, but not both.
+*   Functions must be async (`async def`).
+*   Embedded function names must match their dictionary key.
+*   Use either `code` or `module`+`function`, not both.
 
 ### Examples
 
-#### Embedded Function
+#### Embedded
 
 ```yaml
 functions:
@@ -64,7 +73,7 @@ functions:
           return f"Hello, {name}!"
 ```
 
-#### External Function
+#### External
 
 ```yaml
 functions:
@@ -73,19 +82,19 @@ functions:
     function: "fetch_data"
 ```
 
-## `nodes` Section
+## Nodes
 
-The `nodes` section is a dictionary where each key is a unique node name, and the value is a dictionary configuring the node’s behavior.
+Nodes are tasks linked to functions, defined in YAML or via `Nodes.define` decorators in code.
 
-### Fields for `nodes`
+### Fields
 
-*   `function` (string, required): The name of the function to execute, as defined in the `functions` section.
-*   `inputs` (list of strings, required): Keys in the context (`ctx`) that the function requires as input.
-*   `output` (string, required): The key in the context where the function’s result will be stored.
-*   `retries` (integer, optional, default: 3): Number of retry attempts if the function fails.
-*   `delay` (float, optional, default: 1.0): Delay in seconds between retries.
-*   `timeout` (float or null, optional, default: null): Maximum execution time in seconds. If null, no timeout is applied.
-*   `parallel` (boolean, optional, default: false): Whether the node can be executed in parallel with others.
+*   `function` (string, required): Name of the linked function.
+*   `inputs` (list, required): Context keys required by the function.
+*   `output` (string, required): Context key for the result.
+*   `retries` (int, optional, default: 3): Retry attempts on failure.
+*   `delay` (float, optional, default: 1.0): Seconds between retries.
+*   `timeout` (float/null, optional, default: null): Max execution time.
+*   `parallel` (bool, optional, default: false): Allow parallel execution.
 
 ### Example
 
@@ -93,104 +102,97 @@ The `nodes` section is a dictionary where each key is a unique node name, and th
 nodes:
   greet:
     function: greet_user
-    inputs: [user_name]
+    inputs: [name]
     output: greeting
     retries: 2
     delay: 0.5
     timeout: 5.0
-    parallel: false
 ```
 
-## `workflow` Section
+## Workflow
 
-The `workflow` section defines the workflow’s structure, including its starting point and the transitions between nodes.
+The `workflow` section defines the flow, with a start node and transitions.
 
-### Fields for `workflow`
+### Fields
 
-*   `start` (string, required): The name of the starting node.
-*   `transitions` (list, required): A list of transition rules defining the flow between nodes.
+*   `start` (string, required): Starting node name.
+*   `transitions` (list, required): Transition rules.
 
 ### Transition Fields
 
-Each transition is a dictionary with:
-
-*   `from` (string, required): The source node name.
-*   `to` (string or list of strings, required): The next node(s) to execute. A string indicates sequential execution; a list indicates parallel execution.
-*   `condition` (string, optional): A Python expression that evaluates to a boolean based on the context (`ctx`). If omitted, the transition is unconditional.
-
-### Rules
-
-*   The `start` node must exist in the `nodes` section.
-*   All `from` and `to` values must reference valid node names.
-*   Conditions use `ctx` to access the context dictionary and must be valid Python expressions.
+*   `from` (string, required): Source node.
+*   `to` (string/list, required): Target node(s) — string for sequential, list for parallel.
+*   `condition` (string, optional): Python expression using `ctx`.
 
 ### Examples
 
-#### Sequential Workflow
+#### Sequential
 
 ```yaml
 workflow:
   start: greet
   transitions:
     - from: greet
-      to: log_message
+      to: log
 ```
 
-#### Conditional Workflow
+#### Conditional
 
 ```yaml
 workflow:
-  start: check_status
+  start: check
   transitions:
-    - from: check_status
+    - from: check
       to: process
       condition: "ctx.get('status') == 'active'"
-    - from: check_status
-      to: halt
-      condition: "ctx.get('status') != 'active'"
 ```
 
-#### Parallel Workflow
+#### Parallel
 
 ```yaml
 workflow:
   start: prepare
   transitions:
     - from: prepare
-      to: [send_email, update_db]
+      to: [email, update]
 ```
 
-## Context (`ctx`)
+## Context
 
-The workflow maintains a context dictionary (`ctx`) that stores the state and outputs of executed nodes. Each node’s output is saved under the key specified in its `output` field. Conditions in transitions can access this context using `ctx`.
-
-For example:
-
-If a node `greet` stores `"Hello, Alice!"` in `ctx["greeting"]`, a condition like `"ctx.get('greeting').startswith('Hello')"` would evaluate to `True`.
+The context (`ctx`) is a dictionary storing node outputs, accessible in conditions. Example: `ctx["greeting"] = "Hello, Alice!"`.
 
 ## Execution Flow
 
-1.  The workflow begins at the node specified in `workflow.start`.
-2.  After a node executes, its output is stored in the context under its `output` key.
-3.  The engine evaluates all transitions where the `from` field matches the completed node:
-    *   If a `condition` is present, it is evaluated using the current context.
-    *   If the condition is `True` (or no condition exists), the `to` node(s) are scheduled.
-    *   If `to` is a list, the listed nodes execute in parallel; otherwise, execution is sequential.
-4.  The workflow continues until no further transitions are triggered.
+The WorkflowEngine executes the workflow:
 
-## Additional Notes
+1.  Starts at `workflow.start`.
+2.  Executes nodes, storing outputs in `ctx`.
+3.  Evaluates transitions:
+    *   If conditional, checks `ctx` against the condition.
+    *   Schedules to nodes (sequential or parallel).
+4.  Continues until no transitions remain.
 
-*   **Async Functions**: All functions must be asynchronous to support I/O operations or delays.
-*   **Error Handling**: If a node fails after all retries, the workflow engine should define the failure behavior (e.g., terminate or transition to an error node).
-*   **Security**: Embedded Python code should come from trusted sources. For untrusted YAML, prefer external references and validate conditions.
+## WorkflowManager
+
+The `WorkflowManager` class enables programmatic workflow management:
+
+*   Add/update/remove nodes and transitions.
+*   Load/save YAML files.
+*   Instantiate Workflow objects.
+
+### Example
+
+```python
+manager = WorkflowManager()
+manager.add_function("greet", "embedded", code="async def greet(name): return f'Hi, {name}!'")
+manager.add_node("start", "greet", output="greeting")
+manager.set_start_node("start")
+manager.save_to_yaml("workflow.yaml")
+```
 
 ## Examples
 
-Below are detailed examples showcasing different use cases of the DSL.
-
 ### Example 1: Simple Sequential Workflow
-
-A basic workflow that greets a user and logs the result.
 
 ```yaml
 functions:
@@ -202,20 +204,17 @@ functions:
   log_message:
     code: |
       async def log_message(message: str) -> bool:
-          await anyio.sleep(1)
           print(f"Logged: {message}")
           return True
-
 nodes:
   greet:
     function: greet_user
-    inputs: [user_name]
+    inputs: [name]
     output: greeting
   log:
     function: log_message
-    inputs: [greeting]
+    inputs: [message]
     output: logged
-
 workflow:
   start: greet
   transitions:
@@ -223,34 +222,27 @@ workflow:
       to: log
 ```
 
-**Execution:**
-
-1.  `greet` runs with `user_name` from the initial context, storing the result in `ctx["greeting"]`.
-2.  `log` runs with `ctx["greeting"]`, printing the message and storing `True` in `ctx["logged"]`.
-
-### Example 2: Conditional Order Processing
-
-An e-commerce workflow with conditional transitions based on inventory and payment status.
+### Example 2: E-commerce Workflow
 
 ```yaml
 functions:
+  validate_order:
+    code: |
+      async def validate_order(order: dict) -> bool:
+          return bool(order.get("customer"))
   check_inventory:
     code: |
       async def check_inventory(order: dict) -> bool:
-          await anyio.sleep(1)
-          return order["quantity"] <= 5
+          return len(order["items"]) <= 2
   process_payment:
     code: |
       async def process_payment(order: dict) -> bool:
-          await anyio.sleep(1)
-          return order["card_valid"]
-  ship_order:
-    code: |
-      async def ship_order(order: dict) -> str:
-          await anyio.sleep(1)
-          return "Shipped"
-
+          return order["customer"] == "John Doe"
 nodes:
+  validate:
+    function: validate_order
+    inputs: [order]
+    output: is_valid
   inventory:
     function: check_inventory
     inputs: [order]
@@ -258,102 +250,25 @@ nodes:
   payment:
     function: process_payment
     inputs: [order]
-    output: paid
-  ship:
-    function: ship_order
-    inputs: [order]
-    output: shipping_status
-
+    output: payment_success
 workflow:
-  start: inventory
+  start: validate
   transitions:
+    - from: validate
+      to: inventory
     - from: inventory
       to: payment
       condition: "ctx.get('in_stock')"
-    - from: payment
-      to: ship
-      condition: "ctx.get('paid')"
 ```
 
-**Execution with `ctx = {"order": {"quantity": 3, "card_valid": True}}`:**
+Execution with `ctx = {"order": {"items": ["item1"], "customer": "John Doe"}}`:
 
-1.  `inventory` checks stock, sets `ctx["in_stock"] = True`.
-2.  `payment` processes payment, sets `ctx["paid"] = True`.
-3.  `ship` ships the order, sets `ctx["shipping_status"] = "Shipped"`.
-
-### Example 3: Parallel Task Execution
-
-A workflow that processes a file and performs two tasks in parallel.
-
-```yaml
-functions:
-  read_file:
-    code: |
-      async def read_file(path: str) -> str:
-          await anyio.sleep(1)
-          return "File contents"
-  compress_data:
-    code: |
-      async def compress_data(data: str) -> str:
-          await anyio.sleep(1)
-          return f"Compressed: {data}"
-  encrypt_data:
-    code: |
-      async def encrypt_data(data: str) -> str:
-          await anyio.sleep(1)
-          return f"Encrypted: {data}"
-
-nodes:
-  read:
-    function: read_file
-    inputs: [file_path]
-    output: data
-  compress:
-    function: compress_data
-    inputs: [data]
-    output: compressed_data
-  encrypt:
-    function: encrypt_data
-    inputs: [data]
-    output: encrypted_data
-
-workflow:
-  start: read
-  transitions:
-    - from: read
-      to: [compress, encrypt]
-```
-
-**Execution with `ctx = {"file_path": "/example.txt"}`:**
-
-1.  `read` sets `ctx["data"] = "File contents".
-2.  `compress` and `encrypt` run in parallel, setting `ctx["compressed_data"]` and `ctx["encrypted_data"]`.
-
-### Example 4: External Function Reference
-
-A workflow using an external function from GitHub.
-
-```yaml
-functions:
-  fetch_weather:
-    module: "https://github.com/user/repo/blob/main/weather.py"
-    function: "get_weather"
-
-nodes:
-  weather:
-    function: fetch_weather
-    inputs: [city]
-    output: temperature
-
-workflow:
-  start: weather
-  transitions: []
-```
-
-**Execution with `ctx = {"city": "London"}`:**
-
-1.  `weather` calls the external `get_weather` function, storing the result in `ctx["temperature"]`.
+1.  validate → `ctx["is_valid"] = True`.
+2.  inventory → `ctx["in_stock"] = True`.
+3.  payment → `ctx["payment_success"] = True`.
 
 ## Conclusion
 
-This YAML Workflow DSL provides a flexible, extensible way to define workflows with support for embedded and external functions, sequential and parallel execution, and conditional transitions. The examples demonstrate its applicability to various scenarios, from simple tasks to complex conditional workflows. The specification ensures clarity and consistency, making it suitable for both human authors and automated workflow engines.
+The Quantalogic Flow YAML DSL provides a robust, flexible way to define workflows, integrating seamlessly with the Workflow, WorkflowEngine, and WorkflowManager classes. It supports diverse use cases, from simple sequences to complex conditional flows, as of February 22, 2025.
+
+This Markdown version is streamlined, reflects the provided code, and maintains clarity for users and developers.

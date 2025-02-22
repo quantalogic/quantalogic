@@ -10,104 +10,87 @@
 #     "quantalogic>=0.35"
 # ]
 # ///
-from typing import Any, Dict, List
+from typing import List
 
 import anyio
 from litellm import acompletion
 from loguru import logger
 
-from quantalogic.flow import Nodes, Workflow, WorkflowEngine
+from quantalogic.flow import Nodes, Workflow
 
-# Constants for LLM configuration
 MODEL = "gemini/gemini-2.0-flash"
-DEFAULT_PARAMS = {
-    "temperature": 0.7,
-    "max_tokens": 2000
-}
+DEFAULT_PARAMS = {"temperature": 0.7, "max_tokens": 2000}
 
-# Helper function for LLM content generation
 async def generate_content(prompt: str, **kwargs) -> str:
+    """Helper function for LLM content generation."""
     params = {**DEFAULT_PARAMS, **kwargs}
-    response = await acompletion(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        **params
-    )
+    response = await acompletion(model=MODEL, messages=[{"role": "user", "content": prompt}], **params)
     return response.choices[0].message.content.strip()
 
-# Node definitions using quantalogic.flow.Nodes
-@Nodes.define(output="validation_result")
+@Nodes.validate_node(output="validation_result")
 async def validate_input(genre: str, num_chapters: int) -> str:
     """Validate input parameters."""
-    if num_chapters < 1 or num_chapters > 20:
-        raise ValueError("Number of chapters must be between 1 and 20")
-    valid_genres = ["science fiction", "fantasy", "mystery", "romance"]
-    if genre.lower() not in valid_genres:
-        raise ValueError(f"Invalid genre. Supported genres: {', '.join(valid_genres)}")
-    return "Input validation passed"
+    if not (1 <= num_chapters <= 20 and genre.lower() in ["science fiction", "fantasy", "mystery", "romance"]):
+        raise ValueError(f"Invalid input: num_chapters must be 1-20, genre must be one of science fiction, fantasy, mystery, romance")
+    return "Input validated"
 
 @Nodes.define(output="title")
 async def generate_title(genre: str) -> str:
     """Generate a title based on the genre."""
-    prompt = f"Generate a creative title for a {genre} story"
-    return await generate_content(prompt)
+    return await generate_content(f"Generate a creative title for a {genre} story")
 
 @Nodes.define(output="outline")
 async def generate_outline(genre: str, title: str, num_chapters: int) -> str:
     """Generate a chapter outline for the story."""
-    prompt = f"Create a detailed outline for a {genre} story titled '{title}' with {num_chapters} chapters"
-    return await generate_content(prompt)
+    return await generate_content(f"Create a detailed outline for a {genre} story titled '{title}' with {num_chapters} chapters")
 
 @Nodes.define(output="chapter_content")
 async def generate_chapter(title: str, outline: str, completed_chapters: int, num_chapters: int, style: str = "descriptive") -> str:
     """Generate content for a specific chapter."""
-    prompt = f"Write chapter {completed_chapters + 1} of {num_chapters} for the story '{title}'. Story outline: {outline}. Writing style: {style}"
-    return await generate_content(prompt)
+    return await generate_content(
+        f"Write chapter {completed_chapters + 1} of {num_chapters} for the story '{title}'. Outline: {outline}. Style: {style}"
+    )
 
 @Nodes.define(output="completed_chapters")
 async def update_chapter_progress(chapters: List[str], chapter_content: str, completed_chapters: int) -> int:
     """Update the chapter list and completion count."""
-    chapters.append(chapter_content)  # Modify the list in place
+    chapters.append(chapter_content)
     return completed_chapters + 1
 
 @Nodes.define(output="manuscript")
 async def compile_book(title: str, outline: str, chapters: List[str]) -> str:
     """Compile the full manuscript from title, outline, and chapters."""
-    manuscript = f"Title: {title}\n\nOutline:\n{outline}\n\n"
-    for i, chapter in enumerate(chapters, 1):
-        manuscript += f"Chapter {i}:\n{chapter}\n\n"
-    return manuscript
+    return f"Title: {title}\n\nOutline:\n{outline}\n\n" + "\n\n".join(f"Chapter {i}:\n{chap}" for i, chap in enumerate(chapters, 1))
 
 @Nodes.define(output="quality_check_result")
 async def quality_check(manuscript: str) -> str:
     """Perform a quality check on the compiled manuscript."""
-    prompt = f"Review this manuscript for coherence, grammar, and storytelling quality:\n\n{manuscript}"
-    return await generate_content(prompt)
+    return await generate_content(f"Review this manuscript for coherence, grammar, and quality:\n\n{manuscript}")
 
 @Nodes.define()
 async def end(quality_check_result: str) -> None:
     """Log the end of the workflow."""
     logger.info(f"Story generation completed. Quality check: {quality_check_result}")
 
-# Define the workflow using quantalogic.flow.Workflow
+# Define the workflow with explicit transitions to ensure correct execution order
 workflow = (
     Workflow("validate_input")
-    .node("validate_input")            # Start: Validate inputs
+    .node("validate_input")
     .then("generate_title")
-    .node("generate_title")            # Generate the story title
+    .node("generate_title")
     .then("generate_outline")
-    .node("generate_outline")          # Generate the outline
+    .node("generate_outline")
     .then("generate_chapter")
-    .node("generate_chapter")          # Generate the first chapter
+    .node("generate_chapter")
     .then("update_chapter_progress")
-    .node("update_chapter_progress")   # Update progress
-    .then("generate_chapter", condition=lambda ctx: ctx['completed_chapters'] < ctx['num_chapters'])  # Loop if more chapters needed
-    .then("compile_book", condition=lambda ctx: ctx['completed_chapters'] >= ctx['num_chapters'])     # Proceed when all chapters done
-    .node("compile_book")              # Compile the book
+    .node("update_chapter_progress")
+    .then("generate_chapter", condition=lambda ctx: ctx["completed_chapters"] < ctx["num_chapters"])
+    .then("compile_book", condition=lambda ctx: ctx["completed_chapters"] >= ctx["num_chapters"])
+    .node("compile_book")
     .then("quality_check")
-    .node("quality_check")             # Perform quality check
+    .node("quality_check")
     .then("end")
-    .node("end")                       # End the workflow
+    .node("end")
 )
 
 async def main():
@@ -119,8 +102,7 @@ async def main():
         "completed_chapters": 0,
         "style": "descriptive"
     }
-
-    engine = workflow.build()  # Create the WorkflowEngine correctly
+    engine = workflow.build()
     result = await engine.run(initial_context)
     logger.info(f"Workflow result: {result}")
 

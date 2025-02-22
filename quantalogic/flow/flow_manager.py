@@ -1,6 +1,6 @@
 import importlib
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Callable, Dict, Optional, Union
 
 import yaml
 from pydantic import ValidationError
@@ -45,13 +45,11 @@ class WorkflowManager:
         if name not in self.workflow.nodes:
             raise ValueError(f"Node '{name}' does not exist")
         del self.workflow.nodes[name]
-        # Remove transitions involving this node
         self.workflow.workflow.transitions = [
             t
             for t in self.workflow.workflow.transitions
             if t.from_ != name and (isinstance(t.to, str) or name not in t.to)
         ]
-        # Reset start node if it was the removed node
         if self.workflow.workflow.start == name:
             self.workflow.workflow.start = None
 
@@ -120,22 +118,12 @@ class WorkflowManager:
         self.workflow.functions[name] = func_def
 
     def instantiate_workflow(self) -> Workflow:
-        """
-        Instantiates a Workflow object based on the definitions stored in the WorkflowManager.
-
-        Returns:
-            Workflow: An instance of the Workflow class ready to be built into a WorkflowEngine.
-
-        Raises:
-            ValueError: If a function cannot be resolved or if node definitions are inconsistent.
-            SyntaxError: If embedded function code is invalid.
-        """
-        # Resolve function definitions into callable functions
-        functions: Dict[str, callable] = {}
+        """Instantiates a Workflow object based on the definitions stored in the WorkflowManager."""
+        functions: Dict[str, Callable] = {}
         for func_name, func_def in self.workflow.functions.items():
             if func_def.type == "embedded":
                 local_scope = {}
-                exec(func_def.code, local_scope)  # Execute embedded code
+                exec(func_def.code, local_scope)
                 if func_name not in local_scope:
                     raise ValueError(f"Embedded function '{func_name}' not defined in code")
                 functions[func_name] = local_scope[func_name]
@@ -146,7 +134,6 @@ class WorkflowManager:
                 except (ImportError, AttributeError) as e:
                     raise ValueError(f"Failed to import external function '{func_name}': {e}")
 
-        # Register nodes with Nodes.define
         for node_name, node_def in self.workflow.nodes.items():
             if node_def.function not in functions:
                 raise ValueError(f"Function '{node_def.function}' for node '{node_name}' not found")
@@ -159,37 +146,27 @@ class WorkflowManager:
                 parallel=node_def.parallel,
             )(func)
 
-        # Create the Workflow instance
         if not self.workflow.workflow.start:
             raise ValueError("Start node not set in workflow definition")
         wf = Workflow(start=self.workflow.workflow.start)
 
-        # Add all nodes to the workflow
-        for node_name in self.workflow.nodes:
-            wf.node(node_name)
-
-        # Define transitions
+        # Track nodes added to handle sequences and loops
+        added_nodes = set()
         for trans in self.workflow.workflow.transitions:
             from_node = trans.from_
             to_nodes = [trans.to] if isinstance(trans.to, str) else trans.to
-            # Convert condition to callable; default to True if None
-            if trans.condition:
-                try:
-                    condition = eval(f"lambda ctx: {trans.condition}")
-                except SyntaxError as e:
-                    raise ValueError(f"Invalid condition syntax in transition from '{from_node}': {e}")
+            if from_node not in added_nodes:
+                wf.node(from_node)
+                added_nodes.add(from_node)
+            for to_node in to_nodes:
+                if to_node not in added_nodes:
+                    wf.node(to_node)
+                    added_nodes.add(to_node)
+            condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else lambda _: True
+            if len(to_nodes) > 1:
+                wf.parallel(*to_nodes, condition=condition)
             else:
-                def condition(ctx):
-                    return True
-
-            # Define transition function
-            def transition_func(ctx, to_nodes=to_nodes, condition=condition):
-                return set(to_nodes) if condition(ctx) else set()
-
-            # Append to transitions
-            if from_node not in wf.transitions:
-                wf.transitions[from_node] = []
-            wf.transitions[from_node].append(transition_func)
+                wf.then(to_nodes[0], condition=condition)
 
         return wf
 
@@ -220,8 +197,6 @@ class WorkflowManager:
 def main():
     """Demonstrate usage of WorkflowManager."""
     manager = WorkflowManager()
-
-    # Add functions
     manager.add_function(
         name="greet",
         type_="embedded",
@@ -232,21 +207,11 @@ def main():
         type_="embedded",
         code="def farewell(user_name): return f'Goodbye, {user_name}!'",
     )
-
-    # Add nodes
     manager.add_node(name="start", function="greet")
     manager.add_node(name="end", function="farewell")
-
-    # Set start node
     manager.set_start_node("start")
-
-    # Add transition
     manager.add_transition(from_="start", to="end")
-
-    # Save to YAML
     manager.save_to_yaml("workflow.yaml")
-
-    # Load and verify
     new_manager = WorkflowManager()
     new_manager.load_from_yaml("workflow.yaml")
     print(new_manager.workflow.model_dump())

@@ -21,25 +21,19 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # --- Core Definitions ---
 
-
 class NodeStatus(str, Enum):
     """Enum representing the possible statuses of a workflow node."""
-
     PENDING = "pending"
     SUCCESS = "success"
     FAILED = "failed"
     RUNNING = "running"
 
-
 class WorkflowError(Exception):
     """Custom exception for workflow-related errors."""
-
     pass
-
 
 class WorkflowState(BaseModel):
     """State of the workflow, tracking execution details and context."""
-
     execution_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     current_nodes: Set[str] = Field(default_factory=set)
     context: Dict[str, Any] = Field(default_factory=dict)
@@ -53,16 +47,13 @@ class WorkflowState(BaseModel):
         self.__dict__.update(kwargs)
         self.updated_at = datetime.now(timezone.utc)
 
-
 # --- Node Definitions ---
 
 T = TypeVar("T")
 R = TypeVar("R")
 
-
 class Node(BaseModel):
     """Definition of a workflow node."""
-
     name: str
     func: Callable
     inputs: Set[str]
@@ -74,10 +65,8 @@ class Node(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-
 class Nodes:
-    """Registry for workflow nodes."""
-
+    """Registry for workflow nodes with enhanced decorators."""
     _registry: Dict[str, Node] = {}
 
     @classmethod
@@ -89,8 +78,7 @@ class Nodes:
         timeout: Optional[float] = None,
         parallel: bool = False,
     ):
-        """Decorator to register a node with its configuration."""
-
+        """Base decorator to register a node."""
         def decorator(func: Callable):
             name = func.__name__
             inputs = set(inspect.signature(func).parameters) - {"kwargs"}
@@ -105,8 +93,12 @@ class Nodes:
                 parallel=parallel,
             )
             return func
-
         return decorator
+
+    @classmethod
+    def validate_node(cls, output: Optional[str] = None, **kwargs):
+        """Decorator for validation nodes."""
+        return cls.define(output=output, **kwargs)
 
     @classmethod
     def get(cls, name: str) -> Node:
@@ -115,13 +107,10 @@ class Nodes:
             raise ValueError(f"Node '{name}' not registered")
         return cls._registry[name]
 
-
 # --- Workflow Definition ---
 
-
 class Workflow:
-    """Class to define the structure of a workflow."""
-
+    """Class to define the structure of a workflow with reduced boilerplate."""
     def __init__(self, start: str | Callable):
         self.start = start if isinstance(start, str) else start.__name__
         self.nodes: Dict[str, Node] = {}
@@ -148,19 +137,36 @@ class Workflow:
         self.transitions[source].append(lambda ctx: target_names if condition(ctx) else set())
         return self
 
+    def sequence(self, *nodes: Callable | str):
+        """Define a linear sequence of nodes."""
+        prev_node = None
+        for node in nodes:
+            node_name = node if isinstance(node, str) else node.__name__
+            if prev_node is None and node_name != self.start:
+                raise ValueError(f"Sequence must start with the workflow's start node '{self.start}'")
+            self.node(node_name)
+            if prev_node:
+                self.transitions[prev_node].append(lambda ctx: {node_name})
+            prev_node = node_name
+        return self
+
+    def loop(self, from_node: Callable | str, to_node: Callable | str, condition: Callable[[Dict[str, Any]], bool]):
+        """Define a loop between nodes based on a condition."""
+        from_name = from_node if isinstance(from_node, str) else from_node.__name__
+        to_name = to_node if isinstance(to_node, str) else to_node.__name__
+        self.node(from_name).then(to_name, condition=condition)
+        return self
+
     def build(self) -> "WorkflowEngine":
         """Build the workflow engine from the defined structure."""
         if self.start not in self.nodes:
             raise ValueError(f"Start node '{self.start}' not defined")
         return WorkflowEngine(self)
 
-
 # --- Workflow Engine ---
-
 
 class WorkflowEngine:
     """Engine to execute the workflow."""
-
     def __init__(self, workflow: Workflow):
         self.workflow = workflow
         self.state = WorkflowState(current_nodes={workflow.start})
@@ -226,33 +232,25 @@ class WorkflowEngine:
                     logger.warning(f"Retry {attempt_num + 1}/{node.retries} for {node.name}")
                     await anyio.sleep(node.delay * (2**attempt_num))
 
-
 # --- E-commerce Workflow Nodes ---
 
-
-@Nodes.define(output="is_valid")
+@Nodes.validate_node(output="is_valid")
 async def validate_order(order: dict) -> bool:
     """Validate the customer order."""
     await anyio.sleep(1)  # Simulate async validation
-    # Example: order is valid if customer name is provided
     return bool(order.get("customer"))
-
 
 @Nodes.define(output="in_stock")
 async def check_inventory(order: dict) -> bool:
     """Check if all items in the order are in stock."""
     await anyio.sleep(1)  # Simulate inventory check
-    # Example: in stock if 2 or fewer items
     return len(order["items"]) <= 2
-
 
 @Nodes.define(output="payment_success", retries=3)
 async def process_payment(order: dict) -> bool:
     """Process the customer's payment."""
     await anyio.sleep(1)  # Simulate payment processing
-    # Example: payment succeeds only for customer 'John Doe'
     return order["customer"] == "John Doe"
-
 
 @Nodes.define(output="shipping_confirmation")
 async def ship_order(order: dict) -> str:
@@ -260,13 +258,11 @@ async def ship_order(order: dict) -> str:
     await anyio.sleep(1)  # Simulate shipping
     return "Shipped"
 
-
 @Nodes.define(output="notified_out_of_stock")
 async def notify_customer_out_of_stock(order: dict) -> bool:
     """Notify customer if items are out of stock."""
     await anyio.sleep(1)  # Simulate notification
     return True
-
 
 @Nodes.define(output="notified_payment_failed")
 async def notify_customer_payment_failed(order: dict) -> bool:
@@ -274,13 +270,11 @@ async def notify_customer_payment_failed(order: dict) -> bool:
     await anyio.sleep(1)  # Simulate notification
     return True
 
-
 @Nodes.define(output="order_status_updated")
 async def update_order_status(order: dict) -> bool:
     """Update the order status in the system."""
     await anyio.sleep(1)  # Simulate status update
     return True
-
 
 @Nodes.define(output="confirmation_email_sent")
 async def send_confirmation_email(order: dict) -> bool:
@@ -288,34 +282,32 @@ async def send_confirmation_email(order: dict) -> bool:
     await anyio.sleep(1)  # Simulate email sending
     return True
 
-
 # --- Workflow Definition ---
 
 workflow = (
     Workflow("validate_order")
-    .node(validate_order)
-    .then("check_inventory")
-    .node(check_inventory)
+    .sequence(
+        "validate_order",
+        "check_inventory"
+    )
     .then("process_payment", condition=lambda ctx: ctx.get("in_stock"))
     .then("notify_customer_out_of_stock", condition=lambda ctx: not ctx.get("in_stock"))
-    .node(process_payment)
+    .node("process_payment")
     .then("ship_order", condition=lambda ctx: ctx.get("payment_success"))
     .then("notify_customer_payment_failed", condition=lambda ctx: not ctx.get("payment_success"))
-    .node(ship_order)
+    .node("ship_order")
     .parallel("update_order_status", "send_confirmation_email")
-    .node(update_order_status)
-    .node(send_confirmation_email)
-    .node(notify_customer_out_of_stock)
-    .node(notify_customer_payment_failed)
+    .node("update_order_status")
+    .node("send_confirmation_email")
+    .node("notify_customer_out_of_stock")
+    .node("notify_customer_payment_failed")
 )
 
 # --- Main Execution ---
 
-
 async def main():
     """Run the e-commerce workflow with a sample order."""
     engine = workflow.build()
-    # Sample order context
     order = {
         "items": ["item1", "item2"],  # 2 items (in stock)
         "customer": "John Doe",  # Payment will succeed
@@ -324,7 +316,6 @@ async def main():
     result = await engine.run({"order": order})
     print("Workflow Result:")
     print(result.model_dump())
-
 
 if __name__ == "__main__":
     anyio.run(main)

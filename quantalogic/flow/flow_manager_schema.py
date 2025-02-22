@@ -11,7 +11,6 @@ class FunctionDefinition(BaseModel):
     module: Optional[str] = None
     function: Optional[str] = None
 
-
 class NodeDefinition(BaseModel):
     function: str
     output: str
@@ -20,17 +19,14 @@ class NodeDefinition(BaseModel):
     timeout: Optional[float] = None
     parallel: bool = False
 
-
 class TransitionDefinition(BaseModel):
     from_: str
     to: Union[str, List[str]]
     condition: Optional[str] = None
 
-
 class WorkflowStructure(BaseModel):
     start: Optional[str] = None
     transitions: List[TransitionDefinition] = []
-
 
 class WorkflowDefinition(BaseModel):
     functions: Dict[str, FunctionDefinition] = {}
