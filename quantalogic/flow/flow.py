@@ -172,7 +172,11 @@ class Nodes:
                 timeout=timeout,
                 parallel=parallel,
             )
-            return func
+            # Define wrapper to expose call_llm for explicit invocation
+            async def wrapper(**kwargs):
+                return await call_llm(**kwargs)
+            wrapper._call_llm = call_llm  # Attach call_llm for use in decorated functions
+            return wrapper
         return decorator
 
     @classmethod

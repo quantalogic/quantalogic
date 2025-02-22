@@ -7,12 +7,14 @@
 #     "litellm",
 #     "pydantic>=2.0",
 #     "anyio",
+#     "litellm",
 #     "quantalogic>=0.35"
 # ]
 # ///
 from typing import List
 
 import anyio
+import litellm
 from loguru import logger
 
 from quantalogic.flow import Nodes, Workflow
@@ -54,23 +56,26 @@ async def generate_outline(genre: str, title: str, num_chapters: int) -> str:
     """Generate a chapter outline for the story (handled by llm_node)."""
     pass  # Logic handled by llm_node decorator
 
-@Nodes.llm_node(
-    **DEFAULT_LLM_PARAMS,
-    system_prompt="You are a skilled storyteller with a knack for vivid descriptions.",
-    prompt_template="Write chapter {chapter_num} of {num_chapters} for the story '{title}'. Outline: {outline}. Style: {style}",
-    output="chapter_content",
-)
+@Nodes.define(output="chapter_content")
 async def generate_chapter(title: str, outline: str, completed_chapters: int, num_chapters: int, style: str = "descriptive") -> str:
-    """Generate content for a specific chapter (handled by llm_node)."""
-    chapter_num = completed_chapters + 1  # Compute chapter_num from completed_chapters
-    kwargs = {
-        "chapter_num": chapter_num,
-        "num_chapters": num_chapters,
-        "title": title,
-        "outline": outline,
-        "style": style,
-    }
-    return await generate_chapter._call_llm(**kwargs)  # Direct call to the LLM logic
+    """Generate content for a specific chapter."""
+    chapter_num = completed_chapters + 1  # Compute the current chapter number
+    prompt = f"Write chapter {chapter_num} of {num_chapters} for the story '{title}'. Outline: {outline}. Style: {style}"
+    messages = [
+        {"role": "system", "content": "You are a skilled storyteller with a knack for vivid descriptions."},
+        {"role": "user", "content": prompt},
+    ]
+    response = await litellm.acompletion(
+        model=MODEL,
+        messages=messages,
+        temperature=0.7,
+        max_tokens=2000,
+        top_p=1.0,
+        presence_penalty=0.0,
+        frequency_penalty=0.0,
+        drop_params=True
+    )
+    return response.choices[0].message.content
 
 @Nodes.define(output="completed_chapters")
 async def update_chapter_progress(chapters: List[str], chapter_content: str, completed_chapters: int) -> int:
