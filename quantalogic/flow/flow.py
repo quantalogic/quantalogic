@@ -17,7 +17,7 @@ from typing import (
 
 import anyio
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # --- Core Definitions ---
 
@@ -53,17 +53,30 @@ T = TypeVar("T")
 R = TypeVar("R")
 
 class Node(BaseModel):
-    """Definition of a workflow node."""
+    """Definition of a workflow node, supporting both functions and sub-workflows."""
     name: str
-    func: Callable
+    func: Optional[Callable] = None
+    sub_workflow: Optional["Workflow"] = None
     inputs: Set[str]
-    output: str
+    output: Optional[str] = None  # Optional to support sub-workflows with implicit outputs
     retries: int = 3
     delay: float = 1.0
     timeout: Optional[float] = None
     parallel: bool = False
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_func_or_sub_workflow(cls, data: Any) -> Any:
+        """Ensure a node has either a function or a sub-workflow, but not both."""
+        func = data.get("func")
+        sub_workflow = data.get("sub_workflow")
+        if func is None and sub_workflow is None:
+            raise ValueError("Node must have either 'func' or 'sub_workflow'")
+        if func is not None and sub_workflow is not None:
+            raise ValueError("Node cannot have both 'func' and 'sub_workflow'")
+        return data
 
 class Nodes:
     """Registry for workflow nodes with enhanced decorators."""
@@ -157,11 +170,21 @@ class Workflow:
         self.node(from_name).then(to_name, condition=condition)
         return self
 
+    def add_sub_workflow(self, name: str, sub_wf: "Workflow", inputs: Set[str], output: Optional[str] = None):
+        """Add a sub-workflow as a node in the workflow."""
+        node = Node(name=name, sub_workflow=sub_wf, inputs=inputs, output=output)
+        self.nodes[name] = node
+        self.transitions[name] = []
+        return self
+
     def build(self) -> "WorkflowEngine":
         """Build the workflow engine from the defined structure."""
         if self.start not in self.nodes:
             raise ValueError(f"Start node '{self.start}' not defined")
         return WorkflowEngine(self)
+
+# Resolve forward reference for Node
+Node.model_rebuild()
 
 # --- Workflow Engine ---
 
@@ -203,7 +226,7 @@ class WorkflowEngine:
                 tg.start_soon(self._execute_node, node)
 
     async def _execute_node(self, node: Node):
-        """Execute a single node with retries and timeout handling."""
+        """Execute a single node with retries and timeout handling, supporting sub-workflows."""
         logger.info(f"Running {node.name}")
 
         # Check if all required inputs are present
@@ -214,17 +237,24 @@ class WorkflowEngine:
             raise WorkflowError(f"Missing inputs for node '{node.name}': {missing}")
 
         async def execute_single():
-            args = {k: self.state.context[k] for k in node.inputs}
-            if node.timeout:
-                with anyio.fail_after(node.timeout):
-                    return await node.func(**args)
-            return await node.func(**args)
+            if node.sub_workflow:
+                sub_engine = WorkflowEngine(node.sub_workflow)
+                await sub_engine.run(self.state.context)  # Share parent context
+                if node.output and node.output not in self.state.context:
+                    raise WorkflowError(f"Sub-workflow '{node.name}' did not set output '{node.output}'")
+            else:
+                args = {k: self.state.context[k] for k in node.inputs}
+                if node.timeout:
+                    with anyio.fail_after(node.timeout):
+                        return await node.func(**args)
+                return await node.func(**args)
 
         async with self._node_context(node):
             for attempt_num in range(node.retries):
                 try:
                     result = await execute_single()
-                    self.state.update(context={**self.state.context, node.output: result})
+                    if node.func and node.output:
+                        self.state.context[node.output] = result  # Update context in place
                     return
                 except Exception as e:
                     if attempt_num == node.retries - 1:
@@ -282,25 +312,32 @@ async def send_confirmation_email(order: dict) -> bool:
     await anyio.sleep(1)  # Simulate email sending
     return True
 
-# --- Workflow Definition ---
+# --- Workflow Definition with Nested Flow ---
 
+# Define a sub-workflow for payment and shipping
+payment_shipping_sub_wf = (
+    Workflow("process_payment")
+    .node("process_payment")
+    .then("ship_order", condition=lambda ctx: ctx.get("payment_success"))
+    .then("notify_customer_payment_failed", condition=lambda ctx: not ctx.get("payment_success"))
+    .node("ship_order")
+    .node("notify_customer_payment_failed")
+)
+
+# Main workflow incorporating the sub-workflow
 workflow = (
     Workflow("validate_order")
     .sequence(
         "validate_order",
         "check_inventory"
     )
-    .then("process_payment", condition=lambda ctx: ctx.get("in_stock"))
+    .then("payment_shipping", condition=lambda ctx: ctx.get("in_stock"))
     .then("notify_customer_out_of_stock", condition=lambda ctx: not ctx.get("in_stock"))
-    .node("process_payment")
-    .then("ship_order", condition=lambda ctx: ctx.get("payment_success"))
-    .then("notify_customer_payment_failed", condition=lambda ctx: not ctx.get("payment_success"))
-    .node("ship_order")
+    .add_sub_workflow("payment_shipping", payment_shipping_sub_wf, inputs={"order"}, output="shipping_confirmation")
     .parallel("update_order_status", "send_confirmation_email")
     .node("update_order_status")
     .node("send_confirmation_email")
     .node("notify_customer_out_of_stock")
-    .node("notify_customer_payment_failed")
 )
 
 # --- Main Execution ---

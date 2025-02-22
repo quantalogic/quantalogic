@@ -1,6 +1,6 @@
 import importlib
 from pathlib import Path
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import yaml
 from pydantic import ValidationError
@@ -11,6 +11,7 @@ from quantalogic.flow.flow_manager_schema import (
     NodeDefinition,
     TransitionDefinition,
     WorkflowDefinition,
+    WorkflowStructure,
 )
 
 
@@ -22,17 +23,19 @@ class WorkflowManager:
     def add_node(
         self,
         name: str,
-        function: str,
+        function: Optional[str] = None,
+        sub_workflow: Optional[WorkflowStructure] = None,
         output: Optional[str] = None,
         retries: int = 3,
         delay: float = 1.0,
         timeout: Optional[float] = None,
         parallel: bool = False,
     ) -> None:
-        """Add a new node to the workflow definition."""
+        """Add a new node to the workflow definition, supporting sub-workflows."""
         node = NodeDefinition(
             function=function,
-            output=output or f"{name}_result",
+            sub_workflow=sub_workflow,
+            output=output or (f"{name}_result" if function else None),
             retries=retries,
             delay=delay,
             timeout=timeout,
@@ -83,7 +86,7 @@ class WorkflowManager:
     def add_transition(
         self,
         from_: str,
-        to: Union[str, list[str]],
+        to: Union[str, List[str]],
         condition: Optional[str] = None,
     ) -> None:
         """Add a transition between nodes, ensuring all nodes exist."""
@@ -134,32 +137,55 @@ class WorkflowManager:
                 except (ImportError, AttributeError) as e:
                     raise ValueError(f"Failed to import external function '{func_name}': {e}")
 
-        for node_name, node_def in self.workflow.nodes.items():
-            if node_def.function not in functions:
-                raise ValueError(f"Function '{node_def.function}' for node '{node_name}' not found")
-            func = functions[node_def.function]
-            Nodes.define(
-                output=node_def.output,
-                retries=node_def.retries,
-                delay=node_def.delay,
-                timeout=node_def.timeout,
-                parallel=node_def.parallel,
-            )(func)
-
         if not self.workflow.workflow.start:
             raise ValueError("Start node not set in workflow definition")
         wf = Workflow(start=self.workflow.workflow.start)
 
-        # Track nodes added to handle sequences and loops
+        sub_workflows: Dict[str, Workflow] = {}
+        for node_name, node_def in self.workflow.nodes.items():
+            if node_def.sub_workflow:
+                sub_wf = Workflow(node_def.sub_workflow.start)
+                sub_workflows[node_name] = sub_wf
+                added_sub_nodes = set()
+                for trans in node_def.sub_workflow.transitions:
+                    from_node = trans.from_
+                    to_nodes = [trans.to] if isinstance(trans.to, str) else trans.to
+                    if from_node not in added_sub_nodes:
+                        sub_wf.node(from_node)
+                        added_sub_nodes.add(from_node)
+                    for to_node in to_nodes:
+                        if to_node not in added_sub_nodes:
+                            sub_wf.node(to_node)
+                            added_sub_nodes.add(to_node)
+                    condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else lambda _: True
+                    if len(to_nodes) > 1:
+                        sub_wf.parallel(*to_nodes, condition=condition)
+                    else:
+                        sub_wf.then(to_nodes[0], condition=condition)
+                # Use the start node's inputs as the sub-workflow's inputs
+                inputs = Nodes.get(sub_wf.start).inputs
+                wf.add_sub_workflow(node_name, sub_wf, inputs=inputs, output=node_def.output)
+            elif node_def.function:
+                if node_def.function not in functions:
+                    raise ValueError(f"Function '{node_def.function}' for node '{node_name}' not found")
+                func = functions[node_def.function]
+                Nodes.define(
+                    output=node_def.output,
+                    retries=node_def.retries,
+                    delay=node_def.delay,
+                    timeout=node_def.timeout,
+                    parallel=node_def.parallel,
+                )(func)
+
         added_nodes = set()
         for trans in self.workflow.workflow.transitions:
             from_node = trans.from_
             to_nodes = [trans.to] if isinstance(trans.to, str) else trans.to
-            if from_node not in added_nodes:
+            if from_node not in added_nodes and from_node not in sub_workflows:
                 wf.node(from_node)
                 added_nodes.add(from_node)
             for to_node in to_nodes:
-                if to_node not in added_nodes:
+                if to_node not in added_nodes and to_node not in sub_workflows:
                     wf.node(to_node)
                     added_nodes.add(to_node)
             condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else lambda _: True

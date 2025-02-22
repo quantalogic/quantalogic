@@ -2,6 +2,7 @@
 Flow Package Initialization
 
 This module initializes the flow package and provides package-level imports.
+Now supports nested workflows for hierarchical flow definitions.
 """
 
 from loguru import logger

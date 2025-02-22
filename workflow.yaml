@@ -12,6 +12,7 @@ functions:
 nodes:
   start:
     function: greet
+    sub_workflow: null
     output: start_result
     retries: 3
     delay: 1.0
@@ -19,6 +20,7 @@ nodes:
     parallel: false
   end:
     function: farewell
+    sub_workflow: null
     output: end_result
     retries: 3
     delay: 1.0
