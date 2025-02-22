@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import litellm  # New import for LLM integration
 import yaml
+from jinja2 import Template  # Import Jinja2 for templating support
 from pydantic import ValidationError
 
 # Import directly from flow.py to avoid circular import through __init__.py
@@ -187,7 +188,9 @@ class WorkflowManager:
                     messages = []
                     if llm_config.get("system_prompt"):
                         messages.append({"role": "system", "content": llm_config["system_prompt"]})
-                    prompt = llm_config.get("prompt_template", "{input}").format(**kwargs)
+                    # Render the prompt using Jinja2 templating
+                    template = Template(llm_config.get("prompt_template", "{{ input }}"))
+                    prompt = template.render(**kwargs)
                     messages.append({"role": "user", "content": prompt})
                     response = await litellm.acompletion(
                         model=llm_config.get("model", "gpt-3.5-turbo"),
@@ -201,11 +204,19 @@ class WorkflowManager:
                         api_key=llm_config.get("api_key"),
                     )
                     return response.choices[0].message.content
-                inputs = set(re.findall(r"\{([^}]+)\}", llm_config.get("prompt_template", "{input}")))
+                # Extract inputs from the prompt template using regex (conservative approach)
+                inputs = set(re.findall(r"{{\s*([^}]+?)\s*}}", llm_config.get("prompt_template", "{{ input }}")))
+                # Clean up inputs by removing simple expressions (e.g., "completed_chapters + 1" becomes "completed_chapters")
+                cleaned_inputs = set()
+                for input_var in inputs:
+                    # Split on common operators and take the first variable-like part
+                    base_var = re.split(r"\s*[\+\-\*/]\s*", input_var.strip())[0].strip()
+                    if base_var.isidentifier():  # Ensure it's a valid Python identifier
+                        cleaned_inputs.add(base_var)
                 Nodes._registry[node_name] = Node(
                     name=node_name,
                     func=llm_func,
-                    inputs=inputs,
+                    inputs=cleaned_inputs,
                     output=node_def.output or f"{node_name}_result",
                     retries=node_def.retries,
                     delay=node_def.delay,

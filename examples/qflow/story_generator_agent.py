@@ -7,14 +7,13 @@
 #     "litellm",
 #     "pydantic>=2.0",
 #     "anyio",
-#     "litellm",
-#     "quantalogic>=0.35"
+#     "quantalogic>=0.35",
+#     "jinja2"  # Added for Jinja2 templating support
 # ]
 # ///
 from typing import List
 
 import anyio
-import litellm
 from loguru import logger
 
 from quantalogic.flow import Nodes, Workflow
@@ -39,7 +38,7 @@ async def validate_input(genre: str, num_chapters: int) -> str:
 @Nodes.llm_node(
     **DEFAULT_LLM_PARAMS,
     system_prompt="You are a creative writer specializing in story titles.",
-    prompt_template="Generate a creative title for a {genre} story",
+    prompt_template="Generate a creative title for a {{ genre }} story",
     output="title",
 )
 async def generate_title(genre: str) -> str:
@@ -49,33 +48,22 @@ async def generate_title(genre: str) -> str:
 @Nodes.llm_node(
     **DEFAULT_LLM_PARAMS,
     system_prompt="You are an expert in story structuring and outlining.",
-    prompt_template="Create a detailed outline for a {genre} story titled '{title}' with {num_chapters} chapters",
+    prompt_template="Create a detailed outline for a {{ genre }} story titled '{{ title }}' with {{ num_chapters }} chapters",
     output="outline",
 )
 async def generate_outline(genre: str, title: str, num_chapters: int) -> str:
     """Generate a chapter outline for the story (handled by llm_node)."""
     pass  # Logic handled by llm_node decorator
 
-@Nodes.define(output="chapter_content")
+@Nodes.llm_node(
+    **DEFAULT_LLM_PARAMS,
+    system_prompt="You are a skilled storyteller with a knack for vivid descriptions.",
+    prompt_template="Write chapter {{ completed_chapters + 1 }} of {{ num_chapters }} for the story '{{ title }}'. Outline: {{ outline }}. Style: {{ style }}",
+    output="chapter_content",
+)
 async def generate_chapter(title: str, outline: str, completed_chapters: int, num_chapters: int, style: str = "descriptive") -> str:
-    """Generate content for a specific chapter."""
-    chapter_num = completed_chapters + 1  # Compute the current chapter number
-    prompt = f"Write chapter {chapter_num} of {num_chapters} for the story '{title}'. Outline: {outline}. Style: {style}"
-    messages = [
-        {"role": "system", "content": "You are a skilled storyteller with a knack for vivid descriptions."},
-        {"role": "user", "content": prompt},
-    ]
-    response = await litellm.acompletion(
-        model=MODEL,
-        messages=messages,
-        temperature=0.7,
-        max_tokens=2000,
-        top_p=1.0,
-        presence_penalty=0.0,
-        frequency_penalty=0.0,
-        drop_params=True
-    )
-    return response.choices[0].message.content
+    """Generate content for a specific chapter (handled by llm_node with Jinja2 templating)."""
+    pass  # Logic handled by llm_node decorator
 
 @Nodes.define(output="completed_chapters")
 async def update_chapter_progress(chapters: List[str], chapter_content: str, completed_chapters: int) -> int:
@@ -91,7 +79,7 @@ async def compile_book(title: str, outline: str, chapters: List[str]) -> str:
 @Nodes.llm_node(
     **DEFAULT_LLM_PARAMS,
     system_prompt="You are a meticulous editor reviewing manuscripts for quality.",
-    prompt_template="Review this manuscript for coherence, grammar, and quality:\n\n{manuscript}",
+    prompt_template="Review this manuscript for coherence, grammar, and quality:\n\n{{ manuscript }}",
     output="quality_check_result",
 )
 async def quality_check(manuscript: str) -> str:

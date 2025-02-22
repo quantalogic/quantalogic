@@ -17,6 +17,7 @@ from typing import (
 
 import anyio
 import litellm  # New import for LLM integration
+from jinja2 import Template  # Import Jinja2 for templating
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -118,32 +119,35 @@ class Nodes:
     def llm_node(
         cls,
         model: str = "gpt-3.5-turbo",
-        system_prompt: Optional[str] = None,  # New: Configurable system prompt
-        prompt_template: str = "{input}",
+        system_prompt: Optional[str] = None,
+        prompt_template: str = "{{ input }}",  # Now a Jinja2 template
         output: str = "llm_response",
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
-        top_p: float = 1.0,  # New: Nucleus sampling
-        presence_penalty: float = 0.0,  # New: Encourage new topics
-        frequency_penalty: float = 0.0,  # New: Reduce repetition
-        stop: Optional[List[str]] = None,  # New: Stop sequences
-        api_key: Optional[str] = None,  # New: Custom API key
+        top_p: float = 1.0,
+        presence_penalty: float = 0.0,
+        frequency_penalty: float = 0.0,
+        stop: Optional[List[str]] = None,
+        api_key: Optional[str] = None,
         retries: int = 3,
         delay: float = 1.0,
         timeout: Optional[float] = None,
         parallel: bool = False,
         post_process: Optional[Callable[[str], Any]] = None,
     ):
-        """Decorator to register an LLM node with litellm integration."""
+        """Decorator to register an LLM node with Jinja2 templating for dynamic prompts."""
         async def call_llm(**kwargs) -> Any:
-            # Construct the messages list
+            # Render the prompt using Jinja2 with the full context
+            template = Template(prompt_template)
+            prompt = template.render(**kwargs)
+
+            # Build the messages list
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
-            prompt = prompt_template.format(**kwargs)
             messages.append({"role": "user", "content": prompt})
 
-            # Call litellm with all parameters
+            # Call the LLM via litellm
             response = await litellm.acompletion(
                 model=model,
                 messages=messages,
@@ -154,7 +158,7 @@ class Nodes:
                 frequency_penalty=frequency_penalty,
                 stop=stop,
                 api_key=api_key,
-                drop_params=True
+                drop_params=True,
             )
             result = response.choices[0].message.content
             return post_process(result) if post_process else result
@@ -172,10 +176,10 @@ class Nodes:
                 timeout=timeout,
                 parallel=parallel,
             )
-            # Define wrapper to expose call_llm for explicit invocation
+            # Wrapper to allow direct invocation
             async def wrapper(**kwargs):
                 return await call_llm(**kwargs)
-            wrapper._call_llm = call_llm  # Attach call_llm for use in decorated functions
+            wrapper._call_llm = call_llm  # Attach for internal use
             return wrapper
         return decorator
 
