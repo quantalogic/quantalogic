@@ -13,6 +13,7 @@ nodes:
   start:
     function: greet
     sub_workflow: null
+    llm_config: null
     output: start_result
     retries: 3
     delay: 1.0
@@ -21,6 +22,7 @@ nodes:
   end:
     function: farewell
     sub_workflow: null
+    llm_config: null
     output: end_result
     retries: 3
     delay: 1.0

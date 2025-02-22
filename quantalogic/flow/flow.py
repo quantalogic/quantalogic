@@ -16,6 +16,7 @@ from typing import (
 )
 
 import anyio
+import litellm  # New import for LLM integration
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -112,6 +113,67 @@ class Nodes:
     def validate_node(cls, output: Optional[str] = None, **kwargs):
         """Decorator for validation nodes."""
         return cls.define(output=output, **kwargs)
+
+    @classmethod
+    def llm_node(
+        cls,
+        model: str = "gpt-3.5-turbo",
+        system_prompt: Optional[str] = None,  # New: Configurable system prompt
+        prompt_template: str = "{input}",
+        output: str = "llm_response",
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        top_p: float = 1.0,  # New: Nucleus sampling
+        presence_penalty: float = 0.0,  # New: Encourage new topics
+        frequency_penalty: float = 0.0,  # New: Reduce repetition
+        stop: Optional[List[str]] = None,  # New: Stop sequences
+        api_key: Optional[str] = None,  # New: Custom API key
+        retries: int = 3,
+        delay: float = 1.0,
+        timeout: Optional[float] = None,
+        parallel: bool = False,
+        post_process: Optional[Callable[[str], Any]] = None,
+    ):
+        """Decorator to register an LLM node with litellm integration."""
+        async def call_llm(**kwargs) -> Any:
+            # Construct the messages list
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            prompt = prompt_template.format(**kwargs)
+            messages.append({"role": "user", "content": prompt})
+
+            # Call litellm with all parameters
+            response = await litellm.acompletion(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                presence_penalty=presence_penalty,
+                frequency_penalty=frequency_penalty,
+                stop=stop,
+                api_key=api_key,
+                drop_params=True
+            )
+            result = response.choices[0].message.content
+            return post_process(result) if post_process else result
+
+        def decorator(func: Callable):
+            name = func.__name__
+            inputs = set(inspect.signature(func).parameters) - {"kwargs"}
+            cls._registry[name] = Node(
+                name=name,
+                func=call_llm,
+                inputs=inputs,
+                output=output,
+                retries=retries,
+                delay=delay,
+                timeout=timeout,
+                parallel=parallel,
+            )
+            return func
+        return decorator
 
     @classmethod
     def get(cls, name: str) -> Node:

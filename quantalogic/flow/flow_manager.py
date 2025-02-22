@@ -1,11 +1,14 @@
 import importlib
+import re
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
+import litellm  # New import for LLM integration
 import yaml
 from pydantic import ValidationError
 
-from quantalogic.flow import Nodes, Workflow
+# Import directly from flow.py to avoid circular import through __init__.py
+from quantalogic.flow.flow import Node, Nodes, Workflow
 from quantalogic.flow.flow_manager_schema import (
     FunctionDefinition,
     NodeDefinition,
@@ -25,17 +28,19 @@ class WorkflowManager:
         name: str,
         function: Optional[str] = None,
         sub_workflow: Optional[WorkflowStructure] = None,
+        llm_config: Optional[Dict[str, Any]] = None,
         output: Optional[str] = None,
         retries: int = 3,
         delay: float = 1.0,
         timeout: Optional[float] = None,
         parallel: bool = False,
     ) -> None:
-        """Add a new node to the workflow definition, supporting sub-workflows."""
+        """Add a new node to the workflow definition, supporting sub-workflows and LLM nodes."""
         node = NodeDefinition(
             function=function,
             sub_workflow=sub_workflow,
-            output=output or (f"{name}_result" if function else None),
+            llm_config=llm_config,
+            output=output or (f"{name}_result" if function or llm_config else None),
             retries=retries,
             delay=delay,
             timeout=timeout,
@@ -176,6 +181,37 @@ class WorkflowManager:
                     timeout=node_def.timeout,
                     parallel=node_def.parallel,
                 )(func)
+            elif node_def.llm_config:
+                llm_config = node_def.llm_config
+                async def llm_func(**kwargs):
+                    messages = []
+                    if llm_config.get("system_prompt"):
+                        messages.append({"role": "system", "content": llm_config["system_prompt"]})
+                    prompt = llm_config.get("prompt_template", "{input}").format(**kwargs)
+                    messages.append({"role": "user", "content": prompt})
+                    response = await litellm.acompletion(
+                        model=llm_config.get("model", "gpt-3.5-turbo"),
+                        messages=messages,
+                        temperature=llm_config.get("temperature", 0.7),
+                        max_tokens=llm_config.get("max_tokens"),
+                        top_p=llm_config.get("top_p", 1.0),
+                        presence_penalty=llm_config.get("presence_penalty", 0.0),
+                        frequency_penalty=llm_config.get("frequency_penalty", 0.0),
+                        stop=llm_config.get("stop"),
+                        api_key=llm_config.get("api_key"),
+                    )
+                    return response.choices[0].message.content
+                inputs = set(re.findall(r"\{([^}]+)\}", llm_config.get("prompt_template", "{input}")))
+                Nodes._registry[node_name] = Node(
+                    name=node_name,
+                    func=llm_func,
+                    inputs=inputs,
+                    output=node_def.output or f"{node_name}_result",
+                    retries=node_def.retries,
+                    delay=node_def.delay,
+                    timeout=node_def.timeout,
+                    parallel=node_def.parallel,
+                )
 
         added_nodes = set()
         for trans in self.workflow.workflow.transitions:

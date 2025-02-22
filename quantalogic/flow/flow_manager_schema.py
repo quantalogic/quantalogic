@@ -15,6 +15,7 @@ class FunctionDefinition(BaseModel):
 class NodeDefinition(BaseModel):
     function: Optional[str] = None
     sub_workflow: Optional["WorkflowStructure"] = None
+    llm_config: Optional[Dict[str, Any]] = None  # Supports LLM parameters like system_prompt, top_p, etc.
     output: Optional[str] = None  # Made optional to align with Node
     retries: int = 3
     delay: float = 1.0
@@ -24,13 +25,14 @@ class NodeDefinition(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def check_function_or_sub_workflow(cls, data: Any) -> Any:
-        """Ensure a node has either a function or a sub-workflow."""
+        """Ensure a node has either a function, sub-workflow, or LLM config, but not more than one."""
         func = data.get("function")
         sub_wf = data.get("sub_workflow")
-        if func is None and sub_wf is None:
-            raise ValueError("Node must have either 'function' or 'sub_workflow'")
-        if func is not None and sub_wf is not None:
-            raise ValueError("Node cannot have both 'function' and 'sub_workflow'")
+        llm = data.get("llm_config")
+        if all(x is None for x in (func, sub_wf, llm)):
+            raise ValueError("Node must have either 'function', 'sub_workflow', or 'llm_config'")
+        if sum(x is not None for x in (func, sub_wf, llm)) > 1:
+            raise ValueError("Node cannot have more than one of 'function', 'sub_workflow', or 'llm_config'")
         return data
 
 
@@ -49,6 +51,7 @@ class WorkflowDefinition(BaseModel):
     functions: Dict[str, FunctionDefinition] = {}
     nodes: Dict[str, NodeDefinition] = {}
     workflow: WorkflowStructure = WorkflowStructure()
+
 
 # Resolve forward reference
 NodeDefinition.model_rebuild()

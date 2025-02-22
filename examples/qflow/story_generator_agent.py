@@ -13,19 +13,19 @@
 from typing import List
 
 import anyio
-from litellm import acompletion
 from loguru import logger
 
 from quantalogic.flow import Nodes, Workflow
 
 MODEL = "gemini/gemini-2.0-flash"
-DEFAULT_PARAMS = {"temperature": 0.7, "max_tokens": 2000}
-
-async def generate_content(prompt: str, **kwargs) -> str:
-    """Helper function for LLM content generation."""
-    params = {**DEFAULT_PARAMS, **kwargs}
-    response = await acompletion(model=MODEL, messages=[{"role": "user", "content": prompt}], **params)
-    return response.choices[0].message.content.strip()
+DEFAULT_LLM_PARAMS = {
+    "model": MODEL,
+    "temperature": 0.7,
+    "max_tokens": 2000,
+    "top_p": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+}
 
 @Nodes.validate_node(output="validation_result")
 async def validate_input(genre: str, num_chapters: int) -> str:
@@ -34,22 +34,43 @@ async def validate_input(genre: str, num_chapters: int) -> str:
         raise ValueError(f"Invalid input: num_chapters must be 1-20, genre must be one of science fiction, fantasy, mystery, romance")
     return "Input validated"
 
-@Nodes.define(output="title")
+@Nodes.llm_node(
+    **DEFAULT_LLM_PARAMS,
+    system_prompt="You are a creative writer specializing in story titles.",
+    prompt_template="Generate a creative title for a {genre} story",
+    output="title",
+)
 async def generate_title(genre: str) -> str:
-    """Generate a title based on the genre."""
-    return await generate_content(f"Generate a creative title for a {genre} story")
+    """Generate a title based on the genre (handled by llm_node)."""
+    pass  # Logic handled by llm_node decorator
 
-@Nodes.define(output="outline")
+@Nodes.llm_node(
+    **DEFAULT_LLM_PARAMS,
+    system_prompt="You are an expert in story structuring and outlining.",
+    prompt_template="Create a detailed outline for a {genre} story titled '{title}' with {num_chapters} chapters",
+    output="outline",
+)
 async def generate_outline(genre: str, title: str, num_chapters: int) -> str:
-    """Generate a chapter outline for the story."""
-    return await generate_content(f"Create a detailed outline for a {genre} story titled '{title}' with {num_chapters} chapters")
+    """Generate a chapter outline for the story (handled by llm_node)."""
+    pass  # Logic handled by llm_node decorator
 
-@Nodes.define(output="chapter_content")
+@Nodes.llm_node(
+    **DEFAULT_LLM_PARAMS,
+    system_prompt="You are a skilled storyteller with a knack for vivid descriptions.",
+    prompt_template="Write chapter {chapter_num} of {num_chapters} for the story '{title}'. Outline: {outline}. Style: {style}",
+    output="chapter_content",
+)
 async def generate_chapter(title: str, outline: str, completed_chapters: int, num_chapters: int, style: str = "descriptive") -> str:
-    """Generate content for a specific chapter."""
-    return await generate_content(
-        f"Write chapter {completed_chapters + 1} of {num_chapters} for the story '{title}'. Outline: {outline}. Style: {style}"
-    )
+    """Generate content for a specific chapter (handled by llm_node)."""
+    chapter_num = completed_chapters + 1  # Compute chapter_num from completed_chapters
+    kwargs = {
+        "chapter_num": chapter_num,
+        "num_chapters": num_chapters,
+        "title": title,
+        "outline": outline,
+        "style": style,
+    }
+    return await generate_chapter._call_llm(**kwargs)  # Direct call to the LLM logic
 
 @Nodes.define(output="completed_chapters")
 async def update_chapter_progress(chapters: List[str], chapter_content: str, completed_chapters: int) -> int:
@@ -62,10 +83,15 @@ async def compile_book(title: str, outline: str, chapters: List[str]) -> str:
     """Compile the full manuscript from title, outline, and chapters."""
     return f"Title: {title}\n\nOutline:\n{outline}\n\n" + "\n\n".join(f"Chapter {i}:\n{chap}" for i, chap in enumerate(chapters, 1))
 
-@Nodes.define(output="quality_check_result")
+@Nodes.llm_node(
+    **DEFAULT_LLM_PARAMS,
+    system_prompt="You are a meticulous editor reviewing manuscripts for quality.",
+    prompt_template="Review this manuscript for coherence, grammar, and quality:\n\n{manuscript}",
+    output="quality_check_result",
+)
 async def quality_check(manuscript: str) -> str:
-    """Perform a quality check on the compiled manuscript."""
-    return await generate_content(f"Review this manuscript for coherence, grammar, and quality:\n\n{manuscript}")
+    """Perform a quality check on the compiled manuscript (handled by llm_node)."""
+    pass  # Logic handled by llm_node decorator
 
 @Nodes.define()
 async def end(quality_check_result: str) -> None:
