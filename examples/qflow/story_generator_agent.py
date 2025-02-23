@@ -38,7 +38,7 @@ async def validate_input(genre: str, num_chapters: int) -> str:
 @Nodes.llm_node(
     **DEFAULT_LLM_PARAMS,
     system_prompt="You are a creative writer specializing in story titles.",
-    prompt_template="Generate a creative title for a {{ genre }} story",
+    prompt_template="Generate a creative title for a {{ genre }} story. Output only the title.",
     output="title",
 )
 async def generate_title(genre: str) -> str:
@@ -48,7 +48,7 @@ async def generate_title(genre: str) -> str:
 @Nodes.llm_node(
     **DEFAULT_LLM_PARAMS,
     system_prompt="You are an expert in story structuring and outlining.",
-    prompt_template="Create a detailed outline for a {{ genre }} story titled '{{ title }}' with {{ num_chapters }} chapters",
+    prompt_template="Create a detailed outline for a {{ genre }} story titled '{{ title }}' with {{ num_chapters }} chapters. Only the outline in markdown, no comments.",
     output="outline",
 )
 async def generate_outline(genre: str, title: str, num_chapters: int) -> str:
@@ -58,7 +58,7 @@ async def generate_outline(genre: str, title: str, num_chapters: int) -> str:
 @Nodes.llm_node(
     **DEFAULT_LLM_PARAMS,
     system_prompt="You are a skilled storyteller with a knack for vivid descriptions.",
-    prompt_template="Write chapter {{ completed_chapters + 1 }} of {{ num_chapters }} for the story '{{ title }}'. Outline: {{ outline }}. Style: {{ style }}",
+    prompt_template="Write chapter {{ completed_chapters + 1 }} of {{ num_chapters }} for the story '{{ title }}'. Outline: {{ outline }}. Style: {{ style }}. Output only the chapter content, markdown format",
     output="chapter_content",
 )
 async def generate_chapter(title: str, outline: str, completed_chapters: int, num_chapters: int, style: str = "descriptive") -> str:
