@@ -91,25 +91,17 @@ async def end(quality_check_result: str) -> None:
     """Log the end of the workflow."""
     logger.info(f"Story generation completed. Quality check: {quality_check_result}")
 
-# Define the workflow with explicit transitions to ensure correct execution order
+# Define the workflow using simplified syntax with automatic node registration
 workflow = (
     Workflow("validate_input")
-    .node("validate_input")
     .then("generate_title")
-    .node("generate_title")
     .then("generate_outline")
-    .node("generate_outline")
     .then("generate_chapter")
-    .node("generate_chapter")
     .then("update_chapter_progress")
-    .node("update_chapter_progress")
     .then("generate_chapter", condition=lambda ctx: ctx["completed_chapters"] < ctx["num_chapters"])
     .then("compile_book", condition=lambda ctx: ctx["completed_chapters"] >= ctx["num_chapters"])
-    .node("compile_book")
     .then("quality_check")
-    .node("quality_check")
     .then("end")
-    .node("end")
 )
 
 async def main():

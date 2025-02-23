@@ -58,6 +58,7 @@ class WorkflowEngine:
         logger.info("Workflow execution completed")
         return self.context
 
+
 class Workflow:
     def __init__(self, start_node: str):
         """Initialize a workflow with a starting node."""
@@ -67,15 +68,21 @@ class Workflow:
         self.node_outputs: Dict[str, Optional[str]] = {}
         self.transitions: Dict[str, List[Tuple[str, Optional[Callable]]]] = {}
         self.current_node = None
+        self._register_node(start_node)  # Register the start node without setting current_node
+        self.current_node = start_node  # Set current_node explicitly after registration
 
-    def node(self, name: str):
-        """Add a node to the workflow chain."""
+    def _register_node(self, name: str):
+        """Register a node without modifying the current node."""
         if name not in Nodes.NODE_REGISTRY:
             raise ValueError(f"Node {name} not registered")
         func, inputs, output = Nodes.NODE_REGISTRY[name]
         self.nodes[name] = func
         self.node_inputs[name] = inputs
         self.node_outputs[name] = output
+
+    def node(self, name: str):
+        """Add a node to the workflow chain and set it as the current node."""
+        self._register_node(name)
         self.current_node = name
         return self
 
@@ -97,8 +104,11 @@ class Workflow:
 
     def then(self, next_node: str, condition: Optional[Callable] = None):
         """Add a transition to the next node with an optional condition."""
+        if next_node not in self.nodes:
+            self._register_node(next_node)  # Register without changing current_node
         if self.current_node:
             self.transitions.setdefault(self.current_node, []).append((next_node, condition))
+            logger.debug(f"Added transition from {self.current_node} to {next_node} with condition {condition}")
         else:
             logger.warning("No current node set for transition")
         self.current_node = next_node
@@ -129,6 +139,7 @@ class Workflow:
     def build(self) -> WorkflowEngine:
         """Build and return a WorkflowEngine instance."""
         return WorkflowEngine(self)
+
 
 class Nodes:
     NODE_REGISTRY = {}  # Registry to hold node functions and metadata
@@ -282,6 +293,7 @@ class Nodes:
             logger.error(f"Error rendering prompt template: {e}")
             raise
 
+
 # Example workflow matching the provided structure
 async def example_workflow():
     # Define Pydantic model for structured output
@@ -334,10 +346,10 @@ async def example_workflow():
     # Main workflow incorporating the sub-workflow
     workflow = (
         Workflow("validate_order")
+        .add_sub_workflow("payment_shipping", payment_shipping_sub_wf, inputs={"order": "order"}, output="shipping_confirmation")
         .sequence("validate_order", "check_inventory")
         .then("payment_shipping", condition=lambda ctx: ctx.get("inventory_status").in_stock if ctx.get("inventory_status") else False)
         .then("notify_customer_out_of_stock", condition=lambda ctx: not ctx.get("inventory_status").in_stock if ctx.get("inventory_status") else True)
-        .add_sub_workflow("payment_shipping", payment_shipping_sub_wf, inputs={"order": "order"}, output="shipping_confirmation")
         .parallel("update_order_status", "send_confirmation_email")
         .node("update_order_status")
         .node("send_confirmation_email")

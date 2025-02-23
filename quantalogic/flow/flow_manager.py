@@ -6,10 +6,11 @@ from typing import Any, Callable, Dict, List, Optional, Union
 import litellm  # New import for LLM integration
 import yaml
 from jinja2 import Template  # Import Jinja2 for templating support
+from loguru import logger
 from pydantic import ValidationError
 
 # Import directly from flow.py to avoid circular import through __init__.py
-from quantalogic.flow.flow import Node, Nodes, Workflow
+from quantalogic.flow.flow import Nodes, Workflow
 from quantalogic.flow.flow_manager_schema import (
     FunctionDefinition,
     NodeDefinition,
@@ -169,19 +170,15 @@ class WorkflowManager:
                     else:
                         sub_wf.then(to_nodes[0], condition=condition)
                 # Use the start node's inputs as the sub-workflow's inputs
-                inputs = Nodes.get(sub_wf.start).inputs
-                wf.add_sub_workflow(node_name, sub_wf, inputs=inputs, output=node_def.output)
+                inputs = list(Nodes.NODE_REGISTRY[sub_wf.start_node][1])  # Extract inputs from registry
+                wf.add_sub_workflow(node_name, sub_wf, inputs={k: k for k in inputs}, output=node_def.output)
             elif node_def.function:
                 if node_def.function not in functions:
                     raise ValueError(f"Function '{node_def.function}' for node '{node_name}' not found")
                 func = functions[node_def.function]
                 Nodes.define(
                     output=node_def.output,
-                    retries=node_def.retries,
-                    delay=node_def.delay,
-                    timeout=node_def.timeout,
-                    parallel=node_def.parallel,
-                )(func)
+                )(func)  # Register without retries, delay, etc., as they aren't used by WorkflowEngine
             elif node_def.llm_config:
                 llm_config = node_def.llm_config
                 async def llm_func(**kwargs):
@@ -213,16 +210,10 @@ class WorkflowManager:
                     base_var = re.split(r"\s*[\+\-\*/]\s*", input_var.strip())[0].strip()
                     if base_var.isidentifier():  # Ensure it's a valid Python identifier
                         cleaned_inputs.add(base_var)
-                Nodes._registry[node_name] = Node(
-                    name=node_name,
-                    func=llm_func,
-                    inputs=cleaned_inputs,
-                    output=node_def.output or f"{node_name}_result",
-                    retries=node_def.retries,
-                    delay=node_def.delay,
-                    timeout=node_def.timeout,
-                    parallel=node_def.parallel,
-                )
+                # Register the LLM node in Nodes.NODE_REGISTRY
+                Nodes.NODE_REGISTRY[node_name] = (llm_func, list(cleaned_inputs), node_def.output or f"{node_name}_result")
+                # Log registration for consistency with flow.py
+                logger.debug(f"Registering LLM node {node_name} with inputs {cleaned_inputs} and output {node_def.output or f'{node_name}_result'}")
 
         added_nodes = set()
         for trans in self.workflow.workflow.transitions:
