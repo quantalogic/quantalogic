@@ -9,7 +9,7 @@ from jinja2 import Template  # Import Jinja2 for templating support
 from pydantic import ValidationError
 
 # Import directly from flow.py to avoid circular import through __init__.py
-from quantalogic.flow.flow import Nodes, Workflow
+from quantalogic.flow.flow import Node, Nodes, Workflow
 from quantalogic.flow.flow_manager_schema import (
     FunctionDefinition,
     NodeDefinition,
