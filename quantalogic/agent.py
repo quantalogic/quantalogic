@@ -690,10 +690,14 @@ class Agent(BaseModel):
         try:
             import re
             for var in self.variable_store.keys():
-                # Create safe pattern without double-escaping backslashes
-                safe_var = re.sub(r"([\\\.\^\$\*\+\?\{\}\[\]\|\(\)])", r"\\\1", var)
-                pattern = rf"\${safe_var}\$"
-                replacement = self.variable_store[var]
+                # Escape the variable name for regex, but use raw value for replacement
+                pattern = rf"\${re.escape(var)}\$"
+                value = self.variable_store[var]
+                # Convert dictionary values to JSON strings
+                if isinstance(value, dict):
+                    replacement = json.dumps(value)
+                else:
+                    replacement = str(value)
                 text = re.sub(pattern, replacement, text)
             return text
         except Exception as e:
