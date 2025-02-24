@@ -215,7 +215,7 @@ class WorkflowManager:
 
         if not self.workflow.workflow.start:
             raise ValueError("Start node not set in workflow definition")
-        wf = Workflow(start=self.workflow.workflow.start)
+        wf = Workflow(start_node=self.workflow.workflow.start)
 
         sub_workflows: Dict[str, Workflow] = {}
         for node_name, node_def in self.workflow.nodes.items():
@@ -329,14 +329,25 @@ class WorkflowManager:
             raise ValueError(f"Invalid workflow YAML: {e}")
 
     def save_to_yaml(self, file_path: Union[str, Path]) -> None:
-        """Save the workflow to a YAML file using aliases for field names."""
+        """Save the workflow to a YAML file using aliases and multi-line block scalars for code."""
         file_path = Path(file_path)
+        # Custom representer to use multi-line block scalars for multi-line strings
+        def str_representer(dumper, data):
+            if "\n" in data:  # Use block scalar for multi-line strings
+                return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
+            return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+
+        # Add the custom representer to the SafeDumper
+        yaml.add_representer(str, str_representer, Dumper=yaml.SafeDumper)
+
         with file_path.open("w") as f:
             yaml.safe_dump(
                 self.workflow.model_dump(by_alias=True),
                 f,
                 default_flow_style=False,
                 sort_keys=False,
+                allow_unicode=True,
+                width=120,  # Wider width to reduce wrapping
             )
 
 
