@@ -51,14 +51,18 @@ from .utilities.csv_processor_tool import CSVProcessorTool
 from .utilities.download_file_tool import PrepareDownloadTool
 from .utilities.mermaid_validator_tool import MermaidValidatorTool
 
-# from .finance.yahoo_finance import YFinanceTool
-# from .finance.finance_llm_tool import FinanceLLMTool
-# from .finance.google_finance import GFinanceTool
+#from .finance.yahoo_finance import YFinanceTool
+#from .finance.finance_llm_tool import FinanceLLMTool
+#from .finance.google_finance import GFinanceTool
 # from .finance.alpha_vantage_tool import AlphaVantageTool
 # from .finance.ccxt_tool import CCXTTool
 # from .finance.market_intelligence_tool import MarketIntelligenceTool
 # from .finance.tradingview_tool import TradingViewTool
 # from .finance.technical_analysis_tool import TechnicalAnalysisTool
+
+from .nasa_packages.nasa_neows_tool import NasaNeoWsTool
+from .nasa_packages.nasa_apod_tool import NasaApodTool
+from .product_hunt.product_hunt_tool import ProductHuntTool
 
 __all__ = [
     "WikipediaSearchTool",
@@ -115,9 +119,12 @@ __all__ = [
     # "YFinanceTool",
     # "FinanceLLMTool",
     # "GFinanceTool",
+    "NasaNeoWsTool",
+    "NasaApodTool",
     # "AlphaVantageTool",
     # "CCXTTool",
     # "MarketIntelligenceTool",
     # "TradingViewTool",
     # "TechnicalAnalysisTool"
+    "ProductHuntTool",
 ]

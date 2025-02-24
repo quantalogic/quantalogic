@@ -342,6 +342,10 @@ async def download_file(filename: str):
         media_type='application/octet-stream'
     )
 
+@app.get("/api/agent/health")
+async def health_check() -> Dict[str, str]:
+    return {"status": "ok"}
+
 
 if __name__ == "__main__":
     config = uvicorn.Config(

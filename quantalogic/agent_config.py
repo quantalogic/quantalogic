@@ -57,14 +57,17 @@ from quantalogic.tools import (
     CSVProcessorTool,
     PrepareDownloadTool,
     MermaidValidatorTool,
-    # YFinanceTool,
-    # FinanceLLMTool,
-    # AlphaVantageTool,
-    # CCXTTool,
-    # GFinanceTool,
+    # YFinanceTool,
+    # FinanceLLMTool,
+    # # AlphaVantageTool,
+    # # CCXTTool,
+    # GFinanceTool,
     # MarketIntelligenceTool,
     # TradingViewTool,
-    # TechnicalAnalysisTool
+    # TechnicalAnalysisTool,
+    NasaNeoWsTool,
+    NasaApodTool,
+    ProductHuntTool
 )
 from composio import ComposioToolSet, Action
 
@@ -361,9 +364,9 @@ def create_custom_agent(
         "wikipedia_search": lambda params: WikipediaSearchTool(),
         "write_file": lambda params: WriteFileTool(),
         "google_news": lambda params: GoogleNewsTool(
-            model_name=params.get("model_name", model_name),
-            on_token=console_print_token if not no_stream else None,
-            event_emitter=event_emitter
+            # model_name=params.get("model_name", model_name),
+            # on_token=console_print_token if not no_stream else None,
+            # event_emitter=event_emitter
         ),
         "presentation_llm": lambda params: PresentationLLMTool(
             model_name=params.get("model_name", model_name),
@@ -419,11 +422,17 @@ def create_custom_agent(
             name="weather_tool",
             description="Get weather information for a location"
         ),
-        # "YFinanceTool": lambda params: YFinanceTool(),
-        # "FinanceLLMTool": lambda params: FinanceLLMTool(),
+        # "yfinance_tool": lambda params: YFinanceTool(),
+        # "finance_llm_tool": lambda params: FinanceLLMTool(
+        #     model_name=params.get("model_name", model_name),
+        #     on_token=console_print_token if not no_stream else None,
+        #     event_emitter=event_emitter),
+        # "gfinance_tool": lambda params: GFinanceTool(),
+        "nasa_neows_tool": lambda params: NasaNeoWsTool(),
+        "nasa_apod_tool": lambda params: NasaApodTool(),
+        "product_hunt_tool": lambda params : ProductHuntTool(),
         # "AlphaVantageTool": lambda params: AlphaVantageTool(),
         # "CCXTTool": lambda params: CCXTTool(),
-        # "GFinanceTool": lambda params: GFinanceTool(),
         # "MarketIntelligenceTool": lambda params: MarketIntelligenceTool(),
         # "TradingViewTool": lambda params: TradingViewTool(),
         # "TechnicalAnalysisTool": lambda params: TechnicalAnalysisTool(),

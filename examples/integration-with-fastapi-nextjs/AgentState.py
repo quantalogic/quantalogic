@@ -135,7 +135,7 @@ class AgentState:
             )
              
             # Override ask_for_user_validation with SSE-based method 
-            agent.ask_for_user_validation = self.sse_ask_for_user_validation
+            # agent.ask_for_user_validation = self.sse_ask_for_user_validation
 
             # Set up event handlers
             self._setup_agent_events(agent)
