@@ -1,13 +1,11 @@
 import importlib
 import re
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
-import litellm  # New import for LLM integration
 import yaml
-from jinja2 import Template  # Import Jinja2 for templating support
 from loguru import logger
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 # Import directly from flow.py to avoid circular import through __init__.py
 from quantalogic.flow.flow import Nodes, Workflow
@@ -127,6 +125,18 @@ class WorkflowManager:
         func_def = FunctionDefinition(type=type_, code=code, module=module, function=function)
         self.workflow.functions[name] = func_def
 
+    def _resolve_model(self, model_str: str) -> Type[BaseModel]:
+        """Resolve a string to a Pydantic model class for structured_llm_node."""
+        try:
+            module_name, class_name = model_str.split(":")
+            module = importlib.import_module(module_name)
+            model_class = getattr(module, class_name)
+            if not issubclass(model_class, BaseModel):
+                raise ValueError(f"{model_str} is not a Pydantic model")
+            return model_class
+        except (ValueError, ImportError, AttributeError) as e:
+            raise ValueError(f"Failed to resolve response_model '{model_str}': {e}")
+
     def instantiate_workflow(self) -> Workflow:
         """Instantiates a Workflow object based on the definitions stored in the WorkflowManager."""
         functions: Dict[str, Callable] = {}
@@ -169,8 +179,7 @@ class WorkflowManager:
                         sub_wf.parallel(*to_nodes, condition=condition)
                     else:
                         sub_wf.then(to_nodes[0], condition=condition)
-                # Use the start node's inputs as the sub-workflow's inputs
-                inputs = list(Nodes.NODE_REGISTRY[sub_wf.start_node][1])  # Extract inputs from registry
+                inputs = list(Nodes.NODE_REGISTRY[sub_wf.start_node][1])
                 wf.add_sub_workflow(node_name, sub_wf, inputs={k: k for k in inputs}, output=node_def.output)
             elif node_def.function:
                 if node_def.function not in functions:
@@ -178,42 +187,56 @@ class WorkflowManager:
                 func = functions[node_def.function]
                 Nodes.define(
                     output=node_def.output,
-                )(func)  # Register without retries, delay, etc., as they aren't used by WorkflowEngine
+                )(func)
             elif node_def.llm_config:
                 llm_config = node_def.llm_config
-                async def llm_func(**kwargs):
-                    messages = []
-                    if llm_config.get("system_prompt"):
-                        messages.append({"role": "system", "content": llm_config["system_prompt"]})
-                    # Render the prompt using Jinja2 templating
-                    template = Template(llm_config.get("prompt_template", "{{ input }}"))
-                    prompt = template.render(**kwargs)
-                    messages.append({"role": "user", "content": prompt})
-                    response = await litellm.acompletion(
-                        model=llm_config.get("model", "gpt-3.5-turbo"),
-                        messages=messages,
-                        temperature=llm_config.get("temperature", 0.7),
-                        max_tokens=llm_config.get("max_tokens"),
-                        top_p=llm_config.get("top_p", 1.0),
-                        presence_penalty=llm_config.get("presence_penalty", 0.0),
-                        frequency_penalty=llm_config.get("frequency_penalty", 0.0),
-                        stop=llm_config.get("stop"),
-                        api_key=llm_config.get("api_key"),
-                    )
-                    return response.choices[0].message.content
-                # Extract inputs from the prompt template using regex (conservative approach)
-                inputs = set(re.findall(r"{{\s*([^}]+?)\s*}}", llm_config.get("prompt_template", "{{ input }}")))
-                # Clean up inputs by removing simple expressions (e.g., "completed_chapters + 1" becomes "completed_chapters")
+                # Extract inputs from prompt_template using regex
+                inputs = set(re.findall(r"{{\s*([^}]+?)\s*}}", llm_config.prompt_template))
                 cleaned_inputs = set()
                 for input_var in inputs:
-                    # Split on common operators and take the first variable-like part
                     base_var = re.split(r"\s*[\+\-\*/]\s*", input_var.strip())[0].strip()
-                    if base_var.isidentifier():  # Ensure it's a valid Python identifier
+                    if base_var.isidentifier():
                         cleaned_inputs.add(base_var)
-                # Register the LLM node in Nodes.NODE_REGISTRY
-                Nodes.NODE_REGISTRY[node_name] = (llm_func, list(cleaned_inputs), node_def.output or f"{node_name}_result")
-                # Log registration for consistency with flow.py
-                logger.debug(f"Registering LLM node {node_name} with inputs {cleaned_inputs} and output {node_def.output or f'{node_name}_result'}")
+                inputs_list = list(cleaned_inputs)
+
+                # Define a dummy function to be decorated
+                async def dummy_func(**kwargs):
+                    pass  # This will be replaced by the decorator logic
+
+                if llm_config.response_model:
+                    # Structured LLM node
+                    response_model = self._resolve_model(llm_config.response_model)
+                    decorated_func = Nodes.structured_llm_node(
+                        model=llm_config.model,
+                        system_prompt=llm_config.system_prompt or "",
+                        prompt_template=llm_config.prompt_template,
+                        response_model=response_model,
+                        output=node_def.output or f"{node_name}_result",
+                        temperature=llm_config.temperature,
+                        max_tokens=llm_config.max_tokens or 2000,
+                        top_p=llm_config.top_p,
+                        presence_penalty=llm_config.presence_penalty,
+                        frequency_penalty=llm_config.frequency_penalty,
+                        api_key=llm_config.api_key,
+                    )(dummy_func)
+                else:
+                    # Plain LLM node
+                    decorated_func = Nodes.llm_node(
+                        model=llm_config.model,
+                        system_prompt=llm_config.system_prompt or "",
+                        prompt_template=llm_config.prompt_template,
+                        output=node_def.output or f"{node_name}_result",
+                        temperature=llm_config.temperature,
+                        max_tokens=llm_config.max_tokens or 2000,
+                        top_p=llm_config.top_p,
+                        presence_penalty=llm_config.presence_penalty,
+                        frequency_penalty=llm_config.frequency_penalty,
+                        api_key=llm_config.api_key,
+                    )(dummy_func)
+
+                # Register the node in NODE_REGISTRY with proper inputs
+                Nodes.NODE_REGISTRY[node_name] = (decorated_func, inputs_list, node_def.output or f"{node_name}_result")
+                logger.debug(f"Registered LLM node '{node_name}' with inputs {inputs_list} and output {node_def.output or f'{node_name}_result'}")
 
         added_nodes = set()
         for trans in self.workflow.workflow.transitions:
