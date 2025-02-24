@@ -31,6 +31,6 @@ nodes:
 workflow:
   start: start
   transitions:
-  - from_: start
+  - from: start
     to: end
     condition: null

@@ -1,5 +1,10 @@
 import importlib
+import importlib.util
+import os
 import re
+import sys
+import tempfile
+import urllib
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
@@ -104,7 +109,8 @@ class WorkflowManager:
             for t in to:
                 if t not in self.workflow.nodes:
                     raise ValueError(f"Target node '{t}' does not exist")
-        transition = TransitionDefinition(from_=from_, to=to, condition=condition)
+        # Use 'from' field name instead of the alias 'from_'
+        transition = TransitionDefinition(**{"from": from_, "to": to, "condition": condition})
         self.workflow.workflow.transitions.append(transition)
 
     def set_start_node(self, name: str) -> None:
@@ -137,6 +143,59 @@ class WorkflowManager:
         except (ValueError, ImportError, AttributeError) as e:
             raise ValueError(f"Failed to resolve response_model '{model_str}': {e}")
 
+    def import_module_from_source(self, source: str) -> Any:
+        """
+        Import a module from various sources: installed module name (e.g., PyPI), local file path, or remote URL.
+
+        Args:
+            source: The module specification (e.g., 'requests', '/path/to/file.py', 'https://example.com/module.py').
+
+        Returns:
+            The imported module object.
+
+        Raises:
+            ValueError: If the module cannot be imported, with suggestions for installation if it's a PyPI package.
+        """
+        if source.startswith("http://") or source.startswith("https://"):
+            # Handle remote URL
+            try:
+                with urllib.request.urlopen(source) as response:
+                    code = response.read().decode('utf-8')
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.py') as temp_file:
+                    temp_file.write(code.encode('utf-8'))
+                    temp_path = temp_file.name
+                module_name = f"temp_module_{hash(temp_path)}"
+                spec = importlib.util.spec_from_file_location(module_name, temp_path)
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module
+                spec.loader.exec_module(module)
+                os.remove(temp_path)
+                return module
+            except Exception as e:
+                raise ValueError(f"Failed to import module from URL '{source}': {e}")
+        elif os.path.isfile(source):
+            # Handle local file path
+            try:
+                module_name = f"local_module_{hash(source)}"
+                spec = importlib.util.spec_from_file_location(module_name, source)
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module
+                spec.loader.exec_module(module)
+                return module
+            except Exception as e:
+                raise ValueError(f"Failed to import module from file '{source}': {e}")
+        else:
+            # Assume installed module name from PyPI or system
+            try:
+                return importlib.import_module(source)
+            except ImportError as e:
+                logger.error(f"Module '{source}' not found: {e}")
+                raise ValueError(
+                    f"Failed to import module '{source}': {e}. "
+                    f"This may be a PyPI package. Ensure it is installed using 'pip install {source}' "
+                    "or check if the module name is correct."
+                )
+
     def instantiate_workflow(self) -> Workflow:
         """Instantiates a Workflow object based on the definitions stored in the WorkflowManager."""
         functions: Dict[str, Callable] = {}
@@ -149,7 +208,7 @@ class WorkflowManager:
                 functions[func_name] = local_scope[func_name]
             elif func_def.type == "external":
                 try:
-                    module = importlib.import_module(func_def.module)
+                    module = self.import_module_from_source(func_def.module)
                     functions[func_name] = getattr(module, func_def.function)
                 except (ImportError, AttributeError) as e:
                     raise ValueError(f"Failed to import external function '{func_name}': {e}")
@@ -174,9 +233,9 @@ class WorkflowManager:
                         if to_node not in added_sub_nodes:
                             sub_wf.node(to_node)
                             added_sub_nodes.add(to_node)
-                    condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else lambda _: True
+                    condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else None
                     if len(to_nodes) > 1:
-                        sub_wf.parallel(*to_nodes, condition=condition)
+                        sub_wf.parallel(*to_nodes)  # No condition support in parallel as per original
                     else:
                         sub_wf.then(to_nodes[0], condition=condition)
                 inputs = list(Nodes.NODE_REGISTRY[sub_wf.start_node][1])
@@ -249,9 +308,9 @@ class WorkflowManager:
                 if to_node not in added_nodes and to_node not in sub_workflows:
                     wf.node(to_node)
                     added_nodes.add(to_node)
-            condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else lambda _: True
+            condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else None
             if len(to_nodes) > 1:
-                wf.parallel(*to_nodes, condition=condition)
+                wf.parallel(*to_nodes)
             else:
                 wf.then(to_nodes[0], condition=condition)
 
