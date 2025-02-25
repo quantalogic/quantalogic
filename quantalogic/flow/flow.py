@@ -7,7 +7,7 @@
 #     "pydantic>=2.0",
 #     "anyio",
 #     "jinja2",
-#     "instructor[litellm]"  # Added for structured_llm_node support
+#     "instructor[litellm]"  # Required for structured_llm_node
 # ]
 # ///
 
@@ -34,6 +34,7 @@ class WorkflowEventType(Enum):
     SUB_WORKFLOW_ENTERED = "sub_workflow_entered"
     SUB_WORKFLOW_EXITED = "sub_workflow_exited"
 
+
 @dataclass
 class WorkflowEvent:
     event_type: WorkflowEventType
@@ -44,6 +45,8 @@ class WorkflowEvent:
     transition_from: Optional[str] = None
     transition_to: Optional[str] = None
     sub_workflow_name: Optional[str] = None
+    usage: Optional[Dict[str, Any]] = None  # Added to store token usage and cost
+
 
 WorkflowObserver = Callable[[WorkflowEvent], None]
 
@@ -146,8 +149,10 @@ class WorkflowEngine:
             try:
                 if isinstance(node_func, SubWorkflowNode):
                     result = await node_func(self, **inputs)
+                    usage = None  # Sub-workflow usage is handled by its own nodes
                 else:
                     result = await node_func(**inputs)
+                    usage = getattr(node_func, 'usage', None)  # Extract usage if set by LLM nodes
                 output_key = self.workflow.node_outputs[current_node]
                 if output_key:
                     self.context[output_key] = result
@@ -155,7 +160,8 @@ class WorkflowEngine:
                     event_type=WorkflowEventType.NODE_COMPLETED,
                     node_name=current_node,
                     context=self.context,
-                    result=result
+                    result=result,
+                    usage=usage  # Include usage data in the event
                 ))
             except Exception as e:
                 logger.error(f"Error executing node {current_node}: {e}")
@@ -365,6 +371,13 @@ class Nodes:
                         **kwargs
                     )
                     content = response.choices[0].message.content.strip()
+                    # Attach usage metadata to the function
+                    wrapped_func.usage = {
+                        "prompt_tokens": response.usage.prompt_tokens,
+                        "completion_tokens": response.usage.completion_tokens,
+                        "total_tokens": response.usage.total_tokens,
+                        "cost": getattr(response, "cost", None)  # Include cost if available
+                    }
                     logger.debug(f"LLM output from {func.__name__}: {content[:50]}...")
                     return content
                 except Exception as e:
@@ -391,7 +404,7 @@ class Nodes:
         frequency_penalty: float = 0.0,
         **kwargs
     ):
-        """Decorator for creating LLM nodes with structured output using Instructor."""
+        """Decorator for creating LLM nodes with structured output using instructor."""
         try:
             client = instructor.from_litellm(acompletion)
         except ImportError:
@@ -406,7 +419,8 @@ class Nodes:
                     {"role": "user", "content": prompt},
                 ]
                 try:
-                    response = await client.chat.completions.create(
+                    # Use instructor with completion to get both structured output and raw response
+                    structured_response, raw_response = await client.chat.completions.create_with_completion(
                         model=model,
                         messages=messages,
                         response_model=response_model,
@@ -418,8 +432,15 @@ class Nodes:
                         drop_params=True,
                         **kwargs
                     )
-                    logger.debug(f"Structured output from {func.__name__}: {response}")
-                    return response
+                    # Attach usage metadata to the function
+                    wrapped_func.usage = {
+                        "prompt_tokens": raw_response.usage.prompt_tokens,
+                        "completion_tokens": raw_response.usage.completion_tokens,
+                        "total_tokens": raw_response.usage.total_tokens,
+                        "cost": getattr(raw_response, "cost", None)  # Include cost if available
+                    }
+                    logger.debug(f"Structured output from {func.__name__}: {structured_response}")
+                    return structured_response
                 except ValidationError as e:
                     logger.error(f"Validation error in {func.__name__}: {e}")
                     raise
@@ -442,7 +463,7 @@ class Nodes:
             raise
 
 
-# Example workflow matching the provided structure with observer integration
+# Example workflow with observer integration and updated structured node
 async def example_workflow():
     # Define Pydantic model for structured output
     class OrderDetails(BaseModel):
@@ -450,13 +471,37 @@ async def example_workflow():
         items: List[str]
         in_stock: bool
 
-    # Define an example observer
+    # Define an example observer for progress
     async def progress_monitor(event: WorkflowEvent):
         print(f"[{event.event_type.value}] {event.node_name or 'Workflow'}")
         if event.result is not None:
             print(f"Result: {event.result}")
         if event.exception is not None:
             print(f"Exception: {event.exception}")
+
+    # Define an observer for token usage
+    class TokenUsageObserver:
+        def __init__(self):
+            self.total_prompt_tokens = 0
+            self.total_completion_tokens = 0
+            self.total_cost = 0.0
+            self.node_usages = {}
+
+        def __call__(self, event: WorkflowEvent):
+            if event.event_type == WorkflowEventType.NODE_COMPLETED and event.usage:
+                usage = event.usage
+                self.total_prompt_tokens += usage.get("prompt_tokens", 0)
+                self.total_completion_tokens += usage.get("completion_tokens", 0)
+                if usage.get("cost") is not None:
+                    self.total_cost += usage["cost"]
+                self.node_usages[event.node_name] = usage
+            # Print summary at workflow completion
+            if event.event_type == WorkflowEventType.WORKFLOW_COMPLETED:
+                print(f"Total prompt tokens: {self.total_prompt_tokens}")
+                print(f"Total completion tokens: {self.total_completion_tokens}")
+                print(f"Total cost: {self.total_cost}")
+                for node, usage in self.node_usages.items():
+                    print(f"Node {node}: {usage}")
 
     # Define nodes
     @Nodes.validate_node(output="validation_result")
@@ -465,8 +510,8 @@ async def example_workflow():
 
     @Nodes.structured_llm_node(
         model="gemini/gemini-2.0-flash",
-        system_prompt="Check inventory for items.",
-        prompt_template="Check if {{ items }} are in stock.",
+        system_prompt="You are an inventory checker. Respond with a JSON object containing 'order_id', 'items', and 'in_stock' (boolean).",
+        prompt_template="Check if the following items are in stock: {{ items }}. Return the result in JSON format with 'order_id' set to '123'.",
         response_model=OrderDetails,
         output="inventory_status"
     )
@@ -497,13 +542,16 @@ async def example_workflow():
     payment_shipping_sub_wf = (
         Workflow("process_payment")
         .sequence("process_payment", "arrange_shipping")
-        .add_observer(progress_monitor)  # Observer propagates to sub-workflow
     )
+
+    # Instantiate token usage observer
+    token_observer = TokenUsageObserver()
 
     # Main workflow incorporating the sub-workflow
     workflow = (
         Workflow("validate_order")
-        .add_observer(progress_monitor)  # Add observer to main workflow
+        .add_observer(progress_monitor)  # Add progress observer
+        .add_observer(token_observer)    # Add token usage observer
         .add_sub_workflow("payment_shipping", payment_shipping_sub_wf, inputs={"order": "order"}, output="shipping_confirmation")
         .sequence("validate_order", "check_inventory")
         .then("payment_shipping", condition=lambda ctx: ctx.get("inventory_status").in_stock if ctx.get("inventory_status") else False)
@@ -519,6 +567,7 @@ async def example_workflow():
     engine = workflow.build()
     result = await engine.run(initial_context)
     logger.info(f"Workflow result: {result}")
+
 
 if __name__ == "__main__":
     asyncio.run(example_workflow())
