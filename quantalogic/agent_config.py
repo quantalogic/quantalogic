@@ -5,9 +5,9 @@
 # Local application imports
 import os
 import logging
-from typing import Any
 import json
 from dotenv import load_dotenv
+from typing import Any
 
 from quantalogic.agent import Agent
 from quantalogic.console_print_token import console_print_token
@@ -57,17 +57,10 @@ from quantalogic.tools import (
     CSVProcessorTool,
     PrepareDownloadTool,
     MermaidValidatorTool,
-    # YFinanceTool,
-    # FinanceLLMTool,
-    # # AlphaVantageTool,
-    # # CCXTTool,
-    # GFinanceTool,
-    # MarketIntelligenceTool,
-    # TradingViewTool,
-    # TechnicalAnalysisTool,
     NasaNeoWsTool,
     NasaApodTool,
-    ProductHuntTool
+    ProductHuntTool,
+    RagTool
 )
 from composio import ComposioToolSet, Action
 
@@ -107,27 +100,27 @@ def create_agent(
         Agent: An agent with the specified model and tools
     """
     tools = [
-        # TaskCompleteTool(),
-        # ReadFileTool(),
-        # ReadFileBlockTool(),
+        TaskCompleteTool(),
+        ReadFileTool(),
+        ReadFileBlockTool(),
         WriteFileTool(),
-        # EditWholeContentTool(),
-        # InputQuestionTool(),
-        # ListDirectoryTool(),
-        # ExecuteBashCommandTool(),
-        # ReplaceInFileTool(),
-        # RipgrepTool(),
-        # SearchDefinitionNames(),
-        # MarkitdownTool(),
-        # LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
-        # DownloadHttpFileTool(), 
-        # LLMImageGenerationTool(
-        #         provider="dall-e",
-        #         model_name="openai/dall-e-3",
-        #         on_token=console_print_token if not no_stream else None
-        #     ),
-        # ReadHTMLTool(),
-       # SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
+        EditWholeContentTool(),
+        InputQuestionTool(),
+        ListDirectoryTool(),
+        ExecuteBashCommandTool(),
+        ReplaceInFileTool(),
+        RipgrepTool(),
+        SearchDefinitionNames(),
+        MarkitdownTool(),
+        LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
+        DownloadHttpFileTool(), 
+        LLMImageGenerationTool(
+                provider="dall-e",
+                model_name="openai/dall-e-3",
+                on_token=console_print_token if not no_stream else None
+            ),
+        ReadHTMLTool(),
+        SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
     ]
 
     if vision_model_name:
@@ -319,6 +312,10 @@ def create_custom_agent(
     Returns:
         Agent: An agent with the specified model and tools
     """
+
+    storage_dir = os.path.join(os.path.dirname(__file__), "storage", "rag")
+    os.makedirs(storage_dir, exist_ok=True)
+    
     # Rebuild AgentTool to resolve forward references
     AgentTool.model_rebuild()
 
@@ -404,7 +401,7 @@ def create_custom_agent(
         "markdown_to_docx": lambda params: MarkdownToDocxTool(),
         "csv_processor": lambda params: CSVProcessorTool(),
         "mermaid_validator_tool": lambda params: MermaidValidatorTool(),
-        # "download_file_tool": lambda params: PrepareDownloadTool(),
+        "download_file_tool": lambda params: PrepareDownloadTool(),
         "email_tool": lambda params: ComposioTool(
             action="GMAIL_SEND_EMAIL",
             name="email_tool",
@@ -422,21 +419,15 @@ def create_custom_agent(
             name="weather_tool",
             description="Get weather information for a location"
         ),
-        # "yfinance_tool": lambda params: YFinanceTool(),
-        # "finance_llm_tool": lambda params: FinanceLLMTool(
-        #     model_name=params.get("model_name", model_name),
-        #     on_token=console_print_token if not no_stream else None,
-        #     event_emitter=event_emitter),
-        # "gfinance_tool": lambda params: GFinanceTool(),
         "nasa_neows_tool": lambda params: NasaNeoWsTool(),
         "nasa_apod_tool": lambda params: NasaApodTool(),
         "product_hunt_tool": lambda params : ProductHuntTool(),
-        # "AlphaVantageTool": lambda params: AlphaVantageTool(),
-        # "CCXTTool": lambda params: CCXTTool(),
-        # "MarketIntelligenceTool": lambda params: MarketIntelligenceTool(),
-        # "TradingViewTool": lambda params: TradingViewTool(),
-        # "TechnicalAnalysisTool": lambda params: TechnicalAnalysisTool(),
-        # "task_complete": lambda params: TaskCompleteTool()
+        "rag_tool": lambda params: RagTool(
+            vector_store=params.get("vector_store", "chroma"),
+            embedding_model=params.get("embedding_model", "openai"),
+            persist_dir=storage_dir,
+            document_paths=params.get("document_paths", [])
+        )
     }
 
     # Define write tools that should trigger automatic download tool addition
@@ -478,11 +469,7 @@ def create_custom_agent(
             logger.error(f"Failed to add download tool: {str(e)}")
 
     agent_tools.append(TaskCompleteTool())
-
-    # Always add TaskCompleteTool as it's required for the agent to function
-    # auth_token = "****"
-    # agent_tools.append(CloneRepoTool(auth_token=auth_token))
-    # agent_tools.append(GitOperationsTool(auth_token=auth_token))   
+    
     return Agent(
         model_name=model_name,
         tools=agent_tools,
