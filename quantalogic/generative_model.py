@@ -192,6 +192,9 @@ class GenerativeModel:
     def _stream_response(self, messages, stop_words: list[str] | None = None):
         """Private method to handle streaming responses."""
         try:
+            # The task_id will be added by the AgentState._handle_event method
+            # We don't need to handle it here
+            self.event_emitter.emit("stream_start", {})
             for chunk in generate_completion(
                 temperature=self.temperature,
                 model=self.model,
@@ -201,10 +204,13 @@ class GenerativeModel:
                 stop=stop_words,
             ):
                 if chunk.choices[0].delta.content is not None:
-                    self.event_emitter.emit("stream_chunk", chunk.choices[0].delta.content)
-                    yield chunk.choices[0].delta.content  # Yield each chunk of content
+                    content = chunk.choices[0].delta.content
+                    # Pass data as a positional argument
+                    self.event_emitter.emit("stream_chunk", {"content": content})
+                    yield content  # Yield each chunk of content
 
-            self.event_emitter.emit("stream_end")  # Emit stream end event
+            # Pass empty data dict as a positional argument
+            self.event_emitter.emit("stream_end", {})
         except Exception as e:
             logger.error(f"Streaming error: {str(e)}")
             raise

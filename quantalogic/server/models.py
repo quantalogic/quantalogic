@@ -1,6 +1,6 @@
 """Pydantic models for the QuantaLogic API."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -42,6 +42,9 @@ class TaskSubmission(BaseModel):
     task: str
     model_name: Optional[str] = MODEL_NAME
     max_iterations: Optional[int] = 30
+    mode: Optional[str] = "minimal"
+    expertise: Optional[str] = ""
+    tools: Optional[List[Dict[str, Any]]] = None
 
     model_config = {"extra": "forbid"}
 

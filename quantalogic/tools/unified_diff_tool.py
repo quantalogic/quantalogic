@@ -304,7 +304,7 @@ class UnifiedDiffTool(Tool):
 
     name: str = "unified_diff"
     description: str = "Applies a unified diff patch to update a file."
-    need_validation: bool = True
+    need_validation: bool = False
     lenient: bool = True
     tolerance: int = 5
     arguments: list[ToolArgument] = [

@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
+import uuid
 
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, PrivateAttr
@@ -18,6 +19,7 @@ from quantalogic.utils import get_environment
 from quantalogic.utils.ask_user_validation import console_ask_for_user_validation
 from quantalogic.xml_parser import ToleranceXMLParser
 from quantalogic.xml_tool_parser import ToolParser
+import json
 
 # Maximum ratio occupancy of the occupied memory
 MAX_OCCUPANCY = 90.0
@@ -87,13 +89,15 @@ class Agent(BaseModel):
         get_environment: Callable[[], str] = get_environment,
         compact_every_n_iterations: int | None = None,
         max_tokens_working_memory: int | None = None,
+        event_emitter: EventEmitter | None = None,
     ):
         """Initialize the agent with model, memory, tools, and configurations."""
         try:
             logger.debug("Initializing agent...")
 
-            # Create event emitter
-            event_emitter = EventEmitter()
+            # Create or use provided event emitter
+            if event_emitter is None:
+                event_emitter = EventEmitter()
 
             # Add TaskCompleteTool to the tools list if not already present
             if not any(isinstance(t, TaskCompleteTool) for t in tools):
@@ -192,9 +196,13 @@ class Agent(BaseModel):
         if not self.memory.memory or self.memory.memory[0].role != "system":
             self.memory.add(Message(role="system", content=self.config.system_prompt))
 
+        # Set task ID in event emitter context using UUID
+        task_id = str(uuid.uuid4())  # Generate a UUID for task ID
+        self.event_emitter.context['task_id'] = task_id
+
         self._emit_event(
             "session_start",
-            {"system_prompt": self.config.system_prompt, "content": task},
+            {"system_prompt": self.config.system_prompt, "content": task, "task_id": task_id},
         )
 
         self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
@@ -306,6 +314,8 @@ class Agent(BaseModel):
             self.memory.reset()
             self.variable_store.reset()
             self.total_tokens = 0
+            # Clear task ID from event emitter context
+            self.event_emitter.context.clear()
         self.current_iteration = 0
         self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
         self.max_input_tokens = self.model.get_model_max_input_tokens() or DEFAULT_MAX_INPUT_TOKENS
@@ -583,10 +593,17 @@ class Agent(BaseModel):
         """
         # Handle tool validation if required
         if tool.need_validation:
-            logger.debug(f"Tool '{tool_name}' requires validation.")
+            logger.info(f"Tool '{tool_name}' requires validation.")
+            validation_id = str(uuid.uuid4())
+            logger.info(f"Validation ID: {validation_id}")
+            
             self._emit_event(
                 "tool_execute_validation_start",
-                {"tool_name": tool_name, "arguments": arguments_with_values},
+                {
+                    "validation_id": validation_id,
+                    "tool_name": tool_name, 
+                    "arguments": arguments_with_values
+                },
             )
 
             question_validation: str = (
@@ -602,7 +619,12 @@ class Agent(BaseModel):
 
             self._emit_event(
                 "tool_execute_validation_end",
-                {"tool_name": tool_name, "arguments": arguments_with_values},
+                {
+                    "validation_id": validation_id,
+                    "tool_name": tool_name,
+                    "arguments": arguments_with_values,
+                    "granted": permission_granted
+                },
             )
 
             if not permission_granted:
@@ -667,7 +689,6 @@ class Agent(BaseModel):
         """Interpolate variables using $var$ syntax in the given text."""
         try:
             import re
-
             for var in self.variable_store.keys():
                 # Create safe pattern without double-escaping backslashes
                 safe_var = re.sub(r"([\\\.\^\$\*\+\?\{\}\[\]\|\(\)])", r"\\\1", var)
@@ -712,7 +733,10 @@ class Agent(BaseModel):
             "1. Select ONE tool per message\n"
             "2. You will receive the tool's output in the next user response\n"
             "3. Choose the most appropriate tool for each step\n"
-            "4. Use task_complete tool to confirm task completion\n"
+            "4. If it's not asked to write on files, don't use write_file tool\n"
+            "5. If files are writter, then use tool to display the prepared download link\n"
+            "6. Give the final full answer using all the variables\n"
+            "7. Use task_complete tool to confirm task completion with the full content of the final answer\n"
         )
         return prompt_use_tools
 
@@ -824,3 +848,75 @@ class Agent(BaseModel):
         """Update the model name and recreate the model instance."""
         self.model_name = new_model_name
         self.model = GenerativeModel(model=new_model_name, event_emitter=self.event_emitter)
+
+    def add_tool(self, tool: Tool) -> None:
+        """Add a new tool to the agent's tool manager.
+        
+        Args:
+            tool (Tool): The tool instance to add
+            
+        Raises:
+            ValueError: If a tool with the same name already exists
+        """
+        if tool.name in self.tools.tool_names():
+            raise ValueError(f"Tool with name '{tool.name}' already exists")
+            
+        self.tools.add(tool)
+        # Update tools markdown in config
+        self.config = AgentConfig(
+            environment_details=self.config.environment_details,
+            tools_markdown=self.tools.to_markdown(),
+            system_prompt=self.config.system_prompt,
+        )
+        logger.debug(f"Added tool: {tool.name}")
+        
+    def remove_tool(self, tool_name: str) -> None:
+        """Remove a tool from the agent's tool manager.
+        
+        Args:
+            tool_name (str): Name of the tool to remove
+            
+        Raises:
+            ValueError: If tool doesn't exist or is TaskCompleteTool
+        """
+        if tool_name not in self.tools.tool_names():
+            raise ValueError(f"Tool '{tool_name}' does not exist")
+            
+        tool = self.tools.get(tool_name)
+        if isinstance(tool, TaskCompleteTool):
+            raise ValueError("Cannot remove TaskCompleteTool as it is required")
+            
+        self.tools.remove(tool_name)
+        # Update tools markdown in config
+        self.config = AgentConfig(
+            environment_details=self.config.environment_details,
+            tools_markdown=self.tools.to_markdown(),
+            system_prompt=self.config.system_prompt,
+        )
+        logger.debug(f"Removed tool: {tool_name}")
+        
+    def set_tools(self, tools: list[Tool]) -> None:
+        """Set/replace all tools for the agent.
+        
+        Args:
+            tools (list[Tool]): List of tool instances to set
+            
+        Note:
+            TaskCompleteTool will be automatically added if not present
+        """
+        # Ensure TaskCompleteTool is present
+        if not any(isinstance(t, TaskCompleteTool) for t in tools):
+            tools.append(TaskCompleteTool())
+            
+        # Create new tool manager and add tools
+        tool_manager = ToolManager()
+        tool_manager.add_list(tools)
+        self.tools = tool_manager
+        
+        # Update config with new tools markdown
+        self.config = AgentConfig(
+            environment_details=self.config.environment_details,
+            tools_markdown=self.tools.to_markdown(),
+            system_prompt=self.config.system_prompt,
+        )
+        logger.debug(f"Set {len(tools)} tools")
