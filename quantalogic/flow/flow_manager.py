@@ -13,7 +13,7 @@ from loguru import logger
 from pydantic import BaseModel, ValidationError
 
 # Import directly from flow.py to avoid circular import through __init__.py
-from quantalogic.flow.flow import Nodes, Workflow, WorkflowEvent, WorkflowEventType, WorkflowObserver
+from quantalogic.flow.flow import Nodes, Workflow
 from quantalogic.flow.flow_manager_schema import (
     FunctionDefinition,
     NodeDefinition,
