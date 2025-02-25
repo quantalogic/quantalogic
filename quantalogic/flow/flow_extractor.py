@@ -28,6 +28,7 @@ class WorkflowExtractor(ast.NodeVisitor):
         self.transitions = []     # List of (from_node, to_node, condition) tuples
         self.start_node = None    # Starting node of the workflow
         self.global_vars = {}     # Tracks global variable assignments (e.g., DEFAULT_LLM_PARAMS)
+        self.observers = []       # List of observer function names
 
     def visit_Module(self, node):
         """Log and explicitly process top-level statements in the module."""
@@ -261,7 +262,7 @@ class WorkflowExtractor(ast.NodeVisitor):
 
     def process_workflow_expr(self, expr, var_name):
         """
-        Recursively process Workflow method chaining to build transitions and structure.
+        Recursively process Workflow method chaining to build transitions, structure, and observers.
         
         Args:
             expr: The AST expression to process.
@@ -346,10 +347,22 @@ class WorkflowExtractor(ast.NodeVisitor):
                     'inputs': list(inputs.keys()),
                     'output': output,
                 }
+                # Propagate observers from sub-workflow
+                self.observers.extend(sub_extractor.observers)
                 logger.debug(f"Added sub-workflow node '{sub_wf_name}' with start '{sub_extractor.start_node}'")
                 if previous_node:
                     self.transitions.append((previous_node, sub_wf_name, None))
                 return sub_wf_name
+
+            elif method_name == 'add_observer':
+                if expr.args and isinstance(expr.args[0], (ast.Name, ast.Constant)):
+                    observer_name = expr.args[0].id if isinstance(expr.args[0], ast.Name) else expr.args[0].value
+                    if observer_name not in self.observers:
+                        self.observers.append(observer_name)
+                        logger.debug(f"Added observer '{observer_name}' to workflow '{var_name}'")
+                else:
+                    logger.warning(f"Unsupported observer argument in 'add_observer' for '{var_name}'")
+                return previous_node
 
             else:
                 logger.warning(f"Unsupported Workflow method '{method_name}' in variable '{var_name}'")
@@ -438,11 +451,12 @@ def extract_workflow_from_file(file_path):
         transitions=transitions
     )
 
-    # Assemble WorkflowDefinition
+    # Assemble WorkflowDefinition with observers
     workflow_def = WorkflowDefinition(
         functions=functions,
         nodes=nodes,
-        workflow=workflow_structure
+        workflow=workflow_structure,
+        observers=extractor.observers
     )
 
     return workflow_def, extractor.global_vars
@@ -510,6 +524,8 @@ def generate_executable_script(workflow_def: WorkflowDefinition, global_vars: di
                 if not condition.startswith('lambda ctx:'):
                     condition = f'lambda ctx: {condition}'
             f.write(f'    .then("{to_node}", condition={condition})\n')
+        for observer in workflow_def.observers:
+            f.write(f'    .add_observer({observer})\n')
         f.write(')\n\n')
 
         # Main asynchronous function to run the workflow
@@ -577,6 +593,10 @@ def print_workflow_definition(workflow_def):
                 print(f"- {trans.from_} -> {to_node}{condition_str}")
         else:
             print(f"- {trans.from_} -> {trans.to}{condition_str}")
+
+    print("\n#### Observers:")
+    for observer in workflow_def.observers:
+        print(f"- {observer}")
 
 
 def main():

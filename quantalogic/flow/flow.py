@@ -12,6 +12,8 @@
 # ///
 
 import asyncio
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 import instructor
@@ -21,41 +23,181 @@ from loguru import logger
 from pydantic import BaseModel, ValidationError
 
 
+# Define event types and structure for observer system
+class WorkflowEventType(Enum):
+    NODE_STARTED = "node_started"
+    NODE_COMPLETED = "node_completed"
+    NODE_FAILED = "node_failed"
+    TRANSITION_EVALUATED = "transition_evaluated"
+    WORKFLOW_STARTED = "workflow_started"
+    WORKFLOW_COMPLETED = "workflow_completed"
+    SUB_WORKFLOW_ENTERED = "sub_workflow_entered"
+    SUB_WORKFLOW_EXITED = "sub_workflow_exited"
+
+@dataclass
+class WorkflowEvent:
+    event_type: WorkflowEventType
+    node_name: Optional[str]
+    context: Dict[str, Any]
+    result: Optional[Any] = None
+    exception: Optional[Exception] = None
+    transition_from: Optional[str] = None
+    transition_to: Optional[str] = None
+    sub_workflow_name: Optional[str] = None
+
+WorkflowObserver = Callable[[WorkflowEvent], None]
+
+
+# Define a class for sub-workflow nodes
+class SubWorkflowNode:
+    def __init__(self, sub_workflow: 'Workflow', inputs: Dict[str, str], output: str):
+        """Initialize a sub-workflow node."""
+        self.sub_workflow = sub_workflow
+        self.inputs = inputs
+        self.output = output
+
+    async def __call__(self, engine: 'WorkflowEngine', **kwargs):
+        """Execute the sub-workflow with the engine's context."""
+        sub_context = {sub_key: kwargs[main_key] for main_key, sub_key in self.inputs.items()}
+        sub_engine = self.sub_workflow.build(parent_engine=engine)
+        result = await sub_engine.run(sub_context)
+        return result.get(self.output)
+
+
 class WorkflowEngine:
-    def __init__(self, workflow):
+    def __init__(self, workflow, parent_engine: Optional['WorkflowEngine'] = None):
+        """Initialize the WorkflowEngine with a workflow and optional parent for sub-workflows."""
         self.workflow = workflow
         self.context = {}
+        self.observers: List[WorkflowObserver] = []
+        self.parent_engine = parent_engine  # Link to parent engine for sub-workflow observer propagation
+
+    def add_observer(self, observer: WorkflowObserver) -> None:
+        """Register an event observer callback."""
+        if observer not in self.observers:
+            self.observers.append(observer)
+            logger.debug(f"Added observer: {observer}")
+        if self.parent_engine:
+            self.parent_engine.add_observer(observer)  # Propagate to parent for global visibility
+
+    def remove_observer(self, observer: WorkflowObserver) -> None:
+        """Remove an event observer callback."""
+        if observer in self.observers:
+            self.observers.remove(observer)
+            logger.debug(f"Removed observer: {observer}")
+
+    async def _notify_observers(self, event: WorkflowEvent) -> None:
+        """Asynchronously notify all observers of an event."""
+        tasks = []
+        for observer in self.observers:
+            try:
+                if asyncio.iscoroutinefunction(observer):
+                    tasks.append(observer(event))
+                else:
+                    observer(event)
+            except Exception as e:
+                logger.error(f"Observer {observer} failed for {event.event_type.value}: {e}")
+        if tasks:
+            await asyncio.gather(*tasks)
 
     async def run(self, initial_context: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the workflow starting from the entry node."""
+        """Execute the workflow starting from the entry node with event notifications."""
         self.context = initial_context.copy()
-        current_node = self.workflow.start_node
+        await self._notify_observers(WorkflowEvent(
+            event_type=WorkflowEventType.WORKFLOW_STARTED,
+            node_name=None,
+            context=self.context
+        ))
 
+        current_node = self.workflow.start_node
         while current_node:
             logger.info(f"Executing node: {current_node}")
+            await self._notify_observers(WorkflowEvent(
+                event_type=WorkflowEventType.NODE_STARTED,
+                node_name=current_node,
+                context=self.context
+            ))
+
             node_func = self.workflow.nodes.get(current_node)
             if not node_func:
                 logger.error(f"Node {current_node} not found")
+                exc = ValueError(f"Node {current_node} not found")
+                await self._notify_observers(WorkflowEvent(
+                    event_type=WorkflowEventType.NODE_FAILED,
+                    node_name=current_node,
+                    context=self.context,
+                    exception=exc
+                ))
                 break
 
+            inputs = {k: self.context[k] for k in self.workflow.node_inputs[current_node] if k in self.context}
+            result = None
+            exception = None
+
+            # Handle sub-workflow nodes
+            if isinstance(node_func, SubWorkflowNode):
+                await self._notify_observers(WorkflowEvent(
+                    event_type=WorkflowEventType.SUB_WORKFLOW_ENTERED,
+                    node_name=current_node,
+                    context=self.context,
+                    sub_workflow_name=current_node
+                ))
+
             try:
-                inputs = {k: self.context[k] for k in self.workflow.node_inputs[current_node] if k in self.context}
-                result = await node_func(**inputs)
+                if isinstance(node_func, SubWorkflowNode):
+                    result = await node_func(self, **inputs)
+                else:
+                    result = await node_func(**inputs)
                 output_key = self.workflow.node_outputs[current_node]
                 if output_key:
                     self.context[output_key] = result
+                await self._notify_observers(WorkflowEvent(
+                    event_type=WorkflowEventType.NODE_COMPLETED,
+                    node_name=current_node,
+                    context=self.context,
+                    result=result
+                ))
             except Exception as e:
                 logger.error(f"Error executing node {current_node}: {e}")
+                exception = e
+                await self._notify_observers(WorkflowEvent(
+                    event_type=WorkflowEventType.NODE_FAILED,
+                    node_name=current_node,
+                    context=self.context,
+                    exception=e
+                ))
                 raise
+            finally:
+                if isinstance(node_func, SubWorkflowNode):
+                    await self._notify_observers(WorkflowEvent(
+                        event_type=WorkflowEventType.SUB_WORKFLOW_EXITED,
+                        node_name=current_node,
+                        context=self.context,
+                        sub_workflow_name=current_node,
+                        result=result,
+                        exception=exception
+                    ))
 
             next_nodes = self.workflow.transitions.get(current_node, [])
             current_node = None
             for next_node, condition in next_nodes:
+                await self._notify_observers(WorkflowEvent(
+                    event_type=WorkflowEventType.TRANSITION_EVALUATED,
+                    node_name=None,
+                    context=self.context,
+                    transition_from=current_node,
+                    transition_to=next_node
+                ))
                 if condition is None or condition(self.context):
                     current_node = next_node
                     break
 
         logger.info("Workflow execution completed")
+        await self._notify_observers(WorkflowEvent(
+            event_type=WorkflowEventType.WORKFLOW_COMPLETED,
+            node_name=None,
+            context=self.context
+        ))
         return self.context
 
 
@@ -68,6 +210,7 @@ class Workflow:
         self.node_outputs: Dict[str, Optional[str]] = {}
         self.transitions: Dict[str, List[Tuple[str, Optional[Callable]]]] = {}
         self.current_node = None
+        self._observers: List[WorkflowObserver] = []  # Store observers for later propagation
         self._register_node(start_node)  # Register the start node without setting current_node
         self.current_node = start_node  # Set current_node explicitly after registration
 
@@ -122,23 +265,28 @@ class Workflow:
         self.current_node = None  # Reset after parallel to force explicit next node
         return self
 
+    def add_observer(self, observer: WorkflowObserver) -> 'Workflow':
+        """Add an event observer callback to the workflow."""
+        if observer not in self._observers:
+            self._observers.append(observer)
+            logger.debug(f"Added observer to workflow: {observer}")
+        return self  # Support chaining
+
     def add_sub_workflow(self, name: str, sub_workflow: 'Workflow', inputs: Dict[str, str], output: str):
         """Add a sub-workflow as a node."""
-        async def sub_workflow_node(**kwargs):
-            sub_context = {sub_key: kwargs[main_key] for main_key, sub_key in inputs.items()}
-            sub_engine = sub_workflow.build()
-            result = await sub_engine.run(sub_context)
-            return result.get(output)
-        
-        self.nodes[name] = sub_workflow_node
+        sub_node = SubWorkflowNode(sub_workflow, inputs, output)
+        self.nodes[name] = sub_node
         self.node_inputs[name] = list(inputs.keys())
         self.node_outputs[name] = output
         self.current_node = name
         return self
 
-    def build(self) -> WorkflowEngine:
-        """Build and return a WorkflowEngine instance."""
-        return WorkflowEngine(self)
+    def build(self, parent_engine: Optional['WorkflowEngine'] = None) -> WorkflowEngine:
+        """Build and return a WorkflowEngine instance with registered observers."""
+        engine = WorkflowEngine(self, parent_engine=parent_engine)
+        for observer in self._observers:
+            engine.add_observer(observer)
+        return engine
 
 
 class Nodes:
@@ -294,13 +442,21 @@ class Nodes:
             raise
 
 
-# Example workflow matching the provided structure
+# Example workflow matching the provided structure with observer integration
 async def example_workflow():
     # Define Pydantic model for structured output
     class OrderDetails(BaseModel):
         order_id: str
         items: List[str]
         in_stock: bool
+
+    # Define an example observer
+    async def progress_monitor(event: WorkflowEvent):
+        print(f"[{event.event_type.value}] {event.node_name or 'Workflow'}")
+        if event.result is not None:
+            print(f"Result: {event.result}")
+        if event.exception is not None:
+            print(f"Exception: {event.exception}")
 
     # Define nodes
     @Nodes.validate_node(output="validation_result")
@@ -341,11 +497,13 @@ async def example_workflow():
     payment_shipping_sub_wf = (
         Workflow("process_payment")
         .sequence("process_payment", "arrange_shipping")
+        .add_observer(progress_monitor)  # Observer propagates to sub-workflow
     )
 
     # Main workflow incorporating the sub-workflow
     workflow = (
         Workflow("validate_order")
+        .add_observer(progress_monitor)  # Add observer to main workflow
         .add_sub_workflow("payment_shipping", payment_shipping_sub_wf, inputs={"order": "order"}, output="shipping_confirmation")
         .sequence("validate_order", "check_inventory")
         .then("payment_shipping", condition=lambda ctx: ctx.get("inventory_status").in_stock if ctx.get("inventory_status") else False)

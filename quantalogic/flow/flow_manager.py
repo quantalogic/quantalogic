@@ -13,7 +13,7 @@ from loguru import logger
 from pydantic import BaseModel, ValidationError
 
 # Import directly from flow.py to avoid circular import through __init__.py
-from quantalogic.flow.flow import Nodes, Workflow
+from quantalogic.flow.flow import Nodes, Workflow, WorkflowEvent, WorkflowEventType, WorkflowObserver
 from quantalogic.flow.flow_manager_schema import (
     FunctionDefinition,
     NodeDefinition,
@@ -131,6 +131,14 @@ class WorkflowManager:
         func_def = FunctionDefinition(type=type_, code=code, module=module, function=function)
         self.workflow.functions[name] = func_def
 
+    def add_observer(self, observer_name: str) -> None:
+        """Add an observer function name to the workflow."""
+        if observer_name not in self.workflow.functions:
+            raise ValueError(f"Observer function '{observer_name}' not defined in functions")
+        if observer_name not in self.workflow.observers:
+            self.workflow.observers.append(observer_name)
+            logger.debug(f"Added observer '{observer_name}' to workflow")
+
     def _resolve_model(self, model_str: str) -> Type[BaseModel]:
         """Resolve a string to a Pydantic model class for structured_llm_node."""
         try:
@@ -216,6 +224,13 @@ class WorkflowManager:
         if not self.workflow.workflow.start:
             raise ValueError("Start node not set in workflow definition")
         wf = Workflow(start_node=self.workflow.workflow.start)
+
+        # Register observers
+        for observer_name in self.workflow.observers:
+            if observer_name not in functions:
+                raise ValueError(f"Observer '{observer_name}' not found in functions")
+            wf.add_observer(functions[observer_name])
+            logger.debug(f"Registered observer '{observer_name}' in workflow")
 
         sub_workflows: Dict[str, Workflow] = {}
         for node_name, node_def in self.workflow.nodes.items():
@@ -352,7 +367,7 @@ class WorkflowManager:
 
 
 def main():
-    """Demonstrate usage of WorkflowManager."""
+    """Demonstrate usage of WorkflowManager with observer support."""
     manager = WorkflowManager()
     manager.add_function(
         name="greet",
@@ -364,10 +379,21 @@ def main():
         type_="embedded",
         code="def farewell(user_name): return f'Goodbye, {user_name}!'",
     )
+    manager.add_function(
+        name="monitor",
+        type_="embedded",
+        code="""async def monitor(event):
+            print(f'[EVENT] {event.event_type.value} @ {event.node_name or "workflow"}')
+            if event.result:
+                print(f'Result: {event.result}')
+            if event.exception:
+                print(f'Error: {event.exception}')"""
+    )
     manager.add_node(name="start", function="greet")
     manager.add_node(name="end", function="farewell")
     manager.set_start_node("start")
     manager.add_transition(from_="start", to="end")
+    manager.add_observer("monitor")  # Add the observer
     manager.save_to_yaml("workflow.yaml")
     new_manager = WorkflowManager()
     new_manager.load_from_yaml("workflow.yaml")

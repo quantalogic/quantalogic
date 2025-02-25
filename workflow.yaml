@@ -9,6 +9,17 @@ functions:
     code: 'def farewell(user_name): return f''Goodbye, {user_name}!'''
     module: null
     function: null
+  monitor:
+    type: embedded
+    code: |-
+      async def monitor(event):
+                  print(f'[EVENT] {event.event_type.value} @ {event.node_name or "workflow"}')
+                  if event.result:
+                      print(f'Result: {event.result}')
+                  if event.exception:
+                      print(f'Error: {event.exception}')
+    module: null
+    function: null
 nodes:
   start:
     function: greet
@@ -34,3 +45,5 @@ workflow:
   - from: start
     to: end
     condition: null
+observers:
+- monitor

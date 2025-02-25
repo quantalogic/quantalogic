@@ -223,3 +223,4 @@ workflow:
   - from: quality_check
     to: end
     condition: null
+observers: []

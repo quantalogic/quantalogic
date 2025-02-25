@@ -213,6 +213,10 @@ class WorkflowDefinition(BaseModel):
         default_factory=WorkflowStructure,
         description="Main workflow structure with start node and transitions."
     )
+    observers: List[str] = Field(
+        default_factory=list,
+        description="List of observer function names to monitor workflow execution."
+    )
 
 
 # Resolve forward reference for sub_workflow in NodeDefinition
