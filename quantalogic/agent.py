@@ -50,7 +50,12 @@ class ObserveResponseResult(BaseModel):
 
 
 class Agent(BaseModel):
-    """Enhanced QuantaLogic agent implementing ReAct framework."""
+    """Enhanced QuantaLogic agent implementing ReAct framework.
+
+    Supports both synchronous and asynchronous operations for task solving.
+    Use `solve_task` for synchronous contexts (e.g., CLI tools) and `async_solve_task`
+    for asynchronous contexts (e.g., web servers).
+    """
 
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True, extra="forbid")
 
@@ -167,63 +172,43 @@ class Agent(BaseModel):
     def solve_task(
         self, task: str, max_iterations: int = 30, streaming: bool = False, clear_memory: bool = True
     ) -> str:
-        """Solve the given task using the ReAct framework.
+        """Solve the given task using the ReAct framework (synchronous version).
+
+        Ideal for synchronous applications. For asynchronous contexts, use `async_solve_task`.
 
         Args:
             task (str): The task description.
-            max_iterations (int, optional): Maximum number of iterations to attempt solving the task.
-                Defaults to 30 to prevent infinite loops and ensure timely task completion.
-            streaming (bool, optional): Whether to use streaming mode for generating responses.
-            clear_memory (bool, optional): Whether to clear the memory before solving the task.
+            max_iterations (int, optional): Maximum number of iterations. Defaults to 30.
+            streaming (bool, optional): Whether to use streaming mode. Defaults to False.
+            clear_memory (bool, optional): Whether to clear memory before solving. Defaults to True.
 
         Returns:
             str: The final response after task completion.
         """
         logger.debug(f"Solving task... {task}")
         self._reset_session(task_to_solve=task, max_iterations=max_iterations, clear_memory=clear_memory)
-
-        # Generate task summary
         self.task_to_solve_summary = self._generate_task_summary(task)
 
-        # Add system prompt to memory
-        # Check if system prompt is already in memory
-        # if not add it
-        # The system message is always the first message in memory
         if not self.memory.memory or self.memory.memory[0].role != "system":
             self.memory.add(Message(role="system", content=self.config.system_prompt))
 
-        self._emit_event(
-            "session_start",
-            {"system_prompt": self.config.system_prompt, "content": task},
-        )
+        self._emit_event("session_start", {"system_prompt": self.config.system_prompt, "content": task})
 
         self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
         self.max_input_tokens = self.model.get_model_max_input_tokens() or DEFAULT_MAX_INPUT_TOKENS
 
         done = False
         current_prompt = self._prepare_prompt_task(task)
-
         self.current_iteration = 1
-
-        # Emit event: Task Solve Start
-        self._emit_event(
-            "task_solve_start",
-            {"initial_prompt": current_prompt, "task": task},
-        )
-
-        answer: str = ""
+        answer = ""
 
         while not done:
             try:
-                self._update_total_tokens(message_history=self.memory.memory, prompt=current_prompt)
-
-                # Emit event: Task Think Start after updating total tokens
+                self._update_total_tokens(self.memory.memory, current_prompt)
                 self._emit_event("task_think_start", {"prompt": current_prompt})
-
                 self._compact_memory_if_needed(current_prompt)
 
                 if streaming:
-                    # For streaming, collect the response chunks
                     content = ""
                     for chunk in self.model.generate_with_history(
                         messages_history=self.memory.memory,
@@ -231,54 +216,35 @@ class Agent(BaseModel):
                         streaming=True,
                     ):
                         content += chunk
-
-                    # Create a response object similar to non-streaming mode
                     result = ResponseStats(
                         response=content,
-                        usage=TokenUsage(
-                            prompt_tokens=0,  # We don't have token counts in streaming mode
-                            completion_tokens=0,
-                            total_tokens=0,
-                        ),
+                        usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
                         model=self.model.model,
                         finish_reason="stop",
                     )
                 else:
                     result = self.model.generate_with_history(
-                        messages_history=self.memory.memory, prompt=current_prompt, streaming=False,
+                        messages_history=self.memory.memory,
+                        prompt=current_prompt,
+                        streaming=False,
                         stop_words=["thinking"]
                     )
 
                 content = result.response
-                if not streaming:  # Only update tokens for non-streaming mode
+                if not streaming:
                     token_usage = result.usage
                     self.total_tokens = token_usage.total_tokens
 
-                # Emit event: Task Think End
-                self._emit_event(
-                    "task_think_end",
-                    {
-                        "response": content,
-                    },
-                )
-
-                # Process the assistant's response
+                self._emit_event("task_think_end", {"response": content})
                 result = self._observe_response(content, iteration=self.current_iteration)
-
                 current_prompt = result.next_prompt
 
                 if result.executed_tool == "task_complete":
-                    self._emit_event(
-                        "task_complete",
-                        {
-                            "response": result.answer,
-                        },
-                    )
+                    self._emit_event("task_complete", {"response": result.answer})
                     answer = result.answer
                     done = True
 
                 self._update_session_memory(current_prompt, content)
-
                 self.current_iteration += 1
                 if self.current_iteration >= self.max_iterations:
                     done = True
@@ -286,15 +252,99 @@ class Agent(BaseModel):
 
             except Exception as e:
                 logger.error(f"Error during task solving: {str(e)}")
-                # Optionally, decide to continue or break based on exception type
                 answer = f"Error: {str(e)}"
                 done = True
 
-        # Emit event: Task Solve End
         self._emit_event("task_solve_end")
+        return answer
 
-        logger.debug(f"Task solved: {answer}")
+    async def async_solve_task(
+        self, task: str, max_iterations: int = 30, streaming: bool = False, clear_memory: bool = True
+    ) -> str:
+        """Solve the given task using the ReAct framework (asynchronous version).
 
+        Ideal for asynchronous applications. For synchronous contexts, use `solve_task`.
+
+        Args:
+            task (str): The task description.
+            max_iterations (int, optional): Maximum number of iterations. Defaults to 30.
+            streaming (bool, optional): Whether to use streaming mode. Defaults to False.
+            clear_memory (bool, optional): Whether to clear memory before solving. Defaults to True.
+
+        Returns:
+            str: The final response after task completion.
+        """
+        logger.debug(f"Solving task asynchronously... {task}")
+        self._reset_session(task_to_solve=task, max_iterations=max_iterations, clear_memory=clear_memory)
+        self.task_to_solve_summary = self._generate_task_summary(task)
+
+        if not self.memory.memory or self.memory.memory[0].role != "system":
+            self.memory.add(Message(role="system", content=self.config.system_prompt))
+
+        self._emit_event("session_start", {"system_prompt": self.config.system_prompt, "content": task})
+
+        self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
+        self.max_input_tokens = self.model.get_model_max_input_tokens() or DEFAULT_MAX_INPUT_TOKENS
+
+        done = False
+        current_prompt = self._prepare_prompt_task(task)
+        self.current_iteration = 1
+        answer = ""
+
+        while not done:
+            try:
+                self._update_total_tokens(self.memory.memory, current_prompt)
+                self._emit_event("task_think_start", {"prompt": current_prompt})
+                self._compact_memory_if_needed(current_prompt)
+
+                if streaming:
+                    content = ""
+                    async for chunk in self.model.async_generate_with_history(
+                        messages_history=self.memory.memory,
+                        prompt=current_prompt,
+                        streaming=True,
+                    ):
+                        content += chunk
+                    result = ResponseStats(
+                        response=content,
+                        usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+                        model=self.model.model,
+                        finish_reason="stop",
+                    )
+                else:
+                    result = await self.model.async_generate_with_history(
+                        messages_history=self.memory.memory,
+                        prompt=current_prompt,
+                        streaming=False,
+                        stop_words=["thinking"]
+                    )
+
+                content = result.response
+                if not streaming:
+                    token_usage = result.usage
+                    self.total_tokens = token_usage.total_tokens
+
+                self._emit_event("task_think_end", {"response": content})
+                result = await self._async_observe_response(content, iteration=self.current_iteration)
+                current_prompt = result.next_prompt
+
+                if result.executed_tool == "task_complete":
+                    self._emit_event("task_complete", {"response": result.answer})
+                    answer = result.answer
+                    done = True
+
+                self._update_session_memory(current_prompt, content)
+                self.current_iteration += 1
+                if self.current_iteration >= self.max_iterations:
+                    done = True
+                    self._emit_event("error_max_iterations_reached")
+
+            except Exception as e:
+                logger.error(f"Error during async task solving: {str(e)}")
+                answer = f"Error: {str(e)}"
+                done = True
+
+        self._emit_event("task_solve_end")
         return answer
 
     def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30, clear_memory: bool = True):
@@ -318,10 +368,6 @@ class Agent(BaseModel):
         """Compacts the memory if it exceeds the maximum occupancy or token limit."""
         ratio_occupied = self._calculate_context_occupancy()
 
-        # Compact memory if any of these conditions are met:
-        # 1. Memory occupancy exceeds MAX_OCCUPANCY, or
-        # 2. Current iteration is a multiple of compact_every_n_iterations, or
-        # 3. Working memory exceeds max_tokens_working_memory (if set)
         should_compact_by_occupancy = ratio_occupied >= MAX_OCCUPANCY
         should_compact_by_iteration = (
             self.compact_every_n_iterations is not None
@@ -347,13 +393,7 @@ class Agent(BaseModel):
             self._emit_event("memory_compacted")
 
     def _emit_event(self, event_type: str, data: dict[str, Any] | None = None) -> None:
-        """
-        Emit an event with system context and optional additional data.
-
-        Why: Provides a standardized way to track and log system events
-        with consistent contextual information.
-        """
-        # Use empty dict as default to avoid mutable default argument
+        """Emit an event with system context and optional additional data."""
         event_data = {
             "iteration": self.current_iteration,
             "total_tokens": self.total_tokens,
@@ -361,24 +401,12 @@ class Agent(BaseModel):
             "max_input_tokens": self.max_input_tokens,
             "max_output_tokens": self.max_output_tokens,
         }
-
-        # Merge additional data if provided
         if data:
             event_data.update(data)
-
         self.event_emitter.emit(event_type, event_data)
 
     def _observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
-        """Analyze the assistant's response and determine next steps.
-
-        Args:
-            content (str): The assistant's response content.
-            iteration (int, optional): The current iteration number of task solving.
-                Helps track the progress and prevent infinite loops. Defaults to 1.
-
-        Returns:
-            ObserveResponseResult: A result indicating if the task is done and the next prompt.
-        """
+        """Analyze the assistant's response and determine next steps (synchronous)."""
         try:
             parsed_content = self._parse_tool_usage(content)
             if not parsed_content:
@@ -408,16 +436,126 @@ class Agent(BaseModel):
                     executed_tool=executed_tool,
                     answer=response if executed_tool == "task_complete" else None,
                 )
-
         except Exception as e:
             return self._handle_error(e)
+
+    async def _async_observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
+        """Analyze the assistant's response and determine next steps (asynchronous)."""
+        try:
+            parsed_content = self._parse_tool_usage(content)
+            if not parsed_content:
+                return self._handle_no_tool_usage()
+
+            for tool_name, tool_input in parsed_content.items():
+                tool = self.tools.get(tool_name)
+                if not tool:
+                    return self._handle_tool_not_found(tool_name)
+
+                arguments_with_values = self._parse_tool_arguments(tool, tool_input)
+                is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
+
+                if is_repeated_call:
+                    executed_tool, response = self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                else:
+                    executed_tool, response = await self._async_execute_tool(tool_name, tool, arguments_with_values)
+
+                if not executed_tool:
+                    return self._handle_tool_execution_failure(response)
+
+                variable_name = self.variable_store.add(response)
+                new_prompt = self._format_observation_response(response, executed_tool, variable_name, iteration)
+
+                return ObserveResponseResult(
+                    next_prompt=new_prompt,
+                    executed_tool=executed_tool,
+                    answer=response if executed_tool == "task_complete" else None,
+                )
+        except Exception as e:
+            return self._handle_error(e)
+
+    def _execute_tool(self, tool_name: str, tool, arguments_with_values: dict) -> tuple[str, Any]:
+        """Execute a tool with validation if required (synchronous)."""
+        if tool.need_validation:
+            question_validation = (
+                "Do you permit the execution of this tool?\n"
+                f"Tool: {tool_name}\nArguments:\n"
+                "<arguments>\n"
+                + "\n".join([f"    <{key}>{value}</{key}>" for key, value in arguments_with_values.items()])
+                + "\n</arguments>\nYes or No"
+            )
+            permission_granted = self.ask_for_user_validation(question_validation)
+            if not permission_granted:
+                return "", f"Error: execution of tool '{tool_name}' was denied by the user."
+
+        self._emit_event("tool_execution_start", {"tool_name": tool_name, "arguments": arguments_with_values})
+
+        try:
+            arguments_with_values_interpolated = {
+                key: self._interpolate_variables(value) for key, value in arguments_with_values.items()
+            }
+            if tool.need_variables:
+                arguments_with_values_interpolated["variables"] = self.variable_store
+            if tool.need_caller_context_memory:
+                arguments_with_values_interpolated["caller_context_memory"] = self.memory.memory
+
+            converted_args = self.tools.validate_and_convert_arguments(tool_name, arguments_with_values_interpolated)
+            injectable_properties = tool.get_injectable_properties_in_execution()
+            for key, value in injectable_properties.items():
+                converted_args[key] = value
+
+            response = tool.execute(**converted_args)
+            executed_tool = tool.name
+        except Exception as e:
+            response = f"Error executing tool: {tool_name}: {str(e)}\n"
+            executed_tool = ""
+
+        self._emit_event("tool_execution_end", {"tool_name": tool_name, "arguments": arguments_with_values, "response": response})
+        return executed_tool, response
+
+    async def _async_execute_tool(self, tool_name: str, tool, arguments_with_values: dict) -> tuple[str, Any]:
+        """Execute a tool with validation if required (asynchronous)."""
+        if tool.need_validation:
+            question_validation = (
+                "Do you permit the execution of this tool?\n"
+                f"Tool: {tool_name}\nArguments:\n"
+                "<arguments>\n"
+                + "\n".join([f"    <{key}>{value}</{key}>" for key, value in arguments_with_values.items()])
+                + "\n</arguments>\nYes or No"
+            )
+            permission_granted = self.ask_for_user_validation(question_validation)
+            if not permission_granted:
+                return "", f"Error: execution of tool '{tool_name}' was denied by the user."
+
+        self._emit_event("tool_execution_start", {"tool_name": tool_name, "arguments": arguments_with_values})
+
+        try:
+            arguments_with_values_interpolated = {
+                key: self._interpolate_variables(value) for key, value in arguments_with_values.items()
+            }
+            if tool.need_variables:
+                arguments_with_values_interpolated["variables"] = self.variable_store
+            if tool.need_caller_context_memory:
+                arguments_with_values_interpolated["caller_context_memory"] = self.memory.memory
+
+            converted_args = self.tools.validate_and_convert_arguments(tool_name, arguments_with_values_interpolated)
+            injectable_properties = tool.get_injectable_properties_in_execution()
+            for key, value in injectable_properties.items():
+                converted_args[key] = value
+
+            response = await tool.execute_async(**converted_args)
+            executed_tool = tool.name
+        except Exception as e:
+            response = f"Error executing tool: {tool_name}: {str(e)}\n"
+            executed_tool = ""
+
+        self._emit_event("tool_execution_end", {"tool_name": tool_name, "arguments": arguments_with_values, "response": response})
+        return executed_tool, response
 
     def _parse_tool_usage(self, content: str) -> dict:
         """Extract tool usage from the response content."""
         if not content or not isinstance(content, str):
             return {}
 
-        # Extract action 
         xml_parser = ToleranceXMLParser()
         action = xml_parser.extract_elements(text=content, element_names=["action"])
 
@@ -426,9 +564,7 @@ class Agent(BaseModel):
         if action:
             return xml_parser.extract_elements(text=action["action"], element_names=tool_names)
         else:
-            # Fallback to extracting tool usage directly
             return xml_parser.extract_elements(text=content, element_names=tool_names)
-
 
     def _parse_tool_arguments(self, tool, tool_input: str) -> dict:
         """Parse the tool arguments from the tool input."""
@@ -516,8 +652,7 @@ class Agent(BaseModel):
                 f"... content was truncated full content available by interpolation in variable {variable_name}"
             )
 
-        # Format the response message
-        formatted_response = formatted_response = (
+        formatted_response = (
             "# Analysis and Next Action Decision Point\n\n"
             f"📊 Progress: Iteration {iteration}/{self.max_iterations}\n\n"
             "## Global Task summary:\n"
@@ -561,115 +696,12 @@ class Agent(BaseModel):
 
         return formatted_response
 
-    def _execute_tool(self, tool_name: str, tool, arguments_with_values: dict) -> tuple[str, Any]:
-        """Execute a tool with validation if required.
-
-        Args:
-            tool_name: Name of the tool to execute
-            tool: Tool instance
-            arguments_with_values: Dictionary of argument names and values
-
-        Returns:
-            tuple containing:
-                - executed_tool name (str)
-                - tool execution response (Any)
-
-        Note:
-            Predefined variable properties take precedence over dynamically provided values.
-            This ensures consistent behavior when tools have both predefined properties
-            and runtime-provided arguments. The precedence order is:
-            1. Predefined properties from tool.get_injectable_properties_in_execution()
-            2. Runtime-provided arguments from arguments_with_values
-        """
-        # Handle tool validation if required
-        if tool.need_validation:
-            logger.debug(f"Tool '{tool_name}' requires validation.")
-            self._emit_event(
-                "tool_execute_validation_start",
-                {"tool_name": tool_name, "arguments": arguments_with_values},
-            )
-
-            question_validation: str = (
-                "Do you permit the execution of this tool?\n"
-                f"Tool: {tool_name}\n"
-                "Arguments:\n"
-                "<arguments>\n"
-                + "\n".join([f"    <{key}>{value}</{key}>" for key, value in arguments_with_values.items()])
-                + "\n</arguments>\n"
-                "Yes or No"
-            )
-            permission_granted = self.ask_for_user_validation(question_validation)
-
-            self._emit_event(
-                "tool_execute_validation_end",
-                {"tool_name": tool_name, "arguments": arguments_with_values},
-            )
-
-            if not permission_granted:
-                logger.debug(f"Execution of tool '{tool_name}' was denied by the user.")
-                return "", f"Error: execution of tool '{tool_name}' was denied by the user."
-
-        # Emit event: Tool Execution Start
-        self._emit_event(
-            "tool_execution_start",
-            {"tool_name": tool_name, "arguments": arguments_with_values},
-        )
-
-        try:
-            # Execute the tool synchronously
-            arguments_with_values_interpolated = {
-                key: self._interpolate_variables(value) for key, value in arguments_with_values.items()
-            }
-
-            arguments_with_values_interpolated = arguments_with_values_interpolated
-
-            # test if tool need variables in context
-            if tool.need_variables:
-                # Inject variables into the tool if needed
-                arguments_with_values_interpolated["variables"] = self.variable_store
-            if tool.need_caller_context_memory:
-                # Inject caller context into the tool if needed
-                arguments_with_values_interpolated["caller_context_memory"] = self.memory.memory
-
-            try:
-                # Convert arguments to proper types
-                converted_args = self.tools.validate_and_convert_arguments(
-                    tool_name, arguments_with_values_interpolated
-                )
-            except ValueError as e:
-                return "", f"Argument Error: {str(e)}"
-
-            # Add injectable variables
-            injectable_properties = tool.get_injectable_properties_in_execution()
-            for key, value in injectable_properties.items():
-                converted_args[key] = value
-
-            # Call tool execute with named arguments
-            response = tool.execute(**converted_args)
-            executed_tool = tool.name
-        except Exception as e:
-            response = f"Error executing tool: {tool_name}: {str(e)}\n"
-            executed_tool = ""
-
-        # Emit event: Tool Execution End
-        self._emit_event(
-            "tool_execution_end",
-            {
-                "tool_name": tool_name,
-                "arguments": arguments_with_values,
-                "response": response,
-            },
-        )
-
-        return executed_tool, response
-
     def _interpolate_variables(self, text: str) -> str:
         """Interpolate variables using $var$ syntax in the given text."""
         try:
             import re
 
             for var in self.variable_store.keys():
-                # Create safe pattern without double-escaping backslashes
                 safe_var = re.sub(r"([\\\.\^\$\*\+\?\{\}\[\]\|\(\)])", r"\\\1", var)
                 pattern = rf"\${safe_var}\$"
                 replacement = self.variable_store[var]
@@ -733,10 +765,8 @@ class Agent(BaseModel):
     def _calculate_context_occupancy(self) -> float:
         """Calculate the number of tokens in percentages for prompt and completion."""
         total_tokens = self.total_tokens
-        # Calculate token usage of prompt
         max_tokens = self.model.get_model_max_input_tokens()
 
-        # Handle None value and prevent division by zero
         if max_tokens is None or max_tokens <= 0:
             logger.warning(f"Invalid max tokens value: {max_tokens}. Using default of {DEFAULT_MAX_INPUT_TOKENS}.")
             max_tokens = DEFAULT_MAX_INPUT_TOKENS
@@ -755,16 +785,12 @@ class Agent(BaseModel):
             "Keep the summary clear and actionable.\n"
         )
 
-        # Get all message system, except the last assistant / user message
         memory_copy = self.memory.memory.copy()
 
-        # Remove the last assistant / user message
         user_message = memory_copy.pop()
         assistant_message = memory_copy.pop()
         summary = self.model.generate_with_history(messages_history=memory_copy, prompt=prompt_summary)
-        # Remove user message
         memory_copy.pop()
-        # Replace by summary
         memory_copy.append(Message(role="user", content=summary.response))
         memory_copy.append(assistant_message)
         memory_copy.append(user_message)
@@ -800,25 +826,17 @@ class Agent(BaseModel):
             return f"Summary generation failed: {str(e)}"
 
     def _update_session_memory(self, user_content: str, assistant_content: str) -> None:
-        """
-        Log session messages to memory and emit events.
+        """Log session messages to memory and emit events.
 
         Args:
             user_content (str): The user's content.
             assistant_content (str): The assistant's content.
         """
         self.memory.add(Message(role="user", content=user_content))
-        self._emit_event(
-            "session_add_message",
-            {"role": "user", "content": user_content},
-        )
+        self._emit_event("session_add_message", {"role": "user", "content": user_content})
 
         self.memory.add(Message(role="assistant", content=assistant_content))
-
-        self._emit_event(
-            "session_add_message",
-            {"role": "assistant", "content": assistant_content},
-        )
+        self._emit_event("session_add_message", {"role": "assistant", "content": assistant_content})
 
     def update_model(self, new_model_name: str) -> None:
         """Update the model name and recreate the model instance."""

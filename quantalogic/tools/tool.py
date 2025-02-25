@@ -4,6 +4,7 @@ This module provides base classes and data models for creating configurable tool
 with type-validated arguments and execution methods.
 """
 
+import asyncio  # Added for asynchronous support
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -168,6 +169,16 @@ class ToolDefinition(BaseModel):
             arg for arg in self.arguments if properties_injectable.get(arg.name) is None
         ]
 
+    def get_injectable_properties_in_execution(self) -> dict[str, Any]:
+        """Get injectable properties excluding tool arguments.
+        
+        Returns:
+            A dictionary of property names and values, excluding tool arguments and None values.
+        """
+        # This method is defined here in ToolDefinition and overridden in Tool
+        # For ToolDefinition, it returns an empty dict since it has no execution context yet
+        return {}
+
 
 class Tool(ToolDefinition):
     """Extended class for tools with execution capabilities.
@@ -210,6 +221,21 @@ class Tool(ToolDefinition):
             A string representing the result of tool execution.
         """
         raise NotImplementedError("This method should be implemented by subclasses.")
+
+    async def execute_async(self, **kwargs) -> str:
+        """Asynchronous version of execute.
+
+        By default, runs the synchronous execute method in a separate thread using asyncio.to_thread.
+        Subclasses can override this method to provide a native asynchronous implementation for
+        operations that benefit from async I/O (e.g., network requests).
+
+        Args:
+            **kwargs: Keyword arguments for tool execution.
+
+        Returns:
+            A string representing the result of tool execution.
+        """
+        return await asyncio.to_thread(self.execute, **kwargs)
 
     def get_injectable_properties_in_execution(self) -> dict[str, Any]:
         """Get injectable properties excluding tool arguments.

@@ -1,7 +1,8 @@
 """Generative model module for AI-powered text generation."""
 
+import asyncio
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, AsyncGenerator, Dict, List
 
 import litellm
 import openai
@@ -76,7 +77,7 @@ class ResponseStats(BaseModel):
 
 
 class GenerativeModel:
-    """Generative model for AI-powered text generation and image generation."""
+    """Generative model for AI-powered text and image generation with sync and async support."""
 
     def __init__(
         self,
@@ -189,6 +190,69 @@ class GenerativeModel:
         except Exception as e:
             self._handle_generation_exception(e)
 
+    async def async_generate_with_history(
+        self,
+        messages_history: list[Message],
+        prompt: str,
+        image_url: str | None = None,
+        streaming: bool = False,
+        stop_words: list[str] | None = None,
+    ) -> ResponseStats | AsyncGenerator[str, None]:
+        """Asynchronously generate a response with conversation history and optional image.
+
+        Args:
+            messages_history: Previous conversation messages.
+            prompt: Current user prompt.
+            image_url: Optional image URL for visual queries.
+            streaming: Whether to stream the response.
+            stop_words: Optional list of stop words for streaming.
+
+        Returns:
+            ResponseStats if streaming=False, or an AsyncGenerator for streaming=True.
+        """
+        messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages_history]
+
+        if image_url:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": str(prompt)},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                }
+            )
+        else:
+            messages.append({"role": "user", "content": str(prompt)})
+
+        if streaming:
+            self.event_emitter.emit("stream_start")
+            return self._async_stream_response(messages, stop_words)
+
+        try:
+            logger.debug(f"Async generating response for prompt: {prompt}")
+            response = await litellm.acompletion(
+                model=self.model,
+                messages=messages,
+                temperature=self.temperature,
+                num_retries=MIN_RETRIES,
+                stop=stop_words,
+                extra_headers={"X-Title": "quantalogic"},
+            )
+            token_usage = TokenUsage(
+                prompt_tokens=response.usage.prompt_tokens,
+                completion_tokens=response.usage.completion_tokens,
+                total_tokens=response.usage.total_tokens,
+            )
+            return ResponseStats(
+                response=response.choices[0].message.content,
+                usage=token_usage,
+                model=self.model,
+                finish_reason=response.choices[0].finish_reason,
+            )
+        except Exception as e:
+            self._handle_generation_exception(e)
+
     def _stream_response(self, messages, stop_words: list[str] | None = None):
         """Private method to handle streaming responses."""
         try:
@@ -209,6 +273,25 @@ class GenerativeModel:
             logger.error(f"Streaming error: {str(e)}")
             raise
 
+    async def _async_stream_response(self, messages, stop_words: list[str] | None = None):
+        """Private method to handle asynchronous streaming responses."""
+        try:
+            async for chunk in litellm.acompletion(
+                model=self.model,
+                messages=messages,
+                temperature=self.temperature,
+                stream=True,
+                stop=stop_words,
+                num_retries=MIN_RETRIES,
+            ):
+                if chunk.choices[0].delta.content is not None:
+                    self.event_emitter.emit("stream_chunk", chunk.choices[0].delta.content)
+                    yield chunk.choices[0].delta.content
+            self.event_emitter.emit("stream_end")
+        except Exception as e:
+            logger.error(f"Async streaming error: {str(e)}")
+            raise
+
     def generate(self, prompt: str, image_url: str | None = None, streaming: bool = False) -> ResponseStats:
         """Generate a response without conversation history.
 
@@ -221,6 +304,24 @@ class GenerativeModel:
             Detailed response statistics or a generator in streaming mode.
         """
         return self.generate_with_history([], prompt, image_url, streaming)
+
+    async def async_generate(
+        self,
+        prompt: str,
+        image_url: str | None = None,
+        streaming: bool = False,
+    ) -> ResponseStats | AsyncGenerator[str, None]:
+        """Asynchronously generate a response without conversation history.
+
+        Args:
+            prompt: User prompt.
+            image_url: Optional image URL for visual queries.
+            streaming: Whether to stream the response.
+
+        Returns:
+            ResponseStats if streaming=False, or an AsyncGenerator for streaming=True.
+        """
+        return await self.async_generate_with_history([], prompt, image_url, streaming)
 
     def _handle_generation_exception(self, e):
         """Handle exceptions during generation."""
@@ -340,4 +441,64 @@ class GenerativeModel:
 
         except Exception as e:
             logger.error(f"Error in image generation: {str(e)}")
+            raise
+
+    async def async_generate_image(self, prompt: str, params: Dict[str, Any]) -> ResponseStats:
+        """Asynchronously generate an image using the specified model and parameters.
+
+        Args:
+            prompt: Text description of the image to generate.
+            params: Dictionary of parameters for image generation.
+
+        Returns:
+            ResponseStats containing the image generation results.
+
+        Raises:
+            Exception: If there's an error during image generation.
+        """
+        try:
+            logger.debug(f"Async generating image with params: {params}")
+            generation_params = {**params, "prompt": prompt}
+            model = generation_params.pop("model")
+
+            # Check if litellm provides an async image generation method; if not, adapt sync
+            try:
+                response = await litellm.aimage_generation(model=model, **generation_params)
+            except AttributeError:
+                # Fallback to running sync generate_image in a thread if no async version exists
+                response = await asyncio.to_thread(generate_image, model=model, **generation_params)
+
+            # Convert response data to list of dictionaries with string values
+            if hasattr(response, "data"):
+                data = []
+                for img in response.data:
+                    img_data = {}
+                    if hasattr(img, "url"):
+                        img_data["url"] = str(img.url)
+                    if hasattr(img, "b64_json"):
+                        img_data["b64_json"] = str(img.b64_json)
+                    if hasattr(img, "revised_prompt"):
+                        img_data["revised_prompt"] = str(img.revised_prompt)
+                    data.append(img_data)
+            else:
+                data = [{"url": str(response.url)}]
+
+            # Convert timestamp to ISO format string
+            if hasattr(response, "created"):
+                try:
+                    created = datetime.fromtimestamp(response.created).isoformat()
+                except (TypeError, ValueError):
+                    created = str(response.created)
+            else:
+                created = None
+
+            return ResponseStats(
+                response="",
+                usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+                model=str(params["model"]),
+                data=data,
+                created=created,
+            )
+        except Exception as e:
+            logger.error(f"Error in async image generation: {str(e)}")
             raise
