@@ -211,15 +211,18 @@ class Tool(ToolDefinition):
     def execute(self, **kwargs) -> str:
         """Execute the tool with provided arguments.
 
+        If not implemented by a subclass, falls back to the asynchronous execute_async method.
+
         Args:
             **kwargs: Keyword arguments for tool execution.
-
-        Raises:
-            NotImplementedError: If the method is not implemented by a subclass.
 
         Returns:
             A string representing the result of tool execution.
         """
+        # Check if execute is implemented in the subclass
+        if self.__class__.execute is Tool.execute:
+            # If not implemented, run the async version synchronously
+            return asyncio.run(self.execute_async(**kwargs))
         raise NotImplementedError("This method should be implemented by subclasses.")
 
     async def execute_async(self, **kwargs) -> str:
@@ -235,7 +238,10 @@ class Tool(ToolDefinition):
         Returns:
             A string representing the result of tool execution.
         """
-        return await asyncio.to_thread(self.execute, **kwargs)
+        # Check if execute_async is implemented in the subclass
+        if self.__class__.execute_async is Tool.execute_async:
+            return await asyncio.to_thread(self.execute, **kwargs)
+        raise NotImplementedError("This method should be implemented by subclasses.")
 
     def get_injectable_properties_in_execution(self) -> dict[str, Any]:
         """Get injectable properties excluding tool arguments.
