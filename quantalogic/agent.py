@@ -1,8 +1,8 @@
 """Enhanced QuantaLogic agent implementing the ReAct framework."""
 
+import asyncio
 from collections.abc import Callable
 from datetime import datetime
-import asyncio
 from typing import Any
 
 from loguru import logger
