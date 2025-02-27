@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import threading
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from loguru import logger
 
@@ -55,7 +55,7 @@ class EventEmitter:
     ) -> None:
         """Schedule an async listener in the background loop and handle errors."""
         kwargs = kwargs or {}  # Ensure kwargs is a dict if None
-        coro = listener(event, *listener_args)  # Pass only event and intended listener args
+        coro = listener(event, *listener_args, **kwargs)  # Pass event, args, and kwargs
         task = self._loop.create_task(coro)
         if error_handler:
             task.add_done_callback(lambda t: self._handle_task_error(t, error_handler, metadata))
@@ -133,14 +133,13 @@ class EventEmitter:
         - metadata (dict, optional): Additional info about the listener for debugging or error handling.
         """
         if inspect.iscoroutinefunction(listener):
-            async def wrapper(event_name: str, *args: Any, **kwargs: Any) -> None:
+            async def wrapper(*args: Any, **kwargs: Any) -> None:
                 self.off(event, wrapper)
-                await listener(event_name, *args)  # Pass event and intended args
+                await listener(*args, **kwargs)
         else:
             def wrapper(*args: Any, **kwargs: Any) -> None:
                 self.off(event, wrapper)
                 listener(*args, **kwargs)
-
         self.on(event, wrapper, priority, metadata)
 
     def off(self, event: str | list[str] | None = None, 
@@ -322,7 +321,7 @@ class EventEmitter:
                     for evt, listeners in self._listeners.items()
                 }
             }
-
+            
 
 if __name__ == "__main__":
     import asyncio
