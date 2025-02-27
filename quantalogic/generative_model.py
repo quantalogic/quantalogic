@@ -276,14 +276,15 @@ class GenerativeModel:
     async def _async_stream_response(self, messages, stop_words: list[str] | None = None):
         """Private method to handle asynchronous streaming responses."""
         try:
-            async for chunk in litellm.acompletion(
+            response = await litellm.acompletion(
                 model=self.model,
                 messages=messages,
                 temperature=self.temperature,
                 stream=True,
                 stop=stop_words,
                 num_retries=MIN_RETRIES,
-            ):
+            )
+            async for chunk in response:
                 if chunk.choices[0].delta.content is not None:
                     self.event_emitter.emit("stream_chunk", chunk.choices[0].delta.content)
                     yield chunk.choices[0].delta.content

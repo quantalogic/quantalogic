@@ -299,11 +299,12 @@ class Agent(BaseModel):
 
                 if streaming:
                     content = ""
-                    async for chunk in self.model.async_generate_with_history(
+                    async_stream = await self.model.async_generate_with_history(
                         messages_history=self.memory.memory,
                         prompt=current_prompt,
                         streaming=True,
-                    ):
+                    )
+                    async for chunk in async_stream:
                         content += chunk
                     result = ResponseStats(
                         response=content,
