@@ -1,15 +1,16 @@
-from typing import Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from loguru import logger
 
 from quantalogic.agent import Agent
 from quantalogic.agent_config import (
     create_basic_agent,
-    create_full_agent,
-    create_interpreter_agent,
-    create_minimal_agent,
+    create_custom_agent,
+    create_full_agent, 
+    create_interpreter_agent, 
 )
 from quantalogic.coding_agent import create_coding_agent
+from quantalogic.memory import AgentMemory
 from quantalogic.search_agent import create_search_agent  # noqa: E402
 
 
@@ -70,7 +71,11 @@ def create_agent_for_mode(
     thinking_model_name: Optional[str],
     no_stream: bool = False,
     compact_every_n_iteration: Optional[int] = None,
-    max_tokens_working_memory: Optional[int] = None
+    max_tokens_working_memory: Optional[int] = None,
+    tools: Optional[List[Any]] = None,
+    event_emitter: Any = None,
+    specific_expertise: str = "",
+    memory: AgentMemory | None = None
 ) -> Agent:
     """Create an agent based on the specified mode.
     
@@ -82,6 +87,10 @@ def create_agent_for_mode(
         no_stream: Whether to disable streaming mode
         compact_every_n_iteration: Optional number of iterations before compacting memory
         max_tokens_working_memory: Optional maximum tokens for working memory
+        tools: Optional list of tools to include in the agent
+        event_emitter: Optional event emitter to use in the agent
+        specific_expertise: Optional specific expertise for the agent
+        memory: Optional AgentMemory instance to use in the agent
         
     Returns:
         Agent: The created agent instance
@@ -162,13 +171,16 @@ def create_agent_for_mode(
             max_tokens_working_memory=max_tokens_working_memory
         )
         return agent
-    if mode == "minimal":
-        agent = create_minimal_agent(
+    if mode == "custom":
+        agent = create_custom_agent(
             model_name,
             vision_model_name,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory
+            max_tokens_working_memory=max_tokens_working_memory,
+            specific_expertise=specific_expertise,
+            tools=tools,
+            memory=memory
         )
         return agent
     else:
