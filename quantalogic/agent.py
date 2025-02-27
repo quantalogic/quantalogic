@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from datetime import datetime
+import asyncio
 from typing import Any
 
 from loguru import logger
@@ -186,77 +187,16 @@ class Agent(BaseModel):
             str: The final response after task completion.
         """
         logger.debug(f"Solving task... {task}")
-        self._reset_session(task_to_solve=task, max_iterations=max_iterations, clear_memory=clear_memory)
-        self.task_to_solve_summary = self._generate_task_summary(task)
-
-        if not self.memory.memory or self.memory.memory[0].role != "system":
-            self.memory.add(Message(role="system", content=self.config.system_prompt))
-
-        self._emit_event("session_start", {"system_prompt": self.config.system_prompt, "content": task})
-
-        self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
-        self.max_input_tokens = self.model.get_model_max_input_tokens() or DEFAULT_MAX_INPUT_TOKENS
-
-        done = False
-        current_prompt = self._prepare_prompt_task(task)
-        self.current_iteration = 1
-        answer = ""
-
-        while not done:
-            try:
-                self._update_total_tokens(self.memory.memory, current_prompt)
-                self._emit_event("task_think_start", {"prompt": current_prompt})
-                self._compact_memory_if_needed(current_prompt)
-
-                if streaming:
-                    content = ""
-                    for chunk in self.model.generate_with_history(
-                        messages_history=self.memory.memory,
-                        prompt=current_prompt,
-                        streaming=True,
-                    ):
-                        content += chunk
-                    result = ResponseStats(
-                        response=content,
-                        usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
-                        model=self.model.model,
-                        finish_reason="stop",
-                    )
-                else:
-                    result = self.model.generate_with_history(
-                        messages_history=self.memory.memory,
-                        prompt=current_prompt,
-                        streaming=False,
-                        stop_words=["thinking"]
-                    )
-
-                content = result.response
-                if not streaming:
-                    token_usage = result.usage
-                    self.total_tokens = token_usage.total_tokens
-
-                self._emit_event("task_think_end", {"response": content})
-                result = self._observe_response(content, iteration=self.current_iteration)
-                current_prompt = result.next_prompt
-
-                if result.executed_tool == "task_complete":
-                    self._emit_event("task_complete", {"response": result.answer})
-                    answer = result.answer
-                    done = True
-
-                self._update_session_memory(current_prompt, content)
-                self.current_iteration += 1
-                if self.current_iteration >= self.max_iterations:
-                    done = True
-                    self._emit_event("error_max_iterations_reached")
-
-            except Exception as e:
-                logger.error(f"Error during task solving: {str(e)}")
-                answer = f"Error: {str(e)}"
-                done = True
-
-        self._emit_event("task_solve_end")
-        return answer
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            # Create a new event loop if one doesn't exist
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        return loop.run_until_complete(
+            self.async_solve_task(task, max_iterations, streaming, clear_memory)
+        )
 
     async def async_solve_task(
         self, task: str, max_iterations: int = 30, streaming: bool = False, clear_memory: bool = True
@@ -276,7 +216,7 @@ class Agent(BaseModel):
         """
         logger.debug(f"Solving task asynchronously... {task}")
         self._reset_session(task_to_solve=task, max_iterations=max_iterations, clear_memory=clear_memory)
-        self.task_to_solve_summary = self._generate_task_summary(task)
+        self.task_to_solve_summary = await self._async_generate_task_summary(task)
 
         if not self.memory.memory or self.memory.memory[0].role != "system":
             self.memory.add(Message(role="system", content=self.config.system_prompt))
@@ -295,7 +235,7 @@ class Agent(BaseModel):
             try:
                 self._update_total_tokens(self.memory.memory, current_prompt)
                 self._emit_event("task_think_start", {"prompt": current_prompt})
-                self._compact_memory_if_needed(current_prompt)
+                await self._async_compact_memory_if_needed(current_prompt)
 
                 if streaming:
                     content = ""
@@ -348,97 +288,15 @@ class Agent(BaseModel):
         self._emit_event("task_solve_end")
         return answer
 
-    def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30, clear_memory: bool = True):
-        """Reset the agent's session."""
-        logger.debug("Resetting session...")
-        self.task_to_solve = task_to_solve
-        if clear_memory:
-            logger.debug("Clearing memory...")
-            self.memory.reset()
-            self.variable_store.reset()
-            self.total_tokens = 0
-        self.current_iteration = 0
-        self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
-        self.max_input_tokens = self.model.get_model_max_input_tokens() or DEFAULT_MAX_INPUT_TOKENS
-        self.max_iterations = max_iterations
-
-    def _update_total_tokens(self, message_history: list[Message], prompt: str) -> None:
-        self.total_tokens = self.model.token_counter_with_history(message_history, prompt)
-
-    def _compact_memory_if_needed(self, current_prompt: str = ""):
-        """Compacts the memory if it exceeds the maximum occupancy or token limit."""
-        ratio_occupied = self._calculate_context_occupancy()
-
-        should_compact_by_occupancy = ratio_occupied >= MAX_OCCUPANCY
-        should_compact_by_iteration = (
-            self.compact_every_n_iterations is not None
-            and self.current_iteration > 0
-            and self.current_iteration % self.compact_every_n_iterations == 0
-        )
-        should_compact_by_token_limit = (
-            self.max_tokens_working_memory is not None and self.total_tokens > self.max_tokens_working_memory
-        )
-
-        if should_compact_by_occupancy or should_compact_by_iteration or should_compact_by_token_limit:
-            if should_compact_by_occupancy:
-                logger.debug(f"Memory compaction triggered: Occupancy {ratio_occupied}% exceeds {MAX_OCCUPANCY}%")
-
-            if should_compact_by_iteration:
-                logger.debug(
-                    f"Memory compaction triggered: Iteration {self.current_iteration} is a multiple of {self.compact_every_n_iterations}"
-                )
-
-            self._emit_event("memory_full")
-            self.memory.compact()
-            self.total_tokens = self.model.token_counter_with_history(self.memory.memory, current_prompt)
-            self._emit_event("memory_compacted")
-
-    def _emit_event(self, event_type: str, data: dict[str, Any] | None = None) -> None:
-        """Emit an event with system context and optional additional data."""
-        event_data = {
-            "iteration": self.current_iteration,
-            "total_tokens": self.total_tokens,
-            "context_occupancy": self._calculate_context_occupancy(),
-            "max_input_tokens": self.max_input_tokens,
-            "max_output_tokens": self.max_output_tokens,
-        }
-        if data:
-            event_data.update(data)
-        self.event_emitter.emit(event_type, event_data)
-
     def _observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
-        """Analyze the assistant's response and determine next steps (synchronous)."""
+        """Analyze the assistant's response and determine next steps (synchronous wrapper)."""
         try:
-            parsed_content = self._parse_tool_usage(content)
-            if not parsed_content:
-                return self._handle_no_tool_usage()
-
-            for tool_name, tool_input in parsed_content.items():
-                tool = self.tools.get(tool_name)
-                if not tool:
-                    return self._handle_tool_not_found(tool_name)
-
-                arguments_with_values = self._parse_tool_arguments(tool, tool_input)
-                is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
-
-                if is_repeated_call:
-                    executed_tool, response = self._handle_repeated_tool_call(tool_name, arguments_with_values)
-                else:
-                    executed_tool, response = self._execute_tool(tool_name, tool, arguments_with_values)
-
-                if not executed_tool:
-                    return self._handle_tool_execution_failure(response)
-
-                variable_name = self.variable_store.add(response)
-                new_prompt = self._format_observation_response(response, executed_tool, variable_name, iteration)
-
-                return ObserveResponseResult(
-                    next_prompt=new_prompt,
-                    executed_tool=executed_tool,
-                    answer=response if executed_tool == "task_complete" else None,
-                )
-        except Exception as e:
-            return self._handle_error(e)
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        return loop.run_until_complete(self._async_observe_response(content, iteration))
 
     async def _async_observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
         """Analyze the assistant's response and determine next steps (asynchronous)."""
@@ -475,43 +333,14 @@ class Agent(BaseModel):
             return self._handle_error(e)
 
     def _execute_tool(self, tool_name: str, tool, arguments_with_values: dict) -> tuple[str, Any]:
-        """Execute a tool with validation if required (synchronous)."""
-        if tool.need_validation:
-            question_validation = (
-                "Do you permit the execution of this tool?\n"
-                f"Tool: {tool_name}\nArguments:\n"
-                "<arguments>\n"
-                + "\n".join([f"    <{key}>{value}</{key}>" for key, value in arguments_with_values.items()])
-                + "\n</arguments>\nYes or No"
-            )
-            permission_granted = self.ask_for_user_validation(question_validation)
-            if not permission_granted:
-                return "", f"Error: execution of tool '{tool_name}' was denied by the user."
-
-        self._emit_event("tool_execution_start", {"tool_name": tool_name, "arguments": arguments_with_values})
-
+        """Execute a tool with validation if required (synchronous wrapper)."""
         try:
-            arguments_with_values_interpolated = {
-                key: self._interpolate_variables(value) for key, value in arguments_with_values.items()
-            }
-            if tool.need_variables:
-                arguments_with_values_interpolated["variables"] = self.variable_store
-            if tool.need_caller_context_memory:
-                arguments_with_values_interpolated["caller_context_memory"] = self.memory.memory
-
-            converted_args = self.tools.validate_and_convert_arguments(tool_name, arguments_with_values_interpolated)
-            injectable_properties = tool.get_injectable_properties_in_execution()
-            for key, value in injectable_properties.items():
-                converted_args[key] = value
-
-            response = tool.execute(**converted_args)
-            executed_tool = tool.name
-        except Exception as e:
-            response = f"Error executing tool: {tool_name}: {str(e)}\n"
-            executed_tool = ""
-
-        self._emit_event("tool_execution_end", {"tool_name": tool_name, "arguments": arguments_with_values, "response": response})
-        return executed_tool, response
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        return loop.run_until_complete(self._async_execute_tool(tool_name, tool, arguments_with_values))
 
     async def _async_execute_tool(self, tool_name: str, tool, arguments_with_values: dict) -> tuple[str, Any]:
         """Execute a tool with validation if required (asynchronous)."""
@@ -531,7 +360,7 @@ class Agent(BaseModel):
 
         try:
             arguments_with_values_interpolated = {
-                key: self._interpolate_variables(value) for key, value in arguments_with_values.items()
+                key: await self._async_interpolate_variables(value) for key, value in arguments_with_values.items()
             }
             if tool.need_variables:
                 arguments_with_values_interpolated["variables"] = self.variable_store
@@ -543,7 +372,11 @@ class Agent(BaseModel):
             for key, value in injectable_properties.items():
                 converted_args[key] = value
 
-            response = await tool.execute_async(**converted_args)
+            if hasattr(tool, "execute_async") and callable(tool.execute_async):
+                response = await tool.execute_async(**converted_args)
+            else:
+                # Fall back to synchronous execution if async is not available
+                response = tool.execute(**converted_args)
             executed_tool = tool.name
         except Exception as e:
             response = f"Error executing tool: {tool_name}: {str(e)}\n"
@@ -551,6 +384,166 @@ class Agent(BaseModel):
 
         self._emit_event("tool_execution_end", {"tool_name": tool_name, "arguments": arguments_with_values, "response": response})
         return executed_tool, response
+
+    def _interpolate_variables(self, text: str) -> str:
+        """Interpolate variables using $var$ syntax in the given text (synchronous wrapper)."""
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        return loop.run_until_complete(self._async_interpolate_variables(text))
+
+    async def _async_interpolate_variables(self, text: str) -> str:
+        """Interpolate variables using $var$ syntax in the given text."""
+        try:
+            import re
+
+            for var in self.variable_store.keys():
+                safe_var = re.sub(r"([\\\.\^\$\*\+\?\{\}\[\]\|\(\)])", r"\\\1", var)
+                pattern = rf"\${safe_var}\$"
+                replacement = self.variable_store[var]
+                text = re.sub(pattern, replacement, text)
+            return text
+        except Exception as e:
+            logger.error(f"Error in _async_interpolate_variables: {str(e)}")
+            return text
+
+    def _compact_memory_if_needed(self, current_prompt: str = ""):
+        """Compacts the memory if it exceeds the maximum occupancy (synchronous wrapper)."""
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        return loop.run_until_complete(self._async_compact_memory_if_needed(current_prompt))
+
+    async def _async_compact_memory_if_needed(self, current_prompt: str = ""):
+        """Compacts the memory if it exceeds the maximum occupancy or token limit."""
+        ratio_occupied = self._calculate_context_occupancy()
+
+        should_compact_by_occupancy = ratio_occupied >= MAX_OCCUPANCY
+        should_compact_by_iteration = (
+            self.compact_every_n_iterations is not None
+            and self.current_iteration > 0
+            and self.current_iteration % self.compact_every_n_iterations == 0
+        )
+        should_compact_by_token_limit = (
+            self.max_tokens_working_memory is not None and self.total_tokens > self.max_tokens_working_memory
+        )
+
+        if should_compact_by_occupancy or should_compact_by_iteration or should_compact_by_token_limit:
+            if should_compact_by_occupancy:
+                logger.debug(f"Memory compaction triggered: Occupancy {ratio_occupied}% exceeds {MAX_OCCUPANCY}%")
+
+            if should_compact_by_iteration:
+                logger.debug(
+                    f"Memory compaction triggered: Iteration {self.current_iteration} is a multiple of {self.compact_every_n_iterations}"
+                )
+
+            self._emit_event("memory_full")
+            await self._async_compact_memory()
+            self.total_tokens = self.model.token_counter_with_history(self.memory.memory, current_prompt)
+            self._emit_event("memory_compacted")
+
+    async def _async_compact_memory(self):
+        """Compact memory asynchronously."""
+        self.memory.compact()
+
+    async def _async_compact_memory_with_summary(self) -> str:
+        """Generate a summary and compact memory asynchronously."""
+        prompt_summary = (
+            "Summarize the conversation concisely:\n"
+            "format in markdown:\n"
+            "<thinking>\n"
+            " - 1. **Completed Steps**: Briefly describe the steps.\n"
+            " - 2. **Variables Used**: List the variables.\n"
+            " - 3. **Progress Analysis**: Assess progress.\n"
+            "</thinking>\n"
+            "Keep the summary clear and actionable.\n"
+        )
+
+        memory_copy = self.memory.memory.copy()
+
+        user_message = memory_copy.pop()
+        assistant_message = memory_copy.pop()
+        summary = await self.model.async_generate_with_history(messages_history=memory_copy, prompt=prompt_summary)
+        memory_copy.pop()
+        memory_copy.append(Message(role="user", content=summary.response))
+        memory_copy.append(assistant_message)
+        memory_copy.append(user_message)
+        self.memory.memory = memory_copy
+        return summary.response
+
+    def _generate_task_summary(self, content: str) -> str:
+        """Generate a concise task-focused summary (synchronous wrapper)."""
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        return loop.run_until_complete(self._async_generate_task_summary(content))
+
+    async def _async_generate_task_summary(self, content: str) -> str:
+        """Generate a concise task-focused summary using the generative model.
+
+        Args:
+            content (str): The content to summarize
+
+        Returns:
+            str: Generated task summary
+        """
+        try:
+            if len(content) < 1024*4:
+                return content
+            prompt = (
+                "Create a task summary that captures ONLY: \n"
+                "1. Primary objective/purpose\n"
+                "2. Core actions/requirements\n"
+                "3. Desired end-state/outcome\n\n"
+                "Guidelines:\n"
+                "- Use imperative voice\n"
+                f"Input Task Description:\n{content}\n\n"
+            )
+            result = await self.model.async_generate(prompt=prompt)
+            logger.debug(f"Generated summary: {result.response}")
+            return result.response.strip() + "\n🚨 The FULL task is in <task> tag in the previous messages.\n"
+        except Exception as e:
+            logger.error(f"Error generating summary: {str(e)}")
+            return f"Summary generation failed: {str(e)}"
+
+    def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30, clear_memory: bool = True):
+        """Reset the agent's session."""
+        logger.debug("Resetting session...")
+        self.task_to_solve = task_to_solve
+        if clear_memory:
+            logger.debug("Clearing memory...")
+            self.memory.reset()
+            self.variable_store.reset()
+            self.total_tokens = 0
+        self.current_iteration = 0
+        self.max_output_tokens = self.model.get_model_max_output_tokens() or DEFAULT_MAX_OUTPUT_TOKENS
+        self.max_input_tokens = self.model.get_model_max_input_tokens() or DEFAULT_MAX_INPUT_TOKENS
+        self.max_iterations = max_iterations
+
+    def _update_total_tokens(self, message_history: list[Message], prompt: str) -> None:
+        self.total_tokens = self.model.token_counter_with_history(message_history, prompt)
+
+    def _emit_event(self, event_type: str, data: dict[str, Any] | None = None) -> None:
+        """Emit an event with system context and optional additional data."""
+        event_data = {
+            "iteration": self.current_iteration,
+            "total_tokens": self.total_tokens,
+            "context_occupancy": self._calculate_context_occupancy(),
+            "max_input_tokens": self.max_input_tokens,
+            "max_output_tokens": self.max_output_tokens,
+        }
+        if data:
+            event_data.update(data)
+        self.event_emitter.emit(event_type, event_data)
 
     def _parse_tool_usage(self, content: str) -> dict:
         """Extract tool usage from the response content."""
