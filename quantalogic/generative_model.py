@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from quantalogic.event_emitter import EventEmitter  # Importing the EventEmitter class
 from quantalogic.get_model_info import get_max_input_tokens, get_max_output_tokens, get_max_tokens
-from quantalogic.llm import count_tokens, generate_completion, generate_image
+from quantalogic.llm import count_tokens, generate_image
 
 MIN_RETRIES = 1
 
@@ -77,7 +77,7 @@ class ResponseStats(BaseModel):
 
 
 class GenerativeModel:
-    """Generative model for AI-powered text and image generation with sync and async support."""
+    """Generative model for AI-powered text and image generation with async support."""
 
     def __init__(
         self,
@@ -121,74 +121,6 @@ class GenerativeModel:
         exceptions.AuthenticationError,
         exceptions.PermissionDeniedError,
     )
-
-    # Generate a response with conversation history and optional streaming
-    def generate_with_history(
-        self,
-        messages_history: list[Message],
-        prompt: str,
-        image_url: str | None = None,
-        streaming: bool = False,
-        stop_words: list[str] | None = None,
-    ) -> ResponseStats:
-        """Generate a response with conversation history and optional image.
-
-        Args:
-            messages_history: Previous conversation messages.
-            prompt: Current user prompt.
-            image_url: Optional image URL for visual queries.
-            streaming: Whether to stream the response.
-            stop_words: Optional list of stop words for streaming
-
-        Returns:
-            Detailed response statistics or a generator in streaming mode.
-        """
-        messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages_history]
-
-        if image_url:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": str(prompt)},
-                        {"type": "image_url", "image_url": {"url": image_url}},
-                    ],
-                }
-            )
-        else:
-            messages.append({"role": "user", "content": str(prompt)})
-
-        if streaming:
-            self.event_emitter.emit("stream_start")  # Emit stream start event
-            return self._stream_response(messages)  # Return generator
-
-        try:
-            logger.debug(f"Generating response for prompt: {prompt}")
-
-            response = generate_completion(
-                temperature=self.temperature,
-                model=self.model,
-                messages=messages,
-                num_retries=MIN_RETRIES,
-                stop=stop_words,
-                extra_headers={"X-Title": "quantalogic"},
-            )
-
-            token_usage = TokenUsage(
-                prompt_tokens=response.usage.prompt_tokens,
-                completion_tokens=response.usage.completion_tokens,
-                total_tokens=response.usage.total_tokens,
-            )
-
-            return ResponseStats(
-                response=response.choices[0].message.content,
-                usage=token_usage,
-                model=self.model,
-                finish_reason=response.choices[0].finish_reason,
-            )
-
-        except Exception as e:
-            self._handle_generation_exception(e)
 
     async def async_generate_with_history(
         self,
@@ -253,26 +185,6 @@ class GenerativeModel:
         except Exception as e:
             self._handle_generation_exception(e)
 
-    def _stream_response(self, messages, stop_words: list[str] | None = None):
-        """Private method to handle streaming responses."""
-        try:
-            for chunk in generate_completion(
-                temperature=self.temperature,
-                model=self.model,
-                messages=messages,
-                num_retries=MIN_RETRIES,
-                stream=True,  # Enable streaming,
-                stop=stop_words,
-            ):
-                if chunk.choices[0].delta.content is not None:
-                    self.event_emitter.emit("stream_chunk", chunk.choices[0].delta.content)
-                    yield chunk.choices[0].delta.content  # Yield each chunk of content
-
-            self.event_emitter.emit("stream_end")  # Emit stream end event
-        except Exception as e:
-            logger.error(f"Streaming error: {str(e)}")
-            raise
-
     async def _async_stream_response(self, messages, stop_words: list[str] | None = None):
         """Private method to handle asynchronous streaming responses."""
         try:
@@ -292,19 +204,6 @@ class GenerativeModel:
         except Exception as e:
             logger.error(f"Async streaming error: {str(e)}")
             raise
-
-    def generate(self, prompt: str, image_url: str | None = None, streaming: bool = False) -> ResponseStats:
-        """Generate a response without conversation history.
-
-        Args:
-            prompt: User prompt.
-            image_url: Optional image URL for visual queries.
-            streaming: Whether to stream the response.
-
-        Returns:
-            Detailed response statistics or a generator in streaming mode.
-        """
-        return self.generate_with_history([], prompt, image_url, streaming)
 
     async def async_generate(
         self,
@@ -357,18 +256,6 @@ class GenerativeModel:
         """Get the maximum number of tokens that can be generated by the model."""
         return get_max_tokens(self.model)
 
-    def token_counter(self, messages: list[Message]) -> int:
-        """Count the number of tokens in a list of messages."""
-        logger.debug(f"Counting tokens for {len(messages)} messages using model {self.model}")
-        litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages]
-        return count_tokens(model=self.model, messages=litellm_messages)
-
-    def token_counter_with_history(self, messages_history: list[Message], prompt: str) -> int:
-        """Count the number of tokens in a list of messages and a prompt."""
-        litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages_history]
-        litellm_messages.append({"role": "user", "content": str(prompt)})
-        return count_tokens(model=self.model, messages=litellm_messages)
-
     def get_model_max_input_tokens(self) -> int | None:
         """Get the maximum number of input tokens for the model."""
         return get_max_input_tokens(self.model)
@@ -376,73 +263,6 @@ class GenerativeModel:
     def get_model_max_output_tokens(self) -> int | None:
         """Get the maximum number of output tokens for the model."""
         return get_max_output_tokens(self.model)
-
-    def generate_image(self, prompt: str, params: Dict[str, Any]) -> ResponseStats:
-        """Generate an image using the specified model and parameters.
-
-        Args:
-            prompt: Text description of the image to generate
-            params: Dictionary of parameters for image generation including:
-                   - model: Name of the image generation model
-                   - size: Size of the generated image
-                   - quality: Quality level (DALL-E only)
-                   - style: Style preference (DALL-E only)
-                   - response_format: Format of the response (url/base64)
-                   - negative_prompt: What to avoid in the image (SD only)
-                   - cfg_scale: Classifier Free Guidance scale (SD only)
-
-        Returns:
-            ResponseStats containing the image generation results
-
-        Raises:
-            Exception: If there's an error during image generation
-        """
-        try:
-            logger.debug(f"Generating image with params: {params}")
-
-            # Ensure prompt is in params
-            generation_params = {**params}
-            generation_params["prompt"] = prompt
-
-            # Call litellm's image generation function
-            response = generate_image(model=generation_params.pop("model"), **generation_params)
-
-            # Convert response data to list of dictionaries with string values
-            if hasattr(response, "data"):
-                data = []
-                for img in response.data:
-                    img_data = {}
-                    if hasattr(img, "url"):
-                        img_data["url"] = str(img.url)
-                    if hasattr(img, "b64_json"):
-                        img_data["b64_json"] = str(img.b64_json)
-                    if hasattr(img, "revised_prompt"):
-                        img_data["revised_prompt"] = str(img.revised_prompt)
-                    data.append(img_data)
-            else:
-                data = [{"url": str(response.url)}]
-
-            # Convert timestamp to ISO format string
-            if hasattr(response, "created"):
-                try:
-                    created = datetime.fromtimestamp(response.created).isoformat()
-                except (TypeError, ValueError):
-                    created = str(response.created)
-            else:
-                created = None
-
-            # Convert response to our ResponseStats format
-            return ResponseStats(
-                response="",  # Empty for image generation
-                usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
-                model=str(params["model"]),
-                data=data,
-                created=created,
-            )
-
-        except Exception as e:
-            logger.error(f"Error in image generation: {str(e)}")
-            raise
 
     async def async_generate_image(self, prompt: str, params: Dict[str, Any]) -> ResponseStats:
         """Asynchronously generate an image using the specified model and parameters.
@@ -503,3 +323,27 @@ class GenerativeModel:
         except Exception as e:
             logger.error(f"Error in async image generation: {str(e)}")
             raise
+
+    def token_counter(self, messages: list[Message]) -> int:
+        """Count the number of tokens in a list of messages."""
+        logger.debug(f"Counting tokens for {len(messages)} messages using model {self.model}")
+        litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages]
+        return count_tokens(model=self.model, messages=litellm_messages)
+
+    def token_counter_with_history(self, messages_history: list[Message], prompt: str) -> int:
+        """Count the number of tokens in a list of messages and a prompt."""
+        litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages_history]
+        litellm_messages.append({"role": "user", "content": str(prompt)})
+        return count_tokens(model=self.model, messages=litellm_messages)
+
+    async def async_token_counter(self, messages: list[Message]) -> int:
+        """Asynchronously count the number of tokens in a list of messages."""
+        logger.debug(f"Async counting tokens for {len(messages)} messages using model {self.model}")
+        litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages]
+        return await asyncio.to_thread(count_tokens, model=self.model, messages=litellm_messages)
+
+    async def async_token_counter_with_history(self, messages_history: list[Message], prompt: str) -> int:
+        """Asynchronously count the number of tokens in a list of messages and a prompt."""
+        litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages_history]
+        litellm_messages.append({"role": "user", "content": str(prompt)})
+        return await asyncio.to_thread(count_tokens, model=self.model, messages=litellm_messages)
