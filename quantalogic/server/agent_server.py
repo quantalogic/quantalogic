@@ -27,8 +27,8 @@ from rich.console import Console
 from quantalogic.agent_config import (
     MODEL_NAME,
     create_agent,
-    create_coding_agent,  # noqa: F401
     create_basic_agent,  # noqa: F401
+    create_coding_agent,  # noqa: F401
 )
 from quantalogic.console_print_events import console_print_events
 

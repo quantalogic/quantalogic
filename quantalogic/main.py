@@ -33,7 +33,7 @@ from quantalogic.utils.get_all_models import get_all_models  # noqa: E402
 
 # Platform-specific imports
 try:
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         import msvcrt  # Built-in Windows module
     else:
         import termios
@@ -50,7 +50,7 @@ AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic", "search", "
 
 def setup_terminal():
     """Configure terminal settings based on platform."""
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         if msvcrt:
             return None  # Windows terminal is already configured
         logger.warning("msvcrt module not available on Windows")
@@ -70,7 +70,7 @@ def setup_terminal():
 
 def restore_terminal(old_settings):
     """Restore terminal settings based on platform."""
-    if sys.platform != 'win32' and termios and old_settings:
+    if sys.platform != "win32" and termios and old_settings:
         try:
             termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_settings)
         except (termios.error, AttributeError) as e:
@@ -88,14 +88,14 @@ def restore_terminal(old_settings):
 @click.option(
     "--model-name",
     default=MODEL_NAME,
-    help='Specify the model to use (litellm format). Examples:\n'
-         '  - openai/gpt-4o-mini\n'
-         '  - openai/gpt-4o\n'
-         '  - anthropic/claude-3.5-sonnet\n'
-         '  - deepseek/deepseek-chat\n'
-         '  - deepseek/deepseek-reasoner\n'
-         '  - openrouter/deepseek/deepseek-r1\n'
-         '  - openrouter/openai/gpt-4o',
+    help="Specify the model to use (litellm format). Examples:\n"
+    "  - openai/gpt-4o-mini\n"
+    "  - openai/gpt-4o\n"
+    "  - anthropic/claude-3.5-sonnet\n"
+    "  - deepseek/deepseek-chat\n"
+    "  - deepseek/deepseek-reasoner\n"
+    "  - openrouter/deepseek/deepseek-r1\n"
+    "  - openrouter/openai/gpt-4o",
 )
 @click.option(
     "--log",
@@ -281,29 +281,25 @@ def task(
 @click.option("--search", type=str, help="Fuzzy search for models containing the given string.")
 def list_models(search: Optional[str] = None):
     """List supported LiteLLM models with optional fuzzy search.
-    
+
     If a search term is provided, it will return models that closely match the term.
     """
     console = Console()
     all_models = get_all_models()
-    
+
     if search:
         # Perform fuzzy matching
         matched_models = process.extractBests(search, all_models, limit=None, score_cutoff=70)
         models = [model for model, score in matched_models]
     else:
         models = all_models
-    
-    console.print(Panel(
-        f"Total Models: {len(models)} "
-        f"({len(all_models)} total)",
-        title="Supported LiteLLM Models"
-    ))
-    
+
+    console.print(Panel(f"Total Models: {len(models)} " f"({len(all_models)} total)", title="Supported LiteLLM Models"))
+
     if not models:
         console.print(f"[yellow]No models found matching '[bold]{search}[/bold]'[/yellow]")
         return
-    
+
     for model in sorted(models):
         console.print(f"- {model}")
 

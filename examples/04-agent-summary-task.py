@@ -15,7 +15,7 @@ from quantalogic.console_print_events import console_print_events
 from quantalogic.console_print_token import console_print_token
 from quantalogic.tools import LLMTool, MarkitdownTool
 
-#MODEL_NAME = "gpt-4o-mini"
+# MODEL_NAME = "gpt-4o-mini"
 MODEL_NAME = "openrouter/openai/gpt-4o-mini"
 
 # Verify API key is set - prevents runtime errors and ensures proper authentication
@@ -49,6 +49,7 @@ agent.event_emitter.on(
     listener=console_print_token,
 )
 
+
 async def main():
     # Execute AI news analysis task showcasing tool integration and content processing
     # Using the async version of solve_task
@@ -63,6 +64,7 @@ async def main():
         streaming=True,
     )
     print(result)
+
 
 # Run the async main function
 if __name__ == "__main__":

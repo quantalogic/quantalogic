@@ -5,7 +5,8 @@ from lxml import etree
 from pydantic import BaseModel, Field
 
 # Type variable for Pydantic model compatibility
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
+
 
 def get_localname(tag: str) -> str:
     """
@@ -17,7 +18,8 @@ def get_localname(tag: str) -> str:
     Returns:
         The tag’s local name (e.g., 'name').
     """
-    return re.sub(r'^\{.*\}', '', tag)
+    return re.sub(r"^\{.*\}", "", tag)
+
 
 def element_to_dict(element):
     """
@@ -33,21 +35,21 @@ def element_to_dict(element):
         - Repeated tags become lists.
     """
     result = {}
-    
+
     # Capture attributes with '@' prefix
     if element.attrib:
         for key, value in element.attrib.items():
             result[f"@{get_localname(key)}"] = value
-    
+
     # Handle text content (including CDATA) if present
     if element.text and element.text.strip():
         result["#text"] = element.text.strip()
-    
+
     # Process child elements
     for child in element:
         child_dict = element_to_dict(child)
         local_tag = get_localname(child.tag)
-        
+
         if local_tag in result:
             # Convert to list for repeated tags
             if not isinstance(result[local_tag], list):
@@ -55,15 +57,22 @@ def element_to_dict(element):
             result[local_tag].append(child_dict)
         else:
             result[local_tag] = child_dict
-    
+
     # For simple leaf elements with no children, attributes or just text content
     # This optimization avoids unnecessary nesting but preserves structure for complex types
-    if (len(element) == 0 and not element.attrib and len(result) == 1 and "#text" in result and
+    if (
+        len(element) == 0
+        and not element.attrib
+        and len(result) == 1
+        and "#text" in result
+        and
         # Don't simplify these elements, they should remain as dictionaries
-        get_localname(element.tag) not in ["description"]):
+        get_localname(element.tag) not in ["description"]
+    ):
         return result["#text"]
-    
+
     return result
+
 
 def parse_xml_to_model(xml_content: str, model: Type[T]) -> T:
     """
@@ -88,20 +97,25 @@ def parse_xml_to_model(xml_content: str, model: Type[T]) -> T:
     # Validate and create Pydantic model instance, applying defaults
     return model.model_validate(data)
 
+
 # Test Models with Default Values
 class Person(BaseModel):
     name: str = "Unnamed"  # Default value for missing name
-    age: int = 0           # Default value for missing age
+    age: int = 0  # Default value for missing age
+
 
 class Description(BaseModel):
     content: str = Field(default="No description", alias="#text")
     type: str = Field(default="unknown", alias="@type")
 
+
 class Item(BaseModel):
     description: Description = Field(default_factory=lambda: Description(content="Default content", type="default"))
 
+
 class People(BaseModel):
     person: List[Person] = Field(default_factory=lambda: [Person(name="Default Person", age=99)])
+
 
 def main():
     """Run example tests to demonstrate XML parsing with Pydantic default values."""
@@ -158,6 +172,7 @@ def main():
     xml6 = "<people></people>"
     people = parse_xml_to_model(xml6, People)
     print(f"Result: {people}")
+
 
 if __name__ == "__main__":
     main()

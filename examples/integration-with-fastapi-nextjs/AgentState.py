@@ -49,7 +49,7 @@ class AgentState:
         self.client_counter = 0
         self.agent = None
         self.agent_registry = AgentRegistry()
-        
+
         # List of events to listen for
         self.agent_events = [
             "session_start",
@@ -62,14 +62,14 @@ class AgentState:
             "task_solve_end",
             "error_tool_execution",
             "error_max_iterations_reached",
-            "error_model_response"
+            "error_model_response",
         ]
 
     async def initialize_agent_with_sse_validation(self, model_name: str = MODEL_NAME, mode: str = "minimal") -> Agent:
         """Initialize agent with SSE-based user validation."""
         try:
             logger.info(f"Initializing agent with model: {model_name}")
-            
+
             if "default" not in self.agent_registry._agents:
                 self.agent = self._create_minimal_agent(model_name, mode)
                 # Set up event handlers before registering the agent
@@ -81,54 +81,49 @@ class AgentState:
             # Ensure events are set up even for existing agent
             self._setup_agent_events(agent)
             return agent
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize agent: {e}", exc_info=True)
             raise
 
     def _create_minimal_agent(self, model_name: str, mode: str) -> Agent:
         """Create a minimal agent with the specified model.
-        
+
         Args:
             model_name: Name of the model to use
             mode: Mode for agent creation
-            
+
         Returns:
             The created agent instance
         """
-        return create_agent_for_mode(
-            mode=mode,
-            model_name=model_name,
-            vision_model_name=None,
-            no_stream=False
-        )
+        return create_agent_for_mode(mode=mode, model_name=model_name, vision_model_name=None, no_stream=False)
 
     def _setup_agent_events(self, agent: Agent) -> None:
         """Set up event handlers for the agent."""
         # Instead of removing all listeners, we'll track our handlers
-        if not hasattr(self, '_event_handlers'):
+        if not hasattr(self, "_event_handlers"):
             self._event_handlers = {}
-            
+
         # Remove existing handlers if any
         for event_type, handler in self._event_handlers.items():
             if handler:
                 agent.event_emitter.off(event_type, handler)
-        
+
         # Clear existing handlers
         self._event_handlers = {}
-        
+
         def create_event_handler(event_type: str):
             def handler(event: str, data: Dict[str, Any]):
                 logger.debug(f"Received agent event: {event_type} with data: {data}")
                 # Add task_id to the event data if it's not there
                 if isinstance(data, dict) and "task_id" not in data:
                     current_task_id = next(
-                        (task_id for task_id, task in self.tasks.items() if task.get("status") == "running"),
-                        None
+                        (task_id for task_id, task in self.tasks.items() if task.get("status") == "running"), None
                     )
                     if current_task_id:
                         data["task_id"] = current_task_id
                 self._handle_event(event_type, data)
+
             return handler
 
         # Set up new handlers
@@ -143,20 +138,17 @@ class AgentState:
         try:
             # Use console_print_events for consistent event formatting
             console_print_events(event_type, data)
-            
+
             # Create event message
             event = EventMessage(
-                id=str(uuid.uuid4()),
-                event=event_type,
-                data=data,
-                timestamp=datetime.utcnow().isoformat()
+                id=str(uuid.uuid4()), event=event_type, data=data, timestamp=datetime.utcnow().isoformat()
             )
-            
+
             logger.debug(f"Broadcasting event: {event_type} - {data}")
-            
+
             # Get task_id from data if available
             task_id = data.get("task_id")
-            
+
             # Broadcast to all clients
             with self.queue_lock:
                 for client_id, client_queues in self.event_queues.items():
@@ -165,14 +157,14 @@ class AgentState:
                         if "global" in client_queues:
                             client_queues["global"].put(event)
                             logger.debug(f"Event sent to client {client_id} global queue")
-                        
+
                         # If event has task_id and client has that task queue, send there too
                         if task_id and task_id in client_queues:
                             client_queues[task_id].put(event)
                             logger.debug(f"Event sent to client {client_id} task queue {task_id}")
                     except Exception as e:
                         logger.error(f"Error sending event to client {client_id}: {e}")
-                        
+
         except Exception as e:
             logger.error(f"Error handling event {event_type}: {e}", exc_info=True)
 
@@ -189,15 +181,12 @@ class AgentState:
             logger.info(f"Starting task execution: {task_id}")
             agent = await self.initialize_agent_with_sse_validation(
                 task_info.get("request", {}).get("model_name", MODEL_NAME),
-                task_info.get("request", {}).get("mode", "minimal")
+                task_info.get("request", {}).get("mode", "minimal"),
             )
-            
+
             # Create event for task start
-            self._handle_event("task_solve_start", {
-                "task_id": task_id,
-                "message": "Task execution started"
-            })
-            
+            self._handle_event("task_solve_start", {"task_id": task_id, "message": "Task execution started"})
+
             # Run solve_task in a thread to not block the event loop
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
@@ -206,35 +195,32 @@ class AgentState:
                     task=task_info["request"]["task"],
                     max_iterations=task_info["request"].get("max_iterations", 30),
                     streaming=True,  # Enable streaming for more events
-                    clear_memory=True
-                )
+                    clear_memory=True,
+                ),
             )
 
             self._update_task_success(task_info, result, agent)
-            
+
             # Create event for task completion
-            self._handle_event("task_solve_end", {
-                "task_id": task_id,
-                "message": "Task execution completed",
-                "result": result
-            })
-            
+            self._handle_event(
+                "task_solve_end", {"task_id": task_id, "message": "Task execution completed", "result": result}
+            )
+
         except Exception as e:
             self._update_task_failure(task_info, e)
-            
+
             # Create event for task failure
-            self._handle_event("error_tool_execution", {
-                "task_id": task_id,
-                "message": f"Task execution failed: {str(e)}"
-            })
-            
+            self._handle_event(
+                "error_tool_execution", {"task_id": task_id, "message": f"Task execution failed: {str(e)}"}
+            )
+
             logger.exception(f"Error executing task {task_id}")
         finally:
             self.remove_task_event_queue(task_id)
 
     def _update_task_success(self, task_info: Dict[str, Any], result: str, agent: Agent) -> None:
         """Update task info after successful execution.
-        
+
         Args:
             task_info: Task information dictionary
             result: Task execution result
@@ -245,10 +231,10 @@ class AgentState:
         task_info["result"] = result
         task_info["total_tokens"] = agent.total_tokens if hasattr(agent, "total_tokens") else None
         task_info["model_name"] = self.get_current_model_name()
-        
+
     def _update_task_failure(self, task_info: Dict[str, Any], error: Exception) -> None:
         """Update task info after failed execution.
-        
+
         Args:
             task_info: Task information dictionary
             error: Exception that caused the failure
@@ -287,12 +273,12 @@ class AgentState:
         with self.queue_lock:
             client_id = f"client_{self.client_counter}"
             self.client_counter += 1
-            
+
             logger.debug(f"Adding new client: {client_id} for task: {task_id}")
 
             # Initialize client queues
             self.event_queues[client_id] = {"global": Queue()}
-            
+
             # Add task-specific queue if needed
             if task_id:
                 self.event_queues[client_id][task_id] = Queue()

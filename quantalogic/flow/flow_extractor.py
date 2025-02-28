@@ -16,19 +16,19 @@ from quantalogic.flow.flow_manager_schema import (
 class WorkflowExtractor(ast.NodeVisitor):
     """
     AST visitor to extract workflow nodes and structure from a Python file.
-    
+
     This class parses Python source code to identify workflow components defined with Nodes decorators
     and Workflow construction, building a WorkflowDefinition compatible with WorkflowManager.
     """
 
     def __init__(self):
         """Initialize the extractor with empty collections for workflow components."""
-        self.nodes = {}           # Maps node names to their definitions
-        self.functions = {}       # Maps function names to their code
-        self.transitions = []     # List of (from_node, to_node, condition) tuples
-        self.start_node = None    # Starting node of the workflow
-        self.global_vars = {}     # Tracks global variable assignments (e.g., DEFAULT_LLM_PARAMS)
-        self.observers = []       # List of observer function names
+        self.nodes = {}  # Maps node names to their definitions
+        self.functions = {}  # Maps function names to their code
+        self.transitions = []  # List of (from_node, to_node, condition) tuples
+        self.start_node = None  # Starting node of the workflow
+        self.global_vars = {}  # Tracks global variable assignments (e.g., DEFAULT_LLM_PARAMS)
+        self.observers = []  # List of observer function names
 
     def visit_Module(self, node):
         """Log and explicitly process top-level statements in the module."""
@@ -59,7 +59,9 @@ class WorkflowExtractor(ast.NodeVisitor):
                         elif isinstance(v, ast.Name) and v.id in self.global_vars:
                             # Resolve variable references to previously defined globals
                             self.global_vars[var_name][key] = self.global_vars[v.id]
-                logger.debug(f"Captured global variable '{var_name}' with keys: {list(self.global_vars[var_name].keys())}")
+                logger.debug(
+                    f"Captured global variable '{var_name}' with keys: {list(self.global_vars[var_name].keys())}"
+                )
 
             # Handle simple constant assignments (e.g., MODEL = "gemini/gemini-2.0-flash")
             elif isinstance(value, ast.Constant):
@@ -83,17 +85,21 @@ class WorkflowExtractor(ast.NodeVisitor):
             logger.debug(f"Examining decorator for '{node.name}': {ast.dump(decorator)}")
 
             # Handle simple decorators (e.g., @Nodes.define)
-            if (isinstance(decorator, ast.Attribute) and
-                    isinstance(decorator.value, ast.Name) and
-                    decorator.value.id == 'Nodes'):
+            if (
+                isinstance(decorator, ast.Attribute)
+                and isinstance(decorator.value, ast.Name)
+                and decorator.value.id == "Nodes"
+            ):
                 decorator_name = decorator.attr
                 logger.debug(f"Found simple decorator 'Nodes.{decorator_name}' for '{node.name}'")
 
             # Handle decorators with arguments (e.g., @Nodes.llm_node(...))
-            elif (isinstance(decorator, ast.Call) and
-                  isinstance(decorator.func, ast.Attribute) and
-                  isinstance(decorator.func.value, ast.Name) and
-                  decorator.func.value.id == 'Nodes'):
+            elif (
+                isinstance(decorator, ast.Call)
+                and isinstance(decorator.func, ast.Attribute)
+                and isinstance(decorator.func.value, ast.Name)
+                and decorator.func.value.id == "Nodes"
+            ):
                 decorator_name = decorator.func.attr
                 logger.debug(f"Found call decorator 'Nodes.{decorator_name}' for '{node.name}'")
                 for kw in decorator.keywords:
@@ -104,7 +110,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                             logger.debug(f"Unpacked '{var_name}' into kwargs: {self.global_vars[var_name]}")
                     elif isinstance(kw.value, ast.Constant):
                         kwargs[kw.arg] = kw.value.value
-                    elif kw.arg == 'response_model' and isinstance(kw.value, ast.Name):
+                    elif kw.arg == "response_model" and isinstance(kw.value, ast.Name):
                         kwargs[kw.arg] = ast.unparse(kw.value)
 
             # Process recognized decorators
@@ -112,46 +118,68 @@ class WorkflowExtractor(ast.NodeVisitor):
                 func_name = node.name
                 inputs = [arg.arg for arg in node.args.args]
 
-                if decorator_name == 'define':
-                    output = kwargs.get('output')
+                if decorator_name == "define":
+                    output = kwargs.get("output")
                     self.nodes[func_name] = {
-                        'type': 'function',
-                        'function': func_name,
-                        'inputs': inputs,
-                        'output': output,
+                        "type": "function",
+                        "function": func_name,
+                        "inputs": inputs,
+                        "output": output,
                     }
-                elif decorator_name == 'llm_node':
+                elif decorator_name == "llm_node":
                     llm_config = {
-                        key: value for key, value in kwargs.items()
-                        if key in ['model', 'system_prompt', 'prompt_template', 'temperature',
-                                   'max_tokens', 'top_p', 'presence_penalty', 'frequency_penalty', 'output']
+                        key: value
+                        for key, value in kwargs.items()
+                        if key
+                        in [
+                            "model",
+                            "system_prompt",
+                            "prompt_template",
+                            "temperature",
+                            "max_tokens",
+                            "top_p",
+                            "presence_penalty",
+                            "frequency_penalty",
+                            "output",
+                        ]
                     }
                     self.nodes[func_name] = {
-                        'type': 'llm',
-                        'llm_config': llm_config,
-                        'inputs': inputs,
-                        'output': llm_config.get('output'),
+                        "type": "llm",
+                        "llm_config": llm_config,
+                        "inputs": inputs,
+                        "output": llm_config.get("output"),
                     }
-                elif decorator_name == 'validate_node':
-                    output = kwargs.get('output')
+                elif decorator_name == "validate_node":
+                    output = kwargs.get("output")
                     self.nodes[func_name] = {
-                        'type': 'function',
-                        'function': func_name,
-                        'inputs': inputs,
-                        'output': output,
+                        "type": "function",
+                        "function": func_name,
+                        "inputs": inputs,
+                        "output": output,
                     }
-                elif decorator_name == 'structured_llm_node':
+                elif decorator_name == "structured_llm_node":
                     llm_config = {
-                        key: value for key, value in kwargs.items()
-                        if key in ['model', 'system_prompt', 'prompt_template', 'temperature',
-                                   'max_tokens', 'top_p', 'presence_penalty', 'frequency_penalty', 'output',
-                                   'response_model']
+                        key: value
+                        for key, value in kwargs.items()
+                        if key
+                        in [
+                            "model",
+                            "system_prompt",
+                            "prompt_template",
+                            "temperature",
+                            "max_tokens",
+                            "top_p",
+                            "presence_penalty",
+                            "frequency_penalty",
+                            "output",
+                            "response_model",
+                        ]
                     }
                     self.nodes[func_name] = {
-                        'type': 'structured_llm',
-                        'llm_config': llm_config,
-                        'inputs': inputs,
-                        'output': llm_config.get('output'),
+                        "type": "structured_llm",
+                        "llm_config": llm_config,
+                        "inputs": inputs,
+                        "output": llm_config.get("output"),
                     }
                 else:
                     logger.warning(f"Unsupported decorator 'Nodes.{decorator_name}' in function '{func_name}'")
@@ -159,8 +187,8 @@ class WorkflowExtractor(ast.NodeVisitor):
                 # Store the function code as embedded
                 func_code = ast.unparse(node)
                 self.functions[func_name] = {
-                    'type': 'embedded',
-                    'code': func_code,
+                    "type": "embedded",
+                    "code": func_code,
                 }
             else:
                 logger.debug(f"No recognized 'Nodes' decorator found for '{node.name}'")
@@ -176,17 +204,21 @@ class WorkflowExtractor(ast.NodeVisitor):
             logger.debug(f"Examining decorator for '{node.name}': {ast.dump(decorator)}")
 
             # Handle simple decorators (e.g., @Nodes.define)
-            if (isinstance(decorator, ast.Attribute) and
-                    isinstance(decorator.value, ast.Name) and
-                    decorator.value.id == 'Nodes'):
+            if (
+                isinstance(decorator, ast.Attribute)
+                and isinstance(decorator.value, ast.Name)
+                and decorator.value.id == "Nodes"
+            ):
                 decorator_name = decorator.attr
                 logger.debug(f"Found simple decorator 'Nodes.{decorator_name}' for '{node.name}'")
 
             # Handle decorators with arguments (e.g., @Nodes.llm_node(...))
-            elif (isinstance(decorator, ast.Call) and
-                  isinstance(decorator.func, ast.Attribute) and
-                  isinstance(decorator.func.value, ast.Name) and
-                  decorator.func.value.id == 'Nodes'):
+            elif (
+                isinstance(decorator, ast.Call)
+                and isinstance(decorator.func, ast.Attribute)
+                and isinstance(decorator.func.value, ast.Name)
+                and decorator.func.value.id == "Nodes"
+            ):
                 decorator_name = decorator.func.attr
                 logger.debug(f"Found call decorator 'Nodes.{decorator_name}' for '{node.name}'")
                 for kw in decorator.keywords:
@@ -197,7 +229,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                             logger.debug(f"Unpacked '{var_name}' into kwargs: {self.global_vars[var_name]}")
                     elif isinstance(kw.value, ast.Constant):
                         kwargs[kw.arg] = kw.value.value
-                    elif kw.arg == 'response_model' and isinstance(kw.value, ast.Name):
+                    elif kw.arg == "response_model" and isinstance(kw.value, ast.Name):
                         kwargs[kw.arg] = ast.unparse(kw.value)
 
             # Process recognized decorators
@@ -205,46 +237,68 @@ class WorkflowExtractor(ast.NodeVisitor):
                 func_name = node.name
                 inputs = [arg.arg for arg in node.args.args]
 
-                if decorator_name == 'define':
-                    output = kwargs.get('output')
+                if decorator_name == "define":
+                    output = kwargs.get("output")
                     self.nodes[func_name] = {
-                        'type': 'function',
-                        'function': func_name,
-                        'inputs': inputs,
-                        'output': output,
+                        "type": "function",
+                        "function": func_name,
+                        "inputs": inputs,
+                        "output": output,
                     }
-                elif decorator_name == 'llm_node':
+                elif decorator_name == "llm_node":
                     llm_config = {
-                        key: value for key, value in kwargs.items()
-                        if key in ['model', 'system_prompt', 'prompt_template', 'temperature',
-                                   'max_tokens', 'top_p', 'presence_penalty', 'frequency_penalty', 'output']
+                        key: value
+                        for key, value in kwargs.items()
+                        if key
+                        in [
+                            "model",
+                            "system_prompt",
+                            "prompt_template",
+                            "temperature",
+                            "max_tokens",
+                            "top_p",
+                            "presence_penalty",
+                            "frequency_penalty",
+                            "output",
+                        ]
                     }
                     self.nodes[func_name] = {
-                        'type': 'llm',
-                        'llm_config': llm_config,
-                        'inputs': inputs,
-                        'output': llm_config.get('output'),
+                        "type": "llm",
+                        "llm_config": llm_config,
+                        "inputs": inputs,
+                        "output": llm_config.get("output"),
                     }
-                elif decorator_name == 'validate_node':
-                    output = kwargs.get('output')
+                elif decorator_name == "validate_node":
+                    output = kwargs.get("output")
                     self.nodes[func_name] = {
-                        'type': 'function',
-                        'function': func_name,
-                        'inputs': inputs,
-                        'output': output,
+                        "type": "function",
+                        "function": func_name,
+                        "inputs": inputs,
+                        "output": output,
                     }
-                elif decorator_name == 'structured_llm_node':
+                elif decorator_name == "structured_llm_node":
                     llm_config = {
-                        key: value for key, value in kwargs.items()
-                        if key in ['model', 'system_prompt', 'prompt_template', 'temperature',
-                                   'max_tokens', 'top_p', 'presence_penalty', 'frequency_penalty', 'output',
-                                   'response_model']
+                        key: value
+                        for key, value in kwargs.items()
+                        if key
+                        in [
+                            "model",
+                            "system_prompt",
+                            "prompt_template",
+                            "temperature",
+                            "max_tokens",
+                            "top_p",
+                            "presence_penalty",
+                            "frequency_penalty",
+                            "output",
+                            "response_model",
+                        ]
                     }
                     self.nodes[func_name] = {
-                        'type': 'structured_llm',
-                        'llm_config': llm_config,
-                        'inputs': inputs,
-                        'output': llm_config.get('output'),
+                        "type": "structured_llm",
+                        "llm_config": llm_config,
+                        "inputs": inputs,
+                        "output": llm_config.get("output"),
                     }
                 else:
                     logger.warning(f"Unsupported decorator 'Nodes.{decorator_name}' in function '{func_name}'")
@@ -252,8 +306,8 @@ class WorkflowExtractor(ast.NodeVisitor):
                 # Store the function code as embedded
                 func_code = ast.unparse(node)
                 self.functions[func_name] = {
-                    'type': 'embedded',
-                    'code': func_code,
+                    "type": "embedded",
+                    "code": func_code,
                 }
             else:
                 logger.debug(f"No recognized 'Nodes' decorator found for '{node.name}'")
@@ -263,11 +317,11 @@ class WorkflowExtractor(ast.NodeVisitor):
     def process_workflow_expr(self, expr, var_name):
         """
         Recursively process Workflow method chaining to build transitions, structure, and observers.
-        
+
         Args:
             expr: The AST expression to process.
             var_name: The variable name to which the workflow is assigned (for logging/context).
-        
+
         Returns:
             str or None: The current node name or None if no specific node is returned.
         """
@@ -278,7 +332,7 @@ class WorkflowExtractor(ast.NodeVisitor):
         func = expr.func
         logger.debug(f"Processing Call node with func type: {type(func).__name__} for '{var_name}'")
 
-        if isinstance(func, ast.Name) and func.id == 'Workflow':
+        if isinstance(func, ast.Name) and func.id == "Workflow":
             self.start_node = expr.args[0].value if expr.args else None
             logger.debug(f"Workflow start node set to '{self.start_node}' for variable '{var_name}'")
             return self.start_node
@@ -287,22 +341,24 @@ class WorkflowExtractor(ast.NodeVisitor):
             obj = func.value
             previous_node = self.process_workflow_expr(obj, var_name)
 
-            if method_name == 'then':
+            if method_name == "then":
                 next_node = expr.args[0].value if expr.args else None
                 condition = None
                 for keyword in expr.keywords:
-                    if keyword.arg == 'condition':
+                    if keyword.arg == "condition":
                         if isinstance(keyword.value, ast.Lambda):
                             condition = ast.unparse(keyword.value)
                         else:
                             condition = ast.unparse(keyword.value)
-                            logger.warning(f"Non-lambda condition in 'then' for '{next_node}' may not be fully supported")
+                            logger.warning(
+                                f"Non-lambda condition in 'then' for '{next_node}' may not be fully supported"
+                            )
                 if previous_node and next_node:
                     self.transitions.append((previous_node, next_node, condition))
                     logger.debug(f"Added transition: {previous_node} -> {next_node} (condition: {condition})")
                 return next_node
 
-            elif method_name == 'sequence':
+            elif method_name == "sequence":
                 nodes = [arg.value for arg in expr.args]
                 if previous_node:
                     self.transitions.append((previous_node, nodes[0], None))
@@ -311,7 +367,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                     logger.debug(f"Added sequence transition: {nodes[i]} -> {nodes[i + 1]}")
                 return nodes[-1] if nodes else previous_node
 
-            elif method_name == 'parallel':
+            elif method_name == "parallel":
                 to_nodes = [arg.value for arg in expr.args]
                 if previous_node:
                     for to_node in to_nodes:
@@ -319,14 +375,14 @@ class WorkflowExtractor(ast.NodeVisitor):
                         logger.debug(f"Added parallel transition: {previous_node} -> {to_node}")
                 return None  # Parallel transitions reset the current node
 
-            elif method_name == 'node':
+            elif method_name == "node":
                 node_name = expr.args[0].value if expr.args else None
                 if node_name and previous_node:
                     self.transitions.append((previous_node, node_name, None))
                     logger.debug(f"Added node transition: {previous_node} -> {node_name}")
                 return node_name
 
-            elif method_name == 'add_sub_workflow':
+            elif method_name == "add_sub_workflow":
                 sub_wf_name = expr.args[0].value
                 sub_wf_obj = expr.args[1]
                 inputs = {}
@@ -336,16 +392,15 @@ class WorkflowExtractor(ast.NodeVisitor):
                 sub_extractor = WorkflowExtractor()
                 sub_extractor.process_workflow_expr(sub_wf_obj, f"{var_name}_{sub_wf_name}")
                 self.nodes[sub_wf_name] = {
-                    'type': 'sub_workflow',
-                    'sub_workflow': WorkflowStructure(
+                    "type": "sub_workflow",
+                    "sub_workflow": WorkflowStructure(
                         start=sub_extractor.start_node,
                         transitions=[
-                            TransitionDefinition(from_=t[0], to=t[1], condition=t[2])
-                            for t in sub_extractor.transitions
-                        ]
+                            TransitionDefinition(from_=t[0], to=t[1], condition=t[2]) for t in sub_extractor.transitions
+                        ],
                     ),
-                    'inputs': list(inputs.keys()),
-                    'output': output,
+                    "inputs": list(inputs.keys()),
+                    "output": output,
                 }
                 # Propagate observers from sub-workflow
                 self.observers.extend(sub_extractor.observers)
@@ -354,7 +409,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                     self.transitions.append((previous_node, sub_wf_name, None))
                 return sub_wf_name
 
-            elif method_name == 'add_observer':
+            elif method_name == "add_observer":
                 if expr.args and isinstance(expr.args[0], (ast.Name, ast.Constant)):
                     observer_name = expr.args[0].id if isinstance(expr.args[0], ast.Name) else expr.args[0].value
                     if observer_name not in self.observers:
@@ -380,7 +435,7 @@ def extract_workflow_from_file(file_path):
         tuple: (WorkflowDefinition, Dict[str, Any]) - The workflow definition and captured global variables.
     """
     # Read and parse the file
-    with open(file_path, 'r') as f:
+    with open(file_path) as f:
         source = f.read()
     tree = ast.parse(source)
 
@@ -389,50 +444,48 @@ def extract_workflow_from_file(file_path):
     extractor.visit(tree)
 
     # Construct FunctionDefinition objects
-    functions = {
-        name: FunctionDefinition(**func)
-        for name, func in extractor.functions.items()
-    }
+    functions = {name: FunctionDefinition(**func) for name, func in extractor.functions.items()}
 
     # Construct NodeDefinition objects
     nodes = {}
     from quantalogic.flow.flow_manager_schema import LLMConfig  # Import LLMConfig explicitly
+
     for name, node_info in extractor.nodes.items():
-        if node_info['type'] == 'function':
+        if node_info["type"] == "function":
             nodes[name] = NodeDefinition(
-                function=node_info['function'],
-                output=node_info['output'],
-                retries=3,    # Default values
+                function=node_info["function"],
+                output=node_info["output"],
+                retries=3,  # Default values
                 delay=1.0,
                 timeout=None,
                 parallel=False,
             )
-        elif node_info['type'] == 'llm':
+        elif node_info["type"] == "llm":
             # Convert llm_config dictionary to LLMConfig object to ensure model is preserved
-            llm_config = LLMConfig(**node_info['llm_config'])
+            llm_config = LLMConfig(**node_info["llm_config"])
             nodes[name] = NodeDefinition(
                 llm_config=llm_config,
-                output=node_info['output'],
+                output=node_info["output"],
                 retries=3,
                 delay=1.0,
                 timeout=None,
                 parallel=False,
             )
-        elif node_info['type'] == 'structured_llm':
+        elif node_info["type"] == "structured_llm":
             # Convert llm_config dictionary to LLMConfig object for structured LLM
-            llm_config = LLMConfig(**node_info['llm_config'])
+            llm_config = LLMConfig(**node_info["llm_config"])
             nodes[name] = NodeDefinition(
                 llm_config=llm_config,
-                output=node_info['output'],
+                output=node_info["output"],
                 retries=3,
                 delay=1.0,
                 timeout=None,
                 parallel=False,
             )
-        elif node_info['type'] == 'sub_workflow':
+        elif node_info["type"] == "sub_workflow":
             nodes[name] = NodeDefinition(
-                sub_workflow=node_info['sub_workflow'],
-                output=node_info['output'],
+                sub_workflow=node_info["sub_workflow"],
+                output=node_info["output"],
                 retries=3,
                 delay=1.0,
                 timeout=None,
@@ -441,22 +494,16 @@ def extract_workflow_from_file(file_path):
 
     # Construct TransitionDefinition objects
     transitions = [
-        TransitionDefinition(**{'from': from_node, 'to': to_node, 'condition': cond})
+        TransitionDefinition(**{"from": from_node, "to": to_node, "condition": cond})
         for from_node, to_node, cond in extractor.transitions
     ]
 
     # Build WorkflowStructure
-    workflow_structure = WorkflowStructure(
-        start=extractor.start_node,
-        transitions=transitions
-    )
+    workflow_structure = WorkflowStructure(start=extractor.start_node, transitions=transitions)
 
     # Assemble WorkflowDefinition with observers
     workflow_def = WorkflowDefinition(
-        functions=functions,
-        nodes=nodes,
-        workflow=workflow_structure,
-        observers=extractor.observers
+        functions=functions, nodes=nodes, workflow=workflow_structure, observers=extractor.observers
     )
 
     return workflow_def, extractor.global_vars
@@ -479,12 +526,12 @@ def generate_executable_script(workflow_def: WorkflowDefinition, global_vars: di
     - Workflow instantiation using direct chaining syntax.
     - A default initial_context matching the example.
     """
-    with open(output_file, 'w') as f:
+    with open(output_file, "w") as f:
         # Write the shebang and metadata
-        f.write('#!/usr/bin/env -S uv run\n')
-        f.write('# /// script\n')
+        f.write("#!/usr/bin/env -S uv run\n")
+        f.write("# /// script\n")
         f.write('# requires-python = ">=3.12"\n')
-        f.write('# dependencies = [\n')
+        f.write("# dependencies = [\n")
         f.write('#     "loguru",\n')
         f.write('#     "litellm",\n')
         f.write('#     "pydantic>=2.0",\n')
@@ -492,59 +539,59 @@ def generate_executable_script(workflow_def: WorkflowDefinition, global_vars: di
         f.write('#     "quantalogic>=0.35",\n')
         f.write('#     "jinja2",\n')
         f.write('#     "instructor[litellm]",\n')  # Kept for potential structured LLM support
-        f.write('# ]\n')
-        f.write('# ///\n\n')
+        f.write("# ]\n")
+        f.write("# ///\n\n")
 
         # Write necessary imports
-        f.write('import anyio\n')
-        f.write('from typing import List\n')
-        f.write('from loguru import logger\n')
-        f.write('from quantalogic.flow import Nodes, Workflow\n\n')
+        f.write("import anyio\n")
+        f.write("from typing import List\n")
+        f.write("from loguru import logger\n")
+        f.write("from quantalogic.flow import Nodes, Workflow\n\n")
 
         # Write global variables
         for var_name, value in global_vars.items():
             f.write(f"{var_name} = {repr(value)}\n")
-        f.write('\n')
+        f.write("\n")
 
         # Embed functions from workflow_def
         for func_name, func_def in workflow_def.functions.items():
             if func_def.type == "embedded":
-                f.write(func_def.code + '\n\n')
+                f.write(func_def.code + "\n\n")
 
         # Define workflow using chaining syntax
-        f.write('# Define the workflow using simplified syntax with automatic node registration\n')
-        f.write('workflow = (\n')
+        f.write("# Define the workflow using simplified syntax with automatic node registration\n")
+        f.write("workflow = (\n")
         f.write(f'    Workflow("{workflow_def.workflow.start}")\n')
         for trans in workflow_def.workflow.transitions:
             from_node = trans.from_
             to_node = trans.to
-            condition = trans.condition or 'None'
-            if condition != 'None':
+            condition = trans.condition or "None"
+            if condition != "None":
                 # Ensure condition is formatted as a lambda if not already
-                if not condition.startswith('lambda ctx:'):
-                    condition = f'lambda ctx: {condition}'
+                if not condition.startswith("lambda ctx:"):
+                    condition = f"lambda ctx: {condition}"
             f.write(f'    .then("{to_node}", condition={condition})\n')
         for observer in workflow_def.observers:
-            f.write(f'    .add_observer({observer})\n')
-        f.write(')\n\n')
+            f.write(f"    .add_observer({observer})\n")
+        f.write(")\n\n")
 
         # Main asynchronous function to run the workflow
-        f.write('async def main():\n')
+        f.write("async def main():\n")
         f.write('    """Main function to run the story generation workflow."""\n')
-        f.write('    initial_context = {\n')
+        f.write("    initial_context = {\n")
         f.write('        "genre": "science fiction",\n')
         f.write('        "num_chapters": 3,\n')
         f.write('        "chapters": [],\n')
         f.write('        "completed_chapters": 0,\n')
         f.write('        "style": "descriptive"\n')
-        f.write('    }  # Customize initial_context as needed\n')
-        f.write('    engine = workflow.build()\n')
-        f.write('    result = await engine.run(initial_context)\n')
+        f.write("    }  # Customize initial_context as needed\n")
+        f.write("    engine = workflow.build()\n")
+        f.write("    result = await engine.run(initial_context)\n")
         f.write('    logger.info(f"Workflow result: {result}")\n\n')
 
         # Entry point to execute the main function
         f.write('if __name__ == "__main__":\n')
-        f.write('    anyio.run(main)\n')
+        f.write("    anyio.run(main)\n")
 
     # Set executable permissions (rwxr-xr-x)
     os.chmod(output_file, 0o755)
@@ -568,18 +615,18 @@ def print_workflow_definition(workflow_def):
     for name, node in workflow_def.nodes.items():
         print(f"- {name}:")
         if node.function:
-            print(f"  Type: Function")
+            print("  Type: Function")
             print(f"  Function: {node.function}")
         elif node.llm_config:
             if node.llm_config.response_model:
-                print(f"  Type: Structured LLM")
+                print("  Type: Structured LLM")
                 print(f"  Response Model: {node.llm_config.response_model}")
             else:
-                print(f"  Type: LLM")
+                print("  Type: LLM")
             print(f"  Model: {node.llm_config.model}")
             print(f"  Prompt Template: {node.llm_config.prompt_template}")
         elif node.sub_workflow:
-            print(f"  Type: Sub-Workflow")
+            print("  Type: Sub-Workflow")
             print(f"  Start Node: {node.sub_workflow.start}")
         print(f"  Output: {node.output or 'None'}")
 
@@ -602,6 +649,7 @@ def print_workflow_definition(workflow_def):
 def main():
     """Demonstrate parsing the story_generator_agent.py workflow and saving it to YAML."""
     from quantalogic.flow.flow_generator import generate_executable_script  # Ensure correct import
+
     output_file_python = "./story_generator.py"
     file_path = "examples/qflow/story_generator_agent.py"
     yaml_output_path = "story_generator_workflow.yaml"  # Output YAML file path

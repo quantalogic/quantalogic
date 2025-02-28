@@ -57,11 +57,14 @@ agent = Agent(
         ReadFileBlockTool(),
         ListDirectoryTool(),
         InputQuestionTool(),
-        LLMTool(model_name=MODEL_NAME, on_token=console_print_token), # LLMTool can be used to explore a specific latent space
+        LLMTool(
+            model_name=MODEL_NAME, on_token=console_print_token
+        ),  # LLMTool can be used to explore a specific latent space
     ],
 )
 
 spinner = None
+
 
 def console_spinner_on(event: str, data: Any | None = None) -> None:
     """
@@ -76,6 +79,7 @@ def console_spinner_on(event: str, data: Any | None = None) -> None:
     spinner = console.status(f"Processing: {event}")
     spinner.start()
 
+
 def console_spinner_off(event: str, data: Any | None = None) -> None:
     """
     Stop the active console spinner.
@@ -87,6 +91,7 @@ def console_spinner_off(event: str, data: Any | None = None) -> None:
     global spinner
     if spinner is not None:
         spinner.stop()
+
 
 # Comprehensive event monitoring implemented through wildcard listener
 # to support multiple critical functions:

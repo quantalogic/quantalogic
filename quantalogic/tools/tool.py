@@ -130,9 +130,7 @@ class ToolDefinition(BaseModel):
                     value_info = f" (default: `{arg.default}`)"
 
                 parameters += (
-                    f"  - `{arg.name}`: "
-                    f"({required_status}{value_info})\n"
-                    f"    {arg.description or ''}\n"
+                    f"  - `{arg.name}`: " f"({required_status}{value_info})\n" f"    {arg.description or ''}\n"
                 )
             if len(parameters) > 0:
                 markdown += parameters + "\n\n"
@@ -165,13 +163,11 @@ class ToolDefinition(BaseModel):
         """
         properties_injectable = self.get_injectable_properties_in_execution()
 
-        return [
-            arg for arg in self.arguments if properties_injectable.get(arg.name) is None
-        ]
+        return [arg for arg in self.arguments if properties_injectable.get(arg.name) is None]
 
     def get_injectable_properties_in_execution(self) -> dict[str, Any]:
         """Get injectable properties excluding tool arguments.
-        
+
         Returns:
             A dictionary of property names and values, excluding tool arguments and None values.
         """
@@ -245,20 +241,16 @@ class Tool(ToolDefinition):
 
     def get_injectable_properties_in_execution(self) -> dict[str, Any]:
         """Get injectable properties excluding tool arguments.
-        
+
         Returns:
             A dictionary of property names and values, excluding tool arguments and None values.
         """
         # Get argument names from tool definition
         argument_names = {arg.name for arg in self.arguments}
-        
+
         # Get properties excluding arguments and filter out None values
         properties = self.get_properties(exclude=["arguments"])
-        return {
-            name: value 
-            for name, value in properties.items() 
-            if value is not None and name in argument_names
-        }
+        return {name: value for name, value in properties.items() if value is not None and name in argument_names}
 
 
 if __name__ == "__main__":

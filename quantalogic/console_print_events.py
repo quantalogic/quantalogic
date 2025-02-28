@@ -15,7 +15,7 @@ def console_print_events(event: str, data: dict[str, Any] | None = None):
     if not data:
         console.print(
             Panel.fit(
-                Text(f"ⓘ No event data", justify="center", style="italic cyan"),
+                Text("ⓘ No event data", justify="center", style="italic cyan"),
                 title=f"✨ {event}",
                 border_style="cyan",
                 box=box.ROUNDED,
@@ -40,11 +40,7 @@ def console_print_events(event: str, data: dict[str, Any] | None = None):
                     else:
                         branch.add(Text(f"• {item}", style="dim green"))
             else:
-                tree.add(Text.assemble(
-                    key_text, 
-                    (" → ", "dim"), 
-                    str(value), style="bright_white"
-                ))
+                tree.add(Text.assemble(key_text, (" → ", "dim"), str(value), style="bright_white"))
 
     # Create a compact tree with subtle styling
     tree = Tree("", guide_style="dim cyan", hide_root=True)
@@ -61,5 +57,5 @@ def console_print_events(event: str, data: dict[str, Any] | None = None):
             subtitle=f"[dim]Items: {len(data)}[/dim]",
             subtitle_align="right",
         ),
-        no_wrap=True
+        no_wrap=True,
     )

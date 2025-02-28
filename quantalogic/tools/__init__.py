@@ -64,8 +64,7 @@ __all__ = [
     "ReadHTMLTool",
     "GrepAppTool",
     "GenerateDatabaseReportTool",
-    'SQLQueryTool',
-    'SafePythonInterpreterTool'
-    'LLMGenerationTool',
-    'SequenceTool'
+    "SQLQueryTool",
+    "SafePythonInterpreterTool" "LLMGenerationTool",
+    "SequenceTool",
 ]

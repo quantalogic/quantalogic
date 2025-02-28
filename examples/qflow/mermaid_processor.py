@@ -49,7 +49,7 @@ class MermaidProcessor:
             raise
 
         # Create assets subdirectory if it doesn't exist
-        self.assets_dir = self.target_dir / 'assets'
+        self.assets_dir = self.target_dir / "assets"
         self.assets_dir.mkdir(exist_ok=True, parents=True)
 
         # Set filename prefix
@@ -57,9 +57,7 @@ class MermaidProcessor:
 
         # Perform initial Mermaid CLI installation check
         if not self.check_mermaid_cli_installation():
-            logger.warning(
-                "⚠️ Mermaid CLI is not properly installed. Image generation may fail."
-            )
+            logger.warning("⚠️ Mermaid CLI is not properly installed. Image generation may fail.")
 
         # Log initialization details
         logger.info("🚀 MermaidProcessor Initialized")
@@ -100,11 +98,12 @@ class MermaidProcessor:
         """
         blocks = []
         pattern = re.compile(
-            r'''(?xm)
+            r"""(?xm)
                 ^\s*```mermaid\s*$\n
                 (.*?)\n
                 ^\s*```\s*$\n
-            ''', re.DOTALL | re.IGNORECASE
+            """,
+            re.DOTALL | re.IGNORECASE,
         )
 
         for match in pattern.finditer(content):
@@ -120,7 +119,7 @@ class MermaidProcessor:
         """Main processing method to replace Mermaid code blocks with images"""
         # Find all Mermaid code blocks
         mermaid_blocks = self.find_mermaid_blocks(markdown_content)
-        
+
         if not mermaid_blocks:
             return markdown_content
 
@@ -164,19 +163,20 @@ class MermaidProcessor:
             # Generate image with a descriptive filename
             filename = f"{self.filename_prefix}_diagram_{block_number}"
             image_path = self.generate_image(code, filename)
-            
+
             # If image is generated, create a markdown image reference
             if image_path:
                 # Validate that the image is within the project root or assets directory
                 image_path = Path(image_path).resolve()
-                if (self.project_root not in image_path.parents and 
-                    self.assets_dir.resolve() not in image_path.parents):
-                    logger.error(f"Failed to process Mermaid block {block_number}: '{image_path}' is not in the subpath of '{self.project_root}' or '{self.assets_dir}'")
+                if self.project_root not in image_path.parents and self.assets_dir.resolve() not in image_path.parents:
+                    logger.error(
+                        f"Failed to process Mermaid block {block_number}: '{image_path}' is not in the subpath of '{self.project_root}' or '{self.assets_dir}'"
+                    )
                     return None
-                
+
                 markdown_image = f"\n\n![Mermaid Diagram {block_number}](assets/{image_path.name})\n\n"
                 return (start, end, markdown_image)
-            
+
             return None
         except Exception as e:
             logger.error(f"Failed to process Mermaid block {block_number}: {e}")
@@ -184,11 +184,7 @@ class MermaidProcessor:
 
     def _get_executor(self, parallel: bool):
         """Get appropriate executor based on parallel flag"""
-        return (
-            ThreadPoolExecutor(max_workers=os.cpu_count() * 2)
-            if parallel
-            else ThreadPoolExecutor(max_workers=1)
-        )
+        return ThreadPoolExecutor(max_workers=os.cpu_count() * 2) if parallel else ThreadPoolExecutor(max_workers=1)
 
     def _extract_code(self, content: str, start: int, end: int) -> Optional[str]:
         """Extract and validate mermaid code from block"""
@@ -200,7 +196,7 @@ class MermaidProcessor:
             logger.error("Error extracting code from block: {}", e)
             return None
 
-    def generate_image(self, code: str, filename: str, theme: str = 'default', scale: float = 2.0) -> Optional[str]:
+    def generate_image(self, code: str, filename: str, theme: str = "default", scale: float = 2.0) -> Optional[str]:
         """
         Generate an image from Mermaid code with comprehensive logging and error handling.
 
@@ -209,7 +205,7 @@ class MermaidProcessor:
             filename (str): Base filename for the output image
             theme (str, optional): Mermaid theme to use. Defaults to 'default'.
                                    Options: 'dark', 'forest', 'neutral', 'default'
-            scale (float, optional): Image scale factor for high resolution. 
+            scale (float, optional): Image scale factor for high resolution.
                                      Defaults to 2.0 for Retina-like quality.
                                      Recommended range: 1.0 to 4.0
 
@@ -223,29 +219,43 @@ class MermaidProcessor:
                 return None
 
             # Clean and normalize Mermaid code
-            code_lines = [line.strip() for line in code.split('\n') if line.strip()]
-            
+            code_lines = [line.strip() for line in code.split("\n") if line.strip()]
+
             # Remove any markdown code fence markers
-            code_lines = [line for line in code_lines if not line.startswith('```') and not line.endswith('```')]
-            
+            code_lines = [line for line in code_lines if not line.startswith("```") and not line.endswith("```")]
+
             # Strict list of allowed diagram types
             allowed_diagram_types = [
-                'zenuml', 'flowchart', 'sequencediagram', 'classdiagram', 
-                'statediagram', 'erdiagram', 'gantt', 'journey', 'gitgraph', 
-                'pie', 'mindmap', 'quadrantchart', 'xychart', 'block-beta', 
-                'packet-beta','graph'
+                "zenuml",
+                "flowchart",
+                "sequencediagram",
+                "classdiagram",
+                "statediagram",
+                "erdiagram",
+                "gantt",
+                "journey",
+                "gitgraph",
+                "pie",
+                "mindmap",
+                "quadrantchart",
+                "xychart",
+                "block-beta",
+                "packet-beta",
+                "graph",
             ]
 
             # Strict diagram type detection with support for graph variations
-            diagram_type = next((line.split()[0] for line in code_lines if line.split()[0] in allowed_diagram_types), None)
-            
+            diagram_type = next(
+                (line.split()[0] for line in code_lines if line.split()[0] in allowed_diagram_types), None
+            )
+
             # If no allowed diagram type detected, raise an error
             if not diagram_type:
                 logger.error(f"🚫 Invalid or unsupported Mermaid diagram type. Allowed types: {allowed_diagram_types}")
                 return None
 
             # Reconstruct the Mermaid code with the strict diagram type
-            cleaned_code = '\n'.join(code_lines)
+            cleaned_code = "\n".join(code_lines)
 
             # Generate output path in assets directory
             output_path = self.assets_dir / f"{self.filename_prefix}_{filename}.png"
@@ -256,7 +266,7 @@ class MermaidProcessor:
             self.assets_dir.mkdir(parents=True, exist_ok=True)
 
             # Create a temporary file with Mermaid code
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.mmd', delete=False) as temp_file:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".mmd", delete=False) as temp_file:
                 temp_file.write(cleaned_code)
                 temp_file.close()
 
@@ -264,17 +274,22 @@ class MermaidProcessor:
                 # Attempt to generate image using Mermaid CLI
                 subprocess.run(
                     [
-                        'mmdc', 
-                        '-i', temp_file.name, 
-                        '-o', str(output_path),
-                        '-t', theme,  # Use configurable theme
-                        '-b', 'transparent',  # Optional: transparent background
-                        '-s', str(scale)  # Add scale parameter
+                        "mmdc",
+                        "-i",
+                        temp_file.name,
+                        "-o",
+                        str(output_path),
+                        "-t",
+                        theme,  # Use configurable theme
+                        "-b",
+                        "transparent",  # Optional: transparent background
+                        "-s",
+                        str(scale),  # Add scale parameter
                     ],
                     check=True,
                     capture_output=True,
                     text=True,
-                    timeout=30  # 30-second timeout
+                    timeout=30,  # 30-second timeout
                 )
             except subprocess.TimeoutExpired:
                 logger.error("⏰ Mermaid CLI image generation timed out")
@@ -313,10 +328,10 @@ class MermaidProcessor:
     def _validate_output(self, output_path: Path):
         """
         Validate generated image file with more lenient checks.
-        
+
         Args:
             output_path (Path): Path to the generated image file
-        
+
         Returns:
             bool: True if image is valid, False otherwise
         """
@@ -361,9 +376,7 @@ class MermaidProcessor:
         """
         try:
             # Check if mmdc command exists
-            result = subprocess.run(
-                ["which", "mmdc"], capture_output=True, text=True, timeout=5
-            )
+            result = subprocess.run(["which", "mmdc"], capture_output=True, text=True, timeout=5)
 
             if result.returncode != 0:
                 logger.warning("🚫 Mermaid CLI (mmdc) not found in system PATH")
@@ -406,8 +419,11 @@ class MermaidProcessor:
 
 
 def process_markdown(
-    markdown_content: str, output_directory: str, filename_prefix: str = "example", 
-    theme: str = 'default', scale: float = 2.0
+    markdown_content: str,
+    output_directory: str,
+    filename_prefix: str = "example",
+    theme: str = "default",
+    scale: float = 2.0,
 ) -> str:
     """
     Process markdown content and generate images for Mermaid diagrams.
@@ -418,7 +434,7 @@ def process_markdown(
         filename_prefix (str, optional): Prefix for generated image filenames
         theme (str, optional): Mermaid theme to use. Defaults to 'default'.
                                Options: 'dark', 'forest', 'neutral', 'default'
-        scale (float, optional): Image scale factor for high resolution. 
+        scale (float, optional): Image scale factor for high resolution.
                                  Defaults to 2.0 for Retina-like quality.
                                  Recommended range: 1.0 to 4.0
 
@@ -435,7 +451,7 @@ def process_markdown(
     processor = MermaidProcessor(output_directory, filename_prefix)
 
     # Extract Mermaid code blocks
-    mermaid_blocks = re.findall(r'\s*```mermaid\n(.*?)\s*```', markdown_content, re.DOTALL)
+    mermaid_blocks = re.findall(r"\s*```mermaid\n(.*?)\s*```", markdown_content, re.DOTALL)
 
     logger.info(f"🧩 Found {len(mermaid_blocks)} Mermaid diagram(s)")
 
@@ -445,22 +461,18 @@ def process_markdown(
         logger.debug(f"📋 Mermaid Code:\n{mermaid_code}")
 
         # Add explicit ER diagram syntax declaration
-        mermaid_code = f'''erDiagram\n{mermaid_code}'''
+        mermaid_code = f"""erDiagram\n{mermaid_code}"""
 
         # Generate image
         try:
-            image_path = processor.generate_image(
-                mermaid_code.strip(), f"diagram_{idx}", theme=theme, scale=scale
-            )
+            image_path = processor.generate_image(mermaid_code.strip(), f"diagram_{idx}", theme=theme, scale=scale)
 
             if image_path:
                 logger.info(f"✅ Generated image: {image_path}")
 
                 # Replace Mermaid code block with image reference
                 img_tag = f"![Diagram {idx}]({image_path})"
-                markdown_content = markdown_content.replace(
-                    f"```mermaid\n{mermaid_code}\n```", img_tag
-                )
+                markdown_content = markdown_content.replace(f"```mermaid\n{mermaid_code}\n```", img_tag)
             else:
                 logger.warning(f"❌ Failed to generate image for Diagram {idx}")
 
@@ -553,7 +565,7 @@ zenuml
     output_markdown_path = demo_dir / "markdown_updated.md"
 
     # Save original markdown
-    with open(input_markdown_path, 'w') as f:
+    with open(input_markdown_path, "w") as f:
         f.write(markdown_content)
     logger.info(f"Saved original markdown to: {input_markdown_path}")
 
@@ -566,6 +578,6 @@ zenuml
     processed_markdown = processor.process_content(markdown_content)
 
     # Save processed markdown
-    with open(output_markdown_path, 'w') as f:
+    with open(output_markdown_path, "w") as f:
         f.write(processed_markdown)
     logger.info(f"Saved processed markdown to: {output_markdown_path}")

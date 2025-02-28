@@ -60,11 +60,6 @@ class TaskStatus(BaseModel):
     model_name: Optional[str] = None
 
 
-
-
-
-
-
 # Models
 class EventMessage(BaseModel):
     """Event message model for SSE."""
@@ -118,4 +113,3 @@ class TaskStatus(BaseModel):
     error: Optional[str] = None
     total_tokens: Optional[int] = None
     model_name: Optional[str] = None
-

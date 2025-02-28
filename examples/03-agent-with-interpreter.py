@@ -54,5 +54,5 @@ agent.event_emitter.on("stream_chunk", console_print_token)
 # - Seamless integration with PythonTool
 # - Real-time monitoring capabilities for debugging
 # This serves as both a functional test and capability demonstration
-result = agent.solve_task("1. Calculate PI with 10000 decimal places.",streaming=True)
+result = agent.solve_task("1. Calculate PI with 10000 decimal places.", streaming=True)
 print(result)

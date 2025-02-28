@@ -35,16 +35,16 @@ def create_tips_section() -> str:
 
 def display_welcome_message(
     console: Console,
-    model_name: str, 
+    model_name: str,
     version: str,
-    vision_model_name: str | None = None, 
-    max_iterations: int = 50, 
+    vision_model_name: str | None = None,
+    max_iterations: int = 50,
     compact_every_n_iteration: int | None = None,
     max_tokens_working_memory: int | None = None,
     mode: str = "basic",
 ) -> None:
     """Display a welcome message and instructions for the QuantaLogic AI Assistant.
-    
+
     Args:
         console: Rich Console instance for rendering output
         model_name: Name of the language model being used
@@ -63,7 +63,7 @@ def display_welcome_message(
         compact_every_n_iteration,
         max_tokens_working_memory,
     )
-    
+
     tips_section = create_tips_section()
 
     welcome_content = (
@@ -74,7 +74,7 @@ def display_welcome_message(
         "[bold magenta]Pro Tips[/bold magenta]\n"
         f"{tips_section}\n"
     )
-    
+
     welcome_panel = Panel(
         welcome_content,
         border_style="blue",
@@ -82,5 +82,5 @@ def display_welcome_message(
         subtitle="[bold cyan]Ready to assist you[/bold cyan]",
         padding=(1, 2),
     )
-    
+
     console.print(welcome_panel)

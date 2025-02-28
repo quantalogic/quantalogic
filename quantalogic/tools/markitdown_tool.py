@@ -65,18 +65,19 @@ class MarkitdownTool(Tool):
                     file_path = os.path.expanduser(file_path)
                 if not os.path.isabs(file_path):
                     file_path = os.path.abspath(file_path)
-                
+
                 # Verify file exists
                 if not os.path.exists(file_path):
                     return f"Error: File not found at path: {file_path}"
 
             from markitdown import MarkItDown
+
             md = MarkItDown()
 
             # Detect file type if possible
             file_extension = os.path.splitext(file_path)[1].lower()
-            supported_extensions = ['.pdf', '.pptx', '.docx', '.xlsx', '.html', '.htm']
-            
+            supported_extensions = [".pdf", ".pptx", ".docx", ".xlsx", ".html", ".htm"]
+
             if not file_extension or file_extension not in supported_extensions:
                 return f"Error: Unsupported file format. Supported formats are: {', '.join(supported_extensions)}"
 
@@ -90,11 +91,11 @@ class MarkitdownTool(Tool):
                 output_dir = os.path.dirname(output_file_path)
                 if output_dir and not os.path.exists(output_dir):
                     os.makedirs(output_dir)
-                    
+
                 with open(output_file_path, "w", encoding="utf-8") as f:
                     f.write(result.text_content)
                 return f"Markdown content successfully written to {output_file_path}"
-            
+
             # Handle content truncation
             lines = result.text_content.splitlines()
             if len(lines) > MAX_LINES:

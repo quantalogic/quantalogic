@@ -23,7 +23,7 @@ class SQLQueryTool(Tool):
             arg_type="string",
             description="The SQL query to execute",
             required=True,
-            example="SELECT * FROM customers WHERE country = 'France'"
+            example="SELECT * FROM customers WHERE country = 'France'",
         ),
         ToolArgument(
             name="start_row",
@@ -31,7 +31,7 @@ class SQLQueryTool(Tool):
             description="1-based starting row number for results",
             required=True,
             example="1",
-            default="1"
+            default="1",
         ),
         ToolArgument(
             name="end_row",
@@ -39,27 +39,27 @@ class SQLQueryTool(Tool):
             description="1-based ending row number for results",
             required=True,
             example="100",
-            default="100"
+            default="100",
         ),
     ]
     connection_string: str = Field(
         ...,
         description="SQLAlchemy-compatible database connection string",
-        example="postgresql://user:password@localhost/mydb"
+        example="postgresql://user:password@localhost/mydb",
     )
 
     def execute(self, query: str, start_row: Any, end_row: Any) -> str:
         """
         Executes a SQL query and returns formatted results.
-        
+
         Args:
             query: SQL query to execute
             start_row: 1-based starting row number (supports various numeric types)
             end_row: 1-based ending row number (supports various numeric types)
-            
+
         Returns:
             str: Markdown-formatted results with pagination metadata
-            
+
         Raises:
             ValueError: For invalid parameters or query errors
             RuntimeError: For database connection issues
@@ -68,7 +68,7 @@ class SQLQueryTool(Tool):
             # Convert and validate row numbers
             start = self._convert_row_number(start_row, "start_row")
             end = self._convert_row_number(end_row, "end_row")
-            
+
             if start > end:
                 raise ValueError(f"start_row ({start}) must be <= end_row ({end})")
 
@@ -83,23 +83,25 @@ class SQLQueryTool(Tool):
             total_rows = len(all_rows)
             actual_start = max(1, start)
             actual_end = min(end, total_rows)
-            
+
             if actual_start > total_rows:
                 return f"No results found (total rows: {total_rows})"
 
             # Slice results (convert to 0-based index)
-            displayed_rows = all_rows[actual_start-1:actual_end]
+            displayed_rows = all_rows[actual_start - 1 : actual_end]
 
             # Format results
             markdown = [
                 f"**Query Results:** `{actual_start}-{actual_end}` of `{total_rows}` rows",
-                self._format_table(columns, displayed_rows)
+                self._format_table(columns, displayed_rows),
             ]
 
             # Add pagination notice
             if actual_end < total_rows:
                 remaining = total_rows - actual_end
-                markdown.append(f"\n*Showing first {actual_end} rows - {remaining} more row{'s' if remaining > 1 else ''} available*")
+                markdown.append(
+                    f"\n*Showing first {actual_end} rows - {remaining} more row{'s' if remaining > 1 else ''} available*"
+                )
 
             return "\n".join(markdown)
 
@@ -125,10 +127,10 @@ class SQLQueryTool(Tool):
             converted = int(num)
             if converted != num:  # Check if float had decimal part
                 raise ValueError("Decimal values are not allowed for row numbers")
-                
+
             if converted <= 0:
                 raise ValueError(f"{field_name} must be a positive integer")
-                
+
             return converted
         except (ValueError, TypeError) as e:
             raise ValueError(f"Invalid value for {field_name}: {repr(value)}") from e
@@ -141,7 +143,7 @@ class SQLQueryTool(Tool):
         # Create header
         header = "| " + " | ".join(columns) + " |"
         separator = "| " + " | ".join(["---"] * len(columns)) + " |"
-        
+
         # Create rows with truncation
         body = []
         for row in rows:
@@ -155,7 +157,6 @@ class SQLQueryTool(Tool):
         return "\n".join([header, separator] + body)
 
 
-
 if __name__ == "__main__":
     from quantalogic.tools.utils.create_sample_database import create_sample_database
 
@@ -164,6 +165,3 @@ if __name__ == "__main__":
     tool = SQLQueryTool(connection_string="sqlite:///sample.db")
     print(tool.execute("select * from customers", 1, 10))
     print(tool.execute("select * from customers", 11, 20))
-     
-    
-    

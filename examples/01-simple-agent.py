@@ -13,7 +13,7 @@ from quantalogic import Agent
 
 # Veirify that is set DEEPSEEK_API_KEY
 
-#MODEL_NAME = "deepseek/deepseek-chat"
+# MODEL_NAME = "deepseek/deepseek-chat"
 MODEL_NAME = "ovh/DeepSeek-R1-Distill-Llama-70B"
 
 if not os.environ.get("DEEPSEEK_API_KEY"):

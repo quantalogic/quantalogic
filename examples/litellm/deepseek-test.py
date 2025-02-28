@@ -1,4 +1,3 @@
-
 # Example of using LLMLingua with Litellm for prompt compression
 # https://github.com/microsoft/LLMLingua
 
@@ -10,9 +9,9 @@ from quantalogic.prompts import system_prompt
 
 llm_lingua = PromptCompressor()
 
-litellm.set_verbose = False 
+litellm.set_verbose = False
 
-system_prompt = system_prompt("","","")
+system_prompt = system_prompt("", "", "")
 print(system_prompt)
 
 contexts_list = []
@@ -32,7 +31,7 @@ compressed_prompt = llm_lingua.compress_prompt(
     context_budget="+100",
     dynamic_context_compression_ratio=0.4,  # enable dynamic_context_compression_ratio
     reorder_context="sort",
-)   
+)
 
 # Count number of words in system prompt
 num_words = len(system_prompt.split())
@@ -43,7 +42,9 @@ num_words = len(compressed_prompt.split())
 print(f"Compressed prompt has {num_words} words")
 
 # Count number of tokens in compressed prompt
-num_tokens = litellm.token_counter(model="deepseek/deepseek-chat", messages=[{"role": "user", "content": compressed_prompt}])
+num_tokens = litellm.token_counter(
+    model="deepseek/deepseek-chat", messages=[{"role": "user", "content": compressed_prompt}]
+)
 print(f"Compressed prompt has {num_tokens} tokens")
 
 messages = [

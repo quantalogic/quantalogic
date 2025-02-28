@@ -168,9 +168,9 @@ class WorkflowManager:
             # Handle remote URL
             try:
                 with urllib.request.urlopen(source) as response:
-                    code = response.read().decode('utf-8')
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.py') as temp_file:
-                    temp_file.write(code.encode('utf-8'))
+                    code = response.read().decode("utf-8")
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".py") as temp_file:
+                    temp_file.write(code.encode("utf-8"))
                     temp_path = temp_file.name
                 module_name = f"temp_module_{hash(temp_path)}"
                 spec = importlib.util.spec_from_file_location(module_name, temp_path)
@@ -310,7 +310,9 @@ class WorkflowManager:
 
                 # Register the node in NODE_REGISTRY with proper inputs
                 Nodes.NODE_REGISTRY[node_name] = (decorated_func, inputs_list, node_def.output or f"{node_name}_result")
-                logger.debug(f"Registered LLM node '{node_name}' with inputs {inputs_list} and output {node_def.output or f'{node_name}_result'}")
+                logger.debug(
+                    f"Registered LLM node '{node_name}' with inputs {inputs_list} and output {node_def.output or f'{node_name}_result'}"
+                )
 
         added_nodes = set()
         for trans in self.workflow.workflow.transitions:
@@ -346,11 +348,12 @@ class WorkflowManager:
     def save_to_yaml(self, file_path: Union[str, Path]) -> None:
         """Save the workflow to a YAML file using aliases and multi-line block scalars for code."""
         file_path = Path(file_path)
+
         # Custom representer to use multi-line block scalars for multi-line strings
         def str_representer(dumper, data):
             if "\n" in data:  # Use block scalar for multi-line strings
-                return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
-            return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+                return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+            return dumper.represent_scalar("tag:yaml.org,2002:str", data)
 
         # Add the custom representer to the SafeDumper
         yaml.add_representer(str, str_representer, Dumper=yaml.SafeDumper)
@@ -387,7 +390,7 @@ def main():
             if event.result:
                 print(f'Result: {event.result}')
             if event.exception:
-                print(f'Error: {event.exception}')"""
+                print(f'Error: {event.exception}')""",
     )
     manager.add_node(name="start", function="greet")
     manager.add_node(name="end", function="farewell")

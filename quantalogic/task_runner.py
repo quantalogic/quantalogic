@@ -84,16 +84,16 @@ def interactive_task_runner(
     while True:
         logger.debug("Waiting for user input...")
         task_content = get_multiline_input(console).strip()
-        
+
         if not task_content:
             logger.info("No task provided. Exiting...")
             console.print("[yellow]No task provided. Exiting...[/yellow]")
             break
 
         # Handle commands with single return
-        if task_content.startswith('/'):
+        if task_content.startswith("/"):
             command = task_content.lower()
-            if command == '/clear':
+            if command == "/clear":
                 logger.info("Clearing agent memory...")
                 console.print("[yellow]Clearing agent memory...[/yellow]")
                 agent.clear_memory()
@@ -111,7 +111,7 @@ def interactive_task_runner(
                 border_style="blue",
             )
         )
-        
+
         if not Confirm.ask("[bold]Are you sure you want to submit this task?[/bold]"):
             console.print("[yellow]Task submission cancelled.[/yellow]")
             if not Confirm.ask("[bold]Would you like to ask another question?[/bold]"):
@@ -127,14 +127,14 @@ def interactive_task_runner(
         )
 
         logger.debug(f"Solving task with agent: {task_content}")
-        result = agent.solve_task(task=task_content, max_iterations=max_iterations, streaming=not no_stream,clear_memory=False)
+        result = agent.solve_task(
+            task=task_content, max_iterations=max_iterations, streaming=not no_stream, clear_memory=False
+        )
         logger.debug(f"Task solved with result: {result} using {max_iterations} iterations")
 
         console.print(
             Panel.fit(
-                f"[bold]Task Result:[/bold]\n{result}",
-                title="[bold]Execution Output[/bold]",
-                border_style="green"
+                f"[bold]Task Result:[/bold]\n{result}", title="[bold]Execution Output[/bold]", border_style="green"
             )
         )
 
@@ -165,7 +165,7 @@ def task_runner(
         vision_model_name=config.vision_model_name,
         thinking_model_name=config.thinking_model_name,
         compact_every_n_iteration=config.compact_every_n_iteration,
-        max_tokens_working_memory=config.max_tokens_working_memory
+        max_tokens_working_memory=config.max_tokens_working_memory,
     )
 
     AgentRegistry.register_agent("main_agent", agent)
@@ -176,14 +176,14 @@ def task_runner(
         logger.debug(f"Solving task with agent: {task_content}")
         if config.max_iterations < 1:
             raise ValueError("max_iterations must be greater than 0")
-        result = agent.solve_task(task=task_content, max_iterations=config.max_iterations, streaming=not config.no_stream)
+        result = agent.solve_task(
+            task=task_content, max_iterations=config.max_iterations, streaming=not config.no_stream
+        )
         logger.debug(f"Task solved with result: {result} using {config.max_iterations} iterations")
 
         console.print(
             Panel.fit(
-                f"[bold]Task Result:[/bold]\n{result}",
-                title="[bold]Execution Output[/bold]",
-                border_style="green"
+                f"[bold]Task Result:[/bold]\n{result}", title="[bold]Execution Output[/bold]", border_style="green"
             )
         )
     else:
@@ -194,14 +194,14 @@ def task_runner(
             logger.debug(f"Solving task with agent: {task_content}")
             if config.max_iterations < 1:
                 raise ValueError("max_iterations must be greater than 0")
-            result = agent.solve_task(task=task_content, max_iterations=config.max_iterations, streaming=not config.no_stream)
+            result = agent.solve_task(
+                task=task_content, max_iterations=config.max_iterations, streaming=not config.no_stream
+            )
             logger.debug(f"Task solved with result: {result} using {config.max_iterations} iterations")
 
             console.print(
                 Panel.fit(
-                    f"[bold]Task Result:[/bold]\n{result}",
-                    title="[bold]Execution Output[/bold]",
-                    border_style="green"
+                    f"[bold]Task Result:[/bold]\n{result}", title="[bold]Execution Output[/bold]", border_style="green"
                 )
             )
         else:
@@ -234,7 +234,7 @@ def task_runner(
                 "memory_summary",
             ]
 
-            #def ask_continue(event: str, data: any) -> None:
+            # def ask_continue(event: str, data: any) -> None:
             #    ## Ask for ctrl+return
             #    if event == "task_think_end":
             #        ## Wait return on the keyboard
@@ -253,10 +253,10 @@ def task_runner(
                 if data is not None:
                     console.print(data, end="", markup=False)
 
-            #agent.event_emitter.on(
+            # agent.event_emitter.on(
             #    event="task_think_end",
             #    listener=ask_continue,
-            #)
+            # )
 
             agent.event_emitter.on(
                 event=events,

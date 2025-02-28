@@ -1,13 +1,12 @@
-
 import requests
 from packaging import version
 
 from quantalogic.version import get_version
 
 
-def check_if_is_latest_version() -> (bool,str|None):
+def check_if_is_latest_version() -> (bool, str | None):
     """Check if the current version is the latest version on PyPI.
-    
+
     Returns:
         bool: True if the current version is the latest, False otherwise
     """
@@ -32,7 +31,6 @@ def main():
     else:
         print("❌ Could not check version")
 
+
 if __name__ == "__main__":
     main()
-
-

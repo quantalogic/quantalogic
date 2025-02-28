@@ -38,7 +38,7 @@ Available models:
   - anthropic/claude-3.5-sonnet
   - openrouter/deepseek/deepseek-chat
   - openrouter/mistralai/mistral-large-2411
-"""
+""",
 )
 parser.add_argument(
     "--model",
@@ -105,8 +105,8 @@ def create_agent(connection_string: str) -> Agent:
                 "openai": os.environ.get("OPENAI_API_KEY"),
                 "anthropic": os.environ.get("ANTHROPIC_API_KEY"),
                 "openrouter": os.environ.get("OPENROUTER_API_KEY"),
-            }
-        }
+            },
+        },
     )
 
     return agent
@@ -153,14 +153,12 @@ def stop_spinner(event: str, data: Any | None = None) -> None:
         current_spinner = None  # Clear reference to allow garbage collection
 
 
-
 # Updated event handling
 loguru.logger.info("Registering event listeners")
 agent.event_emitter.on("task_solve_start", start_spinner)
 agent.event_emitter.on("stream_chunk", stop_spinner)
 agent.event_emitter.on("stream_chunk", console_print_token)
 agent.event_emitter.on("task_solve_end", stop_spinner)
-
 
 
 def format_markdown(result: str) -> Panel:

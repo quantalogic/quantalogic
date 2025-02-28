@@ -113,8 +113,6 @@ agent.event_emitter.on(event=["task_solve_end"], listener=on_task_solve_end)
 agent.event_emitter.on(event=["stream_chunk"], listener=on_stream_chunk)
 
 
-
-
 def get_multiline_input(
     console: Console, prompt: str = "Paste your text below (Press Ctrl+D or type 'END' on a new line to finish):\n"
 ) -> str:
@@ -300,12 +298,11 @@ Take inspiration from the following books to enrich your PRD:
     return task_description
 
 
-
 def main():
     task_description = prepare_prd_task()
     if task_description:
         try:
-            agent.solve_task(task_description, streaming=True,max_iterations=50)
+            agent.solve_task(task_description, streaming=True, max_iterations=50)
         except Exception as e:
             console.print(f"[bold red]An unexpected error occurred: {e}[/bold red]")
             sys.exit(1)

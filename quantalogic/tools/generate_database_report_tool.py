@@ -10,14 +10,12 @@ class GenerateDatabaseReportTool(Tool):
     """Tool for generating database documentation reports from a connection string."""
 
     name: str = "generate_database_report_tool"
-    description: str = (
-        "Generates a comprehensive Markdown database documentation report with ER diagram. "
-    )
+    description: str = "Generates a comprehensive Markdown database documentation report with ER diagram. "
     arguments: list = []  # No execution arguments - connection string is configured during tool setup
     connection_string: str = Field(
         ...,
         description="SQLAlchemy-compatible database connection string (e.g., 'sqlite:///database.db')",
-        example="postgresql://user:password@localhost/mydatabase"
+        example="postgresql://user:password@localhost/mydatabase",
     )
 
     def execute(self) -> str:
@@ -39,14 +37,11 @@ class GenerateDatabaseReportTool(Tool):
 
 
 if __name__ == "__main__":
-
     from quantalogic.tools.utils.create_sample_database import create_sample_database
 
     # Create and document sample database
     create_sample_database("sample.db")
 
     # Example usage
-    tool = GenerateDatabaseReportTool(
-        connection_string="sqlite:///sample.db"
-    )
+    tool = GenerateDatabaseReportTool(connection_string="sqlite:///sample.db")
     print(tool.execute())

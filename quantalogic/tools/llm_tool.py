@@ -102,7 +102,6 @@ class LLMTool(Tool):
             logger.debug(f"Setting up event listener for LLMTool with model: {self.model_name}")
             self.generative_model.event_emitter.on("stream_chunk", self.on_token)
 
-
     async def async_execute(
         self, system_prompt: str | None = None, prompt: str | None = None, temperature: str | None = None
     ) -> str:
@@ -173,7 +172,7 @@ if __name__ == "__main__":
     system_prompt = 'Answer the question as truthfully as possible using the provided context, and if the answer is not contained within the context, say "I don\'t know".'
     question = "What is the meaning of life?"
     temperature = "0.7"
-    
+
     # Synchronous execution
     answer = tool.execute(system_prompt=system_prompt, prompt=question, temperature=temperature)
     print("Synchronous Answer:")
@@ -181,9 +180,7 @@ if __name__ == "__main__":
 
     # Asynchronous execution with streaming
     pirate = LLMTool(
-        model_name="openrouter/openai/gpt-4o-mini", 
-        system_prompt="You are a pirate.", 
-        on_token=console_print_token
+        model_name="openrouter/openai/gpt-4o-mini", system_prompt="You are a pirate.", on_token=console_print_token
     )
     pirate_answer = asyncio.run(
         pirate.async_execute(system_prompt=system_prompt, prompt=question, temperature=temperature)
@@ -193,9 +190,7 @@ if __name__ == "__main__":
 
     # Display tool configuration in Markdown
     custom_tool = LLMTool(
-        model_name="openrouter/openai/gpt-4o-mini", 
-        system_prompt="You are a pirate.", 
-        on_token=console_print_token
+        model_name="openrouter/openai/gpt-4o-mini", system_prompt="You are a pirate.", on_token=console_print_token
     )
     print("\nTool Configuration:")
     print(custom_tool.to_markdown())

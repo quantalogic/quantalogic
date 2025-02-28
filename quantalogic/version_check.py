@@ -11,7 +11,7 @@ from quantalogic.version import get_version
 
 def check_new_version() -> None:
     """Randomly check for updates and display a notification if a new version is available.
-    
+
     This function has a 1 in 10 chance of running when called. When it runs, it checks
     if there's a newer version of the package available and displays an update panel
     with installation instructions if a new version is found.
