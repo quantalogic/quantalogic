@@ -1,15 +1,15 @@
 """Tool for interacting with Composio API services."""
 
-import os
-from typing import Any, Dict, Optional, List, Union
-from datetime import datetime, timedelta
 import json
+import os
 import traceback
+from datetime import datetime
+from typing import Any, Dict, Optional
 
+from composio import Action, ComposioToolSet
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
-from composio import Action, ComposioToolSet
 from quantalogic.tools.tool import Tool, ToolArgument
 
 
