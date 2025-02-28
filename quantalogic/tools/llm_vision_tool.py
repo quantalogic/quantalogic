@@ -1,6 +1,7 @@
 """LLM Vision Tool for analyzing images using a language model."""
 
-from typing import Optional
+import asyncio
+from typing import Callable, Optional
 
 from loguru import logger
 from pydantic import ConfigDict, Field
@@ -59,7 +60,36 @@ class LLMVisionTool(Tool):
     )
 
     model_name: str = Field(..., description="The name of the language model to use")
+    on_token: Callable | None = Field(default=None, exclude=True)
     generative_model: Optional[GenerativeModel] = Field(default=None)
+
+    def __init__(
+        self,
+        model_name: str,
+        on_token: Callable | None = None,
+        name: str = "llm_vision_tool",
+        generative_model: GenerativeModel | None = None,
+    ):
+        """Initialize the LLMVisionTool with model configuration and optional callback.
+
+        Args:
+            model_name (str): The name of the language model to use.
+            on_token (Callable, optional): Callback function for streaming tokens.
+            name (str): Name of the tool instance. Defaults to "llm_vision_tool".
+            generative_model (GenerativeModel, optional): Pre-initialized generative model.
+        """
+        # Use dict to pass validated data to parent constructor
+        super().__init__(
+            **{
+                "model_name": model_name,
+                "on_token": on_token,
+                "name": name,
+                "generative_model": generative_model,
+            }
+        )
+        
+        # Initialize the generative model
+        self.model_post_init(None)
 
     def model_post_init(self, __context):
         """Initialize the generative model after model initialization."""
@@ -74,6 +104,37 @@ class LLMVisionTool(Tool):
 
     def execute(self, system_prompt: str, prompt: str, image_url: str, temperature: str = "0.7") -> str:
         """Execute the tool to analyze an image and generate a response.
+
+        Args:
+            system_prompt: The system prompt to guide the model
+            prompt: The question or instruction about the image
+            image_url: URL of the image to analyze
+            temperature: Sampling temperature
+
+        Returns:
+            The generated response
+
+        Raises:
+            ValueError: If temperature is invalid or image_url is malformed
+            Exception: If there's an error during response generation
+        """
+        # Run the async version synchronously
+        return asyncio.run(
+            self.async_execute(
+                system_prompt=system_prompt,
+                prompt=prompt,
+                image_url=image_url,
+                temperature=temperature
+            )
+        )
+
+    async def async_execute(
+        self, system_prompt: str, prompt: str, image_url: str, temperature: str = "0.7"
+    ) -> str:
+        """Execute the tool to analyze an image and generate a response asynchronously.
+
+        This method provides a native asynchronous implementation, utilizing the generative model's
+        asynchronous capabilities for improved performance in async contexts.
 
         Args:
             system_prompt: The system prompt to guide the model
@@ -111,7 +172,7 @@ class LLMVisionTool(Tool):
 
         try:
             is_streaming = self.on_token is not None
-            response_stats = self.generative_model.generate_with_history(
+            response_stats = await self.generative_model.async_generate_with_history(
                 messages_history=messages_history,
                 prompt=prompt,
                 image_url=image_url,
@@ -120,8 +181,9 @@ class LLMVisionTool(Tool):
 
             if is_streaming:
                 response = ""
-                for chunk in response_stats:
+                async for chunk in response_stats:
                     response += chunk
+                    # Note: on_token is handled via the event emitter set in model_post_init
             else:
                 response = response_stats.response.strip()
 
