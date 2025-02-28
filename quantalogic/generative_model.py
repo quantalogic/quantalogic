@@ -4,20 +4,15 @@ import asyncio
 from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List
 
-import litellm
 import openai
-from litellm import exceptions
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
 from quantalogic.event_emitter import EventEmitter  # Importing the EventEmitter class
 from quantalogic.get_model_info import get_max_input_tokens, get_max_output_tokens, get_max_tokens
-from quantalogic.llm import count_tokens, generate_image
+from quantalogic.quantlitellm import acompletion, aimage_generation, exceptions, token_counter
 
 MIN_RETRIES = 1
-
-
-litellm.suppress_debug_info = True  # Very important to suppress prints don't remove
 
 
 # Define the Message class for conversation handling
@@ -163,7 +158,7 @@ class GenerativeModel:
 
         try:
             logger.debug(f"Async generating response for prompt: {prompt}")
-            response = await litellm.acompletion(
+            response = await acompletion(
                 model=self.model,
                 messages=messages,
                 temperature=self.temperature,
@@ -188,7 +183,7 @@ class GenerativeModel:
     async def _async_stream_response(self, messages, stop_words: list[str] | None = None):
         """Private method to handle asynchronous streaming responses."""
         try:
-            response = await litellm.acompletion(
+            response = await acompletion(
                 model=self.model,
                 messages=messages,
                 temperature=self.temperature,
@@ -283,11 +278,7 @@ class GenerativeModel:
             model = generation_params.pop("model")
 
             # Check if litellm provides an async image generation method; if not, adapt sync
-            try:
-                response = await litellm.aimage_generation(model=model, **generation_params)
-            except AttributeError:
-                # Fallback to running sync generate_image in a thread if no async version exists
-                response = await asyncio.to_thread(generate_image, model=model, **generation_params)
+            response = await aimage_generation(model=model, **generation_params)
 
             # Convert response data to list of dictionaries with string values
             if hasattr(response, "data"):
@@ -328,22 +319,22 @@ class GenerativeModel:
         """Count the number of tokens in a list of messages."""
         logger.debug(f"Counting tokens for {len(messages)} messages using model {self.model}")
         litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages]
-        return count_tokens(model=self.model, messages=litellm_messages)
+        return token_counter(model=self.model, messages=litellm_messages)
 
     def token_counter_with_history(self, messages_history: list[Message], prompt: str) -> int:
         """Count the number of tokens in a list of messages and a prompt."""
         litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages_history]
         litellm_messages.append({"role": "user", "content": str(prompt)})
-        return count_tokens(model=self.model, messages=litellm_messages)
+        return token_counter(model=self.model, messages=litellm_messages)
 
     async def async_token_counter(self, messages: list[Message]) -> int:
         """Asynchronously count the number of tokens in a list of messages."""
         logger.debug(f"Async counting tokens for {len(messages)} messages using model {self.model}")
         litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages]
-        return await asyncio.to_thread(count_tokens, model=self.model, messages=litellm_messages)
+        return await asyncio.to_thread(token_counter, model=self.model, messages=litellm_messages)
 
     async def async_token_counter_with_history(self, messages_history: list[Message], prompt: str) -> int:
         """Asynchronously count the number of tokens in a list of messages and a prompt."""
         litellm_messages = [{"role": msg.role, "content": str(msg.content)} for msg in messages_history]
         litellm_messages.append({"role": "user", "content": str(prompt)})
-        return await asyncio.to_thread(count_tokens, model=self.model, messages=litellm_messages)
+        return await asyncio.to_thread(token_counter, model=self.model, messages=litellm_messages)
