@@ -295,6 +295,9 @@ The core agent implements the `ReAct`paradigm, combining:
 - Event handling
 - Task validation
 
+QuantaLogic offers both synchronous (`solve_task`) and asynchronous (`async_solve_task`) methods for solving tasks using the ReAct framework. The `async_solve_task` function is specifically designed for asynchronous environments like web servers, allowing for non-blocking execution and improved responsiveness. It takes a task description as input and iteratively reasons and acts upon it using available tools until the task is completed or a maximum number of iterations is reached. This asynchronous approach ensures that the agent can handle complex tasks without tying up resources, making it suitable for applications requiring concurrency and scalability.
+
+
 ```python
 from quantalogic import Agent
 from quantalogic.tools import PythonTool, ReadFileTool

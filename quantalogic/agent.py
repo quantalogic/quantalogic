@@ -385,29 +385,44 @@ class Agent(BaseModel):
         )
         return executed_tool, response
 
-    def _interpolate_variables(self, text: str) -> str:
-        """Interpolate variables using $var$ syntax in the given text (synchronous wrapper)."""
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        return loop.run_until_complete(self._async_interpolate_variables(text))
-
     async def _async_interpolate_variables(self, text: str) -> str:
         """Interpolate variables using $var$ syntax in the given text."""
         try:
             import re
-
+            
+            # Process each variable in the store
             for var in self.variable_store.keys():
-                safe_var = re.sub(r"([\\\.\^\$\*\+\?\{\}\[\]\|\(\)])", r"\\\1", var)
-                pattern = rf"\${safe_var}\$"
-                replacement = self.variable_store[var]
-                text = re.sub(pattern, replacement, text)
+                # Properly escape the variable name for regex using re.escape
+                # but handle $ characters separately since they're part of our syntax
+                escaped_var = re.escape(var).replace('\\$', '$')
+                pattern = f"\\${escaped_var}\\$"
+                replacement = str(self.variable_store[var])
+                
+                # Replace all occurrences
+                text = re.sub(pattern, lambda m: replacement, text)
             return text
         except Exception as e:
             logger.error(f"Error in _async_interpolate_variables: {str(e)}")
+            return text
+
+    def _interpolate_variables(self, text: str) -> str:
+        """Interpolate variables using $var$ syntax in the given text."""
+        try:
+            import re
+            
+            # Process each variable in the store
+            for var in self.variable_store.keys():
+                # Properly escape the variable name for regex using re.escape
+                # but handle $ characters separately since they're part of our syntax
+                escaped_var = re.escape(var).replace('\\$', '$')
+                pattern = f"\\${escaped_var}\\$"
+                replacement = str(self.variable_store[var])
+                
+                # Replace all occurrences
+                text = re.sub(pattern, lambda m: replacement, text)
+            return text
+        except Exception as e:
+            logger.error(f"Error in _interpolate_variables: {str(e)}")
             return text
 
     def _compact_memory_if_needed(self, current_prompt: str = ""):
@@ -695,11 +710,16 @@ class Agent(BaseModel):
         try:
             import re
 
+            # Process each variable in the store
             for var in self.variable_store.keys():
-                safe_var = re.sub(r"([\\\.\^\$\*\+\?\{\}\[\]\|\(\)])", r"\\\1", var)
-                pattern = rf"\${safe_var}\$"
-                replacement = self.variable_store[var]
-                text = re.sub(pattern, replacement, text)
+                # Properly escape the variable name for regex using re.escape
+                # but handle $ characters separately since they're part of our syntax
+                escaped_var = re.escape(var).replace('\\$', '$')
+                pattern = f"\\${escaped_var}\\$"
+                replacement = str(self.variable_store[var])
+                
+                # Replace all occurrences
+                text = re.sub(pattern, lambda m: replacement, text)
             return text
         except Exception as e:
             logger.error(f"Error in _interpolate_variables: {str(e)}")
