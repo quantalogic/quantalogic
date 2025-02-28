@@ -4,38 +4,21 @@ This tool provides a flexible RAG implementation supporting multiple vector stor
 and embedding models, with configurable document processing options.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+import datetime
+import json
 import os
 import time
-from pathlib import Path
 from enum import Enum
-import json
-import datetime
-from chromadb import PersistentClient
+from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 from pydantic import BaseModel, Field
-from llama_index.core import (
-    VectorStoreIndex,
-    Document,
-    StorageContext,
-)
-from llama_index.core.node_parser import SentenceSplitter
-from llama_index.core.retrievers import VectorIndexRetriever
-from llama_index.core.postprocessor import SimilarityPostprocessor, KeywordNodePostprocessor
-from llama_index.core.schema import BaseNode
-from llama_index.core.settings import Settings
-from llama_index.core.node_parser import SimpleNodeParser
-from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.embeddings.instructor import InstructorEmbedding
-from llama_index.embeddings.bedrock import BedrockEmbedding
-from llama_index.vector_stores.chroma import ChromaVectorStore
-from llama_index.vector_stores.faiss import FaissVectorStore
 
 from quantalogic.tools.tool import Tool, ToolArgument
+
 from .document_metadata import DocumentMetadata
 from .query_response import QueryResponse
+
 
 class EmbeddingType(str, Enum):
     """Supported embedding model types."""
@@ -121,7 +104,7 @@ class RagTool(Tool):
         super().__init__()
         
         # Initialize config
-        config = RagToolConfig(
+        self._config = RagToolConfig(
             persist_dir=persist_dir,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
@@ -133,21 +116,47 @@ class RagTool(Tool):
             document_paths=document_paths
         )
         
-        # Store instance attributes
-        self._config = config
+        # Store instance attributes without loading dependencies yet
         self._index = None
         self._vector_store = None
         self._storage_context = None
         self._document_metadata = {}
-        
-        # Configure components
-        self._setup_components()
-        
-        if document_paths:
-            self.initialize_with_documents(document_paths)
+        self._dependencies_loaded = False
+
+    def _load_dependencies(self):
+        """Lazily load heavy dependencies."""
+        if not self._dependencies_loaded:
+            global VectorStoreIndex, Document, StorageContext, SentenceSplitter, VectorIndexRetriever
+            global SimilarityPostprocessor, KeywordNodePostprocessor, Settings, SimpleNodeParser
+            global OpenAIEmbedding, HuggingFaceEmbedding, InstructorEmbedding, BedrockEmbedding
+            global ChromaVectorStore, FaissVectorStore, PersistentClient
+            
+            from chromadb import PersistentClient
+            from llama_index.core import (
+                Document,
+                KeywordNodePostprocessor,
+                SentenceSplitter,
+                Settings,
+                SimilarityPostprocessor,
+                SimpleNodeParser,
+                StorageContext,
+                VectorIndexRetriever,
+                VectorStoreIndex,
+            )
+            from llama_index.embeddings.bedrock import BedrockEmbedding
+            from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+            from llama_index.embeddings.instructor import InstructorEmbedding
+            from llama_index.embeddings.openai import OpenAIEmbedding
+            from llama_index.vector_stores.chroma import ChromaVectorStore
+            from llama_index.vector_stores.faiss import FaissVectorStore
+            
+            self._dependencies_loaded = True
+            self._setup_components()
 
     def _setup_components(self):
         """Configure embeddings and settings."""
+        self._load_dependencies()  # Ensure dependencies are loaded
+        
         # Create storage context
         self._storage_context = StorageContext.from_defaults(
             vector_store=self._vector_store
@@ -188,6 +197,10 @@ class RagTool(Tool):
             self._config.persist_dir
         )
 
+        # Initialize with documents if provided
+        if self._config.document_paths:
+            self.initialize_with_documents(self._config.document_paths)
+
     def _setup_embedding_model(self, model_type: str) -> Any:
         """Set up the embedding model based on type.
 
@@ -197,6 +210,7 @@ class RagTool(Tool):
         Returns:
             Configured embedding model instance
         """
+        self._load_dependencies()  # Ensure dependencies are loaded
         model_type = EmbeddingType(model_type.lower())
         if model_type == EmbeddingType.OPENAI:
             return OpenAIEmbedding(api_key=self._config.api_key)
@@ -219,6 +233,7 @@ class RagTool(Tool):
         Returns:
             Configured vector store instance
         """
+        self._load_dependencies()  # Ensure dependencies are loaded
         store_type = VectorStoreType(store_type.lower())
         
         # Ensure the persist directory exists
@@ -246,10 +261,11 @@ class RagTool(Tool):
 
     def _load_existing_index(self):
         """Load existing index and metadata if available."""
+        self._load_dependencies()  # Ensure dependencies are loaded
         try:
             metadata_path = os.path.join(self._config.persist_dir, "metadata.json")
             if os.path.exists(metadata_path):
-                with open(metadata_path, 'r') as f:
+                with open(metadata_path) as f:
                     self._document_metadata = json.load(f)
             
             if os.path.exists(os.path.join(self._config.persist_dir, "docstore.json")):
@@ -279,6 +295,7 @@ class RagTool(Tool):
         Returns:
             List of processed document chunks
         """
+        self._load_dependencies()  # Ensure dependencies are loaded
         file_stats = os.stat(doc_path)
         metadata = DocumentMetadata(
             source_path=doc_path,
@@ -290,6 +307,7 @@ class RagTool(Tool):
         )
         
         # Load and chunk document
+        from llama_index.core import SimpleDirectoryReader  # Lazy import
         reader = SimpleDirectoryReader(
             input_files=[doc_path],
             file_metadata=lambda x: metadata.dict(),
@@ -310,6 +328,7 @@ class RagTool(Tool):
         Returns:
             bool: Success status
         """
+        self._load_dependencies()  # Ensure dependencies are loaded
         try:
             if not os.path.exists(document_path):
                 logger.error(f"Document path does not exist: {document_path}")
@@ -347,7 +366,7 @@ class RagTool(Tool):
             logger.error(f"Error adding documents: {str(e)}")
             return False
 
-    def _create_retriever(self, top_k: int) -> VectorIndexRetriever:
+    def _create_retriever(self, top_k: int) -> 'VectorIndexRetriever':
         """Create an optimized retriever for document search.
 
         Args:
@@ -356,13 +375,14 @@ class RagTool(Tool):
         Returns:
             Configured retriever instance
         """
+        self._load_dependencies()  # Ensure dependencies are loaded
         return VectorIndexRetriever(
             index=self._index,
             similarity_top_k=top_k * 2,  # Get more candidates for better filtering
             filters=None
         )
 
-    def _create_query_engine(self, retriever: VectorIndexRetriever, threshold: float):
+    def _create_query_engine(self, retriever: 'VectorIndexRetriever', threshold: float):
         """Create a query engine with advanced processing.
 
         Args:
@@ -372,6 +392,7 @@ class RagTool(Tool):
         Returns:
             Configured query engine
         """
+        self._load_dependencies()  # Ensure dependencies are loaded
         return self._index.as_query_engine(
             retriever=retriever,
             node_postprocessors=[
@@ -386,7 +407,7 @@ class RagTool(Tool):
         self,
         source_nodes: List[Any],
         top_k: int
-    ) -> tuple[List[Dict[str, Any]], List[float]]:
+    ) -> Tuple[List[Dict[str, Any]], List[float]]:
         """Process and extract information from source nodes.
 
         Args:
@@ -396,6 +417,7 @@ class RagTool(Tool):
         Returns:
             Tuple of (sources, scores)
         """
+        self._load_dependencies()  # Ensure dependencies are loaded
         # Sort by score and take top_k
         nodes = sorted(
             source_nodes,
@@ -437,6 +459,7 @@ class RagTool(Tool):
         Returns:
             QueryResponse with answer and sources
         """
+        self._load_dependencies()  # Ensure dependencies are loaded
         start_time = time.time()
         try:
             if not self._index:
@@ -503,6 +526,7 @@ class RagTool(Tool):
         Args:
             document_paths: List of paths to documents to index
         """
+        self._load_dependencies()  # Ensure dependencies are loaded
         try:
             all_documents = []
             for doc_path in document_paths:

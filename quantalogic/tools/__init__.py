@@ -1,118 +1,101 @@
 """Tools for the QuantaLogic agent."""
 
-from .agent_tool import AgentTool
-from .image_generation.dalle_e import LLMImageGenerationTool
-from .download_http_file_tool import DownloadHttpFileTool
-from .duckduckgo_search_tool import DuckDuckGoSearchTool
-from .edit_whole_content_tool import EditWholeContentTool
-from .elixir_tool import ElixirTool
-from .execute_bash_command_tool import ExecuteBashCommandTool
-from .database.generate_database_report_tool import GenerateDatabaseReportTool
-from .grep_app_tool import GrepAppTool
-from .input_question_tool import InputQuestionTool
-from .jinja_tool import JinjaTool
-from .list_directory_tool import ListDirectoryTool
-from .llm_tool import LLMTool
-from .llm_vision_tool import LLMVisionTool 
-from .markitdown_tool import MarkitdownTool
-from .nodejs_tool import NodeJsTool
-from .python_tool import PythonTool
-from .read_file_block_tool import ReadFileBlockTool
-from .read_file_tool import ReadFileTool
-from .read_html_tool import ReadHTMLTool
-from .replace_in_file_tool import ReplaceInFileTool
-from .ripgrep_tool import RipgrepTool
-from .safe_python_interpreter_tool import SafePythonInterpreterTool
-from .search_definition_names import SearchDefinitionNames
-from .sequence_tool import SequenceTool
-from .serpapi_search_tool import SerpApiSearchTool
-from .sql_query_tool import SQLQueryTool
-from .database.sql_query_tool_advanced import SQLQueryToolAdvanced
-from .task_complete_tool import TaskCompleteTool
-from .tool import Tool, ToolArgument
-from .unified_diff_tool import UnifiedDiffTool
-from .wikipedia_search_tool import WikipediaSearchTool
-from .write_file_tool import WriteFileTool
-from .google_packages.google_news_tool import GoogleNewsTool
-from .presentation_tools.presentation_llm_tool import PresentationLLMTool 
-from .composio.composio import ComposioTool 
-from .git.clone_repo_tool import CloneRepoTool 
-from .git.bitbucket_clone_repo_tool import BitbucketCloneTool 
-from .git.bitbucket_operations_tool import BitbucketOperationsTool 
-from .git.git_operations_tool import GitOperationsTool
-from .document_tools.markdown_to_pdf_tool import MarkdownToPdfTool
-from .document_tools.markdown_to_pptx_tool import MarkdownToPptxTool
-from .document_tools.markdown_to_html_tool import MarkdownToHtmlTool
-from .document_tools.markdown_to_epub_tool import MarkdownToEpubTool
-from .document_tools.markdown_to_ipynb_tool import MarkdownToIpynbTool
-from .document_tools.markdown_to_latex_tool import MarkdownToLatexTool
-from .document_tools.markdown_to_docx_tool import MarkdownToDocxTool
-from .utilities.csv_processor_tool import CSVProcessorTool
-from .utilities.download_file_tool import PrepareDownloadTool
-from .utilities.mermaid_validator_tool import MermaidValidatorTool
+import importlib
+import sys
+from typing import Any, Dict
 
-from .nasa_packages.nasa_neows_tool import NasaNeoWsTool
-from .nasa_packages.nasa_apod_tool import NasaApodTool
-from .product_hunt.product_hunt_tool import ProductHuntTool
-from .rag_tool.rag_tool import RagTool
 
-__all__ = [
-    "WikipediaSearchTool",
-    "SerpApiSearchTool",
-    "DuckDuckGoSearchTool",
-    "Tool",
-    "ToolArgument",
-    "TaskCompleteTool",
-    "ReadFileTool",
-    "WriteFileTool",
-    "InputQuestionTool",
-    "ListDirectoryTool",
-    "LLMTool",
-    "LLMVisionTool",
-    "ExecuteBashCommandTool",
-    "PythonTool",
-    "ElixirTool",
-    "NodeJsTool",
-    "UnifiedDiffTool",
-    "ReplaceInFileTool",
-    "AgentTool",
-    "ReadFileBlockTool",
-    "RipgrepTool",
-    "SearchDefinitionNames",
-    "MarkitdownTool",
-    "DownloadHttpFileTool",
-    "EditWholeContentTool",
-    "JinjaTool",
-    "LLMImageGenerationTool",
-    "ReadHTMLTool",
-    "GrepAppTool",
-    "GenerateDatabaseReportTool",
-    "SQLQueryTool",
-    "SafePythonInterpreterTool" "LLMGenerationTool",
-    "SequenceTool",
-    'SQLQueryTool',
-    'SQLQueryToolAdvanced',
-    'SafePythonInterpreterTool',
-    'GoogleNewsTool',
-    "PresentationLLMTool", 
-    'SequenceTool',
-    'CloneRepoTool',
-    'GitOperationsTool',
-    'ComposioTool',
-    'MarkdownToPdfTool',
-    'MarkdownToPptxTool',
-    'MarkdownToHtmlTool',
-    'MarkdownToEpubTool',
-    'MarkdownToIpynbTool',
-    'MarkdownToLatexTool',
-    'MarkdownToDocxTool',
-    "BitbucketCloneTool",
-    "BitbucketOperationsTool",
-    "CSVProcessorTool",
-    "PrepareDownloadTool",
-    "MermaidValidatorTool",
-    "NasaNeoWsTool",
-    "NasaApodTool",
-    "ProductHuntTool",
-    'RagTool'
-]
+class LazyLoader:
+    """
+    Lazily import a module only when its attributes are accessed.
+    This helps reduce startup time by deferring imports until needed.
+    """
+    def __init__(self, module_path: str):
+        self.module_path = module_path
+        self._module = None
+
+    def __getattr__(self, name: str) -> Any:
+        if self._module is None:
+            self._module = importlib.import_module(self.module_path)
+        return getattr(self._module, name)
+
+
+# Map of tool names to their import paths
+_TOOL_IMPORTS = {
+    "AgentTool": ".agent_tool",
+    "ComposioTool": ".composio.composio",
+    "GenerateDatabaseReportTool": ".database.generate_database_report_tool",
+    "SQLQueryToolAdvanced": ".database.sql_query_tool_advanced",
+    "MarkdownToDocxTool": ".document_tools.markdown_to_docx_tool",
+    "MarkdownToEpubTool": ".document_tools.markdown_to_epub_tool",
+    "MarkdownToHtmlTool": ".document_tools.markdown_to_html_tool",
+    "MarkdownToIpynbTool": ".document_tools.markdown_to_ipynb_tool",
+    "MarkdownToLatexTool": ".document_tools.markdown_to_latex_tool",
+    "MarkdownToPdfTool": ".document_tools.markdown_to_pdf_tool",
+    "MarkdownToPptxTool": ".document_tools.markdown_to_pptx_tool",
+    "DownloadHttpFileTool": ".download_http_file_tool",
+    "DuckDuckGoSearchTool": ".duckduckgo_search_tool",
+    "EditWholeContentTool": ".edit_whole_content_tool",
+    "ElixirTool": ".elixir_tool",
+    "ExecuteBashCommandTool": ".execute_bash_command_tool",
+    "BitbucketCloneTool": ".git.bitbucket_clone_repo_tool",
+    "BitbucketOperationsTool": ".git.bitbucket_operations_tool",
+    "CloneRepoTool": ".git.clone_repo_tool",
+    "GitOperationsTool": ".git.git_operations_tool",
+    "GoogleNewsTool": ".google_packages.google_news_tool",
+    "GrepAppTool": ".grep_app_tool",
+    "LLMImageGenerationTool": ".image_generation.dalle_e",
+    "InputQuestionTool": ".input_question_tool",
+    "JinjaTool": ".jinja_tool",
+    "ListDirectoryTool": ".list_directory_tool",
+    "LLMTool": ".llm_tool",
+    "LLMVisionTool": ".llm_vision_tool",
+    "MarkitdownTool": ".markitdown_tool",
+    "NasaApodTool": ".nasa_packages.nasa_apod_tool",
+    "NasaNeoWsTool": ".nasa_packages.nasa_neows_tool",
+    "NodeJsTool": ".nodejs_tool",
+    "PresentationLLMTool": ".presentation_tools.presentation_llm_tool",
+    "ProductHuntTool": ".product_hunt.product_hunt_tool",
+    "PythonTool": ".python_tool",
+    "RagTool": ".rag_tool.rag_tool",
+    "ReadFileBlockTool": ".read_file_block_tool",
+    "ReadFileTool": ".read_file_tool",
+    "ReadHTMLTool": ".read_html_tool",
+    "ReplaceInFileTool": ".replace_in_file_tool",
+    "RipgrepTool": ".ripgrep_tool",
+    "SafePythonInterpreterTool": ".safe_python_interpreter_tool",
+    "SearchDefinitionNames": ".search_definition_names",
+    "SequenceTool": ".sequence_tool",
+    "SerpApiSearchTool": ".serpapi_search_tool",
+    "SQLQueryTool": ".sql_query_tool",
+    "TaskCompleteTool": ".task_complete_tool",
+    "Tool": ".tool",
+    "ToolArgument": ".tool",
+    "UnifiedDiffTool": ".unified_diff_tool",
+    "CSVProcessorTool": ".utilities.csv_processor_tool",
+    "PrepareDownloadTool": ".utilities.download_file_tool",
+    "MermaidValidatorTool": ".utilities.mermaid_validator_tool",
+    "WikipediaSearchTool": ".wikipedia_search_tool",
+    "WriteFileTool": ".write_file_tool",
+}
+
+# Create lazy loaders for each module path
+_lazy_modules: Dict[str, LazyLoader] = {}
+for tool, path in _TOOL_IMPORTS.items():
+    full_path = f"{__package__}{path}"
+    if full_path not in _lazy_modules:
+        _lazy_modules[full_path] = LazyLoader(full_path)
+
+# Set up attributes for lazy loading
+_tools_to_lazy_modules = {}
+for tool, path in _TOOL_IMPORTS.items():
+    full_path = f"{__package__}{path}"
+    _tools_to_lazy_modules[tool] = _lazy_modules[full_path]
+
+# Define __all__ so that import * works properly
+__all__ = list(_TOOL_IMPORTS.keys())
+
+# Set up lazy loading for each tool
+for tool, lazy_module in _tools_to_lazy_modules.items():
+    # This will create properties that lazily load the requested tool
+    setattr(sys.modules[__name__], tool, getattr(lazy_module, tool))

@@ -4,32 +4,30 @@ This tool provides a flexible RAG implementation supporting multiple vector stor
 and embedding models, with configurable document processing options.
 """
 
-from typing import List, Optional, Dict, Any, Union
-from pathlib import Path
 import os
 from enum import Enum
-from loguru import logger
-from pydantic import Field, validator
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
+import chromadb
 from llama_index.core import (
-    VectorStoreIndex,
-    StorageContext,
     SimpleDirectoryReader,
+    StorageContext,
+    VectorStoreIndex,
     load_index_from_storage,
 )
 from llama_index.core.settings import Settings
-
-from llama_index.vector_stores.chroma import ChromaVectorStore
-from llama_index.vector_stores.faiss import FaissVectorStore
-
-from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.embeddings.bedrock import BedrockEmbedding
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.embeddings.instructor import InstructorEmbedding
-from llama_index.embeddings.bedrock import BedrockEmbedding
-
-import chromadb
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.vector_stores.chroma import ChromaVectorStore
+from llama_index.vector_stores.faiss import FaissVectorStore
+from loguru import logger
+from pydantic import Field, validator
 
 from quantalogic.tools.tool import Tool, ToolArgument
+
 
 class VectorStoreType(str, Enum):
     """Supported vector store types."""
