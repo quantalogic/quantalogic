@@ -139,11 +139,17 @@ class ChatApp(App):
 
         # Event listeners setup
         self.agent.event_emitter.on("stream_chunk", self.handle_stream_chunk)
-        self.agent.event_emitter.on([
-            "task_complete", "task_think_start", "task_think_end",
-            "tool_execution_start", "error_max_iterations_reached",
-            "memory_full"
-        ], self.handle_agent_event)
+        self.agent.event_emitter.on(
+            [
+                "task_complete",
+                "task_think_start",
+                "task_think_end",
+                "tool_execution_start",
+                "error_max_iterations_reached",
+                "memory_full",
+            ],
+            self.handle_agent_event,
+        )
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -172,21 +178,12 @@ class ChatApp(App):
                     self.app.call_from_thread(self.finalize_response, data)
             case "task_think_start":
                 self.app.call_from_thread(self.toggle_loading, True)
-                self.app.call_from_thread(
-                    self.add_system_message, 
-                    "🤔 **Thinking...**"
-                )
+                self.app.call_from_thread(self.add_system_message, "🤔 **Thinking...**")
             case "tool_execution_start":
                 tool = data.get("tool_name", "unknown") if isinstance(data, dict) else "unknown"
-                self.app.call_from_thread(
-                    self.add_system_message,
-                    f"🔧 **Using tool:** {tool}"
-                )
+                self.app.call_from_thread(self.add_system_message, f"🔧 **Using tool:** {tool}")
             case "error_max_iterations_reached":
-                self.app.call_from_thread(
-                    self.add_error_message,
-                    "⚠️ **Max iterations reached**"
-                )
+                self.app.call_from_thread(self.add_error_message, "⚠️ **Max iterations reached**")
 
     async def finalize_response(self, final_answer: str):
         """Handle final response formatting and cleanup"""
@@ -202,7 +199,7 @@ class ChatApp(App):
                 final_response = Response()
                 await chat_view.mount(final_response)
                 final_response.update(final_answer)
-                
+
                 # Remove streaming widget safely
                 if self.current_response in chat_view.children:
                     self.current_response.remove()
@@ -231,7 +228,7 @@ class ChatApp(App):
             # Clear previous response if exists
             if self.current_response:
                 self.current_response.remove()
-                
+
             # Create new streaming response
             self.current_response = Response()
             await chat_view.mount(self.current_response)
@@ -243,15 +240,9 @@ class ChatApp(App):
                 # Synchronous call with streaming enabled
                 result = self.agent.solve_task(query, streaming=True)
                 if result:
-                    self.app.call_from_thread(
-                        self.add_system_message,
-                        f"**Final Answer:**\n{result}"
-                    )
+                    self.app.call_from_thread(self.add_system_message, f"**Final Answer:**\n{result}")
             except Exception as e:
-                self.app.call_from_thread(
-                    self.add_error_message,
-                    f"⚠️ **Error:** {str(e)}"
-                )
+                self.app.call_from_thread(self.add_error_message, f"⚠️ **Error:** {str(e)}")
             finally:
                 self.app.call_from_thread(self.toggle_input, True)
                 self.app.call_from_thread(self.toggle_loading, False)
@@ -261,7 +252,7 @@ class ChatApp(App):
     async def toggle_input(self, enabled: bool) -> None:
         """
         Toggle the input field state with visual feedback.
-        
+
         Args:
             enabled (bool): Whether the input field should be enabled or disabled.
         """
@@ -272,7 +263,7 @@ class ChatApp(App):
     async def toggle_loading(self, visible: bool) -> None:
         """
         Toggle the loading indicator with smooth animation.
-        
+
         Args:
             visible (bool): Whether the loading indicator should be shown or hidden.
         """
@@ -283,7 +274,7 @@ class ChatApp(App):
     async def add_system_message(self, text: str) -> None:
         """
         Add a system message to the chat view with proper formatting.
-        
+
         Args:
             text (str): The system message text to display.
         """
@@ -295,7 +286,7 @@ class ChatApp(App):
     async def add_error_message(self, text: str) -> None:
         """
         Add an error message to the chat view with visual emphasis.
-        
+
         Args:
             text (str): The error message text to display.
         """
@@ -307,7 +298,7 @@ class ChatApp(App):
     def on_unmount(self) -> None:
         """
         Perform cleanup of resources when the application is about to exit.
-        
+
         Ensures proper shutdown of the agent and logs the exit process.
         """
         try:

@@ -16,7 +16,7 @@ from quantalogic.search_agent import create_search_agent  # noqa: E402
 
 class AgentRegistry:
     """Registry for managing agent instances by name."""
-    
+
     _instance = None
     _agents: Dict[str, Agent] = {}
 
@@ -28,7 +28,7 @@ class AgentRegistry:
     @classmethod
     def register_agent(cls, name: str, agent: Agent) -> None:
         """Register an agent instance with a name.
-        
+
         Args:
             name: Unique name for the agent
             agent: Agent instance to register
@@ -40,13 +40,13 @@ class AgentRegistry:
     @classmethod
     def get_agent(cls, name: str) -> Agent:
         """Retrieve a registered agent by name.
-        
+
         Args:
             name: Name of the agent to retrieve
-            
+
         Returns:
             Registered Agent instance
-            
+
         Raises:
             KeyError: If no agent with that name exists
         """
@@ -55,11 +55,12 @@ class AgentRegistry:
     @classmethod
     def list_agents(cls) -> Dict[str, str]:
         """List all registered agents.
-        
+
         Returns:
             Dictionary mapping agent names to their types
         """
         return {name: type(agent).__name__ for name, agent in cls._agents.items()}
+
 
 """Agent factory module for creating different types of agents."""
 
@@ -78,7 +79,7 @@ def create_agent_for_mode(
     memory: AgentMemory | None = None
 ) -> Agent:
     """Create an agent based on the specified mode.
-    
+
     Args:
         mode: The mode of operation for the agent
         model_name: The name of the language model to use
@@ -94,7 +95,7 @@ def create_agent_for_mode(
         
     Returns:
         Agent: The created agent instance
-        
+
     Raises:
         ValueError: If an unknown agent mode is specified
     """
@@ -113,18 +114,17 @@ def create_agent_for_mode(
             basic=False,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory
+            max_tokens_working_memory=max_tokens_working_memory,
         )
         return agent
     if mode == "code-basic":
         agent = create_coding_agent(
             model_name,
             vision_model_name,
-
             basic=True,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory
+            max_tokens_working_memory=max_tokens_working_memory,
         )
         return agent
     elif mode == "basic":
@@ -133,7 +133,7 @@ def create_agent_for_mode(
             vision_model_name,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory
+            max_tokens_working_memory=max_tokens_working_memory,
         )
         return agent
     elif mode == "full":
@@ -142,7 +142,7 @@ def create_agent_for_mode(
             vision_model_name,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory
+            max_tokens_working_memory=max_tokens_working_memory,
         )
         return agent
     elif mode == "interpreter":
@@ -151,7 +151,7 @@ def create_agent_for_mode(
             vision_model_name,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory
+            max_tokens_working_memory=max_tokens_working_memory,
         )
         return agent
     elif mode == "search":
@@ -159,7 +159,7 @@ def create_agent_for_mode(
             model_name,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory
+            max_tokens_working_memory=max_tokens_working_memory,
         )
         return agent
     if mode == "search-full":
@@ -168,7 +168,7 @@ def create_agent_for_mode(
             mode_full=True,
             no_stream=no_stream,
             compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory
+            max_tokens_working_memory=max_tokens_working_memory,
         )
         return agent
     if mode == "custom":

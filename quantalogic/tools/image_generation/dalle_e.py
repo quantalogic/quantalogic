@@ -17,8 +17,10 @@ from quantalogic.tools.tool import Tool, ToolArgument
 
 class ImageProvider(str, Enum):
     """Supported image generation providers."""
+
     DALLE = "dall-e"
     STABLE_DIFFUSION = "stable-diffusion"
+
 
 PROVIDER_CONFIGS = {
     ImageProvider.DALLE: {
@@ -28,13 +30,14 @@ PROVIDER_CONFIGS = {
         "styles": ["vivid", "natural"],
     },
     ImageProvider.STABLE_DIFFUSION: {
-        #"model_name": "anthropic.claude-3-sonnet-20240229",
+        # "model_name": "anthropic.claude-3-sonnet-20240229",
         "model_name": "amazon.titan-image-generator-v1",
         "sizes": ["1024x1024"],  # Bedrock SD supported size
         "qualities": ["standard"],  # SD quality is controlled by cfg_scale
-        "styles": ["none"],  # Style is controlled through prompting 
-    }
+        "styles": ["none"],  # Style is controlled through prompting
+    },
 }
+
 
 class LLMImageGenerationTool(Tool):
     """Tool for generating images using DALL-E or Stable Diffusion."""
@@ -118,23 +121,31 @@ class LLMImageGenerationTool(Tool):
         if self.generative_model is None:
             self.generative_model = GenerativeModel(model=self.model_name)
             logger.debug(f"Initialized LLMImageGenerationTool with model: {self.model_name}")
-        
+
         # Create output directory if it doesn't exist
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def _validate_dalle_params(self, size: str, quality: str, style: str) -> None:
         """Validate DALL-E specific parameters."""
         if size not in PROVIDER_CONFIGS[ImageProvider.DALLE]["sizes"]:
-            raise ValueError(f"Invalid size for DALL-E. Must be one of: {PROVIDER_CONFIGS[ImageProvider.DALLE]['sizes']}")
+            raise ValueError(
+                f"Invalid size for DALL-E. Must be one of: {PROVIDER_CONFIGS[ImageProvider.DALLE]['sizes']}"
+            )
         if quality not in PROVIDER_CONFIGS[ImageProvider.DALLE]["qualities"]:
-            raise ValueError(f"Invalid quality for DALL-E. Must be one of: {PROVIDER_CONFIGS[ImageProvider.DALLE]['qualities']}")
+            raise ValueError(
+                f"Invalid quality for DALL-E. Must be one of: {PROVIDER_CONFIGS[ImageProvider.DALLE]['qualities']}"
+            )
         if style not in PROVIDER_CONFIGS[ImageProvider.DALLE]["styles"]:
-            raise ValueError(f"Invalid style for DALL-E. Must be one of: {PROVIDER_CONFIGS[ImageProvider.DALLE]['styles']}")
+            raise ValueError(
+                f"Invalid style for DALL-E. Must be one of: {PROVIDER_CONFIGS[ImageProvider.DALLE]['styles']}"
+            )
 
     def _validate_sd_params(self, size: str, cfg_scale: float) -> None:
         """Validate Stable Diffusion specific parameters."""
         if size not in PROVIDER_CONFIGS[ImageProvider.STABLE_DIFFUSION]["sizes"]:
-            raise ValueError(f"Invalid size for Stable Diffusion. Must be one of: {PROVIDER_CONFIGS[ImageProvider.STABLE_DIFFUSION]['sizes']}")
+            raise ValueError(
+                f"Invalid size for Stable Diffusion. Must be one of: {PROVIDER_CONFIGS[ImageProvider.STABLE_DIFFUSION]['sizes']}"
+            )
         if not 1.0 <= cfg_scale <= 20.0:
             raise ValueError("cfg_scale must be between 1.0 and 20.0")
 
@@ -144,12 +155,12 @@ class LLMImageGenerationTool(Tool):
         try:
             response = requests.get(image_url, timeout=30)
             response.raise_for_status()
-            
+
             file_path = self.output_dir / filename
             file_path.write_bytes(response.content)
             logger.info(f"Image saved successfully at: {file_path}")
             return file_path
-            
+
         except Exception as e:
             logger.error(f"Error saving image: {e}")
             raise
@@ -158,7 +169,7 @@ class LLMImageGenerationTool(Tool):
         """Save image metadata to JSON file."""
         try:
             metadata_path = self.output_dir / f"{metadata['filename']}.json"
-            with open(metadata_path, 'w') as f:
+            with open(metadata_path, "w") as f:
                 json.dump(metadata, f, indent=2)
             logger.info(f"Metadata saved successfully at: {metadata_path}")
         except Exception as e:
@@ -176,7 +187,7 @@ class LLMImageGenerationTool(Tool):
         cfg_scale: str = "7.5",
     ) -> str:
         """Execute the tool to generate an image based on the prompt.
-        
+
         Args:
             prompt: Text description of the image to generate
             provider: Provider to use (dall-e or stable-diffusion)
@@ -185,16 +196,18 @@ class LLMImageGenerationTool(Tool):
             style: Style preference for DALL-E
             negative_prompt: What to avoid in the image (Stable Diffusion only)
             cfg_scale: Classifier Free Guidance scale (Stable Diffusion only)
-            
+
         Returns:
             Path to the locally saved image
         """
         try:
             provider_enum = ImageProvider(provider.lower())
-            
+
             # Convert cfg_scale to float only if it's not empty and we're using Stable Diffusion
-            cfg_scale_float = float(cfg_scale) if cfg_scale and provider_enum == ImageProvider.STABLE_DIFFUSION else None
-            
+            cfg_scale_float = (
+                float(cfg_scale) if cfg_scale and provider_enum == ImageProvider.STABLE_DIFFUSION else None
+            )
+
             # Validate parameters based on provider
             if provider_enum == ImageProvider.DALLE:
                 self._validate_dalle_params(size, quality, style)
@@ -203,7 +216,7 @@ class LLMImageGenerationTool(Tool):
                     "size": size,
                     "quality": quality,
                     "style": style,
-                    "response_format": "url"
+                    "response_format": "url",
                 }
             else:  # Stable Diffusion
                 if cfg_scale_float is None:
@@ -214,24 +227,21 @@ class LLMImageGenerationTool(Tool):
                     "negative_prompt": negative_prompt,
                     "cfg_scale": cfg_scale_float,
                     "size": size,
-                    "response_format": "url"
+                    "response_format": "url",
                 }
 
             # Generate image
             logger.info(f"Generating image with {provider} using params: {params}")
-            response = self.generative_model.generate_image(
-                prompt=prompt,
-                params=params
-            )
+            response = self.generative_model.generate_image(prompt=prompt, params=params)
 
             # Extract image data from response
             if not response.data:
                 raise ValueError("No image data in response")
-            
+
             image_data = response.data[0]  # First image from the response
             image_url = str(image_data.get("url", ""))
             revised_prompt = str(image_data.get("revised_prompt", prompt))
-            
+
             if not image_url:
                 raise ValueError("No image URL in response")
 
@@ -250,7 +260,7 @@ class LLMImageGenerationTool(Tool):
                 "created": str(response.created or ""),
                 "parameters": {k: str(v) for k, v in {**params, "prompt": prompt}.items()},
                 "image_url": str(image_url),
-                "local_path": str(local_path)
+                "local_path": str(local_path),
             }
             self._save_metadata(metadata)
 

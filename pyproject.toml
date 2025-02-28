@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic"
-version = "0.36.0"
+version = "0.40.0"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
@@ -57,6 +57,7 @@ networkx = "^3.4.2"
 faker = "^33.3.1"
 fuzzywuzzy = "^0.18.0"
 python-levenshtein = "^0.26.1"
+instructor = "^1.7.2"
 gnews = "^0.4.0"
 composio = "^0.1.1"
 html2text = "^2024.2.26"
@@ -91,6 +92,7 @@ llama-index-embeddings-instructor = "^0.3.0"
 llama-index-embeddings-bedrock = "^0.5.0"
 llama-index-vector-stores-chroma = "^0.4.1"
 llama-index-vector-stores-faiss = "^0.3.0"
+ipython = "^8.32.0"
 
 [tool.poetry.scripts]
 quantalogic = "quantalogic.main:cli"

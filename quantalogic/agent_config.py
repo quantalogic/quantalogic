@@ -72,18 +72,20 @@ logger = logging.getLogger(__name__)
 
 _current_model_name: str = ""
 
+
 def get_current_model() -> str:
     """Retrieve the currently active model name."""
     if not _current_model_name:
         raise ValueError("No model initialized")
     return _current_model_name
 
+
 def create_agent(
-    model_name: str, 
-    vision_model_name: str | None, 
-    no_stream: bool = False, 
+    model_name: str,
+    vision_model_name: str | None,
+    no_stream: bool = False,
     compact_every_n_iteration: int | None = None,
-    max_tokens_working_memory: int | None = None
+    max_tokens_working_memory: int | None = None,
 ) -> Agent:
     global _current_model_name
     _current_model_name = model_name
@@ -115,16 +117,16 @@ def create_agent(
         LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
         DownloadHttpFileTool(), 
         LLMImageGenerationTool(
-                provider="dall-e",
-                model_name="openai/dall-e-3",
-                on_token=console_print_token if not no_stream else None
-            ),
+            provider="dall-e", model_name="openai/dall-e-3", on_token=console_print_token if not no_stream else None
+        ),
         ReadHTMLTool(),
-        SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
+       # SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
     ]
 
     if vision_model_name:
-        tools.append(LLMVisionTool(model_name=vision_model_name, on_token=console_print_token if not no_stream else None))
+        tools.append(
+            LLMVisionTool(model_name=vision_model_name, on_token=console_print_token if not no_stream else None)
+        )
 
     return Agent(
         model_name=model_name,
@@ -135,11 +137,11 @@ def create_agent(
 
 
 def create_interpreter_agent(
-    model_name: str, 
-    vision_model_name: str | None, 
-    no_stream: bool = False, 
+    model_name: str,
+    vision_model_name: str | None,
+    no_stream: bool = False,
     compact_every_n_iteration: int | None = None,
-    max_tokens_working_memory: int | None = None
+    max_tokens_working_memory: int | None = None,
 ) -> Agent:
     """Create an interpreter agent with the specified model and tools.
 
@@ -173,7 +175,7 @@ def create_interpreter_agent(
         ReadHTMLTool(),
     ]
     return Agent(
-        model_name=model_name, 
+        model_name=model_name,
         tools=tools,
         compact_every_n_iterations=compact_every_n_iteration,
         max_tokens_working_memory=max_tokens_working_memory,
@@ -181,11 +183,11 @@ def create_interpreter_agent(
 
 
 def create_full_agent(
-    model_name: str, 
-    vision_model_name: str | None, 
-    no_stream: bool = False, 
+    model_name: str,
+    vision_model_name: str | None,
+    no_stream: bool = False,
     compact_every_n_iteration: int | None = None,
-    max_tokens_working_memory: int | None = None
+    max_tokens_working_memory: int | None = None,
 ) -> Agent:
     """Create an agent with the specified model and many tools.
 
@@ -220,11 +222,13 @@ def create_full_agent(
         WikipediaSearchTool(),
         DuckDuckGoSearchTool(),
         ReadHTMLTool(),
-      #  SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
+        #  SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
     ]
 
     if vision_model_name:
-        tools.append(LLMVisionTool(model_name=vision_model_name,on_token=console_print_token if not no_stream else None))
+        tools.append(
+            LLMVisionTool(model_name=vision_model_name, on_token=console_print_token if not no_stream else None)
+        )
 
     return Agent(
         model_name=model_name,
@@ -235,11 +239,11 @@ def create_full_agent(
 
 
 def create_basic_agent(
-    model_name: str, 
-    vision_model_name: str | None = None, 
-    no_stream: bool = False, 
+    model_name: str,
+    vision_model_name: str | None = None,
+    no_stream: bool = False,
     compact_every_n_iteration: int | None = None,
-    max_tokens_working_memory: int | None = None
+    max_tokens_working_memory: int | None = None,
 ) -> Agent:
     """Create an agent with the specified model and tools.
 
@@ -256,7 +260,6 @@ def create_basic_agent(
     # Rebuild AgentTool to resolve forward references
     AgentTool.model_rebuild()
 
-
     tools = [
         TaskCompleteTool(),
         ListDirectoryTool(),
@@ -271,11 +274,13 @@ def create_basic_agent(
         ExecuteBashCommandTool(),
         LLMTool(model_name=model_name, on_token=console_print_token if not no_stream else None),
         ReadHTMLTool(),
-    #    SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
+        #    SafePythonInterpreterTool(allowed_modules=["math", "numpy"])
     ]
 
     if vision_model_name:
-        tools.append(LLMVisionTool(model_name=vision_model_name, on_token=console_print_token if not no_stream else None))
+        tools.append(
+            LLMVisionTool(model_name=vision_model_name, on_token=console_print_token if not no_stream else None)
+        )
 
     return Agent(
         model_name=model_name,

@@ -71,7 +71,7 @@ class ComposioTool(Tool):
         description="Composio API key for authentication",
     )
     action: str = Field(default="")  # Single action per tool instance
-    schema: Optional[ActionSchema] = None
+    action_schema: Optional[ActionSchema] = None
     toolset: Optional[ComposioToolSet] = None
     
     # Performance tracking
@@ -141,7 +141,7 @@ class ComposioTool(Tool):
             "name": self.name,
             "action": self.action,
             "need_validation": self.need_validation,
-            "schema_loaded": self.schema is not None,
+            "schema_loaded": self.action_schema is not None,
             "toolset_initialized": self.toolset is not None,
             "execution_count": self._execution_count,
             "error_count": self._error_count,
@@ -182,8 +182,8 @@ class ComposioTool(Tool):
                 schema_dict["parameters"] = parameters
             
             # Store schema
-            self.schema = ActionSchema(**schema_dict)
-            logger.debug(f"Loaded schema: {self.schema}")
+            self.action_schema = ActionSchema(**schema_dict)
+            logger.debug(f"Loaded schema: {self.action_schema}")
             
             # Log schema version and metadata
             logger.debug(f"Schema version: {schema_dict.get('version', 'unknown')}")
@@ -204,13 +204,13 @@ class ComposioTool(Tool):
         """Update tool description and arguments based on the action schema."""
         logger.debug("Updating tool information from schema")
         
-        if not self.schema:
+        if not self.action_schema:
             logger.warning("No schema available for tool info update")
             return
             
         try:
             # Get parameters info
-            schema_dict = self.schema.model_dump()
+            schema_dict = self.action_schema.model_dump()
             parameters = schema_dict.get("parameters", {})
             required_params = parameters.get("required", [])
             properties = parameters.get("properties", {})
@@ -272,7 +272,7 @@ class ComposioTool(Tool):
 
                 new_description = (
                     f"Execute Composio action {self.action}:\n"
-                    f"Description: {self.schema.description}\n\n"
+                    f"Description: {self.action_schema.description}\n\n"
                     f"Required Parameters:\n" + 
                     "".join(param_details) + "\n"
                     f"Example usage:\n"
@@ -316,9 +316,9 @@ class ComposioTool(Tool):
             logger.debug(f"Updated tool description and {len(self.arguments)} arguments")
             
             # Validate parameters if needed
-            if self.need_validation and self.schema:
+            if self.need_validation and self.action_schema:
                 logger.debug("Validating parameters against schema")
-                schema_dict = self.schema.model_dump()
+                schema_dict = self.action_schema.model_dump()
                 parameters_data = schema_dict.get("parameters", {})
                 required_params = parameters_data.get("required", [])
                 missing_params = [p for p in required_params if p not in example_params]
@@ -372,9 +372,9 @@ class ComposioTool(Tool):
                 raise ValueError(f"Invalid JSON parameters: {str(e)}")
             
             # Validate parameters if needed
-            if self.need_validation and self.schema:
+            if self.need_validation and self.action_schema:
                 logger.debug("Validating parameters against schema")
-                schema_dict = self.schema.model_dump()
+                schema_dict = self.action_schema.model_dump()
                 parameters_data = schema_dict.get("parameters", {})
                 required_params = parameters_data.get("required", [])
                 missing_params = [p for p in required_params if p not in parameters_dict]

@@ -14,6 +14,7 @@ def get_all_models() -> list[str]:
     quantalogic_models = set(model_info.keys())
     return list(litellm_models.union(quantalogic_models))
 
+
 # Example usage
 if __name__ == "__main__":
     models = get_all_models()

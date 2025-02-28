@@ -61,12 +61,12 @@ model_info = {
         model_name="gemini/gemini-2.0-flash",
         max_input_tokens=1000000,
         max_output_tokens=8 * 1024,
-        input_cost_per_token=0.0000001
+        input_cost_per_token=0.0000001,
     ),
     "openrouter/google/gemini-2.0-flash-001": ModelInfo(
         model_name="openrouter/google/gemini-2.0-flash-001",
         max_input_tokens=1000000,
         max_output_tokens=8 * 1024,
-        input_cost_per_token=0.0000001
-    )
+        input_cost_per_token=0.0000001,
+    ),
 }

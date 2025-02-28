@@ -29,17 +29,12 @@ class SafePythonInterpreterTool(Tool):
     A tool to safely execute Python code while only allowing a specific set
     of modules as defined in `allowed_modules`.
     """
+
     # Allowed modules must be provided during initialization.
-    allowed_modules: List[str] = Field(
-        ...,
-        description="List of Python module names allowed for code execution."
-    )
+    allowed_modules: List[str] = Field(..., description="List of Python module names allowed for code execution.")
     # Additional fields to support the Tool API.
     code: str | None = None  # Provided at runtime via kwargs.
-    time_limit: int = Field(
-        default=60,
-        description="Maximum execution time (in seconds) for running the Python code."
-    )
+    time_limit: int = Field(default=60, description="Maximum execution time (in seconds) for running the Python code.")
     # Define tool arguments so that they appear in the tool's markdown description.
     arguments: list[ToolArgument] = [
         ToolArgument(
@@ -59,7 +54,7 @@ def transform_array(x):
 array_input = np.array([1, 4, 9, 16, 25])
 result = transform_array(array_input)
 result
-            """.strip()
+            """.strip(),
         ),
         ToolArgument(
             name="time_limit",
@@ -67,8 +62,8 @@ result
             description="The execution timeout (in seconds).",
             required=False,
             default="60",
-            example="60"
-        )
+            example="60",
+        ),
     ]
     name: Literal["safe_python_interpreter"] = "safe_python_interpreter"
     description: str | None = None
@@ -114,18 +109,12 @@ result
         def run_interpreter() -> Any:
             logger.debug("Starting interpretation of code.")
             import ast  # new import for AST processing
+
             # Delegate to monkeypatched interpret_code if available.
             if interpret_code.__module__ != "quantalogic.utils.python_interpreter":
                 return interpret_code(code, self.allowed_modules)
             # Build safe globals with only allowed modules and minimal builtins.
-            safe_globals = {
-                "__builtins__": {
-                    "range": range,
-                    "len": len,
-                    "print": print,
-                    "__import__": __import__
-                }
-            }
+            safe_globals = {"__builtins__": {"range": range, "len": len, "print": print, "__import__": __import__}}
             for mod in self.allowed_modules:
                 safe_globals[mod] = __import__(mod)
             local_vars = {}
@@ -139,10 +128,7 @@ result
                 tree = ast.parse(code)
                 if tree.body and isinstance(tree.body[-1], ast.Expr):
                     last_expr = tree.body.pop()
-                    assign = ast.Assign(
-                        targets=[ast.Name(id="_result", ctx=ast.Store())],
-                        value=last_expr.value
-                    )
+                    assign = ast.Assign(targets=[ast.Name(id="_result", ctx=ast.Store())], value=last_expr.value)
                     assign = ast.copy_location(assign, last_expr)
                     tree.body.append(assign)
                     fixed_tree = ast.fix_missing_locations(tree)

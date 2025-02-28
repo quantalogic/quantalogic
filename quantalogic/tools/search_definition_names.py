@@ -69,7 +69,7 @@ class SearchDefinitionNames(Tool):
             description="The page number to retrieve (1-based index).",
             required=False,
             example="1",
-            default="1"
+            default="1",
         ),
         ToolArgument(
             name="page_size",
@@ -77,7 +77,7 @@ class SearchDefinitionNames(Tool):
             description="The number of results per page (default: 10).",
             required=False,
             example="10",
-            default="10"
+            default="10",
         ),
     ]
 

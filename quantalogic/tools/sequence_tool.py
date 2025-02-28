@@ -61,9 +61,9 @@ class SequenceTool(Tool):
       wraps the tool calls in a single <sequence> element or is the raw collection of tool calls.
       The tag for each tool call must be one of the authorized tool names.
       Authorized tools: {authorized_list}
-      
+
       For each tool call, include the required parameters as sub-elements. The syntax is as follows:
-      
+
       <sequence>
           <tool_name>
               <param1>value1</param1>
@@ -72,7 +72,7 @@ class SequenceTool(Tool):
           </tool_name>
           ...
       </sequence>
-      
+
     Objective:
       Execute each tool call in order—even if some calls fail—and return an XML report that includes
       the order of execution, provided parameters, execution status (success/failure), and the output or
@@ -149,11 +149,7 @@ class SequenceTool(Tool):
 
         # Try to locate <sequence> elements in the input.
         all_elements = xml_parser._find_all_elements(sequence_xml)
-        sequence_elems = [
-            (tag, content)
-            for tag, content in all_elements
-            if tag.strip().lower() == "sequence"
-        ]
+        sequence_elems = [(tag, content) for tag, content in all_elements if tag.strip().lower() == "sequence"]
         if len(sequence_elems) > 1:
             raise ValueError("Input XML must contain exactly one <sequence> element.")
         elif len(sequence_elems) == 1:
@@ -225,20 +221,15 @@ if __name__ == "__main__":
         def __init__(self, **data: Any):
             data.setdefault("name", "write_file_tool")
             data.setdefault("description", "Writes content to a file at the specified path.")
-            data.setdefault("arguments", [
-                ToolArgument(
-                    name="file_path",
-                    arg_type="string",
-                    required=True,
-                    description="Path to the file"
-                ),
-                ToolArgument(
-                    name="content",
-                    arg_type="string",
-                    required=True,
-                    description="Content to write to the file"
-                )
-            ])
+            data.setdefault(
+                "arguments",
+                [
+                    ToolArgument(name="file_path", arg_type="string", required=True, description="Path to the file"),
+                    ToolArgument(
+                        name="content", arg_type="string", required=True, description="Content to write to the file"
+                    ),
+                ],
+            )
             super().__init__(**data)
 
         def execute(self, **kwargs) -> str:

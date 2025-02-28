@@ -4,6 +4,7 @@ This module provides base classes and data models for creating configurable tool
 with type-validated arguments and execution methods.
 """
 
+import asyncio  # Added for asynchronous support
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -129,9 +130,7 @@ class ToolDefinition(BaseModel):
                     value_info = f" (default: `{arg.default}`)"
 
                 parameters += (
-                    f"  - `{arg.name}`: "
-                    f"({required_status}{value_info})\n"
-                    f"    {arg.description or ''}\n"
+                    f"  - `{arg.name}`: " f"({required_status}{value_info})\n" f"    {arg.description or ''}\n"
                 )
             if len(parameters) > 0:
                 markdown += parameters + "\n\n"
@@ -164,9 +163,17 @@ class ToolDefinition(BaseModel):
         """
         properties_injectable = self.get_injectable_properties_in_execution()
 
-        return [
-            arg for arg in self.arguments if properties_injectable.get(arg.name) is None
-        ]
+        return [arg for arg in self.arguments if properties_injectable.get(arg.name) is None]
+
+    def get_injectable_properties_in_execution(self) -> dict[str, Any]:
+        """Get injectable properties excluding tool arguments.
+
+        Returns:
+            A dictionary of property names and values, excluding tool arguments and None values.
+        """
+        # This method is defined here in ToolDefinition and overridden in Tool
+        # For ToolDefinition, it returns an empty dict since it has no execution context yet
+        return {}
 
 
 class Tool(ToolDefinition):
@@ -200,33 +207,50 @@ class Tool(ToolDefinition):
     def execute(self, **kwargs) -> str:
         """Execute the tool with provided arguments.
 
+        If not implemented by a subclass, falls back to the asynchronous execute_async method.
+
         Args:
             **kwargs: Keyword arguments for tool execution.
-
-        Raises:
-            NotImplementedError: If the method is not implemented by a subclass.
 
         Returns:
             A string representing the result of tool execution.
         """
+        # Check if execute is implemented in the subclass
+        if self.__class__.execute is Tool.execute:
+            # If not implemented, run the async version synchronously
+            return asyncio.run(self.async_execute(**kwargs))
+        raise NotImplementedError("This method should be implemented by subclasses.")
+
+    async def async_execute(self, **kwargs) -> str:
+        """Asynchronous version of execute.
+
+        By default, runs the synchronous execute method in a separate thread using asyncio.to_thread.
+        Subclasses can override this method to provide a native asynchronous implementation for
+        operations that benefit from async I/O (e.g., network requests).
+
+        Args:
+            **kwargs: Keyword arguments for tool execution.
+
+        Returns:
+            A string representing the result of tool execution.
+        """
+        # Check if execute_async is implemented in the subclass
+        if self.__class__.async_execute is Tool.async_execute:
+            return await asyncio.to_thread(self.execute, **kwargs)
         raise NotImplementedError("This method should be implemented by subclasses.")
 
     def get_injectable_properties_in_execution(self) -> dict[str, Any]:
         """Get injectable properties excluding tool arguments.
-        
+
         Returns:
             A dictionary of property names and values, excluding tool arguments and None values.
         """
         # Get argument names from tool definition
         argument_names = {arg.name for arg in self.arguments}
-        
+
         # Get properties excluding arguments and filter out None values
         properties = self.get_properties(exclude=["arguments"])
-        return {
-            name: value 
-            for name, value in properties.items() 
-            if value is not None and name in argument_names
-        }
+        return {name: value for name, value in properties.items() if value is not None and name in argument_names}
 
 
 if __name__ == "__main__":

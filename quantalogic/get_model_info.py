@@ -24,11 +24,11 @@ def get_max_output_tokens(model_name: str) -> int:
     """Get max output tokens with safe fallback"""
     validate_model_name(model_name)
 
-    if model_name.startswith('lm_studio/'):
+    if model_name.startswith("lm_studio/"):
         try:
             models = get_model_list()
             for model in models.data:
-                if model.id == model_name[len('lm_studio/'):]:
+                if model.id == model_name[len("lm_studio/") :]:
                     return model.max_context_length
         except Exception:
             loguru.logger.warning(f"Could not fetch LM Studio model info for {model_name}, using default")
@@ -38,7 +38,7 @@ def get_max_output_tokens(model_name: str) -> int:
 
     try:
         return litellm_get_model_max_output_tokens(model_name)
-    except Exception as e:
+    except Exception:
         loguru.logger.warning(f"Model {model_name} not found in LiteLLM registry, using default")
         return DEFAULT_MAX_OUTPUT_TOKENS
 
@@ -47,11 +47,11 @@ def get_max_input_tokens(model_name: str) -> int:
     """Get max input tokens with safe fallback"""
     validate_model_name(model_name)
 
-    if model_name.startswith('lm_studio/'):
+    if model_name.startswith("lm_studio/"):
         try:
             models = get_model_list()
             for model in models.data:
-                if model.id == model_name[len('lm_studio/'):]:
+                if model.id == model_name[len("lm_studio/") :]:
                     return model.max_context_length
         except Exception:
             loguru.logger.warning(f"Could not fetch LM Studio model info for {model_name}, using default")

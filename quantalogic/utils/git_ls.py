@@ -29,7 +29,7 @@ def git_ls(
 
     # Expand paths and get absolute path
     path = Path(os.path.expanduser(directory_path)).absolute()
-    
+
     # Verify access to base directory
     if not os.access(path, os.R_OK):
         return f"==== Error: No read access to directory {path} ====\n==== End of Block ===="

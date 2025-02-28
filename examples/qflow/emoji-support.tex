@@ -1,0 +1,15 @@
+% emoji-support.tex
+\usepackage{fontspec}
+\usepackage[dvipsnames]{xcolor}
+
+\setmainfont{Helvetica Neue}[
+  BoldFont=Helvetica Neue Bold,
+  ItalicFont=Helvetica Neue Italic,
+  BoldItalicFont=Helvetica Neue Bold Italic
+]
+
+% Use unicode-math for better symbol support
+\usepackage{unicode-math}
+
+% Define a simple pass-through for emojis
+\newcommand{\emoji}[1]{#1}

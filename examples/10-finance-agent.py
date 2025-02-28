@@ -415,8 +415,9 @@ def main():
 
     if query:
         # Clear previous analysis outputs
-        keys_to_clear = [k for k in st.session_state.keys() 
-                       if k.startswith(("response", "data_display", "chunk_container"))]
+        keys_to_clear = [
+            k for k in st.session_state.keys() if k.startswith(("response", "data_display", "chunk_container"))
+        ]
         for key in keys_to_clear:
             del st.session_state[key]
 

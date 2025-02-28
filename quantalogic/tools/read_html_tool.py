@@ -32,56 +32,48 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:89.0) Gecko/20100101 Firefox/89.0",
     # Safari on macOS
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
-    " Version/14.1.1 Safari/605.1.15"
+    " Version/14.1.1 Safari/605.1.15",
 ]
 
 # Additional headers to mimic real browser requests
 ADDITIONAL_HEADERS = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;"
-              "q=0.9,image/webp,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;" "q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
     "Upgrade-Insecure-Requests": "1",
     "DNT": "1",  # Do Not Track
     "Connection": "keep-alive",
-    "Cache-Control": "max-age=0"
+    "Cache-Control": "max-age=0",
 }
+
 
 class ReadHTMLTool(Tool):
     """Tool for reading HTML content from files or URLs in specified line ranges."""
 
     class Arguments(BaseModel):
         source: str = Field(
-            ...,
-            description="The file path or URL to read HTML from",
-            example="https://example.com or ./example.html"
+            ..., description="The file path or URL to read HTML from", example="https://example.com or ./example.html"
         )
         convert: Optional[str] = Field(
             "text",
             description="Convert input to 'text' (Markdown) or 'html' no conversion. Default is 'text'",
-            example="'text' or 'html'"
+            example="'text' or 'html'",
         )
         line_start: Optional[int] = Field(
-            1,
-            description="The starting line number (1-based index). Default: 1",
-            ge=1,
-            example="1"
+            1, description="The starting line number (1-based index). Default: 1", ge=1, example="1"
         )
         line_end: Optional[int] = Field(
-            300,
-            description="The ending line number (1-based index). Default: 300",
-            ge=1,
-            example="300"
+            300, description="The ending line number (1-based index). Default: 300", ge=1, example="300"
         )
 
-        @field_validator('convert')
+        @field_validator("convert")
         def validate_convert(cls, v):
             if v not in ["text", "html"]:
                 raise ValueError("Convert must be either 'text' or 'html'")
             return v
 
-        @field_validator('line_end')
+        @field_validator("line_end")
         def validate_line_end(cls, v, values):
-            if 'line_start' in values and v < values['line_start']:
+            if "line_start" in values and v < values["line_start"]:
                 raise ValueError("line_end must be greater than or equal to line_start")
             return v
 
@@ -97,13 +89,13 @@ class ReadHTMLTool(Tool):
             arg_type="string",
             description="The file path or URL to read HTML from",
             required=True,
-            example="https://example.com or ./example.html"
+            example="https://example.com or ./example.html",
         ),
         ToolArgument(
             name="convert",
             arg_type="string",
             description="Convert input to 'text' (Markdown) or 'html'. Default is 'text'",
-            default='text',
+            default="text",
             required=False,
             example="'text' or 'html'",
         ),
@@ -113,7 +105,7 @@ class ReadHTMLTool(Tool):
             description="The starting line number (1-based index). Default: 1",
             required=False,
             example="1",
-            default="1"
+            default="1",
         ),
         ToolArgument(
             name="line_end",
@@ -121,8 +113,8 @@ class ReadHTMLTool(Tool):
             description="The ending line number (1-based index). Default: 300",
             required=False,
             example="300",
-            default="300"
-        )
+            default="300",
+        ),
     ]
 
     def validate_source(self, source: str) -> bool:
@@ -140,7 +132,7 @@ class ReadHTMLTool(Tool):
     def read_from_file(self, file_path: str) -> str:
         """Read HTML content from a file."""
         try:
-            with open(file_path, encoding='utf-8') as file:
+            with open(file_path, encoding="utf-8") as file:
                 return file.read()
         except Exception as e:
             logger.error(f"Error reading file: {e}")
@@ -157,12 +149,7 @@ class ReadHTMLTool(Tool):
             time.sleep(random.uniform(0.5, 2.0))
 
             # Use a timeout to prevent hanging
-            response = requests.get(
-                url,
-                headers=headers,
-                timeout=10,
-                allow_redirects=True
-            )
+            response = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
             response.raise_for_status()
             return response.text
         except requests.RequestException as e:
@@ -172,7 +159,7 @@ class ReadHTMLTool(Tool):
     def parse_html(self, html_content: str) -> BeautifulSoup:
         """Parse HTML content using BeautifulSoup."""
         try:
-            return BeautifulSoup(html_content, 'html.parser')
+            return BeautifulSoup(html_content, "html.parser")
         except Exception as e:
             logger.error(f"Error parsing HTML: {e}")
             raise ValueError(f"Error parsing HTML: {e}")
@@ -207,7 +194,7 @@ class ReadHTMLTool(Tool):
         if convert_type == "html":
             # Ensure content is valid HTML
             try:
-                soup = BeautifulSoup(content, 'html.parser')
+                soup = BeautifulSoup(content, "html.parser")
                 return soup.prettify()
             except Exception as e:
                 logger.error(f"Error prettifying HTML: {e}")
@@ -215,8 +202,7 @@ class ReadHTMLTool(Tool):
 
         return content
 
-    def execute(self, source: str, convert: Optional[str] = 'text',
-                line_start: int = 1, line_end: int = 300) -> str:
+    def execute(self, source: str, convert: Optional[str] = "text", line_start: int = 1, line_end: int = 300) -> str:
         """Execute the tool to read and parse HTML content in specified line ranges."""
         logger.debug(f"Executing read_html_tool with source: {source}")
 
@@ -242,7 +228,7 @@ class ReadHTMLTool(Tool):
             adjusted_end_line = min(line_end, total_lines)
 
             # Step 5: Slice lines based on line_start and adjusted_end_line
-            sliced_lines = lines[line_start - 1: adjusted_end_line]
+            sliced_lines = lines[line_start - 1 : adjusted_end_line]
             sliced_content = "\n".join(sliced_lines)
 
             # Step 6: Calculate actual_end_line based on lines returned
@@ -268,7 +254,7 @@ class ReadHTMLTool(Tool):
                 f"Is Last Block: {'Yes' if is_last_block else 'No'}",
                 "==== Content ====",
                 sliced_content,
-                "==== End of Block ===="
+                "==== End of Block ====",
             ]
 
             return "\n".join(result)
