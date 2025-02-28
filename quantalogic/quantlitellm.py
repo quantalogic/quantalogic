@@ -1,21 +1,8 @@
-"""LLM wrapper module for handling LiteLLM operations."""
-
-__all__ = [
-    "generate_completion",
-    "generate_image",
-    "count_tokens",
-    "get_model_max_input_tokens",
-    "get_model_max_output_tokens",
-]
-
+# quantlitellm.py
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict
 
-from litellm import (
-    completion,
-    image_generation,
-    token_counter,
-)
+from litellm import aimage_generation, exceptions, token_counter
 from loguru import logger
 
 from quantalogic.get_model_info import (
@@ -23,11 +10,6 @@ from quantalogic.get_model_info import (
     get_max_output_tokens,
     model_info,
 )
-
-
-def get_model_info(model_name: str) -> dict | None:
-    """Get model information for a given model name."""
-    return model_info.get(model_name, None)
 
 
 class ModelProviderConfig:
@@ -53,44 +35,47 @@ PROVIDERS = {
         prefix="dashscope/",
         provider="openai",
         base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-        env_var="DASHSCOPE_API_KEY"
+        env_var="DASHSCOPE_API_KEY",
     ),
     "nvidia": ModelProviderConfig(
-        prefix="nvidia/",
-        provider="openai",
-        base_url="https://integrate.api.nvidia.com/v1",
-        env_var="NVIDIA_API_KEY"
+        prefix="nvidia/", provider="openai", base_url="https://integrate.api.nvidia.com/v1", env_var="NVIDIA_API_KEY"
     ),
     "ovh": ModelProviderConfig(
         prefix="ovh/",
         provider="openai",
         base_url="https://deepseek-r1-distill-llama-70b.endpoints.kepler.ai.cloud.ovh.net/api/openai_compat/v1",
-        env_var="OVH_API_KEY"
-    )
+        env_var="OVH_API_KEY",
+    ),
 }
 
 
-def generate_completion(**kwargs: Dict[str, Any]) -> Any:
+async def acompletion(**kwargs: Dict[str, Any]) -> Any:
     """Wraps litellm completion with proper type hints."""
     model = kwargs.get("model", "")
-    
+
     # Find matching provider
     for provider_name, provider_config in PROVIDERS.items():
         if model.startswith(provider_config.prefix):
             provider_config.configure(model, kwargs)
             break
-    
-    return completion(**kwargs)
+
+    from litellm import acompletion
+
+    return await acompletion(**kwargs)
 
 
-def generate_image(**kwargs: Dict[str, Any]) -> Any:
-    """Wraps litellm image_generation with proper type hints."""
-    return image_generation(**kwargs)
+# Expose the imported litellm components directly
+__all__ = ["acompletion", "aimage_generation", "exceptions", "token_counter"]
 
 
-def count_tokens(model: str, messages: List[Dict[str, Any]]) -> int:
-    """Wraps litellm token_counter with proper type hints."""
-    return token_counter(model=model, messages=messages)
+def suppress_lite_llm_debug_logging():
+    """Suppress debug logging from LiteLLM library."""
+    from litellm import litellm
+
+    litellm.suppress_debug_info = True  # Very important to suppress prints don't remove
+
+
+suppress_lite_llm_debug_logging()
 
 
 def _get_model_info_impl(model_name: str) -> dict:
@@ -171,3 +156,8 @@ def get_model_max_output_tokens(model_name: str) -> int | None:
     except Exception as e:
         logger.error(f"Error getting max output tokens for {model_name}: {e}")
         return None
+
+
+def get_model_info(model_name: str) -> dict | None:
+    """Get model information for a given model name."""
+    return model_info.get(model_name, None)

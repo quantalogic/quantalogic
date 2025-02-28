@@ -372,8 +372,8 @@ class Agent(BaseModel):
             for key, value in injectable_properties.items():
                 converted_args[key] = value
 
-            if hasattr(tool, "execute_async") and callable(tool.execute_async):
-                response = await tool.execute_async(**converted_args)
+            if hasattr(tool, "async_execute") and callable(tool.async_execute):
+                response = await tool.async_execute(**converted_args)
             else:
                 # Fall back to synchronous execution if async is not available
                 response = tool.execute(**converted_args)

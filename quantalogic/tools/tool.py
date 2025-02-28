@@ -222,10 +222,10 @@ class Tool(ToolDefinition):
         # Check if execute is implemented in the subclass
         if self.__class__.execute is Tool.execute:
             # If not implemented, run the async version synchronously
-            return asyncio.run(self.execute_async(**kwargs))
+            return asyncio.run(self.async_execute(**kwargs))
         raise NotImplementedError("This method should be implemented by subclasses.")
 
-    async def execute_async(self, **kwargs) -> str:
+    async def async_execute(self, **kwargs) -> str:
         """Asynchronous version of execute.
 
         By default, runs the synchronous execute method in a separate thread using asyncio.to_thread.
@@ -239,7 +239,7 @@ class Tool(ToolDefinition):
             A string representing the result of tool execution.
         """
         # Check if execute_async is implemented in the subclass
-        if self.__class__.execute_async is Tool.execute_async:
+        if self.__class__.async_execute is Tool.async_execute:
             return await asyncio.to_thread(self.execute, **kwargs)
         raise NotImplementedError("This method should be implemented by subclasses.")
 
