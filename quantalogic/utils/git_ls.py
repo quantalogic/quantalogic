@@ -70,10 +70,10 @@ def generate_file_tree(
 ) -> Dict:
     """Generate file tree structure."""
     if current_depth > max_depth:
-        return {}
+        return None
 
     if ignore_spec.match_file(path) or path.name == ".git":
-        return {}
+        return None
 
     if path.is_file():
         try:
@@ -95,16 +95,18 @@ def generate_file_tree(
     except (PermissionError, OSError):
         tree["children"].append({"name": "no access", "type": "error"})
         return tree
+
     for child in children:
         if not ignore_spec.match_file(child):
             if child.is_file():
                 child_tree = generate_file_tree(child, ignore_spec, recursive, max_depth, current_depth)
-                tree["children"].append(child_tree)
+                if child_tree:  # Only append if not None
+                    tree["children"].append(child_tree)
             elif child.is_dir():
                 # Always include directories
                 child_tree = generate_file_tree(child, ignore_spec, recursive, max_depth, current_depth + 1)
                 if recursive:
-                    if child_tree:
+                    if child_tree:  # Only append if not None
                         tree["children"].append(child_tree)
                 else:
                     tree["children"].append({"name": child.name, "type": "directory", "children": []})
@@ -114,9 +116,16 @@ def generate_file_tree(
 
 def format_tree(tree: Dict, start: int, end: int) -> str:
     """Format tree structure into string output with line information."""
+    if not tree:  # Handle empty or None tree
+        return "==== No files to display ===="
+    
     lines = []
     _format_tree_recursive(tree, lines, 0)
     total_lines = len(lines)
+    
+    if total_lines == 0:  # Handle case with no valid lines
+        return "==== No files to display ===="
+    
     is_last_block = end >= total_lines
     output = "\n".join(lines[start - 1 : end])
 
@@ -129,13 +138,18 @@ def format_tree(tree: Dict, start: int, end: int) -> str:
 
 def _format_tree_recursive(node: Dict, lines: List[str], depth: int):
     """Recursively format tree nodes."""
+    if not node or "type" not in node:  # Skip invalid nodes
+        return
+        
     indent = "  " * depth
     if node["type"] == "file":
         lines.append(f"{indent}📄 {node['name']} ({node['size']})")
-    else:
+    elif node["type"] == "directory":
         lines.append(f"{indent}📁 {node['name']}/")
-        for child in node["children"]:
+        for child in node.get("children", []):
             _format_tree_recursive(child, lines, depth + 1)
+    elif node["type"] == "error":
+        lines.append(f"{indent}❌ {node['name']}")
 
 
 if __name__ == "__main__":

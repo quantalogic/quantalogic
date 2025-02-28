@@ -7,6 +7,7 @@ from loguru import logger
 from pydantic import ConfigDict, Field
 
 from quantalogic.console_print_token import console_print_token
+from quantalogic.event_emitter import EventEmitter
 from quantalogic.generative_model import GenerativeModel, Message
 from quantalogic.tools.tool import Tool, ToolArgument
 
@@ -59,6 +60,7 @@ class LLMTool(Tool):
     system_prompt: str | None = Field(default=None)
     on_token: Callable | None = Field(default=None, exclude=True)
     generative_model: GenerativeModel | None = Field(default=None, exclude=True)
+    event_emitter: EventEmitter | None = Field(default=None, exclude=True)
 
     def __init__(
         self,
@@ -67,6 +69,7 @@ class LLMTool(Tool):
         on_token: Callable | None = None,
         name: str = "llm_tool",
         generative_model: GenerativeModel | None = None,
+        event_emitter: EventEmitter | None = None,
     ):
         """Initialize the LLMTool with model configuration and optional callback.
 
@@ -85,16 +88,20 @@ class LLMTool(Tool):
                 "on_token": on_token,
                 "name": name,
                 "generative_model": generative_model,
+                "event_emitter": event_emitter,
             }
         )
-
+        
         # Initialize the generative model
         self.model_post_init(None)
 
     def model_post_init(self, __context):
         """Initialize the generative model after model initialization."""
         if self.generative_model is None:
-            self.generative_model = GenerativeModel(model=self.model_name)
+            self.generative_model = GenerativeModel(
+                model=self.model_name,
+                event_emitter=self.event_emitter
+            )
             logger.debug(f"Initialized LLMTool with model: {self.model_name}")
 
         # Only set up event listener if on_token is provided

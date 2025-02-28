@@ -1,9 +1,11 @@
 """Tool for listing the contents of a directory."""
 
 import os
+from pathlib import Path
+from typing import List, Dict
+from loguru import logger
 
 from quantalogic.tools.tool import Tool, ToolArgument
-from quantalogic.utils.git_ls import git_ls
 
 
 class ListDirectoryTool(Tool):
@@ -32,8 +34,8 @@ class ListDirectoryTool(Tool):
             arg_type="int",
             description="Maximum directory traversal depth",
             required=False,
-            default="1",
-            example="1",
+            default="10",
+            example="10",
         ),
         ToolArgument(
             name="start_line",
@@ -53,16 +55,95 @@ class ListDirectoryTool(Tool):
         ),
     ]
 
+    def _list_directory(self, path: Path, max_depth: int, current_depth: int = 0) -> List[Dict]:
+        """List directory contents recursively.
+        
+        Args:
+            path: Directory path to list
+            max_depth: Maximum recursion depth
+            current_depth: Current recursion depth
+            
+        Returns:
+            List of dictionaries containing file/directory information
+        """
+        if current_depth > max_depth:
+            return []
+
+        results = []
+        try:
+            for item in sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+                if item.name == ".git":
+                    continue
+                    
+                try:
+                    if item.is_file():
+                        size = item.stat().st_size
+                        results.append({
+                            "type": "file",
+                            "name": item.name,
+                            "size": f"{size} bytes",
+                            "path": str(item.relative_to(path.parent))
+                        })
+                    elif item.is_dir():
+                        children = self._list_directory(item, max_depth, current_depth + 1)
+                        results.append({
+                            "type": "directory",
+                            "name": item.name,
+                            "children": children,
+                            "path": str(item.relative_to(path.parent))
+                        })
+                except PermissionError:
+                    results.append({
+                        "type": "error",
+                        "name": item.name,
+                        "error": "Permission denied"
+                    })
+                except Exception as e:
+                    logger.error(f"Error processing {item}: {str(e)}")
+                    
+        except PermissionError:
+            return [{"type": "error", "name": path.name, "error": "Permission denied"}]
+        except Exception as e:
+            logger.error(f"Error listing directory {path}: {str(e)}")
+            return [{"type": "error", "name": path.name, "error": str(e)}]
+            
+        return results
+
+    def _format_tree(self, items: List[Dict], depth: int = 0) -> List[str]:
+        """Format directory tree into lines of text.
+        
+        Args:
+            items: List of file/directory items
+            depth: Current indentation depth
+            
+        Returns:
+            List of formatted lines
+        """
+        lines = []
+        indent = "  " * depth
+        
+        for item in items:
+            if item["type"] == "file":
+                lines.append(f"{indent} {item['path']} ({item['size']})")
+            elif item["type"] == "directory":
+                lines.append(f"{indent} {item['path']}/")
+                if "children" in item:
+                    lines.extend(self._format_tree(item["children"], depth + 1))
+            elif item["type"] == "error":
+                lines.append(f"{indent} {item['name']} ({item['error']})")
+                
+        return lines
+
     def execute(
         self,
         directory_path: str,
         recursive: str = "false",
-        max_depth: str = "1",
+        max_depth: str = "10",
         start_line: str = "1",
         end_line: str = "200",
     ) -> str:
         """
-        List directory contents with pagination and .gitignore support.
+        List directory contents with pagination.
 
         Args:
             directory_path: Absolute or relative path to target directory
@@ -77,47 +158,55 @@ class ListDirectoryTool(Tool):
         Raises:
             ValueError: For invalid directory paths or pagination parameters
         """
-        # Expand user home directory to full path
-        # This ensures compatibility with '~' shorthand for home directory
-        if directory_path.startswith("~"):
-            directory_path = os.path.expanduser(directory_path)
-
-        # Validate directory existence and type
-        # Fail early with clear error messages if path is invalid
-        if not os.path.exists(directory_path):
-            raise ValueError(f"The directory '{directory_path}' does not exist.")
-        if not os.path.isdir(directory_path):
-            raise ValueError(f"The path '{directory_path}' is not a directory.")
-
-        # Safely convert inputs with default values
-        start = int(start_line or "1")
-        end = int(end_line or "200")
-        max_depth_int = int(max_depth or "1")
-        is_recursive = (recursive or "false").lower() == "true"
-
-        # Validate pagination parameters
-        if start > end:
-            raise ValueError("start_line must be less than or equal to end_line.")
-
         try:
-            # Use git_ls for directory listing with .gitignore support
-            all_lines = git_ls(
-                directory_path=directory_path,
-                recursive=is_recursive,
-                max_depth=max_depth_int,
-                start_line=start,
-                end_line=end,
-            )
-            return all_lines
-        except Exception as e:
-            import traceback
+            # Expand user home directory
+            if directory_path.startswith("~"):
+                directory_path = os.path.expanduser(directory_path)
 
-            traceback.print_exc()
-            return f"Error: {str(e)} occurred during directory listing. See logs for details."
+            path = Path(directory_path)
+            
+            # Validate directory
+            if not path.exists():
+                raise ValueError(f"The directory '{directory_path}' does not exist.")
+            if not path.is_dir():
+                raise ValueError(f"The path '{directory_path}' is not a directory.")
+
+            # Parse parameters
+            start = int(start_line)
+            end = int(end_line)
+            max_depth_int = int(max_depth)
+            is_recursive = recursive.lower() == "true"
+
+            if start > end:
+                raise ValueError("start_line must be less than or equal to end_line.")
+
+            # List directory contents
+            items = self._list_directory(
+                path=path,
+                max_depth=max_depth_int if is_recursive else 0
+            )
+            
+            # Format output
+            lines = self._format_tree(items)
+            
+            if not lines:
+                return "==== No files to display ===="
+                
+            # Paginate results
+            total_lines = len(lines)
+            paginated_lines = lines[start - 1:end]
+            
+            header = f"==== Lines {start}-{min(end, total_lines)} of {total_lines} ===="
+            if end >= total_lines:
+                header += " [LAST BLOCK]"
+                
+            return f"{header}\n" + "\n".join(paginated_lines) + "\n==== End of Block ===="
+            
+        except Exception as e:
+            logger.error(f"Error listing directory: {str(e)}")
+            return f"Error: {str(e)}"
 
 
 if __name__ == "__main__":
     tool = ListDirectoryTool()
-    current_directory = os.getcwd()
-    tool.execute(directory_path=current_directory, recursive="true")
-    print(tool.to_markdown())
+    print(tool.execute(directory_path=".", recursive="true"))

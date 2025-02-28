@@ -80,8 +80,7 @@ elif MODEL_NAME.startswith("openrouter") and not os.environ.get("OPENROUTER_API_
 console = Console()
 db_conn = os.environ.get("DB_CONNECTION_STRING") or Prompt.ask(
     "[bold]Enter database connection string[/bold]", default="sqlite:///sample.db", console=console
-)
-
+) 
 
 def get_database_report():
     """Generate a database report using the GenerateDatabaseReportTool."""

@@ -32,6 +32,7 @@ class EventEmitter:
         self._listeners: dict[str, list[Tuple[Callable[..., Any], int, Optional[Dict[str, Any]]]]] = {}
         self._wildcard_listeners: list[Tuple[Callable[..., Any], int, Optional[Dict[str, Any]]]] = []
         self._lock = threading.RLock()
+        self.context: dict[str, Any] = {}  # Store context data like task_id
 
         # Initialize background asyncio event loop
         self._loop = asyncio.new_event_loop()

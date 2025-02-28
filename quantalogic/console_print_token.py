@@ -13,4 +13,4 @@ def console_print_token(event: str, data: Any | None = None):
         data (Any | None): The token data to print
     """
     console = Console()
-    console.print(data, end="")
+    console.print(data.content if hasattr(data, "content") else data, end="")
