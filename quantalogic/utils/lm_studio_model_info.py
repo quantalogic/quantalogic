@@ -9,13 +9,16 @@ class ModelType(str, Enum):
     EMBEDDINGS = "embeddings"
     VLM = "vlm"
 
+
 class CompatibilityType(str, Enum):
     MLX = "mlx"
     GGUF = "gguf"
 
+
 class ModelState(str, Enum):
     LOADED = "loaded"
     NOT_LOADED = "not-loaded"
+
 
 class ModelInfo(BaseModel):
     id: str = Field(..., description="Unique model identifier in LM Studio's namespace")
@@ -28,21 +31,20 @@ class ModelInfo(BaseModel):
     state: ModelState = Field(..., description="Current loading state in LM Studio")
     max_context_length: int = Field(..., alias="max_context_length", ge=0)
     loaded_context_length: Optional[int] = Field(
-        None, 
-        alias="loaded_context_length",
-        description="Currently allocated context length (only when loaded)",
-        ge=0
+        None, alias="loaded_context_length", description="Currently allocated context length (only when loaded)", ge=0
     )
+
 
 class ModelListResponse(BaseModel):
     data: List[ModelInfo] = Field(..., description="List of available models")
     object: Literal["list"] = Field("list", description="Always 'list' for list responses")
 
+
 def get_model_list() -> ModelListResponse:
     """Fetch and validate model information from LM Studio's API"""
     import requests
-    
+
     response = requests.get("http://localhost:1234/api/v0/models")
     response.raise_for_status()
-    
+
     return ModelListResponse(**response.json())

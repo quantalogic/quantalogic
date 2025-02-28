@@ -53,13 +53,13 @@ WorkflowObserver = Callable[[WorkflowEvent], None]
 
 # Define a class for sub-workflow nodes
 class SubWorkflowNode:
-    def __init__(self, sub_workflow: 'Workflow', inputs: Dict[str, str], output: str):
+    def __init__(self, sub_workflow: "Workflow", inputs: Dict[str, str], output: str):
         """Initialize a sub-workflow node."""
         self.sub_workflow = sub_workflow
         self.inputs = inputs
         self.output = output
 
-    async def __call__(self, engine: 'WorkflowEngine', **kwargs):
+    async def __call__(self, engine: "WorkflowEngine", **kwargs):
         """Execute the sub-workflow with the engine's context."""
         sub_context = {sub_key: kwargs[main_key] for main_key, sub_key in self.inputs.items()}
         sub_engine = self.sub_workflow.build(parent_engine=engine)
@@ -68,7 +68,7 @@ class SubWorkflowNode:
 
 
 class WorkflowEngine:
-    def __init__(self, workflow, parent_engine: Optional['WorkflowEngine'] = None):
+    def __init__(self, workflow, parent_engine: Optional["WorkflowEngine"] = None):
         """Initialize the WorkflowEngine with a workflow and optional parent for sub-workflows."""
         self.workflow = workflow
         self.context = {}
@@ -106,31 +106,29 @@ class WorkflowEngine:
     async def run(self, initial_context: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the workflow starting from the entry node with event notifications."""
         self.context = initial_context.copy()
-        await self._notify_observers(WorkflowEvent(
-            event_type=WorkflowEventType.WORKFLOW_STARTED,
-            node_name=None,
-            context=self.context
-        ))
+        await self._notify_observers(
+            WorkflowEvent(event_type=WorkflowEventType.WORKFLOW_STARTED, node_name=None, context=self.context)
+        )
 
         current_node = self.workflow.start_node
         while current_node:
             logger.info(f"Executing node: {current_node}")
-            await self._notify_observers(WorkflowEvent(
-                event_type=WorkflowEventType.NODE_STARTED,
-                node_name=current_node,
-                context=self.context
-            ))
+            await self._notify_observers(
+                WorkflowEvent(event_type=WorkflowEventType.NODE_STARTED, node_name=current_node, context=self.context)
+            )
 
             node_func = self.workflow.nodes.get(current_node)
             if not node_func:
                 logger.error(f"Node {current_node} not found")
                 exc = ValueError(f"Node {current_node} not found")
-                await self._notify_observers(WorkflowEvent(
-                    event_type=WorkflowEventType.NODE_FAILED,
-                    node_name=current_node,
-                    context=self.context,
-                    exception=exc
-                ))
+                await self._notify_observers(
+                    WorkflowEvent(
+                        event_type=WorkflowEventType.NODE_FAILED,
+                        node_name=current_node,
+                        context=self.context,
+                        exception=exc,
+                    )
+                )
                 break
 
             inputs = {k: self.context[k] for k in self.workflow.node_inputs[current_node] if k in self.context}
@@ -139,12 +137,14 @@ class WorkflowEngine:
 
             # Handle sub-workflow nodes
             if isinstance(node_func, SubWorkflowNode):
-                await self._notify_observers(WorkflowEvent(
-                    event_type=WorkflowEventType.SUB_WORKFLOW_ENTERED,
-                    node_name=current_node,
-                    context=self.context,
-                    sub_workflow_name=current_node
-                ))
+                await self._notify_observers(
+                    WorkflowEvent(
+                        event_type=WorkflowEventType.SUB_WORKFLOW_ENTERED,
+                        node_name=current_node,
+                        context=self.context,
+                        sub_workflow_name=current_node,
+                    )
+                )
 
             try:
                 if isinstance(node_func, SubWorkflowNode):
@@ -152,58 +152,64 @@ class WorkflowEngine:
                     usage = None  # Sub-workflow usage is handled by its own nodes
                 else:
                     result = await node_func(**inputs)
-                    usage = getattr(node_func, 'usage', None)  # Extract usage if set by LLM nodes
+                    usage = getattr(node_func, "usage", None)  # Extract usage if set by LLM nodes
                 output_key = self.workflow.node_outputs[current_node]
                 if output_key:
                     self.context[output_key] = result
-                await self._notify_observers(WorkflowEvent(
-                    event_type=WorkflowEventType.NODE_COMPLETED,
-                    node_name=current_node,
-                    context=self.context,
-                    result=result,
-                    usage=usage  # Include usage data in the event
-                ))
+                await self._notify_observers(
+                    WorkflowEvent(
+                        event_type=WorkflowEventType.NODE_COMPLETED,
+                        node_name=current_node,
+                        context=self.context,
+                        result=result,
+                        usage=usage,  # Include usage data in the event
+                    )
+                )
             except Exception as e:
                 logger.error(f"Error executing node {current_node}: {e}")
                 exception = e
-                await self._notify_observers(WorkflowEvent(
-                    event_type=WorkflowEventType.NODE_FAILED,
-                    node_name=current_node,
-                    context=self.context,
-                    exception=e
-                ))
+                await self._notify_observers(
+                    WorkflowEvent(
+                        event_type=WorkflowEventType.NODE_FAILED,
+                        node_name=current_node,
+                        context=self.context,
+                        exception=e,
+                    )
+                )
                 raise
             finally:
                 if isinstance(node_func, SubWorkflowNode):
-                    await self._notify_observers(WorkflowEvent(
-                        event_type=WorkflowEventType.SUB_WORKFLOW_EXITED,
-                        node_name=current_node,
-                        context=self.context,
-                        sub_workflow_name=current_node,
-                        result=result,
-                        exception=exception
-                    ))
+                    await self._notify_observers(
+                        WorkflowEvent(
+                            event_type=WorkflowEventType.SUB_WORKFLOW_EXITED,
+                            node_name=current_node,
+                            context=self.context,
+                            sub_workflow_name=current_node,
+                            result=result,
+                            exception=exception,
+                        )
+                    )
 
             next_nodes = self.workflow.transitions.get(current_node, [])
             current_node = None
             for next_node, condition in next_nodes:
-                await self._notify_observers(WorkflowEvent(
-                    event_type=WorkflowEventType.TRANSITION_EVALUATED,
-                    node_name=None,
-                    context=self.context,
-                    transition_from=current_node,
-                    transition_to=next_node
-                ))
+                await self._notify_observers(
+                    WorkflowEvent(
+                        event_type=WorkflowEventType.TRANSITION_EVALUATED,
+                        node_name=None,
+                        context=self.context,
+                        transition_from=current_node,
+                        transition_to=next_node,
+                    )
+                )
                 if condition is None or condition(self.context):
                     current_node = next_node
                     break
 
         logger.info("Workflow execution completed")
-        await self._notify_observers(WorkflowEvent(
-            event_type=WorkflowEventType.WORKFLOW_COMPLETED,
-            node_name=None,
-            context=self.context
-        ))
+        await self._notify_observers(
+            WorkflowEvent(event_type=WorkflowEventType.WORKFLOW_COMPLETED, node_name=None, context=self.context)
+        )
         return self.context
 
 
@@ -271,14 +277,14 @@ class Workflow:
         self.current_node = None  # Reset after parallel to force explicit next node
         return self
 
-    def add_observer(self, observer: WorkflowObserver) -> 'Workflow':
+    def add_observer(self, observer: WorkflowObserver) -> "Workflow":
         """Add an event observer callback to the workflow."""
         if observer not in self._observers:
             self._observers.append(observer)
             logger.debug(f"Added observer to workflow: {observer}")
         return self  # Support chaining
 
-    def add_sub_workflow(self, name: str, sub_workflow: 'Workflow', inputs: Dict[str, str], output: str):
+    def add_sub_workflow(self, name: str, sub_workflow: "Workflow", inputs: Dict[str, str], output: str):
         """Add a sub-workflow as a node."""
         sub_node = SubWorkflowNode(sub_workflow, inputs, output)
         self.nodes[name] = sub_node
@@ -287,7 +293,7 @@ class Workflow:
         self.current_node = name
         return self
 
-    def build(self, parent_engine: Optional['WorkflowEngine'] = None) -> WorkflowEngine:
+    def build(self, parent_engine: Optional["WorkflowEngine"] = None) -> WorkflowEngine:
         """Build and return a WorkflowEngine instance with registered observers."""
         engine = WorkflowEngine(self, parent_engine=parent_engine)
         for observer in self._observers:
@@ -301,6 +307,7 @@ class Nodes:
     @classmethod
     def define(cls, output: Optional[str] = None):
         """Decorator for defining simple workflow nodes."""
+
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(**kwargs):
                 try:
@@ -310,15 +317,18 @@ class Nodes:
                 except Exception as e:
                     logger.error(f"Error in node {func.__name__}: {e}")
                     raise
+
             inputs = list(func.__annotations__.keys())
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
             cls.NODE_REGISTRY[func.__name__] = (wrapped_func, inputs, output)
             return wrapped_func
+
         return decorator
 
     @classmethod
     def validate_node(cls, output: str):
         """Decorator for nodes that validate inputs."""
+
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(**kwargs):
                 try:
@@ -330,10 +340,12 @@ class Nodes:
                 except Exception as e:
                     logger.error(f"Validation error in {func.__name__}: {e}")
                     raise
+
             inputs = list(func.__annotations__.keys())
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
             cls.NODE_REGISTRY[func.__name__] = (wrapped_func, inputs, output)
             return wrapped_func
+
         return decorator
 
     @classmethod
@@ -348,9 +360,10 @@ class Nodes:
         top_p: float = 1.0,
         presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
-        **kwargs
+        **kwargs,
     ):
         """Decorator for creating LLM nodes with plain text output."""
+
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(**kwargs):
                 prompt = cls._render_prompt(prompt_template, kwargs)
@@ -368,7 +381,7 @@ class Nodes:
                         presence_penalty=presence_penalty,
                         frequency_penalty=frequency_penalty,
                         drop_params=True,
-                        **kwargs
+                        **kwargs,
                     )
                     content = response.choices[0].message.content.strip()
                     # Attach usage metadata to the function
@@ -376,17 +389,19 @@ class Nodes:
                         "prompt_tokens": response.usage.prompt_tokens,
                         "completion_tokens": response.usage.completion_tokens,
                         "total_tokens": response.usage.total_tokens,
-                        "cost": getattr(response, "cost", None)  # Include cost if available
+                        "cost": getattr(response, "cost", None),  # Include cost if available
                     }
                     logger.debug(f"LLM output from {func.__name__}: {content[:50]}...")
                     return content
                 except Exception as e:
                     logger.error(f"Error in LLM node {func.__name__}: {e}")
                     raise
+
             inputs = list(func.__annotations__.keys())
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
             cls.NODE_REGISTRY[func.__name__] = (wrapped_func, inputs, output)
             return wrapped_func
+
         return decorator
 
     @classmethod
@@ -402,7 +417,7 @@ class Nodes:
         top_p: float = 1.0,
         presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
-        **kwargs
+        **kwargs,
     ):
         """Decorator for creating LLM nodes with structured output using instructor."""
         try:
@@ -430,14 +445,14 @@ class Nodes:
                         presence_penalty=presence_penalty,
                         frequency_penalty=frequency_penalty,
                         drop_params=True,
-                        **kwargs
+                        **kwargs,
                     )
                     # Attach usage metadata to the function
                     wrapped_func.usage = {
                         "prompt_tokens": raw_response.usage.prompt_tokens,
                         "completion_tokens": raw_response.usage.completion_tokens,
                         "total_tokens": raw_response.usage.total_tokens,
-                        "cost": getattr(raw_response, "cost", None)  # Include cost if available
+                        "cost": getattr(raw_response, "cost", None),  # Include cost if available
                     }
                     logger.debug(f"Structured output from {func.__name__}: {structured_response}")
                     return structured_response
@@ -447,10 +462,12 @@ class Nodes:
                 except Exception as e:
                     logger.error(f"Error in structured LLM node {func.__name__}: {e}")
                     raise
+
             inputs = list(func.__annotations__.keys())
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
             cls.NODE_REGISTRY[func.__name__] = (wrapped_func, inputs, output)
             return wrapped_func
+
         return decorator
 
     @staticmethod
@@ -513,7 +530,7 @@ async def example_workflow():
         system_prompt="You are an inventory checker. Respond with a JSON object containing 'order_id', 'items', and 'in_stock' (boolean).",
         prompt_template="Check if the following items are in stock: {{ items }}. Return the result in JSON format with 'order_id' set to '123'.",
         response_model=OrderDetails,
-        output="inventory_status"
+        output="inventory_status",
     )
     async def check_inventory(items: List[str]) -> OrderDetails:
         pass
@@ -539,10 +556,7 @@ async def example_workflow():
         return "Customer notified of out-of-stock"
 
     # Sub-workflow for payment and shipping
-    payment_shipping_sub_wf = (
-        Workflow("process_payment")
-        .sequence("process_payment", "arrange_shipping")
-    )
+    payment_shipping_sub_wf = Workflow("process_payment").sequence("process_payment", "arrange_shipping")
 
     # Instantiate token usage observer
     token_observer = TokenUsageObserver()
@@ -551,11 +565,19 @@ async def example_workflow():
     workflow = (
         Workflow("validate_order")
         .add_observer(progress_monitor)  # Add progress observer
-        .add_observer(token_observer)    # Add token usage observer
-        .add_sub_workflow("payment_shipping", payment_shipping_sub_wf, inputs={"order": "order"}, output="shipping_confirmation")
+        .add_observer(token_observer)  # Add token usage observer
+        .add_sub_workflow(
+            "payment_shipping", payment_shipping_sub_wf, inputs={"order": "order"}, output="shipping_confirmation"
+        )
         .sequence("validate_order", "check_inventory")
-        .then("payment_shipping", condition=lambda ctx: ctx.get("inventory_status").in_stock if ctx.get("inventory_status") else False)
-        .then("notify_customer_out_of_stock", condition=lambda ctx: not ctx.get("inventory_status").in_stock if ctx.get("inventory_status") else True)
+        .then(
+            "payment_shipping",
+            condition=lambda ctx: ctx.get("inventory_status").in_stock if ctx.get("inventory_status") else False,
+        )
+        .then(
+            "notify_customer_out_of_stock",
+            condition=lambda ctx: not ctx.get("inventory_status").in_stock if ctx.get("inventory_status") else True,
+        )
         .parallel("update_order_status", "send_confirmation_email")
         .node("update_order_status")
         .node("send_confirmation_email")

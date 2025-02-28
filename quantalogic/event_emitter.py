@@ -51,7 +51,7 @@ class EventEmitter:
         listener_args: Tuple[Any, ...],
         error_handler: Optional[Callable[[Exception], None]],
         metadata: Optional[Dict[str, Any]],
-        kwargs: Dict[str, Any]
+        kwargs: Dict[str, Any],
     ) -> None:
         """Schedule an async listener in the background loop and handle errors."""
         kwargs = kwargs or {}  # Ensure kwargs is a dict if None
@@ -64,7 +64,7 @@ class EventEmitter:
         self,
         task: asyncio.Task,
         error_handler: Optional[Callable[[Exception], None]],
-        metadata: Optional[Dict[str, Any]]
+        metadata: Optional[Dict[str, Any]],
     ) -> None:
         """Handle exceptions from async listeners."""
         try:
@@ -87,8 +87,13 @@ class EventEmitter:
         self._loop.call_soon_threadsafe(lambda: self._stop_future.set_result(None))
         self._thread.join()
 
-    def on(self, event: str | list[str], listener: Callable[..., Any], 
-           priority: int = 0, metadata: Optional[Dict[str, Any]] = None) -> None:
+    def on(
+        self,
+        event: str | list[str],
+        listener: Callable[..., Any],
+        priority: int = 0,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """Register an event listener for one or more events with optional priority and metadata.
 
         If event is a list, the listener is registered for each event in the list.
@@ -120,8 +125,13 @@ class EventEmitter:
                     if listener_tuple not in self._listeners[evt]:
                         self._listeners[evt].append(listener_tuple)
 
-    def once(self, event: str | list[str], listener: Callable[..., Any], 
-             priority: int = 0, metadata: Optional[Dict[str, Any]] = None) -> None:
+    def once(
+        self,
+        event: str | list[str],
+        listener: Callable[..., Any],
+        priority: int = 0,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """Register a one-time event listener for one or more events with optional priority and metadata.
 
         The listener is removed after it is invoked the first time the event is emitted.
@@ -133,17 +143,19 @@ class EventEmitter:
         - metadata (dict, optional): Additional info about the listener for debugging or error handling.
         """
         if inspect.iscoroutinefunction(listener):
+
             async def wrapper(*args: Any, **kwargs: Any) -> None:
                 self.off(event, wrapper)
                 await listener(*args, **kwargs)
         else:
+
             def wrapper(*args: Any, **kwargs: Any) -> None:
                 self.off(event, wrapper)
                 listener(*args, **kwargs)
+
         self.on(event, wrapper, priority, metadata)
 
-    def off(self, event: str | list[str] | None = None, 
-            listener: Callable[..., Any] = None) -> None:
+    def off(self, event: str | list[str] | None = None, listener: Callable[..., Any] = None) -> None:
         """Unregister an event listener.
 
         If event is None, removes the listener from all events.
@@ -184,8 +196,9 @@ class EventEmitter:
                             if listener_tuple[0] == listener:
                                 self._listeners[evt].remove(listener_tuple)
 
-    def emit(self, event: str, *args: Any, error_handler: Optional[Callable[[Exception], None]] = None, 
-             **kwargs: Any) -> None:
+    def emit(
+        self, event: str, *args: Any, error_handler: Optional[Callable[[Exception], None]] = None, **kwargs: Any
+    ) -> None:
         """Emit an event to all registered listeners with optional error handling.
 
         First, invokes wildcard listeners, then listeners registered to the specific event, sorted by priority.
@@ -219,7 +232,7 @@ class EventEmitter:
                     args,  # Pass args as a tuple
                     error_handler,
                     metadata,
-                    kwargs
+                    kwargs,
                 )
             else:
                 try:
@@ -242,7 +255,7 @@ class EventEmitter:
         """
         if not event or not isinstance(event, str):
             raise ValueError("Event name must be a non-empty string")
-        
+
         with self._lock:
             if event in self._listeners:
                 del self._listeners[event]
@@ -264,7 +277,7 @@ class EventEmitter:
         """
         if not event or not isinstance(event, str):
             raise ValueError("Event name must be a non-empty string")
-        
+
         with self._lock:
             result = [listener_tuple[0] for listener_tuple in self._wildcard_listeners]
             if event in self._listeners:
@@ -300,7 +313,7 @@ class EventEmitter:
         """
         if not event or not isinstance(event, str):
             raise ValueError("Event name must be a non-empty string")
-        
+
         with self._lock:
             count = len(self._wildcard_listeners)
             if event in self._listeners:
@@ -317,11 +330,10 @@ class EventEmitter:
             return {
                 "wildcard_listeners": [(l.__name__, p, m) for l, p, m in self._wildcard_listeners],
                 "event_listeners": {
-                    evt: [(l.__name__, p, m) for l, p, m in listeners]
-                    for evt, listeners in self._listeners.items()
-                }
+                    evt: [(l.__name__, p, m) for l, p, m in listeners] for evt, listeners in self._listeners.items()
+                },
             }
-            
+
 
 if __name__ == "__main__":
     import asyncio
@@ -358,6 +370,7 @@ if __name__ == "__main__":
 
     # Wait briefly to see async output
     import time
+
     time.sleep(2)
 
     # Register a one-time async listener

@@ -302,4 +302,3 @@ if __name__ == "__main__":
         print(parsed_values["action"])
     action = parser.extract_elements(text=xml_content, element_names=["action"])
     print(action["action"])
-

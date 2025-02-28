@@ -10,13 +10,13 @@ class FunctionDefinition(BaseModel):
     This model supports both embedded functions (inline code) and external functions sourced
     from Python modules, including PyPI packages, local files, or remote URLs.
     """
+
     type: str = Field(
         ...,
-        description="Type of function source. Must be 'embedded' for inline code or 'external' for module-based functions."
+        description="Type of function source. Must be 'embedded' for inline code or 'external' for module-based functions.",
     )
     code: Optional[str] = Field(
-        None,
-        description="Multi-line Python code for embedded functions. Required if type is 'embedded'."
+        None, description="Multi-line Python code for embedded functions. Required if type is 'embedded'."
     )
     module: Optional[str] = Field(
         None,
@@ -26,11 +26,11 @@ class FunctionDefinition(BaseModel):
             " - A local file path (e.g., '/path/to/module.py')."
             " - A remote URL (e.g., 'https://example.com/module.py')."
             " Required if type is 'external'."
-        )
+        ),
     )
     function: Optional[str] = Field(
         None,
-        description="Name of the function within the module for 'external' functions. Required if type is 'external'."
+        description="Name of the function within the module for 'external' functions. Required if type is 'external'.",
     )
 
     @model_validator(mode="before")
@@ -55,62 +55,34 @@ class FunctionDefinition(BaseModel):
 
 class LLMConfig(BaseModel):
     """Configuration for LLM-based nodes."""
+
     model: str = Field(
-        default="gpt-3.5-turbo",
-        description="The LLM model to use (e.g., 'gpt-3.5-turbo', 'gemini/gemini-2.0-flash')."
+        default="gpt-3.5-turbo", description="The LLM model to use (e.g., 'gpt-3.5-turbo', 'gemini/gemini-2.0-flash')."
     )
-    system_prompt: Optional[str] = Field(
-        None,
-        description="System prompt defining the LLM's role or context."
-    )
+    system_prompt: Optional[str] = Field(None, description="System prompt defining the LLM's role or context.")
     prompt_template: str = Field(
-        default="{{ input }}",
-        description="Jinja2 template for the user prompt (e.g., 'Summarize {{ text }}')."
+        default="{{ input }}", description="Jinja2 template for the user prompt (e.g., 'Summarize {{ text }}')."
     )
     temperature: float = Field(
-        default=0.7,
-        ge=0.0,
-        le=1.0,
-        description="Controls randomness of LLM output (0.0 to 1.0)."
+        default=0.7, ge=0.0, le=1.0, description="Controls randomness of LLM output (0.0 to 1.0)."
     )
-    max_tokens: Optional[int] = Field(
-        None,
-        ge=1,
-        description="Maximum number of tokens in the response."
-    )
-    top_p: float = Field(
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description="Nucleus sampling parameter (0.0 to 1.0)."
-    )
+    max_tokens: Optional[int] = Field(None, ge=1, description="Maximum number of tokens in the response.")
+    top_p: float = Field(default=1.0, ge=0.0, le=1.0, description="Nucleus sampling parameter (0.0 to 1.0).")
     presence_penalty: float = Field(
-        default=0.0,
-        ge=-2.0,
-        le=2.0,
-        description="Penalty for repeating topics (-2.0 to 2.0)."
+        default=0.0, ge=-2.0, le=2.0, description="Penalty for repeating topics (-2.0 to 2.0)."
     )
     frequency_penalty: float = Field(
-        default=0.0,
-        ge=-2.0,
-        le=2.0,
-        description="Penalty for repeating words (-2.0 to 2.0)."
+        default=0.0, ge=-2.0, le=2.0, description="Penalty for repeating words (-2.0 to 2.0)."
     )
-    stop: Optional[List[str]] = Field(
-        None,
-        description="List of stop sequences for LLM generation (e.g., ['\\n'])."
-    )
+    stop: Optional[List[str]] = Field(None, description="List of stop sequences for LLM generation (e.g., ['\\n']).")
     response_model: Optional[str] = Field(
         None,
         description=(
             "Path to a Pydantic model for structured output (e.g., 'my_module:OrderDetails'). "
             "If specified, uses structured_llm_node; otherwise, uses llm_node."
-        )
+        ),
     )
-    api_key: Optional[str] = Field(
-        None,
-        description="Custom API key for the LLM provider, if required."
-    )
+    api_key: Optional[str] = Field(None, description="Custom API key for the LLM provider, if required.")
 
 
 class NodeDefinition(BaseModel):
@@ -119,44 +91,27 @@ class NodeDefinition(BaseModel):
 
     A node must specify exactly one of 'function', 'sub_workflow', or 'llm_config'.
     """
+
     function: Optional[str] = Field(
-        None,
-        description="Name of the function to execute (references a FunctionDefinition)."
+        None, description="Name of the function to execute (references a FunctionDefinition)."
     )
     sub_workflow: Optional["WorkflowStructure"] = Field(
-        None,
-        description="Nested workflow definition for sub-workflow nodes."
+        None, description="Nested workflow definition for sub-workflow nodes."
     )
-    llm_config: Optional[LLMConfig] = Field(
-        None,
-        description="Configuration for LLM-based nodes."
-    )
+    llm_config: Optional[LLMConfig] = Field(None, description="Configuration for LLM-based nodes.")
     output: Optional[str] = Field(
         None,
         description=(
             "Context key to store the node's result. Defaults to '<node_name>_result' "
             "for function or LLM nodes if not specified."
-        )
+        ),
     )
-    retries: int = Field(
-        default=3,
-        ge=0,
-        description="Number of retry attempts on failure."
-    )
-    delay: float = Field(
-        default=1.0,
-        ge=0.0,
-        description="Delay in seconds between retries."
-    )
+    retries: int = Field(default=3, ge=0, description="Number of retry attempts on failure.")
+    delay: float = Field(default=1.0, ge=0.0, description="Delay in seconds between retries.")
     timeout: Optional[float] = Field(
-        None,
-        ge=0.0,
-        description="Maximum execution time in seconds (null for no timeout)."
+        None, ge=0.0, description="Maximum execution time in seconds (null for no timeout)."
     )
-    parallel: bool = Field(
-        default=False,
-        description="Whether the node can execute in parallel with others."
-    )
+    parallel: bool = Field(default=False, description="Whether the node can execute in parallel with others.")
 
     @model_validator(mode="before")
     @classmethod
@@ -172,50 +127,41 @@ class NodeDefinition(BaseModel):
 
 class TransitionDefinition(BaseModel):
     """Definition of a transition between nodes."""
+
     from_: str = Field(
         ...,
         description="Source node name for the transition.",
-        alias="from"  # Supports YAML aliasing
+        alias="from",  # Supports YAML aliasing
     )
     to: Union[str, List[str]] = Field(
-        ...,
-        description="Target node(s). A string for sequential, a list for parallel execution."
+        ..., description="Target node(s). A string for sequential, a list for parallel execution."
     )
     condition: Optional[str] = Field(
-        None,
-        description="Python expression using 'ctx' for conditional transitions (e.g., 'ctx.get(\"in_stock\")')."
+        None, description="Python expression using 'ctx' for conditional transitions (e.g., 'ctx.get(\"in_stock\")')."
     )
 
 
 class WorkflowStructure(BaseModel):
     """Structure defining the workflow's execution flow."""
-    start: Optional[str] = Field(
-        None,
-        description="Name of the starting node."
-    )
+
+    start: Optional[str] = Field(None, description="Name of the starting node.")
     transitions: List[TransitionDefinition] = Field(
-        default_factory=list,
-        description="List of transitions between nodes."
+        default_factory=list, description="List of transitions between nodes."
     )
 
 
 class WorkflowDefinition(BaseModel):
     """Top-level definition of the workflow."""
+
     functions: Dict[str, FunctionDefinition] = Field(
-        default_factory=dict,
-        description="Dictionary of function definitions used in the workflow."
+        default_factory=dict, description="Dictionary of function definitions used in the workflow."
     )
-    nodes: Dict[str, NodeDefinition] = Field(
-        default_factory=dict,
-        description="Dictionary of node definitions."
-    )
+    nodes: Dict[str, NodeDefinition] = Field(default_factory=dict, description="Dictionary of node definitions.")
     workflow: WorkflowStructure = Field(
-        default_factory=WorkflowStructure,
-        description="Main workflow structure with start node and transitions."
+        default_factory=WorkflowStructure, description="Main workflow structure with start node and transitions."
     )
     observers: List[str] = Field(
-        default_factory=list,
-        description="List of observer function names to monitor workflow execution."
+        default_factory=list, description="List of observer function names to monitor workflow execution."
     )
 
 

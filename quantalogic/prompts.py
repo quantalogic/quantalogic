@@ -94,4 +94,3 @@ Task Format: <task>task_description</task>
 6. 🛑 Fail fast and adapt when encountering blockers
 7. ✅ Verify completion criteria rigorously
 """
-

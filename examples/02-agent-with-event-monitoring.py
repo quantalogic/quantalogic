@@ -16,7 +16,7 @@ from quantalogic.tools import (
     LLMTool,
 )
 
-#MODEL_NAME = "deepseek/deepseek-chat"
+# MODEL_NAME = "deepseek/deepseek-chat"
 MODEL_NAME = "ovh/DeepSeek-R1-Distill-Llama-70B"
 
 # Verify API key is set - required for authentication with DeepSeek's API
@@ -33,7 +33,7 @@ if not os.environ.get("DEEPSEEK_API_KEY"):
 # This architecture reduces model switching overhead and ensures
 # coherent behavior across different operational modes
 agent = Agent(
-    model_name=MODEL_NAME,  
+    model_name=MODEL_NAME,
     tools=[LLMTool(model_name=MODEL_NAME, name="deepseek_llm_tool", on_token=console_print_token)],
 )
 

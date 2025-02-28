@@ -13,11 +13,11 @@ from quantalogic.tools import (
 
 
 def create_search_agent(
-    model_name: str, 
-    mode_full: bool = False, 
-    no_stream: bool = False, 
+    model_name: str,
+    mode_full: bool = False,
+    no_stream: bool = False,
     compact_every_n_iteration: int | None = None,
-    max_tokens_working_memory: int | None = None
+    max_tokens_working_memory: int | None = None,
 ) -> Agent:
     """Creates and configures a search agent with web, knowledge, and privacy-focused search tools.
 

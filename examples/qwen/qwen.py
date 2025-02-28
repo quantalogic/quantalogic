@@ -26,14 +26,15 @@ if not DASHSCOPE_API_KEY:
 # Initialize OpenAI client with DashScope configuration
 client = OpenAI(
     # If the environment variable is not configured, replace the following line with: api_key="sk-xxx",
-    api_key=os.getenv("DASHSCOPE_API_KEY"), 
+    api_key=os.getenv("DASHSCOPE_API_KEY"),
     base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",  # DashScope API endpoint
 )
 completion = client.chat.completions.create(
-    model=MODEL_NAME, # Model list: https://www.alibabacloud.com/help/en/model-studio/getting-started/models
+    model=MODEL_NAME,  # Model list: https://www.alibabacloud.com/help/en/model-studio/getting-started/models
     messages=[
-        {'role': 'system', 'content': 'You are a helpful assistant.'},
-        {'role': 'user', 'content': 'Who are you?'}],
-    )
-    
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Who are you?"},
+    ],
+)
+
 print(completion.model_dump_json())

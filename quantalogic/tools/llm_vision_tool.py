@@ -87,7 +87,7 @@ class LLMVisionTool(Tool):
                 "generative_model": generative_model,
             }
         )
-        
+
         # Initialize the generative model
         self.model_post_init(None)
 
@@ -120,17 +120,10 @@ class LLMVisionTool(Tool):
         """
         # Run the async version synchronously
         return asyncio.run(
-            self.async_execute(
-                system_prompt=system_prompt,
-                prompt=prompt,
-                image_url=image_url,
-                temperature=temperature
-            )
+            self.async_execute(system_prompt=system_prompt, prompt=prompt, image_url=image_url, temperature=temperature)
         )
 
-    async def async_execute(
-        self, system_prompt: str, prompt: str, image_url: str, temperature: str = "0.7"
-    ) -> str:
+    async def async_execute(self, system_prompt: str, prompt: str, image_url: str, temperature: str = "0.7") -> str:
         """Execute the tool to analyze an image and generate a response asynchronously.
 
         This method provides a native asynchronous implementation, utilizing the generative model's
@@ -173,10 +166,7 @@ class LLMVisionTool(Tool):
         try:
             is_streaming = self.on_token is not None
             response_stats = await self.generative_model.async_generate_with_history(
-                messages_history=messages_history,
-                prompt=prompt,
-                image_url=image_url,
-                streaming=is_streaming
+                messages_history=messages_history, prompt=prompt, image_url=image_url, streaming=is_streaming
             )
 
             if is_streaming:

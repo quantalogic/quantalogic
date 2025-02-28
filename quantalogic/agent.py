@@ -193,10 +193,8 @@ class Agent(BaseModel):
             # Create a new event loop if one doesn't exist
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-        
-        return loop.run_until_complete(
-            self.async_solve_task(task, max_iterations, streaming, clear_memory)
-        )
+
+        return loop.run_until_complete(self.async_solve_task(task, max_iterations, streaming, clear_memory))
 
     async def async_solve_task(
         self, task: str, max_iterations: int = 30, streaming: bool = False, clear_memory: bool = True
@@ -257,7 +255,7 @@ class Agent(BaseModel):
                         messages_history=self.memory.memory,
                         prompt=current_prompt,
                         streaming=False,
-                        stop_words=["thinking"]
+                        stop_words=["thinking"],
                     )
 
                 content = result.response
@@ -295,7 +293,7 @@ class Agent(BaseModel):
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
         return loop.run_until_complete(self._async_observe_response(content, iteration))
 
     async def _async_observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
@@ -339,7 +337,7 @@ class Agent(BaseModel):
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
         return loop.run_until_complete(self._async_execute_tool(tool_name, tool, arguments_with_values))
 
     async def _async_execute_tool(self, tool_name: str, tool, arguments_with_values: dict) -> tuple[str, Any]:
@@ -382,7 +380,9 @@ class Agent(BaseModel):
             response = f"Error executing tool: {tool_name}: {str(e)}\n"
             executed_tool = ""
 
-        self._emit_event("tool_execution_end", {"tool_name": tool_name, "arguments": arguments_with_values, "response": response})
+        self._emit_event(
+            "tool_execution_end", {"tool_name": tool_name, "arguments": arguments_with_values, "response": response}
+        )
         return executed_tool, response
 
     def _interpolate_variables(self, text: str) -> str:
@@ -392,7 +392,7 @@ class Agent(BaseModel):
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
         return loop.run_until_complete(self._async_interpolate_variables(text))
 
     async def _async_interpolate_variables(self, text: str) -> str:
@@ -417,7 +417,7 @@ class Agent(BaseModel):
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
         return loop.run_until_complete(self._async_compact_memory_if_needed(current_prompt))
 
     async def _async_compact_memory_if_needed(self, current_prompt: str = ""):
@@ -484,7 +484,7 @@ class Agent(BaseModel):
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
         return loop.run_until_complete(self._async_generate_task_summary(content))
 
     async def _async_generate_task_summary(self, content: str) -> str:
@@ -497,7 +497,7 @@ class Agent(BaseModel):
             str: Generated task summary
         """
         try:
-            if len(content) < 1024*4:
+            if len(content) < 1024 * 4:
                 return content
             prompt = (
                 "Create a task summary that captures ONLY: \n"
@@ -801,7 +801,7 @@ class Agent(BaseModel):
             str: Generated task summary
         """
         try:
-            if len(content) < 1024*4:
+            if len(content) < 1024 * 4:
                 return content
             prompt = (
                 "Create a task summary that captures ONLY: \n"

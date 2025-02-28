@@ -33,10 +33,7 @@ class DuckDuckGoSearchTool(Tool):
     """
 
     name: str = "duckduckgo_tool"
-    description: str = (
-        "Retrieves search results from DuckDuckGo. "
-        "Provides structured output of search results."
-    )
+    description: str = "Retrieves search results from DuckDuckGo. " "Provides structured output of search results."
     arguments: list = [
         ToolArgument(
             name="query",
@@ -183,6 +180,7 @@ class DuckDuckGoSearchTool(Tool):
 
             # Return pretty-printed JSON
             import json
+
             return json.dumps(results, indent=4, ensure_ascii=False)
 
         except Exception as e:

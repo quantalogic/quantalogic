@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 """FastAPI server for the QuantaLogic agent."""
 
-import asyncio 
-import sys 
-from loguru import logger 
-
+import asyncio
+import sys
+from loguru import logger
 
 
 class ServerState:

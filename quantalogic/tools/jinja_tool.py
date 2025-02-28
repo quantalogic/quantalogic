@@ -14,7 +14,7 @@ class JinjaTool(Tool):
 
     name: str = "jinja_tool"
     description: str = (
-        "Renders an inline Jinja2 template string with a predefined context.\n" 
+        "Renders an inline Jinja2 template string with a predefined context.\n"
         "You can use the variables in the template just as var1, var2, etc.\n"
         "Useful for simple calculations or string operations.\n"
     )
@@ -41,7 +41,7 @@ class JinjaTool(Tool):
         """
         super().__init__()
 
-    def execute(self, inline_template: str,variables: Optional[Dict[str, Any]] = None) -> str:
+    def execute(self, inline_template: str, variables: Optional[Dict[str, Any]] = None) -> str:
         """
         Render an inline Jinja2 template with the predefined context.
 
@@ -72,20 +72,16 @@ class JinjaTool(Tool):
 
 if __name__ == "__main__":
     # Example of using JinjaTool with variables
-    tool = JinjaTool(context={
-        "var1": "World", 
-        "var2": 42, 
-        "var3": ["apple", "banana", "cherry"]
-    })
-    
+    tool = JinjaTool(context={"var1": "World", "var2": 42, "var3": ["apple", "banana", "cherry"]})
+
     # Inline template demonstrating variable usage
     template = "Hello {{ var1 }}! The answer is {{ var2 }}. Fruits: {% for fruit in var3 %}{{ fruit }}{% if not loop.last %}, {% endif %}{% endfor %}."
-    
+
     # Render the template
     result = tool.execute(template)
     print("Rendered Template:")
     print(result)
-    
+
     # Print the tool's markdown representation
     print("\nTool Markdown:")
     print(tool.to_markdown())
