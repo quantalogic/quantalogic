@@ -1,18 +1,111 @@
 [tool.poetry]
 name = "quantalogic"
-version = "0.40.0"
+version = "0.50.16"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
 packages = [{include = "quantalogic"}]
 
+# Core dependencies required for the base Agent and ToolManager
 [tool.poetry.dependencies]
 python = "^3.12"
 pydantic = "^2.10.4"
 litellm = "^1.56.4"
 rich = "^13.9.4"
 loguru = "^0.7.3"
+tenacity = "^9.0.0"
+prompt-toolkit = "^3.0.48"
+click = "^8.1.8"
+jinja2 = "^3.1.5"
+instructor = "^1.7.2"
+requests = "^2.32.3"
+pathspec = "^0.12.1"
+faker = "^36.1.1"
+sqlalchemy = "^2.0.25"
+networkx = "^3.2.1"
+duckduckgo-search = "^7.2.1"
+
+[tool.poetry.group.file-tools]
+optional = false
+
+[tool.poetry.group.file-tools.dependencies]
+python-dotenv = "^1.0.1"
+
+# Optional group for git-related tools
+[tool.poetry.group.git-tools]
+optional = true
+
+[tool.poetry.group.git-tools.dependencies]
+gitpython = "^3.1.44"
+
+# Optional group for search-related tools
+[tool.poetry.group.search-tools]
+optional = false
+
+[tool.poetry.group.search-tools.dependencies]
+google-search-results = "^2.4.2"
+serpapi = "^0.1.5"
+
+# Optional group for document conversion tools
+[tool.poetry.group.document-tools]
+optional = true
+
+[tool.poetry.group.document-tools.dependencies]
+markitdown = "^0.0.1a3"
+weasyprint = "^64.0"
+python-docx = "^1.1.2"
+python-pptx = "^1.0.2"
+pypdf = "^5.3.0"
+ebooklib = "^0.18"
+markdown = "^3.7"
+pygments = "^2.19.1"
+mermaid-py = "^0.7.0"
+pillow = ">=10.2,<11.0"
+
+# Optional group for database tools
+[tool.poetry.group.database-tools]
+optional = true
+
+[tool.poetry.group.database-tools.dependencies]
+chromadb = "^0.6.3"
+faiss-cpu = "^1.10.0"
+pinecone-client = "^6.0.0"
+
+# Optional group for LLM and AI-related tools
+[tool.poetry.group.llm-tools]
+optional = true
+
+[tool.poetry.group.llm-tools.dependencies]
+transformers = "^4.49.0"
+torch = "^2.6.0"
+llama-index = "^0.12.19"
+llama-index-embeddings-openai = "^0.3.1"
+llama-index-embeddings-huggingface = "^0.5.1"
+llama-index-embeddings-instructor = "^0.3.0"
+llama-index-embeddings-bedrock = "^0.5.0"
+llama-index-vector-stores-chroma = "^0.4.1"
+llama-index-vector-stores-faiss = "^0.3.0"
+llmlingua = "^0.2.2"
+
+# Optional group for web and API tools
+[tool.poetry.group.web-tools]
+optional = true
+
+[tool.poetry.group.web-tools.dependencies]
 boto3 = "^1.35.86"
+uvicorn = "^0.34.0"
+fastapi = "^0.115.6"
+websocket = "^0.2.1"
+
+beautifulsoup4 = "^4.12.3"
+html2text = "^2024.2.26"
+python-multipart = "^0.0.20"
+
+# Optional group for code parsing tools
+[tool.poetry.group.code-parsing]
+optional = false
+
+[tool.poetry.group.code-parsing.dependencies]
 tree-sitter-python = "^0.23.6"
 tree-sitter = "^0.23.2"
 tree-sitter-javascript = "^0.23.1"
@@ -23,20 +116,12 @@ tree-sitter-go = "^0.23.4"
 tree-sitter-rust = "^0.23.2"
 tree-sitter-c = "^0.23.4"
 tree-sitter-cpp = "^0.23.4"
-markitdown = "^0.0.1a3"
-prompt-toolkit = "^3.0.48"
-uvicorn = "^0.34.0"
-fastapi = "^0.115.6"
-websocket = "^0.2.1"
-tenacity = "^9.0.0"
-google-auth = "^2.20.0"
-pathspec = "^0.12.1"
-click = "^8.1.8"
-toml = "^0.10.2"
-types-requests = "^2.32.0.20241016"
-google-search-results = "^2.4.2"
-serpapi = "^0.1.5"
-duckduckgo-search = "^7.2.1"
+
+# Optional group for documentation tools
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
 mkdocs-material = {extras = ["imaging"], version = "^9.5.49"}
 mkdocs-mermaid2-plugin = "^1.1.1"
 mkdocs-minify-plugin = "^0.7.1"
@@ -45,60 +130,35 @@ mkdocs-macros-plugin = "^1.0.4"
 mkdocstrings = "^0.24.0"
 mkdocstrings-python = "^1.7.0"
 pymdown-extensions = "^10.3.1"
-llmlingua = "^0.2.2"
-jinja2 = "^3.1.5"
-beautifulsoup4 = "^4.12.3"
+mkdocs = "^1.6.0"
+
+# Optional group for Composio integration
+[tool.poetry.group.composio-tools]
+optional = true
+
+[tool.poetry.group.composio-tools.dependencies]
+composio = "^0.1.1"
+
+# Optional group for additional utilities
+[tool.poetry.group.utilities]
+optional = false
+
+[tool.poetry.group.utilities.dependencies]
+google-auth = "^2.20.0"
+toml = "^0.10.2"
+types-requests = "^2.32.0.20241016"
 markdownify = "^0.14.1"
-tvDatafeed = { git = "https://github.com/rongardF/tvdatafeed.git" }
-requests = "^2.32.3"
-sqlalchemy = "^2.0.37"
-python-dotenv = "^1.0.1"
-networkx = "^3.4.2"
-faker = "^33.3.1"
 fuzzywuzzy = "^0.18.0"
 python-levenshtein = "^0.26.1"
-instructor = "^1.7.2"
-gnews = "^0.4.0"
-composio = "^0.1.1"
-html2text = "^2024.2.26"
-python-multipart = "^0.0.20"
-gitpython = "^3.1.44"
-python-docx = "^1.1.2"
-python-pptx = "^1.0.2"
-mermaid-py = "^0.7.0"
-pillow = ">=10.2,<11.0"
-markdown = "^3.7"
-weasyprint = "^64.0"
-pygments = "^2.19.1"
 bibtexparser = "^1.4.3"
-ebooklib = "^0.18"
 nbformat = "^5.10.4"
 ta = "^0.11.0"
 pandas = "^2.2.3"
 numpy = "^2.2.3"
-yfinance = "^0.2.53"
-ccxt = "^4.4.61"
-llama-index = "^0.12.19"
-chromadb = "^0.6.3"
-faiss-cpu = "^1.10.0"
-pinecone-client = "^6.0.0"
-transformers = "^4.49.0"
-torch = "^2.6.0"
-pypdf = "^5.3.0"
-epub = "^0.5.2"
-llama-index-embeddings-openai = "^0.3.1"
-llama-index-embeddings-huggingface = "^0.5.1"
-llama-index-embeddings-instructor = "^0.3.0"
-llama-index-embeddings-bedrock = "^0.5.0"
-llama-index-vector-stores-chroma = "^0.4.1"
-llama-index-vector-stores-faiss = "^0.3.0"
-ipython = "^8.32.0"
 
-[tool.poetry.scripts]
-quantalogic = "quantalogic.main:cli"
-docs-serve = "quantalogic.docs_cli:serve_docs"
-docs-build = "quantalogic.docs_cli:build_docs"
-docs-deploy = "quantalogic.docs_cli:deploy_docs"
+# Development dependencies
+[tool.poetry.group.dev]
+optional = false
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.8.4"
@@ -106,22 +166,20 @@ pytest = "^8.2.0"
 pytest-mock = "^3.14.0"
 litellm = "^1.55.9"
 ollama = "^0.4.4"
-mkdocs = "^1.6.0"
-mkdocs-material = "^9.5.0"
 
-[tool.poetry.group.docs.dependencies]
-mkdocs-material = {extras = ["imaging"], version = "^9.5.49"}
-mkdocs-mermaid2-plugin = "^1.1.1"
-mkdocs-git-revision-date-localized-plugin = "^1.2.0"
-mkdocs-macros-plugin = "^1.0.4"
-mkdocstrings = "^0.24.0"
-mkdocstrings-python = "^1.7.0"
-pymdown-extensions = "^10.3.1"
+# Scripts for CLI and documentation
+[tool.poetry.scripts]
+quantalogic = "quantalogic.main:cli"
+docs-serve = "quantalogic.docs_cli:serve_docs"
+docs-build = "quantalogic.docs_cli:build_docs"
+docs-deploy = "quantalogic.docs_cli:deploy_docs"
 
+# Build system configuration
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+# Ruff linting configuration
 [tool.ruff]
 target-version = "py312"
 line-length = 88
@@ -133,6 +191,7 @@ ignore = ["E501"]
 [tool.ruff.format]
 preview = true
 
+# Pytest configuration
 [tool.pytest.ini_options]
 addopts = "-v"
 markers = [

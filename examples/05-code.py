@@ -18,22 +18,22 @@ from quantalogic.tools import (
     ReadFileTool,
     ReplaceInFileTool,
     RipgrepTool,
-    SearchDefinitionNames,
+    SearchDefinitionNamesTool,
     WriteFileTool,
 )
 
-MODEL_NAME = "deepseek/deepseek-chat"
+MODEL_NAME = "openrouter/openai/gpt-4o-mini"
 
-# Verify API key is set - required for authentication with DeepSeek's API
+# Verify API key is set - required for authentication with OpenRouter API
 # This check ensures the agent won't fail during runtime due to missing credentials
-if not os.environ.get("DEEPSEEK_API_KEY"):
-    raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
+if not os.environ.get("OPENROUTER_API_KEY"):
+    raise ValueError("OPENROUTER_API_KEY environment variable is not set")
 
 
 agent = Agent(
     model_name=MODEL_NAME,
     tools=[
-        SearchDefinitionNames(),
+        SearchDefinitionNamesTool(),
         RipgrepTool(),
         WriteFileTool(),
         ReadFileTool(),
@@ -72,8 +72,11 @@ agent.event_emitter.on(event=["stream_chunk"], listener=console_print_token)
 result = agent.solve_task(
     """
 
-1. Update all the files at the first level of the ./examples directory
-2. Update the comments of each file to make it more relevant and informative: focus on why
+Step 1: Write a snake game program in C ./demo/
+Step 2: Review the program and identify potential issues or improvements
+Step 3: Update the program to address the identified issues
+
+Ensure we have an updated snake game program in ./demo/
 
 """,
     streaming=True,

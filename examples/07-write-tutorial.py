@@ -24,7 +24,7 @@ from quantalogic.tools import (
     ReadFileTool,
     ReplaceInFileTool,
     RipgrepTool,
-    SearchDefinitionNames,
+    SearchDefinitionNamesTool,
     WriteFileTool,
 )
 
@@ -49,7 +49,7 @@ if not os.environ.get("DEEPSEEK_API_KEY"):
 agent = Agent(
     model_name=MODEL_NAME,
     tools=[
-        SearchDefinitionNames(),
+        SearchDefinitionNamesTool(),
         RipgrepTool(),
         WriteFileTool(),
         ReadFileTool(),

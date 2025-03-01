@@ -52,7 +52,7 @@ def create_coding_agent(
     specific_expertise = (
         "Software expert focused on pragmatic solutions."
         "Validates codebase pre/post changes."
-        "Employs SearchDefinitionNames for code search; ReplaceInFileTool for updates."
+        "Employs SearchDefinitionNamesTool for code search; ReplaceInFileTool for updates."
         "Exercise caution with the surrounding context during search/replace operations."
         "For refactoring tasks, take the time to develop a comprehensive plan for implementing the proposed changes."
     )

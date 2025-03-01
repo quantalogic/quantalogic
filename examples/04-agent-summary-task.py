@@ -7,13 +7,13 @@
 # ]
 # ///
 
-import os
 import asyncio
+import os
 
 from quantalogic import Agent
 from quantalogic.console_print_events import console_print_events
 from quantalogic.console_print_token import console_print_token
-from quantalogic.tools import LLMTool, MarkitdownTool
+from quantalogic.tools import LLMTool, MarkitdownTool, ReadHTMLTool
 
 # MODEL_NAME = "gpt-4o-mini"
 MODEL_NAME = "openrouter/openai/gpt-4o-mini"
@@ -27,7 +27,7 @@ if not os.environ.get("OPENAI_API_KEY"):
 agent = Agent(
     model_name=MODEL_NAME,
     tools=[
-        MarkitdownTool(),
+        ReadHTMLTool(),
         LLMTool(model_name=MODEL_NAME, on_token=console_print_token),
     ],
 )
@@ -56,9 +56,9 @@ async def main():
     result = await agent.async_solve_task(
         """
 
-        1. Read the latest news about AI https://arxiv.org/search/cs?query=artificial+intelligence+survey&searchtype=all&abstracts=show&order=-announced_date_first&size=25 
+        Step 1. Read the latest news about AI https://arxiv.org/search/cs?query=artificial+intelligence+survey&searchtype=all&abstracts=show&order=-announced_date_first&size=25 
            You can use MarkitdownTool to read the latest news.
-        2. Select the top 5 articles based on their impact on the AI field and summarize their key points as answer.
+        Step 2. Select the top 5 articles based on their impact on the AI field and summarize their key points as answer from the Step 1.
 
     """,
         streaming=True,

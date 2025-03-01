@@ -88,24 +88,17 @@ def get_database_report():
     return tool.execute()
 
 
-# Initialize agent with SQL capabilities using LiteLLM
+# Initialize agent with SQL capabilities
 def create_agent(connection_string: str) -> Agent:
-    """Create an agent with SQL capabilities using LiteLLM."""
+    """Create an agent with SQL capabilities."""
     agent = Agent(
         model_name=MODEL_NAME,
         tools=[
             SQLQueryTool(connection_string=connection_string),
             InputQuestionTool(),
         ],
-        llm_config={
-            "provider": "litellm",
-            "api_keys": {
-                "deepseek": os.environ.get("DEEPSEEK_API_KEY"),
-                "openai": os.environ.get("OPENAI_API_KEY"),
-                "anthropic": os.environ.get("ANTHROPIC_API_KEY"),
-                "openrouter": os.environ.get("OPENROUTER_API_KEY"),
-            },
-        },
+        specific_expertise="SQL Query Assistant able to generate SQL queries based on natural language questions",
+        task_to_solve="Generate SQL queries based on user questions about the database"
     )
 
     return agent

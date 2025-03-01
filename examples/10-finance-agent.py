@@ -7,7 +7,7 @@
 #     "yfinance",
 #     "pandas",
 #     "plotly",
-#     "quantalogic",
+#     "quantalogic>=0.50.0",
 # ]
 # ///
 
@@ -22,7 +22,7 @@ import streamlit as st
 import yfinance as yf
 
 from quantalogic import Agent
-from quantalogic.tools import DuckDuckGoSearchTool, LLMTool, PythonTool, SerpApiSearchTool, Tool, ToolArgument
+from quantalogic.tools import DuckDuckGoSearchTool, LLMTool, SerpApiSearchTool, Tool, ToolArgument
 
 
 class StreamlitInputTool(Tool):
