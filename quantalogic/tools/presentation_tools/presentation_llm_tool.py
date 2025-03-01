@@ -1,7 +1,6 @@
 """Specialized LLM Tool for formatting and structuring content presentations."""
 
-from typing import Callable, Literal, ClassVar, Dict
-import json
+from typing import Callable, ClassVar, Dict, Literal
 
 from loguru import logger
 from pydantic import ConfigDict, Field

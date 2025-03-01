@@ -4,6 +4,7 @@ import os
 import re
 from typing import ClassVar, Dict
 from urllib.parse import urlparse
+
 from git import Repo
 from git.exc import GitCommandError
 from loguru import logger

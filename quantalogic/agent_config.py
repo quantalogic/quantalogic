@@ -3,11 +3,11 @@
 # Standard library imports
 
 # Local application imports
-import os
 import logging
-import json
-from dotenv import load_dotenv
+import os
 from typing import Any
+
+from dotenv import load_dotenv
 
 from quantalogic.agent import Agent
 from quantalogic.console_print_token import console_print_token
@@ -15,54 +15,53 @@ from quantalogic.event_emitter import EventEmitter
 from quantalogic.memory import AgentMemory
 from quantalogic.tools import (
     AgentTool,
+    BitbucketCloneTool,
+    BitbucketOperationsTool,
+    CloneRepoTool,
+    ComposioTool,
+    CSVProcessorTool,
     DownloadHttpFileTool,
     DuckDuckGoSearchTool,
     EditWholeContentTool,
     ExecuteBashCommandTool,
+    GitOperationsTool,
+    GoogleNewsTool,
     InputQuestionTool,
     ListDirectoryTool,
     LLMImageGenerationTool,
     LLMTool,
     LLMVisionTool,
+    MarkdownToDocxTool,
+    MarkdownToEpubTool,
+    MarkdownToHtmlTool,
+    MarkdownToIpynbTool,
+    MarkdownToLatexTool,
+    MarkdownToPdfTool,
+    MarkdownToPptxTool,
     MarkitdownTool,
+    MermaidValidatorTool,
+    NasaApodTool,
+    NasaNeoWsTool,
     NodeJsTool,
+    PrepareDownloadTool,
+    PresentationLLMTool,
+    ProductHuntTool,
     PythonTool,
+    RagTool,
     ReadFileBlockTool,
     ReadFileTool,
     ReadHTMLTool,
     ReplaceInFileTool,
     RipgrepTool,
-    SafePythonInterpreterTool, 
+    SafePythonInterpreterTool,
     SearchDefinitionNames,
+    SequenceTool,
+    SQLQueryTool,
+    SQLQueryToolAdvanced,
     TaskCompleteTool,
     WikipediaSearchTool,
     WriteFileTool,
-    GoogleNewsTool,
-    PresentationLLMTool,
-    SequenceTool,
-    SQLQueryTool,
-    ComposioTool,
-    CloneRepoTool,
-    GitOperationsTool,
-    SQLQueryToolAdvanced,
-    MarkdownToPdfTool,
-    MarkdownToPptxTool,
-    MarkdownToHtmlTool,
-    MarkdownToEpubTool,
-    MarkdownToIpynbTool,
-    MarkdownToLatexTool,
-    MarkdownToDocxTool,
-    BitbucketCloneTool,
-    BitbucketOperationsTool,
-    CSVProcessorTool,
-    PrepareDownloadTool,
-    MermaidValidatorTool,
-    NasaNeoWsTool,
-    NasaApodTool,
-    ProductHuntTool,
-    RagTool
 )
-from composio import ComposioToolSet, Action
 
 load_dotenv()
 
@@ -313,11 +312,11 @@ def create_custom_agent(
             Each tool config should have:
             - type: str - The type of tool
             - parameters: dict - The parameters required for the tool
+        memory (AgentMemory, optional): Memory object to use for the agent.
 
     Returns:
         Agent: An agent with the specified model and tools
     """
-
     storage_dir = os.path.join(os.path.dirname(__file__), "storage", "rag")
     os.makedirs(storage_dir, exist_ok=True)
     
@@ -436,11 +435,11 @@ def create_custom_agent(
     }
 
     # Define write tools that should trigger automatic download tool addition
-    WRITE_TOOLS = {"write_file", "edit_whole_content", "replace_in_file"}
+    write_tools = {"write_file", "edit_whole_content", "replace_in_file"} 
     
     agent_tools = []
     has_write_tool = any(
-        tool_config.get("type") in WRITE_TOOLS 
+        tool_config.get("type") in write_tools 
         for tool_config in (tools or [])
     )
 

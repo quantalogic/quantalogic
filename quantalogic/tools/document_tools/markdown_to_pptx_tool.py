@@ -7,22 +7,17 @@ Why this tool:
 - Supports customization through templates and style configurations
 """
 
-import os
-from typing import Dict, Optional, List, Union, Any
 import json
+import os
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
-from loguru import logger
-from pydantic import Field
-from pptx import Presentation
-from pptx.util import Pt, Inches
-from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
 import markdown
-import mermaid
-from bs4 import BeautifulSoup, Tag
-import requests
-from PIL import Image
+from bs4 import BeautifulSoup
+from loguru import logger
+from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.util import Inches, Pt
 
 from quantalogic.tools.tool import Tool, ToolArgument
 

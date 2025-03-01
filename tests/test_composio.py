@@ -1,52 +1,14 @@
 """Test module for Composio tool integration with QuantaLogic agent."""
 
-import os
+
 from dotenv import load_dotenv
 
 from quantalogic.agent import Agent
-from quantalogic.console_print_token import console_print_token
-from quantalogic.event_emitter import EventEmitter
-from quantalogic.memory import AgentMemory
-from quantalogic.tools.composio import ComposioTool 
-
-from typing import Any
-from dotenv import load_dotenv
-
-from quantalogic.agent import Agent
-from quantalogic.console_print_token import console_print_token
-from quantalogic.event_emitter import EventEmitter
-from quantalogic.memory import AgentMemory
 from quantalogic.tools import (
     AgentTool,
-    DownloadHttpFileTool,
-    DuckDuckGoSearchTool,
-    EditWholeContentTool,
-    ExecuteBashCommandTool,
-    InputQuestionTool,
-    ListDirectoryTool,
-    LLMImageGenerationTool,
-    LLMTool,
-    LLMVisionTool,
-    MarkitdownTool,
-    NodeJsTool,
-    PythonTool,
-    ReadFileBlockTool,
-    ReadFileTool,
-    ReadHTMLTool,
-    ReplaceInFileTool,
-    RipgrepTool,
-    SafePythonInterpreterTool, 
-    SearchDefinitionNames,
     TaskCompleteTool,
-    WikipediaSearchTool,
-    WriteFileTool,
-    GoogleNewsTool,
-    PresentationLLMTool,
-    SequenceTool,
-    SQLQueryTool,
-    SQLQueryToolAdvanced
 )
-
+from quantalogic.tools.composio import ComposioTool
 
 # Load environment variables
 load_dotenv()
@@ -94,7 +56,7 @@ def test_composio_weather():
     """Test Composio weather integration with the agent."""
     # Create agent with Composio tool
     agent = create_basic_composio_agent(
-        model_name="openai/gpt-4o-mini", 
+        model_name="openrouter/openai/gpt-4o-mini", 
         vision_model_name=None
     )
     

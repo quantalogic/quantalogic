@@ -4,7 +4,6 @@ import asyncio
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
-import uuid
 
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, PrivateAttr
@@ -20,7 +19,6 @@ from quantalogic.utils import get_environment
 from quantalogic.utils.ask_user_validation import console_ask_for_user_validation
 from quantalogic.xml_parser import ToleranceXMLParser
 from quantalogic.xml_tool_parser import ToolParser
-import json
 
 # Maximum ratio occupancy of the occupied memory
 MAX_OCCUPANCY = 90.0

@@ -2,12 +2,13 @@
 
 import os
 import shutil
+from pathlib import Path
+
 import requests
 from git import Repo
 from git.exc import GitCommandError
 from loguru import logger
 from pydantic import Field
-from pathlib import Path
 
 from quantalogic.tools.tool import Tool, ToolArgument
 

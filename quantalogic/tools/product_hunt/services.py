@@ -4,9 +4,11 @@ This module provides service functions for interacting with the Product Hunt Gra
 """
 
 import os
-from typing import Dict, Any
+from typing import Any, Dict
+
 import requests
 from loguru import logger
+
 
 class ProductHuntService:
     """Service class for Product Hunt API interactions."""

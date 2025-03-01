@@ -1,13 +1,12 @@
 """Tool for executing SQL queries and performing database operations with safety checks."""
 
-from enum import Enum
-from typing import Any, Dict, List, Optional, Union
 import json
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
-from pydantic import Field, ValidationError
-from sqlalchemy import create_engine, text, MetaData, Table, inspect
-from sqlalchemy.exc import SQLAlchemyError
+from pydantic import Field
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
 from quantalogic.tools.tool import Tool, ToolArgument
@@ -257,6 +256,6 @@ if __name__ == "__main__":
 
     # Create and document sample database
     create_sample_database("sample.db")
-    tool = SQLQueryTool(connection_string="sqlite:///sample.db")
+    tool = SQLQueryToolAdvanced(connection_string="sqlite:///sample.db")
     print(tool.execute("select * from customers", 1, 10))
     print(tool.execute("select * from customers", 11, 20))

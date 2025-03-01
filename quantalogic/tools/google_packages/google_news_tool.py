@@ -4,23 +4,18 @@ This tool provides a sophisticated interface to fetch, analyze, and format news 
 from Google News using multiple sources and advanced filtering capabilities.
 """
 
-from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any
-import json
-from urllib.parse import quote_plus
 import asyncio
+from typing import Any, Dict, List
+
 import aiohttp
+import html2text
 from bs4 import BeautifulSoup
 from gnews import GNews
 from loguru import logger
-from pydantic import Field, validator, ConfigDict
-import nltk
-from nltk.sentiment import SentimentIntensityAnalyzer
-import html2text
 
-from quantalogic.tools.tool import Tool, ToolArgument
-from quantalogic.tools.llm_tool import LLMTool
 from quantalogic.event_emitter import EventEmitter
+from quantalogic.tools.llm_tool import LLMTool
+from quantalogic.tools.tool import Tool, ToolArgument
 
 
 class NewsArticle:

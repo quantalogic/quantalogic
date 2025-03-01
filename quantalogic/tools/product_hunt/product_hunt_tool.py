@@ -4,12 +4,15 @@ This tool provides access to Product Hunt's GraphQL API to retrieve information 
 products, posts, collections, and more.
 """
 
-from typing import List, Dict, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List
+
 from loguru import logger
 
 from quantalogic.tools.tool import Tool, ToolArgument
+
 from .services import ProductHuntService
+
 
 class ProductHuntTool(Tool):
     """Tool for accessing Product Hunt's GraphQL API.

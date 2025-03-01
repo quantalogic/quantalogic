@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-"""
-Script to explore Composio functionality and manage connected accounts.
-"""
+"""Script to explore Composio functionality and manage connected accounts."""
 
 import os
 from pprint import pprint
-from typing import List
-from composio import ComposioToolSet, Action
-from composio.client.collections import ConnectedAccountModel
+
+from composio import Action, ComposioToolSet
 
 # Initialize Composio client with your API key
 api_key = os.getenv("COMPOSIO_API_KEY", "95vfbyvfe1r6chz93o2bgq")

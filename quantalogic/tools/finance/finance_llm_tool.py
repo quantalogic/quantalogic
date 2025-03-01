@@ -1,21 +1,22 @@
 """Advanced Financial Analysis LLM Tool combining market data with AI insights."""
 
-from typing import Callable, Dict, List, Optional, Union, Literal, ClassVar
-from datetime import datetime, timedelta
 import json
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Union
+
 import pandas as pd
-import numpy as np
+import ta
 from loguru import logger
 from pydantic import ConfigDict, Field
-import ta
-from dataclasses import dataclass
 
-from quantalogic.console_print_token import console_print_token
+from quantalogic.agent import Agent
 from quantalogic.event_emitter import EventEmitter
 from quantalogic.generative_model import GenerativeModel, Message
-from quantalogic.tools.tool import Tool, ToolArgument
-from quantalogic.tools.finance.ccxt_tool import CCXTTool
 from quantalogic.tools.finance.alpha_vantage_tool import AlphaVantageTool
+from quantalogic.tools.finance.ccxt_tool import CCXTTool
+from quantalogic.tools.tool import Tool, ToolArgument
+
 
 @dataclass
 class StrategyResult:

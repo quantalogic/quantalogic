@@ -1,12 +1,12 @@
-import json
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union, ClassVar
+from datetime import datetime
+from typing import ClassVar, Dict
+
 import pandas as pd
-import numpy as np
-from loguru import logger
 import requests
- 
+from loguru import logger
+
 from quantalogic.tools import Tool, ToolArgument
+
 
 class GFinanceTool(Tool):
     """Enhanced Google Finance data retrieval and analysis tool."""

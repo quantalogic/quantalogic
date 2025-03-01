@@ -7,24 +7,20 @@ Why this tool:
 - Supports customization through style configurations and templates
 """
 
-import os
-from typing import Dict, Optional, List, ClassVar, Union, Any
 import json
+import os
 from pathlib import Path
+from typing import ClassVar, Dict, List, Optional, Union
 
-from loguru import logger
-from pydantic import Field
 import markdown
 import mermaid
 from bs4 import BeautifulSoup, Tag
-import requests
-from PIL import Image
-from weasyprint import HTML, CSS
-from weasyprint.text.fonts import FontConfiguration
+from loguru import logger
 from pygments import highlight
-from pygments.lexers import get_lexer_by_name, TextLexer
 from pygments.formatters import HtmlFormatter
-from pygments.styles import get_style_by_name
+from pygments.lexers import TextLexer, get_lexer_by_name
+from weasyprint import CSS, HTML
+from weasyprint.text.fonts import FontConfiguration
 
 from quantalogic.tools.tool import Tool, ToolArgument
 

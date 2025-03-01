@@ -8,21 +8,16 @@ Why this tool:
 - Perfect for tutorials, documentation, and educational content
 """
 
-import os
-from typing import Dict, Optional, List, Any
 import json
-from pathlib import Path
+import os
 import re
-import nbformat
-from nbformat.v4 import new_notebook, new_markdown_cell, new_code_cell
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from loguru import logger
-from pydantic import Field
-import markdown
 import mermaid
-from bs4 import BeautifulSoup, Tag
-import requests
-from PIL import Image
+import nbformat
+from loguru import logger
+from nbformat.v4 import new_code_cell, new_markdown_cell, new_notebook
 
 from quantalogic.tools.tool import Tool, ToolArgument
 

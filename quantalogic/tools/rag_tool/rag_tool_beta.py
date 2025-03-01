@@ -6,8 +6,7 @@ and embedding models, with configurable document processing options.
 
 import os
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, List, Optional
 
 import chromadb
 from llama_index.core import (
@@ -24,7 +23,6 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.vector_stores.faiss import FaissVectorStore
 from loguru import logger
-from pydantic import Field, validator
 
 from quantalogic.tools.tool import Tool, ToolArgument
 

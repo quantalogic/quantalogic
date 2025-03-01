@@ -1,5 +1,7 @@
 from typing import Any, Dict, List
+
 from pydantic import BaseModel
+
 
 class QueryResponse(BaseModel):
     """Structured query response with source attribution."""

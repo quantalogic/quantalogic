@@ -8,20 +8,14 @@ Why this tool:
 - Can be used as an intermediate format for other conversions
 """
 
-import os
-from typing import Dict, Optional, List, ClassVar, Union, Any
 import json
+import os
 from pathlib import Path
-import shutil
+from typing import ClassVar, Dict, List, Optional
 
-from loguru import logger
-from pydantic import Field
 import markdown
-import mermaid
-from bs4 import BeautifulSoup, Tag
-import requests
-from PIL import Image
-import pygments
+from bs4 import BeautifulSoup
+from loguru import logger
 from pygments.formatters import HtmlFormatter
 
 from quantalogic.tools.tool import Tool, ToolArgument

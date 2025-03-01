@@ -8,20 +8,14 @@ Why this tool:
 - Supports custom document classes and packages
 """
 
-import os
-from typing import Dict, Optional, List, ClassVar, Union, Any
 import json
-from pathlib import Path
+import os
 import re
+from pathlib import Path
+from typing import Any, ClassVar, Dict, List, Optional, Union
 
-from loguru import logger
-from pydantic import Field
-import markdown
 import mermaid
-from bs4 import BeautifulSoup, Tag
-import requests
-from PIL import Image
-import bibtexparser
+from loguru import logger
 
 from quantalogic.tools.tool import Tool, ToolArgument
 

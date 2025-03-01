@@ -1,18 +1,17 @@
 """Advanced Technical Analysis Tool for comprehensive market analysis."""
 
-from typing import Dict, List, Optional, Union, Tuple, Any
-from datetime import datetime, timedelta
-import pandas as pd
-import numpy as np
-from loguru import logger
-import ta
-from dataclasses import dataclass
-from enum import Enum
-import scipy.stats as stats
-from scipy.signal import argrelextrema
-import warnings
 import json
-from pydantic import model_validator
+import warnings
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+from typing import Any, ClassVar, Dict, List
+
+import numpy as np
+import pandas as pd
+import ta
+from loguru import logger
+from scipy.signal import argrelextrema
 
 from quantalogic.tools import Tool, ToolArgument
 

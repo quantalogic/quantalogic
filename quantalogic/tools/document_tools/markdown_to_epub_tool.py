@@ -8,23 +8,18 @@ Why this tool:
 - Includes support for custom styling and themes
 """
 
-import os
-from typing import Dict, Optional, List, ClassVar, Union, Any
 import json
-from pathlib import Path
-import uuid
-import datetime
-import shutil
+import os
 import tempfile
+import uuid
+from pathlib import Path
+from typing import ClassVar, Dict, List, Optional
 
-from loguru import logger
-from pydantic import Field
 import markdown
 import mermaid
-from bs4 import BeautifulSoup, Tag
-import requests
-from PIL import Image
+from bs4 import BeautifulSoup
 from ebooklib import epub
+from loguru import logger
 
 from quantalogic.tools.tool import Tool, ToolArgument
 

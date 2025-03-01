@@ -4,14 +4,15 @@ This tool provides access to NASA's APOD API to retrieve astronomy pictures and 
 It supports fetching both current and historical astronomy pictures with detailed metadata.
 """
 
-from datetime import datetime, date
-from typing import List, Optional, Dict, Any
-import requests
-from pydantic import Field, validator
-from loguru import logger
 import os
+from datetime import datetime
+from typing import Any, Dict, List
+
+import requests
+from loguru import logger
 
 from quantalogic.tools.tool import Tool, ToolArgument
+
 
 class NasaApodTool(Tool):
     """Tool for accessing NASA's Astronomy Picture of the Day (APOD) API.

@@ -1,6 +1,8 @@
-from typing import Any, Dict
 from datetime import datetime
+from typing import Any, Dict
+
 from pydantic import BaseModel, Field
+
 
 class DocumentMetadata(BaseModel):
     """Metadata for indexed documents."""

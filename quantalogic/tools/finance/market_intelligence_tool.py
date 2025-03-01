@@ -1,24 +1,25 @@
 """Advanced Market Intelligence Tool for comprehensive financial information retrieval."""
 
 import os
-from typing import Dict, List, Optional, Union, Any
-from datetime import datetime, timedelta
-import pandas as pd
-import numpy as np
-from loguru import logger
-import requests
-import json
 from dataclasses import dataclass
-from bs4 import BeautifulSoup
-from serpapi import GoogleSearch
-import yfinance as yf
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import ccxt
+import numpy as np
+import pandas as pd
+import requests
+import tweepy
+import yfinance as yf
 from alpha_vantage.fundamentaldata import FundamentalData
 from alpha_vantage.timeseries import TimeSeries
-import tweepy
+from loguru import logger
 from newsapi import NewsApiClient
+from serpapi import GoogleSearch
 
+from quantalogic.agent import Agent
 from quantalogic.tools.tool import Tool, ToolArgument
+
 
 @dataclass
 class MarketNews:

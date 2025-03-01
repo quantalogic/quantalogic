@@ -1,12 +1,14 @@
 import json
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union, ClassVar
+from typing import ClassVar, Dict, List, Optional, Union
+
 import numpy as np
 import pandas as pd
 import yfinance as yf
 from loguru import logger
 
 from quantalogic.tools import Tool, ToolArgument
+
 
 class YFinanceTool(Tool):
     """Enhanced Yahoo Finance data retrieval and analysis tool."""

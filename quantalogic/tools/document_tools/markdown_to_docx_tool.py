@@ -7,27 +7,25 @@ Why this tool:
 - Supports customization through templates and style configurations
 """
 
-import os
-from typing import Dict, Optional, List, Union, Any, Tuple
-import json
-from pathlib import Path
 import hashlib
+import json
+import os
 import tempfile
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
 
-from loguru import logger
-from pydantic import Field
-from docx import Document
-from docx.shared import Pt, Inches, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.style import WD_STYLE_TYPE
 import markdown
-import mermaid
-from bs4 import BeautifulSoup, Tag
 import requests
+from bs4 import BeautifulSoup, Tag
+from docx import Document
+from docx.enum.style import WD_STYLE_TYPE
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Inches, Pt, RGBColor
+from loguru import logger
 from PIL import Image
 from pygments import highlight
-from pygments.lexers import get_lexer_by_name, TextLexer
 from pygments.formatters import HtmlFormatter
+from pygments.lexers import TextLexer, get_lexer_by_name
 from pygments.styles import get_style_by_name
 
 from quantalogic.tools.tool import Tool, ToolArgument
