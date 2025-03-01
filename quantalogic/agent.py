@@ -562,17 +562,7 @@ class Agent(BaseModel):
         Returns:
             Generated summary text
         """
-        prompt_summary = (
-            "Summarize the conversation concisely:\n"
-            "format in markdown:\n"
-            "<thinking>\n"
-            " - 1. **Completed Steps**: Briefly describe the steps.\n"
-            " - 2. **Variables Used**: List the variables.\n"
-            " - 3. **Progress Analysis**: Assess progress.\n"
-            "</thinking>\n"
-            "Keep the summary clear and actionable.\n"
-        )
-
+        # Format conversation history for the template
         memory_copy = self.memory.memory.copy()
 
         if len(memory_copy) < 3:
@@ -581,6 +571,14 @@ class Agent(BaseModel):
 
         user_message = memory_copy.pop()
         assistant_message = memory_copy.pop()
+        
+        # Create summarization prompt using template
+        prompt_summary = self._render_template('memory_compaction_prompt.j2', 
+                                             conversation_history="\n\n".join(
+                                                 f"[{msg.role.upper()}]: {msg.content}" 
+                                                 for msg in memory_copy
+                                             ))
+        
         summary = await self.model.async_generate_with_history(messages_history=memory_copy, prompt=prompt_summary)
         
         # Remove last system message if present
