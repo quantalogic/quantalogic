@@ -38,7 +38,10 @@ PROVIDERS = {
         env_var="DASHSCOPE_API_KEY",
     ),
     "nvidia": ModelProviderConfig(
-        prefix="nvidia/", provider="openai", base_url="https://integrate.api.nvidia.com/v1", env_var="NVIDIA_API_KEY"
+        prefix="nvidia/",
+        provider="openai",
+        base_url="https://integrate.api.nvidia.com/v1",
+        env_var="NVIDIA_API_KEY",
     ),
     "ovh": ModelProviderConfig(
         prefix="ovh/",

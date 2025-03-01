@@ -1,0 +1,55 @@
+# Analysis and Next Action Decision Point
+
+📊 Progress: Iteration {{ iteration }}/{{ max_iterations }}
+
+## Global Task summary:
+```
+
+{{ task_to_solve_summary }}```
+
+## Available Resources
+🛠️ Tools:
+{{ tools_prompt }}
+
+📦 Variables:
+{{ variables_prompt }}
+
+## Your Task
+1. Analyze the execution result and progress, formalize if the current step is solved according to the task.
+2. Determine the most effective next step
+3. Select exactly ONE tool from the available list
+4. Utilize variable interpolation where needed
+
+## Response Requirements
+Provide TWO markdown-formatted XML blocks:
+1. Your analysis of the progression resulting from the execution of the tool in <thinking> tags, don't include <context_analysis/>
+2. Your tool execution plan in <tool_name> tags
+
+## Last executed action result
+Last executed tool {{ last_executed_tool }} Execution Result:
+
+<{{ variable_name }}>
+{{ response_display }}
+</{{ variable_name }}>
+
+## Response Format
+```xml
+<thinking>
+[Detailed analysis of progress, and reasoning for next step]
+</thinking>
+```
+```xml
+<action>
+<selected_tool_name>
+[Precise instruction for tool execution]
+</selected_tool_name>
+</action>
+```
+
+⚠️ Important:
+- Respond ONLY with the two XML blocks
+- No additional commentary
+- If previous step failed, revise approach
+- Use interpolated variables ($variable_name$) where required in tool calls, to minimize token usage, if possible
+- strictly follow the required arguments for each tool as defined in system prompt
+- Utilize <action><task_complete><answer>...</answer></task_complete><action> to indicate task completion, display the result or if the task is deemed unfeasible.

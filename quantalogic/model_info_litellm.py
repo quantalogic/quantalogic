@@ -1,7 +1,19 @@
 import functools
 
-import litellm
+# litellm will be imported lazily when needed
+_litellm = None
 
+def _get_litellm():
+    """Lazy load litellm module.
+
+    Returns:
+        The litellm module
+    """
+    global _litellm
+    if _litellm is None:
+        import litellm
+        _litellm = litellm
+    return _litellm
 
 @functools.lru_cache(maxsize=32)
 def litellm_get_model_info(model_name: str) -> dict | None:
@@ -16,6 +28,7 @@ def litellm_get_model_info(model_name: str) -> dict | None:
     Raises:
         ValueError: If model info cannot be found after prefix fallbacks
     """
+    litellm = _get_litellm()
     tried_models = [model_name]
 
     while True:
@@ -37,7 +50,6 @@ def litellm_get_model_info(model_name: str) -> dict | None:
 
     return None
 
-
 def litellm_get_model_max_input_tokens(model_name: str) -> int | None:
     """Get maximum input tokens for a model using litellm.
 
@@ -52,7 +64,6 @@ def litellm_get_model_max_input_tokens(model_name: str) -> int | None:
         return info.get("max_input_tokens", 8192)
     except Exception:
         return 8192  # Default for many modern models
-
 
 def litellm_get_model_max_output_tokens(model_name: str) -> int | None:
     """Get maximum output tokens for a model using litellm.
