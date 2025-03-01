@@ -200,10 +200,10 @@ class SQLQueryToolAdvanced(Tool):
             raise ValueError("DROP DATABASE operations are not allowed")
         
         inspector = inspect(self._engine)
-        existing_tables = inspector.get_table_names()
+        _existing_tables = inspector.get_table_names()
         
         # Additional safety checks could be added here
-        logger.debug(f"Schema validation passed for operation")
+        logger.debug("Schema validation passed for operation")
 
     def _convert_row_number(self, value: Any, field_name: str) -> int:
         """Convert and validate row number input."""

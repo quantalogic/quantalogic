@@ -11,38 +11,17 @@ from quantalogic.agent import Agent
 from quantalogic.console_print_token import console_print_token
 from quantalogic.tools import (
     AgentTool,
-#    BitbucketCloneTool,
-#    BitbucketOperationsTool,
-#    CloneRepoTool,
-#    ComposioTool,
     DownloadHttpFileTool,
     DuckDuckGoSearchTool,
     EditWholeContentTool,
     ExecuteBashCommandTool,
-#    GitOperationsTool,
-#    GoogleNewsTool,
     InputQuestionTool,
     ListDirectoryTool,
-    LLMImageGenerationTool,
     LLMTool,
     LLMVisionTool,
-#    MarkdownToDocxTool,
-#    MarkdownToEpubTool,
-#    MarkdownToHtmlTool,
-#    MarkdownToIpynbTool,
-#    MarkdownToLatexTool,
-#    MarkdownToPdfTool,
-#    MarkdownToPptxTool,
     MarkitdownTool,
-#    MermaidValidatorTool,
-#    NasaApodTool,
-#    NasaNeoWsTool,
     NodeJsTool,
-#    PrepareDownloadTool,
-#    PresentationLLMTool,
-#    ProductHuntTool,
     PythonTool,
-#    RagTool,
     ReadFileBlockTool,
     ReadFileTool,
     ReadHTMLTool,
@@ -53,6 +32,7 @@ from quantalogic.tools import (
     WikipediaSearchTool,
     WriteFileTool,
 )
+from quantalogic.tools.image_generation import LLMImageGenerationTool
 
 load_dotenv()
 
