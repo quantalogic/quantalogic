@@ -1,10 +1,13 @@
 """Enhanced QuantaLogic agent implementing the ReAct framework."""
 
 import asyncio
+import os
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 
@@ -620,15 +623,7 @@ class Agent(BaseModel):
             if len(content) < 1024 * 4:
                 return content
                 
-            prompt = (
-                "Create a task summary that captures ONLY: \n"
-                "1. Primary objective/purpose\n"
-                "2. Core actions/requirements\n"
-                "3. Desired end-state/outcome\n\n"
-                "Guidelines:\n"
-                "- Use imperative voice\n"
-                f"Input Task Description:\n{content}\n\n"
-            )
+            prompt = self._render_template('task_summary_prompt.j2', content=content)
             result = await self.model.async_generate(prompt=prompt)
             logger.debug(f"Generated summary: {result.response}")
             return result.response.strip() + "\n🚨 The FULL task is in <task> tag in the previous messages.\n"
@@ -785,16 +780,11 @@ class Agent(BaseModel):
             Tuple of (executed_tool_name, error_message)
         """
         repeat_count = self.last_tool_call.get("count", 0)
-        error_message = (
-            "Error: Detected repeated identical tool call pattern.\n"
-            f"Tool: {tool_name}\n"
-            f"Arguments: {arguments_with_values}\n"
-            f"Repeated {repeat_count} times\n\n"
-            "PLEASE:\n"
-            "1. Review your previous steps\n"
-            "2. Consider a different approach\n"
-            "3. Use a different tool or modify the arguments\n"
-            "4. Ensure you're making progress towards the goal"
+        error_message = self._render_template(
+            'repeated_tool_call_error.j2',
+            tool_name=tool_name,
+            arguments_with_values=arguments_with_values,
+            repeat_count=repeat_count
         )
         return tool_name, error_message
 
@@ -850,46 +840,19 @@ class Agent(BaseModel):
                 f"... content was truncated full content available by interpolation in variable {variable_name}"
             )
 
-        formatted_response = (
-            "# Analysis and Next Action Decision Point\n\n"
-            f"📊 Progress: Iteration {iteration}/{self.max_iterations}\n\n"
-            "## Global Task summary:\n"
-            f"```\n\n{self.task_to_solve_summary}```\n\n"
-            "## Available Resources\n"
-            f"🛠️ Tools:\n{self._get_tools_names_prompt()}\n\n"
-            f"📦 Variables:\n{self._get_variable_prompt()}\n\n"
-            "## Your Task\n"
-            "1. Analyze the execution result and progress, formalize if the current step is solved according to the task.\n"
-            "2. Determine the most effective next step\n"
-            "3. Select exactly ONE tool from the available list\n"
-            "4. Utilize variable interpolation where needed\n"
-            "## Response Requirements\n"
-            "Provide TWO markdown-formatted XML blocks:\n"
-            "1. Your analysis of the progression resulting from the execution of the tool in <thinking> tags, don't include <context_analysis/>\n"
-            "2. Your tool execution plan in <tool_name> tags\n\n"
-            "## Last executed action result\n"
-            f"Last executed tool {last_executed_tool} Execution Result:\n"
-            f"\n<{variable_name}>\n{response_display}\n</{variable_name}>\n"
-            "## Response Format\n"
-            "```xml\n"
-            "<thinking>\n"
-            "[Detailed analysis of progress, and reasoning for next step]\n"
-            "</thinking>\n"
-            "```\n"
-            "```xml\n"
-            "<action>\n"
-            "<selected_tool_name>\n"
-            "[Precise instruction for tool execution]\n"
-            "</selected_tool_name>\n"
-            "</action>\n"
-            "```\n\n"
-            "⚠️ Important:\n"
-            "- Respond ONLY with the two XML blocks\n"
-            "- No additional commentary\n"
-            "- If previous step failed, revise approach\n"
-            "- Use interpolated variables ($variable_name$) where required in tool calls, to minimize token usage, if possible\n"
-            "- strictly follow the required arguments for each tool as defined in system prompt\n"
-            "- Utilize <action><task_complete><answer>...</answer></task_complete><action> to indicate task completion, display the result or if the task is deemed unfeasible."
+        tools_prompt = self._get_tools_names_prompt()
+        variables_prompt = self._get_variable_prompt()
+        
+        formatted_response = self._render_template(
+            'observation_response_format.j2',
+            iteration=iteration,
+            max_iterations=self.max_iterations,
+            task_to_solve_summary=self.task_to_solve_summary,
+            tools_prompt=tools_prompt,
+            variables_prompt=variables_prompt,
+            last_executed_tool=last_executed_tool,
+            variable_name=variable_name,
+            response_display=response_display
         )
 
         return formatted_response
@@ -903,16 +866,14 @@ class Agent(BaseModel):
         Returns:
             The formatted task prompt
         """
-        prompt_task: str = (
-            "## Your task to solve:\n"
-            f"<task>\n{task}\n</task>\n"
-            "\n### Tools:\n"
-            "-----------------------------\n"
-            f"{self._get_tools_names_prompt()}\n"
-            "\n"
-            "### Variables:\n"
-            "-----------------------------\n"
-            f"{self._get_variable_prompt()}\n"
+        tools_prompt = self._get_tools_names_prompt()
+        variables_prompt = self._get_variable_prompt()
+        
+        prompt_task = self._render_template(
+            'task_prompt.j2',
+            task=task,
+            tools_prompt=tools_prompt,
+            variables_prompt=variables_prompt
         )
         return prompt_task
 
@@ -922,21 +883,8 @@ class Agent(BaseModel):
         Returns:
             Formatted tools prompt
         """
-        prompt_use_tools: str = (
-            "To accomplish this task, you have access to these tools:\n"
-            "\n"
-            f"{', '.join(self.tools.tool_names())}\n\n"
-            "Instructions:\n"
-            "\n"
-            "1. Select ONE tool per message\n"
-            "2. You will receive the tool's output in the next user response\n"
-            "3. Choose the most appropriate tool for each step\n"
-            "4. If it's not asked to write on files, don't use write_file tool\n"
-            "5. If files are written, then use tool to display the prepared download link\n"
-            "6. Give the final full answer using all the variables\n"
-            "7. Use task_complete tool to confirm task completion with the full content of the final answer\n"
-        )
-        return prompt_use_tools
+        tool_names = ', '.join(self.tools.tool_names())
+        return self._render_template('tools_prompt.j2', tool_names=tool_names)
 
     def _get_variable_prompt(self) -> str:
         """Construct a prompt that explains how to use variables.
@@ -944,17 +892,8 @@ class Agent(BaseModel):
         Returns:
             Formatted variables prompt
         """
-        prompt_use_variables: str = (
-            "To use a variable interpolation, use the format $variable_name$ in function arguments.\n"
-            "Example: <write_file><file_path>/path/to/file.txt</file_path><content>$var1$</content></write_file>\n"
-            "\n"
-            "Available variables:\n"
-            "\n"
-            f"{', '.join(self.variable_store.keys())}\n"
-            if len(self.variable_store.keys()) > 0
-            else "None\n"
-        )
-        return prompt_use_variables
+        variable_names = ', '.join(self.variable_store.keys()) if len(self.variable_store.keys()) > 0 else "None"
+        return self._render_template('variables_prompt.j2', variable_names=variable_names)
 
     def _calculate_context_occupancy(self) -> float:
         """Calculate the number of tokens in percentages for prompt and completion.
@@ -1064,3 +1003,30 @@ class Agent(BaseModel):
             system_prompt=self.config.system_prompt,
         )
         logger.debug(f"Set {len(tools)} tools")
+        
+    def _render_template(self, template_name: str, **kwargs) -> str:
+        """Render a Jinja2 template with the provided variables.
+        
+        Args:
+            template_name: Name of the template file (without directory path)
+            **kwargs: Variables to pass to the template
+            
+        Returns:
+            str: The rendered template
+        """
+        try:
+            # Get the directory where this file is located
+            current_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+            
+            # Set up Jinja2 environment
+            template_dir = current_dir / 'prompts'
+            env = Environment(loader=FileSystemLoader(template_dir))
+            
+            # Load the template
+            template = env.get_template(template_name)
+            
+            # Render the template with the provided variables
+            return template.render(**kwargs)
+        except Exception as e:
+            logger.error(f"Error rendering template {template_name}: {str(e)}")
+            raise
