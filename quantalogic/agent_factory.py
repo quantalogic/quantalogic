@@ -5,7 +5,6 @@ from loguru import logger
 from quantalogic.agent import Agent
 from quantalogic.agent_config import (
     create_basic_agent,
-    create_custom_agent,
     create_full_agent,
     create_interpreter_agent,
 )
@@ -171,17 +170,17 @@ def create_agent_for_mode(
             max_tokens_working_memory=max_tokens_working_memory,
         )
         return agent
-    if mode == "custom":
-        agent = create_custom_agent(
-            model_name,
-            vision_model_name,
-            no_stream=no_stream,
-            compact_every_n_iteration=compact_every_n_iteration,
-            max_tokens_working_memory=max_tokens_working_memory,
-            specific_expertise=specific_expertise,
-            tools=tools,
-            memory=memory
-        )
-        return agent
+#    if mode == "custom":
+#        agent = create_custom_agent(
+#            model_name,
+#            vision_model_name,
+#            no_stream=no_stream,
+#            compact_every_n_iteration=compact_every_n_iteration,
+#            max_tokens_working_memory=max_tokens_working_memory,
+#            specific_expertise=specific_expertise,
+#            tools=tools,
+#            memory=memory
+#        )
+#        return agent
     else:
         raise ValueError(f"Unknown agent mode: {mode}")

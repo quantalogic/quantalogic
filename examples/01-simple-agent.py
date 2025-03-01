@@ -3,7 +3,8 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "quantalogic",
+#     "quantalogic>=0.50.13",
+#     "pathspec",
 # ]
 # ///
 
@@ -13,8 +14,8 @@ from quantalogic import Agent
 
 # Veirify that is set DEEPSEEK_API_KEY
 
-# MODEL_NAME = "deepseek/deepseek-chat"
-MODEL_NAME = "ovh/DeepSeek-R1-Distill-Llama-70B"
+MODEL_NAME = "deepseek/deepseek-chat"
+#MODEL_NAME = "ovh/DeepSeek-R1-Distill-Llama-70B"
 
 if not os.environ.get("DEEPSEEK_API_KEY"):
     raise ValueError("DEEPSEEK_API_KEY environment variable is not set")

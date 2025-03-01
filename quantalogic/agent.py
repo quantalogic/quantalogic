@@ -29,6 +29,9 @@ MAX_RESPONSE_LENGTH = 1024 * 32
 DEFAULT_MAX_INPUT_TOKENS = 128 * 1024
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 
+# Maximum recursion depth for variable interpolation
+MAX_INTERPOLATION_DEPTH = 10
+
 
 class AgentConfig(BaseModel):
     """Configuration settings for the Agent."""
@@ -95,7 +98,21 @@ class Agent(BaseModel):
         max_tokens_working_memory: int | None = None,
         event_emitter: EventEmitter | None = None,
     ):
-        """Initialize the agent with model, memory, tools, and configurations."""
+        """Initialize the agent with model, memory, tools, and configurations.
+        
+        Args:
+            model_name: Name of the model to use
+            memory: AgentMemory instance for storing conversation history
+            variable_store: VariableMemory instance for storing variables
+            tools: List of Tool instances 
+            ask_for_user_validation: Function to ask for user validation
+            task_to_solve: Initial task to solve
+            specific_expertise: Description of the agent's expertise
+            get_environment: Function to get environment details
+            compact_every_n_iterations: How often to compact memory
+            max_tokens_working_memory: Maximum token count for working memory
+            event_emitter: EventEmitter instance for event handling
+        """
         try:
             logger.debug("Initializing agent...")
 
@@ -163,12 +180,12 @@ class Agent(BaseModel):
 
     @model_name.setter
     def model_name(self, value: str) -> None:
-        """Set the model name."""
+        """Set the model name and update the model instance."""
         self._model_name = value
         # Update the model instance with the new name
         self.model = GenerativeModel(model=value, event_emitter=self.event_emitter)
 
-    def clear_memory(self):
+    def clear_memory(self) -> None:
         """Clear the memory and reset the session."""
         self._reset_session(clear_memory=True)
 
@@ -180,13 +197,13 @@ class Agent(BaseModel):
         Ideal for synchronous applications. For asynchronous contexts, use `async_solve_task`.
 
         Args:
-            task (str): The task description.
-            max_iterations (int, optional): Maximum number of iterations. Defaults to 30.
-            streaming (bool, optional): Whether to use streaming mode. Defaults to False.
-            clear_memory (bool, optional): Whether to clear memory before solving. Defaults to True.
+            task: The task description
+            max_iterations: Maximum number of iterations
+            streaming: Whether to use streaming mode
+            clear_memory: Whether to clear memory before solving
 
         Returns:
-            str: The final response after task completion.
+            The final response after task completion
         """
         logger.debug(f"Solving task... {task}")
         try:
@@ -206,13 +223,13 @@ class Agent(BaseModel):
         Ideal for asynchronous applications. For synchronous contexts, use `solve_task`.
 
         Args:
-            task (str): The task description.
-            max_iterations (int, optional): Maximum number of iterations. Defaults to 30.
-            streaming (bool, optional): Whether to use streaming mode. Defaults to False.
-            clear_memory (bool, optional): Whether to clear memory before solving. Defaults to True.
+            task: The task description
+            max_iterations: Maximum number of iterations
+            streaming: Whether to use streaming mode
+            clear_memory: Whether to clear memory before solving
 
         Returns:
-            str: The final response after task completion.
+            The final response after task completion
         """
         logger.debug(f"Solving task asynchronously... {task}")
         self._reset_session(task_to_solve=task, max_iterations=max_iterations, clear_memory=clear_memory)
@@ -271,7 +288,7 @@ class Agent(BaseModel):
 
                 if result.executed_tool == "task_complete":
                     self._emit_event("task_complete", {"response": result.answer})
-                    answer = result.answer
+                    answer = result.answer or ""  # Ensure answer is never None
                     done = True
 
                 self._update_session_memory(current_prompt, content)
@@ -289,7 +306,15 @@ class Agent(BaseModel):
         return answer
 
     def _observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
-        """Analyze the assistant's response and determine next steps (synchronous wrapper)."""
+        """Analyze the assistant's response and determine next steps (synchronous wrapper).
+        
+        Args:
+            content: The response content to analyze
+            iteration: Current iteration number
+            
+        Returns:
+            ObserveResponseResult with next steps information
+        """
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
@@ -299,7 +324,15 @@ class Agent(BaseModel):
         return loop.run_until_complete(self._async_observe_response(content, iteration))
 
     async def _async_observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
-        """Analyze the assistant's response and determine next steps (asynchronous)."""
+        """Analyze the assistant's response and determine next steps (asynchronous).
+        
+        Args:
+            content: The response content to analyze
+            iteration: Current iteration number
+            
+        Returns:
+            ObserveResponseResult with next steps information
+        """
         try:
             parsed_content = self._parse_tool_usage(content)
             if not parsed_content:
@@ -332,8 +365,17 @@ class Agent(BaseModel):
         except Exception as e:
             return self._handle_error(e)
 
-    def _execute_tool(self, tool_name: str, tool, arguments_with_values: dict) -> tuple[str, Any]:
-        """Execute a tool with validation if required (synchronous wrapper)."""
+    def _execute_tool(self, tool_name: str, tool: Tool, arguments_with_values: dict) -> tuple[str, Any]:
+        """Execute a tool with validation if required (synchronous wrapper).
+        
+        Args:
+            tool_name: Name of the tool to execute
+            tool: Tool instance
+            arguments_with_values: Tool arguments
+            
+        Returns:
+            Tuple of (executed_tool_name, response)
+        """
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
@@ -342,8 +384,17 @@ class Agent(BaseModel):
 
         return loop.run_until_complete(self._async_execute_tool(tool_name, tool, arguments_with_values))
 
-    async def _async_execute_tool(self, tool_name: str, tool, arguments_with_values: dict) -> tuple[str, Any]:
-        """Execute a tool with validation if required (asynchronous)."""
+    async def _async_execute_tool(self, tool_name: str, tool: Tool, arguments_with_values: dict) -> tuple[str, Any]:
+        """Execute a tool with validation if required (asynchronous).
+        
+        Args:
+            tool_name: Name of the tool to execute
+            tool: Tool instance
+            arguments_with_values: Tool arguments
+            
+        Returns:
+            Tuple of (executed_tool_name, response)
+        """
         if tool.need_validation:
             question_validation = (
                 "Do you permit the execution of this tool?\n"
@@ -387,8 +438,23 @@ class Agent(BaseModel):
         )
         return executed_tool, response
 
-    async def _async_interpolate_variables(self, text: str) -> str:
-        """Interpolate variables using $var$ syntax in the given text."""
+    async def _async_interpolate_variables(self, text: str, depth: int = 0) -> str:
+        """Interpolate variables using $var$ syntax in the given text with recursion protection.
+        
+        Args:
+            text: Text containing variable references
+            depth: Current recursion depth
+            
+        Returns:
+            Text with variables interpolated
+        """
+        if not isinstance(text, str):
+            return str(text)
+            
+        if depth > MAX_INTERPOLATION_DEPTH:
+            logger.warning(f"Max interpolation depth ({MAX_INTERPOLATION_DEPTH}) reached, stopping recursion")
+            return text
+            
         try:
             import re
             
@@ -398,37 +464,45 @@ class Agent(BaseModel):
                 # but handle $ characters separately since they're part of our syntax
                 escaped_var = re.escape(var).replace('\\$', '$')
                 pattern = f"\\${escaped_var}\\$"
+                
+                # Get variable value as string
                 replacement = str(self.variable_store[var])
                 
                 # Replace all occurrences
                 text = re.sub(pattern, lambda m: replacement, text)
+                
+            # Check if there are still variables to interpolate (for nested variables)
+            if '$' in text and depth < MAX_INTERPOLATION_DEPTH:
+                return await self._async_interpolate_variables(text, depth + 1)
+                
             return text
         except Exception as e:
             logger.error(f"Error in _async_interpolate_variables: {str(e)}")
             return text
 
     def _interpolate_variables(self, text: str) -> str:
-        """Interpolate variables using $var$ syntax in the given text."""
-        try:
-            import re
+        """Interpolate variables using $var$ syntax in the given text (synchronous wrapper).
+        
+        Args:
+            text: Text containing variable references
             
-            # Process each variable in the store
-            for var in self.variable_store.keys():
-                # Properly escape the variable name for regex using re.escape
-                # but handle $ characters separately since they're part of our syntax
-                escaped_var = re.escape(var).replace('\\$', '$')
-                pattern = f"\\${escaped_var}\\$"
-                replacement = str(self.variable_store[var])
-                
-                # Replace all occurrences
-                text = re.sub(pattern, lambda m: replacement, text)
-            return text
-        except Exception as e:
-            logger.error(f"Error in _interpolate_variables: {str(e)}")
-            return text
+        Returns:
+            Text with variables interpolated
+        """
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-    def _compact_memory_if_needed(self, current_prompt: str = ""):
-        """Compacts the memory if it exceeds the maximum occupancy (synchronous wrapper)."""
+        return loop.run_until_complete(self._async_interpolate_variables(text))
+
+    def _compact_memory_if_needed(self, current_prompt: str = "") -> None:
+        """Compacts the memory if it exceeds the maximum occupancy (synchronous wrapper).
+        
+        Args:
+            current_prompt: Current prompt to calculate token usage
+        """
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
@@ -437,8 +511,12 @@ class Agent(BaseModel):
 
         return loop.run_until_complete(self._async_compact_memory_if_needed(current_prompt))
 
-    async def _async_compact_memory_if_needed(self, current_prompt: str = ""):
-        """Compacts the memory if it exceeds the maximum occupancy or token limit."""
+    async def _async_compact_memory_if_needed(self, current_prompt: str = "") -> None:
+        """Compacts the memory if it exceeds the maximum occupancy or token limit.
+        
+        Args:
+            current_prompt: Current prompt to calculate token usage
+        """
         ratio_occupied = self._calculate_context_occupancy()
 
         should_compact_by_occupancy = ratio_occupied >= MAX_OCCUPANCY
@@ -448,7 +526,8 @@ class Agent(BaseModel):
             and self.current_iteration % self.compact_every_n_iterations == 0
         )
         should_compact_by_token_limit = (
-            self.max_tokens_working_memory is not None and self.total_tokens > self.max_tokens_working_memory
+            self.max_tokens_working_memory is not None 
+            and self.total_tokens > self.max_tokens_working_memory
         )
 
         if should_compact_by_occupancy or should_compact_by_iteration or should_compact_by_token_limit:
@@ -460,17 +539,26 @@ class Agent(BaseModel):
                     f"Memory compaction triggered: Iteration {self.current_iteration} is a multiple of {self.compact_every_n_iterations}"
                 )
 
+            if should_compact_by_token_limit:
+                logger.debug(
+                    f"Memory compaction triggered: Token count {self.total_tokens} exceeds limit {self.max_tokens_working_memory}"
+                )
+
             self._emit_event("memory_full")
             await self._async_compact_memory()
             self.total_tokens = self.model.token_counter_with_history(self.memory.memory, current_prompt)
             self._emit_event("memory_compacted")
 
-    async def _async_compact_memory(self):
+    async def _async_compact_memory(self) -> None:
         """Compact memory asynchronously."""
         self.memory.compact()
 
     async def _async_compact_memory_with_summary(self) -> str:
-        """Generate a summary and compact memory asynchronously."""
+        """Generate a summary and compact memory asynchronously.
+        
+        Returns:
+            Generated summary text
+        """
         prompt_summary = (
             "Summarize the conversation concisely:\n"
             "format in markdown:\n"
@@ -484,10 +572,18 @@ class Agent(BaseModel):
 
         memory_copy = self.memory.memory.copy()
 
+        if len(memory_copy) < 3:
+            logger.warning("Not enough messages to compact memory with summary")
+            return "Memory compaction skipped: not enough messages"
+
         user_message = memory_copy.pop()
         assistant_message = memory_copy.pop()
         summary = await self.model.async_generate_with_history(messages_history=memory_copy, prompt=prompt_summary)
-        memory_copy.pop()
+        
+        # Remove last system message if present
+        if memory_copy and memory_copy[-1].role == "system":
+            memory_copy.pop()
+            
         memory_copy.append(Message(role="user", content=summary.response))
         memory_copy.append(assistant_message)
         memory_copy.append(user_message)
@@ -495,7 +591,14 @@ class Agent(BaseModel):
         return summary.response
 
     def _generate_task_summary(self, content: str) -> str:
-        """Generate a concise task-focused summary (synchronous wrapper)."""
+        """Generate a concise task-focused summary (synchronous wrapper).
+        
+        Args:
+            content: The content to summarize
+            
+        Returns:
+            Generated task summary
+        """
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
@@ -508,14 +611,15 @@ class Agent(BaseModel):
         """Generate a concise task-focused summary using the generative model.
 
         Args:
-            content (str): The content to summarize
+            content: The content to summarize
 
         Returns:
-            str: Generated task summary
+            Generated task summary
         """
         try:
             if len(content) < 1024 * 4:
                 return content
+                
             prompt = (
                 "Create a task summary that captures ONLY: \n"
                 "1. Primary objective/purpose\n"
@@ -532,8 +636,14 @@ class Agent(BaseModel):
             logger.error(f"Error generating summary: {str(e)}")
             return f"Summary generation failed: {str(e)}"
 
-    def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30, clear_memory: bool = True):
-        """Reset the agent's session."""
+    def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30, clear_memory: bool = True) -> None:
+        """Reset the agent's session.
+        
+        Args:
+            task_to_solve: New task to solve
+            max_iterations: Maximum number of iterations
+            clear_memory: Whether to clear memory
+        """
         logger.debug("Resetting session...")
         self.task_to_solve = task_to_solve
         if clear_memory:
@@ -547,10 +657,21 @@ class Agent(BaseModel):
         self.max_iterations = max_iterations
 
     def _update_total_tokens(self, message_history: list[Message], prompt: str) -> None:
+        """Update the total tokens count based on message history and prompt.
+        
+        Args:
+            message_history: List of messages
+            prompt: Current prompt
+        """
         self.total_tokens = self.model.token_counter_with_history(message_history, prompt)
 
     def _emit_event(self, event_type: str, data: dict[str, Any] | None = None) -> None:
-        """Emit an event with system context and optional additional data."""
+        """Emit an event with system context and optional additional data.
+        
+        Args:
+            event_type: Type of event
+            data: Additional event data
+        """
         event_data = {
             "iteration": self.current_iteration,
             "total_tokens": self.total_tokens,
@@ -563,7 +684,14 @@ class Agent(BaseModel):
         self.event_emitter.emit(event_type, event_data)
 
     def _parse_tool_usage(self, content: str) -> dict:
-        """Extract tool usage from the response content."""
+        """Extract tool usage from the response content.
+        
+        Args:
+            content: Response content
+            
+        Returns:
+            Dictionary mapping tool names to inputs
+        """
         if not content or not isinstance(content, str):
             return {}
 
@@ -577,13 +705,29 @@ class Agent(BaseModel):
         else:
             return xml_parser.extract_elements(text=content, element_names=tool_names)
 
-    def _parse_tool_arguments(self, tool, tool_input: str) -> dict:
-        """Parse the tool arguments from the tool input."""
+    def _parse_tool_arguments(self, tool: Tool, tool_input: str) -> dict:
+        """Parse the tool arguments from the tool input.
+        
+        Args:
+            tool: Tool instance
+            tool_input: Raw tool input text
+            
+        Returns:
+            Dictionary of parsed arguments
+        """
         tool_parser = ToolParser(tool=tool)
         return tool_parser.parse(tool_input)
 
     def _is_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> bool:
-        """Check if the tool call is repeated."""
+        """Check if the tool call is repeated.
+        
+        Args:
+            tool_name: Name of the tool
+            arguments_with_values: Tool arguments
+            
+        Returns:
+            True if call is repeated, False otherwise
+        """
         current_call = {
             "tool_name": tool_name,
             "arguments": arguments_with_values,
@@ -602,16 +746,27 @@ class Agent(BaseModel):
             current_call["count"] = 1
 
         self.last_tool_call = current_call
-        return is_repeated_call and repeat_count >= 2
+        return is_repeated_call and current_call.get("count", 0) >= 2
 
     def _handle_no_tool_usage(self) -> ObserveResponseResult:
-        """Handle the case where no tool usage is found in the response."""
+        """Handle the case where no tool usage is found in the response.
+        
+        Returns:
+            ObserveResponseResult with error message
+        """
         return ObserveResponseResult(
             next_prompt="Error: No tool usage found in response.", executed_tool=None, answer=None
         )
 
     def _handle_tool_not_found(self, tool_name: str) -> ObserveResponseResult:
-        """Handle the case where the tool is not found."""
+        """Handle the case where the tool is not found.
+        
+        Args:
+            tool_name: Name of the tool
+            
+        Returns:
+            ObserveResponseResult with error message
+        """
         logger.warning(f"Tool '{tool_name}' not found in tool manager.")
         return ObserveResponseResult(
             next_prompt=f"Error: Tool '{tool_name}' not found in tool manager.",
@@ -619,8 +774,16 @@ class Agent(BaseModel):
             answer=None,
         )
 
-    def _handle_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> (str, str):
-        """Handle the case where a tool call is repeated."""
+    def _handle_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> tuple[str, str]:
+        """Handle the case where a tool call is repeated.
+        
+        Args:
+            tool_name: Name of the tool
+            arguments_with_values: Tool arguments
+            
+        Returns:
+            Tuple of (executed_tool_name, error_message)
+        """
         repeat_count = self.last_tool_call.get("count", 0)
         error_message = (
             "Error: Detected repeated identical tool call pattern.\n"
@@ -636,7 +799,14 @@ class Agent(BaseModel):
         return tool_name, error_message
 
     def _handle_tool_execution_failure(self, response: str) -> ObserveResponseResult:
-        """Handle the case where tool execution fails."""
+        """Handle the case where tool execution fails.
+        
+        Args:
+            response: Error response
+            
+        Returns:
+            ObserveResponseResult with error message
+        """
         return ObserveResponseResult(
             next_prompt=response,
             executed_tool="",
@@ -644,7 +814,14 @@ class Agent(BaseModel):
         )
 
     def _handle_error(self, error: Exception) -> ObserveResponseResult:
-        """Handle any exceptions that occur during response observation."""
+        """Handle any exceptions that occur during response observation.
+        
+        Args:
+            error: Exception that occurred
+            
+        Returns:
+            ObserveResponseResult with error message
+        """
         logger.error(f"Error in _observe_response: {str(error)}")
         return ObserveResponseResult(
             next_prompt=f"An error occurred while processing the response: {str(error)}",
@@ -653,9 +830,19 @@ class Agent(BaseModel):
         )
 
     def _format_observation_response(
-        self, response: str, last_exectured_tool: str, variable_name: str, iteration: int
+        self, response: str, last_executed_tool: str, variable_name: str, iteration: int
     ) -> str:
-        """Format the observation response with the given response, variable name, and iteration."""
+        """Format the observation response with the given response, variable name, and iteration.
+        
+        Args:
+            response: Tool execution response
+            last_executed_tool: Name of last executed tool
+            variable_name: Name of variable storing response
+            iteration: Current iteration number
+            
+        Returns:
+            Formatted observation response
+        """
         response_display = response
         if len(response) > MAX_RESPONSE_LENGTH:
             response_display = response[:MAX_RESPONSE_LENGTH]
@@ -681,7 +868,7 @@ class Agent(BaseModel):
             "1. Your analysis of the progression resulting from the execution of the tool in <thinking> tags, don't include <context_analysis/>\n"
             "2. Your tool execution plan in <tool_name> tags\n\n"
             "## Last executed action result\n"
-            f"Last executed tool {last_exectured_tool} Execution Result:\n"
+            f"Last executed tool {last_executed_tool} Execution Result:\n"
             f"\n<{variable_name}>\n{response_display}\n</{variable_name}>\n"
             "## Response Format\n"
             "```xml\n"
@@ -707,34 +894,14 @@ class Agent(BaseModel):
 
         return formatted_response
 
-    def _interpolate_variables(self, text: str) -> str:
-        """Interpolate variables using $var$ syntax in the given text."""
-        try:
-            import re
-
-            # Process each variable in the store
-            for var in self.variable_store.keys():
-                # Properly escape the variable name for regex using re.escape
-                # but handle $ characters separately since they're part of our syntax
-                escaped_var = re.escape(var).replace('\\$', '$')
-                pattern = f"\\${escaped_var}\\$"
-                replacement = str(self.variable_store[var])
-                
-                # Replace all occurrences
-                text = re.sub(pattern, lambda m: replacement, text)
-            return text
-        except Exception as e:
-            logger.error(f"Error in _interpolate_variables: {str(e)}")
-            return text
-
     def _prepare_prompt_task(self, task: str) -> str:
         """Prepare the initial prompt for the task.
 
         Args:
-            task (str): The task description.
+            task: The task description
 
         Returns:
-            str: The formatted task prompt.
+            The formatted task prompt
         """
         prompt_task: str = (
             "## Your task to solve:\n"
@@ -750,7 +917,11 @@ class Agent(BaseModel):
         return prompt_task
 
     def _get_tools_names_prompt(self) -> str:
-        """Construct a detailed prompt that lists the available tools for task execution."""
+        """Construct a detailed prompt that lists the available tools for task execution.
+        
+        Returns:
+            Formatted tools prompt
+        """
         prompt_use_tools: str = (
             "To accomplish this task, you have access to these tools:\n"
             "\n"
@@ -761,17 +932,21 @@ class Agent(BaseModel):
             "2. You will receive the tool's output in the next user response\n"
             "3. Choose the most appropriate tool for each step\n"
             "4. If it's not asked to write on files, don't use write_file tool\n"
-            "5. If files are writter, then use tool to display the prepared download link\n"
+            "5. If files are written, then use tool to display the prepared download link\n"
             "6. Give the final full answer using all the variables\n"
             "7. Use task_complete tool to confirm task completion with the full content of the final answer\n"
         )
         return prompt_use_tools
 
     def _get_variable_prompt(self) -> str:
-        """Construct a prompt that explains how to use variables."""
+        """Construct a prompt that explains how to use variables.
+        
+        Returns:
+            Formatted variables prompt
+        """
         prompt_use_variables: str = (
             "To use a variable interpolation, use the format $variable_name$ in function arguments.\n"
-            "Example: <write_file><file_path>/path/to/file.txt</file_path><content>$var1$</write_file>\n"
+            "Example: <write_file><file_path>/path/to/file.txt</file_path><content>$var1$</content></write_file>\n"
             "\n"
             "Available variables:\n"
             "\n"
@@ -782,7 +957,11 @@ class Agent(BaseModel):
         return prompt_use_variables
 
     def _calculate_context_occupancy(self) -> float:
-        """Calculate the number of tokens in percentages for prompt and completion."""
+        """Calculate the number of tokens in percentages for prompt and completion.
+        
+        Returns:
+            Percentage of context window occupied
+        """
         total_tokens = self.total_tokens
         max_tokens = self.model.get_model_max_input_tokens()
 
@@ -792,64 +971,12 @@ class Agent(BaseModel):
 
         return round((total_tokens / max_tokens) * 100, 2)
 
-    def _compact_memory_with_summary(self) -> str:
-        prompt_summary = (
-            "Summarize the conversation concisely:\n"
-            "format in markdown:\n"
-            "<thinking>\n"
-            " - 1. **Completed Steps**: Briefly describe the steps.\n"
-            " - 2. **Variables Used**: List the variables.\n"
-            " - 3. **Progress Analysis**: Assess progress.\n"
-            "</thinking>\n"
-            "Keep the summary clear and actionable.\n"
-        )
-
-        memory_copy = self.memory.memory.copy()
-
-        user_message = memory_copy.pop()
-        assistant_message = memory_copy.pop()
-        summary = self.model.generate_with_history(messages_history=memory_copy, prompt=prompt_summary)
-        memory_copy.pop()
-        memory_copy.append(Message(role="user", content=summary.response))
-        memory_copy.append(assistant_message)
-        memory_copy.append(user_message)
-        self.memory.memory = memory_copy
-        return summary.response
-
-    def _generate_task_summary(self, content: str) -> str:
-        """Generate a concise task-focused summary using the generative model.
-
-        Args:
-            content (str): The content to summarize
-
-        Returns:
-            str: Generated task summary
-        """
-        try:
-            if len(content) < 1024 * 4:
-                return content
-            prompt = (
-                "Create a task summary that captures ONLY: \n"
-                "1. Primary objective/purpose\n"
-                "2. Core actions/requirements\n"
-                "3. Desired end-state/outcome\n\n"
-                "Guidelines:\n"
-                "- Use imperative voice\n"
-                f"Input Task Description:\n{content}\n\n"
-            )
-            result = self.model.generate(prompt=prompt)
-            logger.debug(f"Generated summary: {result.response}")
-            return result.response.strip() + "\n🚨 The FULL task is in <task> tag in the previous messages.\n"
-        except Exception as e:
-            logger.error(f"Error generating summary: {str(e)}")
-            return f"Summary generation failed: {str(e)}"
-
     def _update_session_memory(self, user_content: str, assistant_content: str) -> None:
         """Log session messages to memory and emit events.
 
         Args:
-            user_content (str): The user's content.
-            assistant_content (str): The assistant's content.
+            user_content: The user's content
+            assistant_content: The assistant's content
         """
         self.memory.add(Message(role="user", content=user_content))
         self._emit_event("session_add_message", {"role": "user", "content": user_content})
@@ -858,7 +985,11 @@ class Agent(BaseModel):
         self._emit_event("session_add_message", {"role": "assistant", "content": assistant_content})
 
     def update_model(self, new_model_name: str) -> None:
-        """Update the model name and recreate the model instance."""
+        """Update the model name and recreate the model instance.
+        
+        Args:
+            new_model_name: New model name to use
+        """
         self.model_name = new_model_name
         self.model = GenerativeModel(model=new_model_name, event_emitter=self.event_emitter)
 
@@ -866,7 +997,7 @@ class Agent(BaseModel):
         """Add a new tool to the agent's tool manager.
         
         Args:
-            tool (Tool): The tool instance to add
+            tool: The tool instance to add
             
         Raises:
             ValueError: If a tool with the same name already exists
@@ -887,7 +1018,7 @@ class Agent(BaseModel):
         """Remove a tool from the agent's tool manager.
         
         Args:
-            tool_name (str): Name of the tool to remove
+            tool_name: Name of the tool to remove
             
         Raises:
             ValueError: If tool doesn't exist or is TaskCompleteTool
@@ -912,7 +1043,7 @@ class Agent(BaseModel):
         """Set/replace all tools for the agent.
         
         Args:
-            tools (list[Tool]): List of tool instances to set
+            tools: List of tool instances to set
             
         Note:
             TaskCompleteTool will be automatically added if not present
