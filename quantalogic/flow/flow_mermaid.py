@@ -1,5 +1,5 @@
 import re
-from typing import Dict, List, Set, Tuple, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 from quantalogic.flow.flow_manager import WorkflowManager
 from quantalogic.flow.flow_manager_schema import NodeDefinition, WorkflowDefinition
