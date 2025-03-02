@@ -40,5 +40,14 @@ agent = Agent(model_name=MODEL_NAME)
 # Execute a sample task to demonstrate agent capabilities
 # This example creates a Fibonacci sequence function
 # Shows how the agent can generate code solutions
-result = agent.solve_task("Create a Python function that calculates the Fibonacci sequence")
+
+# Define a simple task to create a Fibonacci sequence function
+fibonacci_task = "Create a Python function that calculates the Fibonacci sequence"
+
+# The streaming parameter controls whether responses are generated incrementally or all at once
+# With our fix, both streaming=True and streaming=False should work correctly
+streaming_enabled = False  # Try with both True and False
+
+# Execute the agent with the task
+result = agent.solve_task(fibonacci_task, streaming=streaming_enabled)
 print(result)

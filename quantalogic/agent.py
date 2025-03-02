@@ -277,7 +277,7 @@ class Agent(BaseModel):
                         messages_history=self.memory.memory,
                         prompt=current_prompt,
                         streaming=False,
-                        stop_words=["thinking"],
+                        # Removed stop_words parameter to allow complete responses
                     )
 
                 content = result.response
