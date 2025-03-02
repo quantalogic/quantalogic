@@ -184,6 +184,75 @@ result = await engine.run({"theme": "Cosmic Quest"})
 print(result["chapter"])
 ```
 
+### Example: Story Generator Agent
+
+Here's a more complex example showing a complete story generation workflow using the Flow module:
+
+```python
+from typing import List
+import anyio
+from loguru import logger
+from quantalogic.flow import Nodes, Workflow
+
+# Define node functions with decorators
+@Nodes.validate_node(output="validation_result")
+async def validate_input(genre: str, num_chapters: int) -> str:
+    """Validate input parameters."""
+    if not (1 <= num_chapters <= 20 and genre.lower() in ["science fiction", "fantasy", "mystery", "romance"]):
+        raise ValueError("Invalid input: genre must be one of science fiction, fantasy, mystery, romance")
+    return "Input validated"
+
+@Nodes.llm_node(
+    model="gemini/gemini-2.0-flash",
+    system_prompt="You are a creative writer specializing in story titles.",
+    prompt_template="Generate a creative title for a {{ genre }} story. Output only the title.",
+    output="title",
+)
+async def generate_title(genre: str) -> str:
+    """Generate a title based on the genre (handled by llm_node)."""
+    pass  # Logic handled by llm_node decorator
+
+@Nodes.define(output="manuscript")
+async def compile_book(title: str, outline: str, chapters: List[str]) -> str:
+    """Compile the full manuscript from title, outline, and chapters."""
+    return f"Title: {title}\n\nOutline:\n{outline}\n\n" + "\n\n".join(
+        f"Chapter {i}:\n{chap}" for i, chap in enumerate(chapters, 1)
+    )
+
+# Define the workflow with conditional branching
+workflow = (
+    Workflow("validate_input")
+    .then("generate_title")
+    .then("generate_outline")
+    .then("generate_chapter")
+    .then("update_chapter_progress")
+    .then("generate_chapter", condition=lambda ctx: ctx["completed_chapters"] < ctx["num_chapters"])
+    .then("compile_book", condition=lambda ctx: ctx["completed_chapters"] >= ctx["num_chapters"])
+    .then("quality_check")
+    .then("end")
+)
+
+# Run the workflow
+async def main():
+    initial_context = {
+        "genre": "science fiction",
+        "num_chapters": 3,
+        "chapters": [],
+        "completed_chapters": 0,
+    }
+    engine = workflow.build()
+    result = await engine.run(initial_context)
+```
+
+This example demonstrates:
+- Input validation with `@Nodes.validate_node`
+- LLM integration with `@Nodes.llm_node`
+- Custom processing with `@Nodes.define`
+- Conditional branching for iterative chapter generation
+- Context management for tracking progress
+
+The full example is available at [examples/flow/story_generator_agent.py](./examples/flow/story_generator_agent.py).
+
 ### Flow Visualized
 ```mermaid
 graph LR
@@ -243,28 +312,46 @@ The CLI is your command center—fast, flexible, and fun!
 quantalogic [OPTIONS] COMMAND [ARGS]...
 ```
 
+### Description
+QuantaLogic AI Assistant - A powerful AI tool for various tasks.
+
+### Environment Variables
+- **OpenAI**: Set `OPENAI_API_KEY` to your OpenAI API key
+- **Anthropic**: Set `ANTHROPIC_API_KEY` to your Anthropic API key
+- **DeepSeek**: Set `DEEPSEEK_API_KEY` to your DeepSeek API key
+
+Use a `.env` file or export these variables in your shell for seamless integration.
+
 ### Commands
 - **`task`**: Kick off a mission.
   ```bash
   quantalogic task "Summarize this file" --file notes.txt
   ```
-- **`list-models`**: Peek at LLM options.
+- **`list-models`**: List supported LiteLLM models with optional fuzzy search.
   ```bash
   quantalogic list-models --search "gpt"
   ```
 
 ### Options
-- `--model-name TEXT`: Your LLM pick (e.g., `"openai/gpt-4o"`).
-- `--mode TEXT`: Agent flavor:
-  - `basic`: Simple stuff.
-  - `code`: Code wizardry.
-  - `full`: All the bells!
-  - (More in docs!)
-- `--log [info|debug|warning]`: Chatty or quiet?
-- `--max-iterations INT`: Cap the loops (default: 30).
-- `--no-stream`: Wait for the full reveal.
+- **`--model-name TEXT`**: Specify the model to use (litellm format). Examples:
+  - `openai/gpt-4o-mini`
+  - `openai/gpt-4o`
+  - `anthropic/claude-3.5-sonnet`
+  - `deepseek/deepseek-chat`
+  - `deepseek/deepseek-reasoner`
+  - `openrouter/deepseek/deepseek-r1`
+  - `openrouter/openai/gpt-4o`
+- **`--mode [code|basic|interpreter|full|code-basic|search|search-full]`**: Agent mode
+- **`--vision-model-name TEXT`**: Specify the vision model to use (litellm format)
+- **`--log [info|debug|warning]`**: Set logging level
+- **`--verbose`**: Enable verbose output
+- **`--max-iterations INTEGER`**: Maximum number of iterations (default: 30)
+- **`--max-tokens-working-memory INTEGER`**: Set the maximum tokens allowed in working memory
+- **`--compact-every-n-iteration INTEGER`**: Set the frequency of memory compaction
+- **`--thinking-model TEXT`**: The thinking model to use
+- **`--version`**: Show version information
 
-> **Hack**: `quantalogic --help` spills all the secrets!
+> **Tip**: Run `quantalogic --help` for the complete command reference!
 
 ---
 
@@ -278,11 +365,19 @@ Let’s light up your imagination with these gems:
 ### Hands-On Examples
 | Name              | What’s It Do?                       | File                                       |
 |-------------------|------------------------------------|--------------------------------------------|
-| Code Buddy        | ReAct writes a sorting script      | [01-simple-agent.py](./examples/01-simple-agent.py) |
-| Story Weaver      | Flow crafts a tale                 | [story_generator_agent.py](./examples/qflow/story_generator_agent.py) |
-| Finance Guru      | ReAct crunches numbers             | [10-finance-agent.py](./examples/10-finance-agent.py) |
-| File Cleaner      | Flow tidies up text                | See [Flow Example](#flow-module-structured-workflows) |
-| Math Whiz         | ReAct solves equations             | Below!                                     |
+| Simple Agent      | Basic ReAct agent demo             | [01-simple-agent.py](./examples/01-simple-agent.py) |
+| Event Monitoring  | Agent with event tracking          | [02-agent-with-event-monitoring.py](./examples/02-agent-with-event-monitoring.py) |
+| Interpreter Mode  | Agent with interpreter             | [03-agent-with-interpreter.py](./examples/03-agent-with-interpreter.py) |
+| Agent Summary     | Task summary generation            | [04-agent-summary-task.py](./examples/04-agent-summary-task.py) |
+| Code Generation   | Basic code generation              | [05-code.py](./examples/05-code.py) |
+| Code Screen       | Advanced code generation           | [06-code-screen.py](./examples/06-code-screen.py) |
+| Tutorial Writer   | Write technical tutorials          | [07-write-tutorial.py](./examples/07-write-tutorial.py) |
+| PRD Writer        | Product Requirements Document      | [08-prd-writer.py](./examples/08-prd-writer.py) |
+| Story Generator   | Flow-based story creation          | [story_generator_agent.py](./examples/flow/story_generator_agent.py) |
+| SQL Query         | Database query generation          | [09-sql-query.py](./examples/09-sql-query.py) |
+| Finance Agent     | Financial analysis and tasks       | [10-finance-agent.py](./examples/10-finance-agent.py) |
+| Textual Interface | Agent with textual UI               | [11-textual-agent-interface.py](./examples/11-textual-agent-interface.py) |
+| Composio Test     | Composio integration demo           | [12-composio-test.py](./examples/12-composio-test.py) |
 
 ### Bonus: Math Whiz
 ```bash
