@@ -1,20 +1,20 @@
-# QuantaLogic 🌌
+# QuantaLogic 
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)](https://quantalogic.github.io/quantalogic/)
 
-Hey there, welcome to **QuantaLogic**—your cosmic toolkit for crafting AI agents and workflows that shine! 🌟 Whether you’re coding up a storm, automating a business process, or dreaming up something wild, QuantaLogic is here to make it happen. We’re talking **large language models (LLMs)** fused with a stellar toolset, featuring two powerhouse approaches: the **ReAct framework** for dynamic problem-solving and the dazzling new **Flow module** for structured brilliance.
+Hey there, welcome to **QuantaLogic**—your cosmic toolkit for crafting AI agents and workflows that shine!  Whether you’re coding up a storm, automating a business process, or dreaming up something wild, QuantaLogic is here to make it happen. We’re talking **large language models (LLMs)** fused with a stellar toolset, featuring two powerhouse approaches: the **ReAct framework** for dynamic problem-solving and the dazzling new **Flow module** for structured brilliance.
 
-Picture this: a CLI that’s as easy as a snap, a Python API that’s pure magic, and a framework that scales from quick hacks to galactic enterprises. Ready to launch? Let’s blast off! 🚀
+Picture this: a CLI that’s as easy as a snap, a Python API that’s pure magic, and a framework that scales from quick hacks to galactic enterprises. Ready to launch? Let’s blast off! 
 
-[📖 Full Docs](https://quantalogic.github.io/quantalogic/) | [🛠️ How-To Guide](./docs/howto/howto.md)
+[ Full Docs](https://quantalogic.github.io/quantalogic/) | [ How-To Guide](./docs/howto/howto.md)
 
 ![Video Demo](./examples/generated_tutorials/python/quantalogic_8s.gif)
 
 ---
 
-## Why QuantaLogic? 🤔
+## Why QuantaLogic? 
 
 At [QuantaLogic](https://www.quantalogic.app), we spotted a black hole: amazing AI models from OpenAI, Anthropic, and DeepSeek weren’t fully lighting up real-world tasks. Our mission? Ignite that spark! We’re here to make generative AI a breeze for developers, businesses, and dreamers alike—turning ideas into action, one brilliant solution at a time.
 
@@ -22,19 +22,19 @@ At [QuantaLogic](https://www.quantalogic.app), we spotted a black hole: amazing 
 
 ---
 
-## 🌟 Key Features
+##  Key Features
 
-- **ReAct Framework**: Reasoning + action = unstoppable agents! 🧠💪
-- **Flow Module**: Structured workflows that flow like a river. 🌊
-- **LLM Galaxy**: Tap into OpenAI, DeepSeek, and more via LiteLLM. 🌍
-- **Secure Tools**: Docker-powered safety for code and files. 🔒
-- **Live Monitoring**: Watch it unfold with a web interface and SSE. 📡
-- **Memory Magic**: Smart context keeps things snappy. ✨
-- **Enterprise-Ready**: Logs, error handling, and validation—rock solid. 🏢
+- **ReAct Framework**: Reasoning + action = unstoppable agents! 
+- **Flow Module**: Structured workflows that flow like a river. 
+- **LLM Galaxy**: Tap into OpenAI, DeepSeek, and more via LiteLLM. 
+- **Secure Tools**: Docker-powered safety for code and files. 
+- **Live Monitoring**: Watch it unfold with a web interface and SSE. 
+- **Memory Magic**: Smart context keeps things snappy. 
+- **Enterprise-Ready**: Logs, error handling, and validation—rock solid. 
 
 ---
 
-## 📋 Table of Contents
+##  Table of Contents
 
 - [Why QuantaLogic?](#why-quantalogic)
 - [Key Features](#key-features)
@@ -54,13 +54,13 @@ At [QuantaLogic](https://www.quantalogic.app), we spotted a black hole: amazing 
 
 ---
 
-## Installation ⚙️
+## Installation 
 
 Let’s get QuantaLogic orbiting your system—it’s as easy as 1-2-3!
 
 ### What You’ll Need
-- **Python 3.12+**: The fuel for our rocket. 🚀
-- **Docker** (optional): Locks down code execution in a safe pod. 🛡️
+- **Python 3.12+**: The fuel for our rocket. 
+- **Docker** (optional): Locks down code execution in a safe pod. 
 
 ### Option 1: pip—Fast and Simple
 ```bash
@@ -84,7 +84,7 @@ poetry install
 
 ---
 
-## Quick Start 🚀
+## Quick Start 
 
 Ready to see the magic? Here’s your launchpad:
 
@@ -104,6 +104,159 @@ print(result)
 # Output: "def fib(n): return [0, 1] if n <= 2 else fib(n-1) + [fib(n-1)[-1] + fib(n-1)[-2]]"
 ```
 
+### Synchronous Agent Example 
+
+```python
+from quantalogic import Agent
+
+# Create a synchronous agent
+agent = Agent(model_name="gpt-4o")
+
+# Solve a task synchronously
+result = agent.solve_task(
+    task="Write a Python function to calculate Fibonacci numbers",
+    max_iterations=10  # Optional: limit iterations
+)
+
+print(result)
+```
+
+### Async Agent Example 🌊
+
+```python
+import asyncio
+from quantalogic import Agent
+
+async def main():
+    # Create an async agent
+    agent = Agent(model_name="gpt-4o")
+    
+    # Solve a task asynchronously with streaming
+    result = await agent.async_solve_task(
+        task="Write a Python script to scrape top GitHub repositories",
+        max_iterations=15,  # Optional: limit iterations
+        streaming=True      # Optional: stream the response
+    )
+    
+    print(result)
+
+# Run the async function
+asyncio.run(main())
+```
+
+### Event Monitoring Examples 🔍
+
+#### Synchronous Event Monitoring with Finance Tools
+```python
+from quantalogic import Agent
+from quantalogic.console_print_events import console_print_events
+from quantalogic.console_print_token import console_print_token
+from quantalogic.tools import (
+    DuckDuckGoSearchTool, 
+    TechnicalAnalysisTool, 
+    YFinanceTool
+)
+
+# Create an agent with finance-related tools
+agent = Agent(
+    model_name="gpt-4o",
+    tools=[
+        DuckDuckGoSearchTool(),  # Web search tool
+        TechnicalAnalysisTool(),  # Stock technical analysis
+        YFinanceTool()            # Stock data retrieval
+    ]
+)
+
+# Set up comprehensive event listeners
+agent.event_emitter.on(
+    event=[
+        "task_complete",
+        "task_think_start", 
+        "task_think_end", 
+        "tool_execution_start", 
+        "tool_execution_end",
+        "error_max_iterations_reached",
+        "memory_full",
+        "memory_compacted"
+    ],
+    listener=console_print_events
+)
+
+# Optional: Monitor streaming tokens
+agent.event_emitter.on(
+    event=["stream_chunk"], 
+    listener=console_print_token
+)
+
+# Execute a multi-step financial analysis task
+result = agent.solve_task(
+    "1. Find the top 3 tech stocks for Q3 2024 "
+    "2. Retrieve historical stock data for each "
+    "3. Calculate 50-day and 200-day moving averages "
+    "4. Provide a brief investment recommendation",
+    streaming=True  # Enable streaming for detailed output
+)
+print(result)
+```
+
+#### Async Event Monitoring with Finance Tools
+```python
+import asyncio
+from quantalogic import Agent
+from quantalogic.console_print_events import console_print_events
+from quantalogic.console_print_token import console_print_token
+from quantalogic.tools import (
+    DuckDuckGoSearchTool, 
+    TechnicalAnalysisTool, 
+    YFinanceTool
+)
+
+async def main():
+    # Create an async agent with finance-related tools
+    agent = Agent(
+        model_name="gpt-4o",
+        tools=[
+            DuckDuckGoSearchTool(),  # Web search tool
+            TechnicalAnalysisTool(),  # Stock technical analysis
+            YFinanceTool()            # Stock data retrieval
+        ]
+    )
+
+    # Set up comprehensive event listeners
+    agent.event_emitter.on(
+        event=[
+            "task_complete",
+            "task_think_start", 
+            "task_think_end", 
+            "tool_execution_start", 
+            "tool_execution_end",
+            "error_max_iterations_reached",
+            "memory_full",
+            "memory_compacted"
+        ],
+        listener=console_print_events
+    )
+
+    # Optional: Monitor streaming tokens
+    agent.event_emitter.on(
+        event=["stream_chunk"], 
+        listener=console_print_token
+    )
+
+    # Execute a multi-step financial analysis task asynchronously
+    result = await agent.async_solve_task(
+        "1. Find emerging AI technology startups "
+        "2. Analyze their recent funding rounds "
+        "3. Compare market potential and growth indicators "
+        "4. Provide an investment trend report",
+        streaming=True  # Enable streaming for detailed output
+    )
+    print(result)
+
+# Run the async function
+asyncio.run(main())
+```
+
 ### Python: Flow Workflow
 ```python
 from quantalogic.flow import Workflow, Nodes
@@ -119,7 +272,7 @@ print(result["greeting"])  # "Hello, Luna!"
 
 ---
 
-## ReAct Framework: Dynamic Agents 🧠
+## ReAct Framework: Dynamic Agents 
 
 The **ReAct** framework is your AI sidekick—think fast, act smart. It pairs LLM reasoning with tool-powered action, perfect for tasks that need a bit of improvisation.
 
@@ -156,15 +309,15 @@ Perfect for coding, debugging, or answering wild questions on the fly.
 
 ---
 
-## Flow Module: Structured Workflows 🌊
+## Flow Module: Structured Workflows 
 
 The **Flow module** is your architect—building workflows that hum with precision. It’s all about nodes, transitions, and a steady rhythm, ideal for repeatable missions.
 
 ### The Building Blocks
-- **Nodes**: Tasks like functions or LLM calls. 🛠️
-- **Transitions**: Paths with optional conditions. ➡️
-- **Engine**: Runs the show with flair. ⚙️
-- **Observers**: Peek at progress with events. 👀
+- **Nodes**: Tasks like functions or LLM calls. 
+- **Transitions**: Paths with optional conditions. 
+- **Engine**: Runs the show with flair. 
+- **Observers**: Peek at progress with events. 
 
 ### Example: Story Weaver
 ```python
@@ -177,7 +330,7 @@ async def write_chapter(ctx: dict) -> str:
 workflow = (
     Workflow("write_chapter")
     .then("end", condition="lambda ctx: True")
-    .add_observer(lambda e: print(f"✨ {e.event_type}"))
+    .add_observer(lambda e: print(f" {e.event_type}"))
 )
 engine = workflow.build()
 result = await engine.run({"theme": "Cosmic Quest"})
@@ -284,11 +437,11 @@ Think content pipelines, automation flows, or any multi-step task that needs ord
 
 ---
 
-## ReAct vs. Flow: Pick Your Power ⚡
+## ReAct vs. Flow: Pick Your Power 
 
 Both are stellar, but here’s the scoop:
 
-| Feature             | ReAct Framework 🌠              | Flow Module 🌊                 |
+| Feature             | ReAct Framework | Flow Module                 |
 |---------------------|--------------------------------|--------------------------------|
 | **Vibe**           | Free-spirited, adaptive        | Organized, predictable         |
 | **Flow**           | Loops ‘til it’s solved         | Follows a roadmap              |
@@ -303,7 +456,7 @@ Both are stellar, but here’s the scoop:
 
 ---
 
-## Using the CLI 🎮
+## Using the CLI 
 
 The CLI is your command center—fast, flexible, and fun!
 
@@ -355,7 +508,7 @@ Use a `.env` file or export these variables in your shell for seamless integrati
 
 ---
 
-## Examples That Spark Joy 🎉
+## Examples That Spark Joy 
 
 Let’s light up your imagination with these gems:
 
@@ -378,6 +531,8 @@ Let’s light up your imagination with these gems:
 | Finance Agent     | Financial analysis and tasks       | [10-finance-agent.py](./examples/10-finance-agent.py) |
 | Textual Interface | Agent with textual UI               | [11-textual-agent-interface.py](./examples/11-textual-agent-interface.py) |
 | Composio Test     | Composio integration demo           | [12-composio-test.py](./examples/12-composio-test.py) |
+| Synchronous Agent | Synchronous agent demo             | [13-synchronous-agent.py](./examples/13-synchronous-agent.py) |
+| Async Agent       | Async agent demo                   | [14-async-agent.py](./examples/14-async-agent.py) |
 
 ### Bonus: Math Whiz
 ```bash
@@ -387,7 +542,7 @@ quantalogic task "Solve 2x + 5 = 15"
 
 ---
 
-## Core Components 🛠️
+## Core Components 
 
 ### ReAct Agents
 - **Brain**: LLMs power the thinking.
@@ -405,7 +560,7 @@ quantalogic task "Solve 2x + 5 = 15"
 
 ---
 
-## Developing with QuantaLogic 👩‍💻
+## Developing with QuantaLogic 
 
 ### Setup Your Lab
 ```bash
@@ -430,7 +585,7 @@ ruff check quantalogic  # Lint it
 
 ---
 
-## Contributing 🤝
+## Contributing 
 
 Join the QuantaLogic galaxy!
 1. Fork it.
@@ -442,20 +597,20 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full scoop.
 
 ---
 
-## License 📜
+## License 
 
-© 2024 QuantaLogic Contributors. **Apache 2.0**—free and open. Check [LICENSE](./LICENSE).
+ 2024 QuantaLogic Contributors. **Apache 2.0**—free and open. Check [LICENSE](./LICENSE).
 
 Dreamed up by Raphaël MANSUY, founder of [QuantaLogic](https://www.quantalogic.app).
 
 ---
 
-## Project Growth 📈
+## Project Growth 
 [![Star History Chart](https://api.star-history.com/svg?repos=quantalogic/quantalogic&type=Date)](https://star-history.com/#quantalogic/quantalogic&Date)
 
 ---
 
-## API Keys and Environment Configuration 🔑
+## API Keys and Environment Configuration 
 
 QuantaLogic links to LLMs via API keys—here’s your guide to unlocking the universe!
 
@@ -493,6 +648,6 @@ export LM_STUDIO_API_KEY="lm-your-key"
 
 ---
 
-## Final Boost 🚀
+## Final Boost 
 
-QuantaLogic is your ticket to AI awesomeness. Install it, play with it, and let’s build something unforgettable together! 🌠
+QuantaLogic is your ticket to AI awesomeness. Install it, play with it, and let’s build something unforgettable together! 
