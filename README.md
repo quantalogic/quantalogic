@@ -42,6 +42,8 @@ At [QuantaLogic](https://www.quantalogic.app), we spotted a black hole: amazing 
 - [Quick Start](#quick-start)
 - [ReAct Framework: Dynamic Agents](#react-framework-dynamic-agents)
 - [Flow Module: Structured Workflows](#flow-module-structured-workflows)
+  - 📘 **[Workflow YAML DSL Specification](./quantalogic/flow/flow_yaml.md)**: Comprehensive guide to defining powerful, structured workflows using our Domain-Specific Language
+  - 📚 **[Flow YAML Documentation](https://quantalogic.github.io/quantalogic/flow/flow_yaml)**: Dive into the official documentation for a deeper understanding of Flow YAML and its applications
 - [ReAct vs. Flow: Pick Your Power](#react-vs-flow-pick-your-power)
 - [Using the CLI](#using-the-cli)
 - [Examples That Spark Joy](#examples-that-spark-joy)
@@ -311,7 +313,15 @@ Perfect for coding, debugging, or answering wild questions on the fly.
 
 ## Flow Module: Structured Workflows 
 
-The **Flow module** is your architect—building workflows that hum with precision. It’s all about nodes, transitions, and a steady rhythm, ideal for repeatable missions.
+The **Flow module** is your architect—building workflows that hum with precision. It's all about nodes, transitions, and a steady rhythm, ideal for repeatable missions.
+
+🔍 **Want to dive deeper?** Check out our comprehensive [Workflow YAML DSL Specification](./quantalogic/flow/flow_yaml.md), a detailed guide that walks you through defining powerful, structured workflows. From basic node configurations to complex transition logic, this documentation is your roadmap to mastering workflow design with QuantaLogic.
+
+📚 **For a deeper understanding of Flow YAML and its applications, please refer to the official [Flow YAML Documentation](https://quantalogic.github.io/quantalogic/flow/flow_yaml).**
+
+The Flow YAML documentation provides a comprehensive overview of the Flow YAML language, including its syntax, features, and best practices. It's a valuable resource for anyone looking to create complex workflows with QuantaLogic.
+
+Additionally, the Flow YAML documentation includes a number of examples and tutorials to help you get started with creating your own workflows. These examples cover a range of topics, from simple workflows to more complex scenarios, and are designed to help you understand how to use Flow YAML to create powerful and flexible workflows.
 
 ### The Building Blocks
 - **Nodes**: Tasks like functions or LLM calls. 

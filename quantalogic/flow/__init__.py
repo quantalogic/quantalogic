@@ -22,6 +22,7 @@ from .flow_extractor import extract_workflow_from_file
 from .flow_generator import generate_executable_script
 from .flow_manager import WorkflowManager
 from .flow_mermaid import generate_mermaid_diagram
+from .flow_validator import validate_workflow_definition
 
 # Define which symbols are exported when using `from flow import *`
 __all__ = [
@@ -32,6 +33,7 @@ __all__ = [
     "generate_mermaid_diagram",
     "extract_workflow_from_file",
     "generate_executable_script",
+    "validate_workflow_definition"
 ]
 
 # Package-level logger configuration

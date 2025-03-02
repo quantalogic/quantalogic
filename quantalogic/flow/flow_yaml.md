@@ -1,4 +1,3 @@
-
 # Quantalogic Flow YAML DSL Specification 🚀
 
 ## 1. Introduction 🌟
@@ -282,7 +281,38 @@ graph TD
     style I fill:#ffd9b3,stroke:#cc3300
 ```
 
-## 6. Observers 👀
+## 6. Workflow Validation 🕵️‍♀️
+
+The `validate_workflow_definition()` function provides comprehensive workflow integrity checks to ensure your workflow is well-formed and executable. This validation helps catch potential issues before runtime, improving workflow reliability and preventing unexpected errors.
+
+### Validation Checks 🔍
+
+The validation process examines multiple aspects of your workflow definition:
+
+- **Node Connectivity**: Verifies that all nodes are reachable from the start node.
+- **Circular References**: Detects intentional and unintentional circular transitions.
+- **Undefined Nodes**: Identifies transitions to nodes that are not defined in the workflow.
+- **Missing Start Node**: Ensures the workflow has a valid start node.
+- **Transition Integrity**: Checks that transitions are properly configured.
+
+### Return Value 📦
+
+The function returns a list of `WorkflowIssue` objects, each containing:
+- `node_name`: The name of the node with an issue (or `None` for workflow-level issues)
+- `description`: A human-readable explanation of the problem
+
+### Example Usage 🚀
+
+```python
+issues = validate_workflow_definition(workflow)
+if issues:
+    for issue in issues:
+        print(f"Node '{issue.node_name}': {issue.description}")
+```
+
+By leveraging `validate_workflow_definition()`, you can catch and address workflow design issues early, ensuring more robust and reliable workflow execution. 🛡️
+
+## 7. Observers 👀
 
 Add observers to watch workflow events (e.g., node start, completion, failures). Define them in `functions` and list them under `observers`.
 
@@ -304,13 +334,13 @@ observers:
   - log_event
 ```
 
-## 7. Context 📦
+## 8. Context 📦
 
 The `ctx` dictionary carries data across nodes:
 - `greet` → `ctx["greeting"] = "Hello, Alice!"`
 - `inventory_check` → `ctx["stock"] = StockStatus(...)`
 
-## 8. Execution Flow 🏃‍♂️
+## 9. Execution Flow 🏃‍♂️
 
 The `WorkflowEngine` runs it all:
 1. Starts at `workflow.start`.
@@ -319,7 +349,7 @@ The `WorkflowEngine` runs it all:
 4. Notifies observers of events.
 5. Stops when no transitions remain.
 
-## 9. Converting Between Python and YAML 🔄
+## 10. Converting Between Python and YAML 🔄
 
 The `quantalogic.flow` package provides tools to bridge Python-defined workflows and YAML definitions, making your workflows portable and standalone.
 
@@ -428,7 +458,7 @@ graph TD
     style E fill:#fff0e6,stroke:#cc3300,stroke-width:2px
 ```
 
-## 10. WorkflowManager 🧑‍💻
+## 11. WorkflowManager 🧑‍💻
 
 The `WorkflowManager` lets you build workflows programmatically:
 - Add nodes, transitions, functions, and observers.
@@ -444,7 +474,7 @@ manager.set_start_node("start")
 manager.save_to_yaml("hi.yaml")
 ```
 
-## 11. Full Example: Order Processing 📦🤖
+## 12. Full Example: Order Processing 📦🤖
 
 ```yaml
 functions:
@@ -502,7 +532,6 @@ graph TD
     style C fill:#e6ffe6,stroke:#009933,stroke-width:2px
 ```
 
-## 12. Conclusion 🎉
+## 13. Conclusion 🎉
 
 The Quantalogic Flow YAML DSL (March 1, 2025) is your go-to for crafting workflows—simple or sophisticated. With tools like `flow_extractor.py` and `flow_generator.py`, you can switch between Python and YAML effortlessly, making workflows portable and standalone. Add PyPI support, sub-workflows, LLM nodes, and observers, and you’ve got a versatile framework for automation and AI tasks. Pair it with `WorkflowManager` for maximum flexibility! 🚀
-
