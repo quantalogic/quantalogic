@@ -102,17 +102,27 @@ class WorkflowManager:
         from_node: str,
         to_node: Union[str, List[str]],
         condition: Optional[str] = None,
+        strict: bool = True,
     ) -> None:
-        """Add a transition between nodes, ensuring all nodes exist."""
-        if from_node not in self.workflow.nodes:
-            raise ValueError(f"Source node '{from_node}' does not exist")
-        if isinstance(to_node, str):
-            if to_node not in self.workflow.nodes:
-                raise ValueError(f"Target node '{to_node}' does not exist")
-        else:
-            for t in to_node:
-                if t not in self.workflow.nodes:
-                    raise ValueError(f"Target node '{t}' does not exist")
+        """Add a transition between nodes.
+        
+        Args:
+            from_node: Source node name
+            to_node: Target node name or list of target node names
+            condition: Optional condition for the transition
+            strict: If True, validates that all nodes exist before adding the transition.
+                   If False, allows adding transitions to non-existent nodes.
+        """
+        if strict:
+            if from_node not in self.workflow.nodes:
+                raise ValueError(f"Source node '{from_node}' does not exist")
+            if isinstance(to_node, str):
+                if to_node not in self.workflow.nodes:
+                    raise ValueError(f"Target node '{to_node}' does not exist")
+            else:
+                for t in to_node:
+                    if t not in self.workflow.nodes:
+                        raise ValueError(f"Target node '{t}' does not exist")
         # Create TransitionDefinition with named parameters
         transition = TransitionDefinition(
             from_node=from_node,

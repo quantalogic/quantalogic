@@ -161,7 +161,8 @@ def main():
     manager.set_start_node("start")
     manager.add_transition(from_node="start", to_node="outro")
     manager.add_transition(from_node="outro", to_node="start")  # Intentional: circular
-    manager.add_transition(from_node="start", to_node="missing_node")  # Intentional: undefined node
+    # Test non-strict mode that allows adding transitions to non-existent nodes
+    manager.add_transition(from_node="start", to_node="missing_node", strict=False)  # Intentional: undefined node
 
     # Add observer with error handling
     try:
