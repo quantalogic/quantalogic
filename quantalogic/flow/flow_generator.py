@@ -68,6 +68,10 @@ def generate_executable_script(workflow_def: WorkflowDefinition, global_vars: di
                 if not condition.startswith("lambda ctx:"):
                     condition = f"lambda ctx: {condition}"
             f.write(f'    .then("{to_node}", condition={condition})\n')
+        # Add observers if any exist in the workflow definition
+        if hasattr(workflow_def, 'observers'):
+            for observer in workflow_def.observers:
+                f.write(f"    .add_observer({observer})\n")
         f.write(")\n\n")
 
         # Main asynchronous function to run the workflow

@@ -1,0 +1,114 @@
+functions:
+  generate_outline:
+    type: embedded
+    code: |-
+      @Nodes.llm_node(system_prompt='You are a creative writer skilled at generating stories.', prompt_template='Create a story outline for a {genre} story with {num_chapters} chapters.', output='outline', **DEFAULT_LLM_PARAMS)
+      def generate_outline(genre, num_chapters):
+          """Generate a story outline based on genre and number of chapters."""
+          return {}
+    module: null
+    function: null
+  generate_chapter:
+    type: embedded
+    code: |-
+      @Nodes.llm_node(system_prompt='You are a creative writer.', prompt_template='Write chapter {chapter_num} for this story outline: {outline}. Style: {style}.', output='chapter', **DEFAULT_LLM_PARAMS)
+      def generate_chapter(outline, chapter_num, style):
+          """Generate a single chapter based on the outline."""
+          return {}
+    module: null
+    function: null
+  update_progress:
+    type: embedded
+    code: |-
+      @Nodes.define(output='updated_context')
+      def update_progress(chapters, completed_chapters, chapter, **kwargs):
+          """Update the progress of chapter generation."""
+          chapters.append(chapter)
+          completed_chapters += 1
+          return {'chapters': chapters, 'completed_chapters': completed_chapters, **kwargs}
+    module: null
+    function: null
+  check_if_complete:
+    type: embedded
+    code: |-
+      @Nodes.define(output='continue_generating')
+      def check_if_complete(completed_chapters, num_chapters, **kwargs):
+          """Check if all chapters have been generated."""
+          return completed_chapters < num_chapters
+    module: null
+    function: null
+nodes:
+  generate_outline:
+    function: null
+    sub_workflow: null
+    llm_config:
+      model: gemini/gemini-2.0-flash
+      system_prompt: You are a creative writer skilled at generating stories.
+      prompt_template: Create a story outline for a {genre} story with {num_chapters} chapters.
+      temperature: 0.7
+      max_tokens: 1000
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      stop: null
+      response_model: null
+      api_key: null
+    output: outline
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+  generate_chapter:
+    function: null
+    sub_workflow: null
+    llm_config:
+      model: gemini/gemini-2.0-flash
+      system_prompt: You are a creative writer.
+      prompt_template: 'Write chapter {chapter_num} for this story outline: {outline}. Style: {style}.'
+      temperature: 0.7
+      max_tokens: 1000
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      stop: null
+      response_model: null
+      api_key: null
+    output: chapter
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+  update_progress:
+    function: update_progress
+    sub_workflow: null
+    llm_config: null
+    output: updated_context
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+  check_if_complete:
+    function: check_if_complete
+    sub_workflow: null
+    llm_config: null
+    output: continue_generating
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+workflow:
+  start: generate_outline
+  transitions:
+  - from: generate_outline
+    to: generate_chapter
+    condition: null
+  - from: generate_chapter
+    to: update_progress
+    condition: null
+  - from: update_progress
+    to: check_if_complete
+    condition: 'lambda ctx: ctx[''continue_generating'']'
+  - from: check_if_complete
+    to: generate_chapter
+    condition: 'lambda ctx: ctx[''continue_generating'']'
+observers: []
