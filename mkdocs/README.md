@@ -29,3 +29,7 @@ mkdocs build
 # Deploy to GitHub Pages
 mkdocs gh-deploy
 ```
+
+## Documentation Links
+
+- [Workflow YAML DSL Specification](/quantalogic/flow/flow_yaml/) - Comprehensive guide to defining workflows using the Quantalogic Flow YAML DSL

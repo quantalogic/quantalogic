@@ -37,6 +37,7 @@ ignore = [
     "D100", # Missing docstring in public module
     "D415", # First line should end with a period
     "D104", # First word of the docstring should not be This
+    'UP038', # Remove unnecessary type annotations
 ]
 
 # Docstring configuration

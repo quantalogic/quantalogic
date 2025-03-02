@@ -128,12 +128,11 @@ class NodeDefinition(BaseModel):
 class TransitionDefinition(BaseModel):
     """Definition of a transition between nodes."""
 
-    from_: str = Field(
+    from_node: str = Field(
         ...,
         description="Source node name for the transition.",
-        alias="from",  # Supports YAML aliasing
     )
-    to: Union[str, List[str]] = Field(
+    to_node: Union[str, List[str]] = Field(
         ..., description="Target node(s). A string for sequential, a list for parallel execution."
     )
     condition: Optional[str] = Field(

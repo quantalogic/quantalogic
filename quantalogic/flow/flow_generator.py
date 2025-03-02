@@ -60,14 +60,18 @@ def generate_executable_script(workflow_def: WorkflowDefinition, global_vars: di
         f.write("workflow = (\n")
         f.write(f'    Workflow("{workflow_def.workflow.start}")\n')
         for trans in workflow_def.workflow.transitions:
-            _from_node = trans.from_
-            to_node = trans.to
+            _from_node = trans.from_node
+            to_node = trans.to_node
             condition = trans.condition or "None"
             if condition != "None":
                 # Ensure condition is formatted as a lambda if not already
                 if not condition.startswith("lambda ctx:"):
                     condition = f"lambda ctx: {condition}"
             f.write(f'    .then("{to_node}", condition={condition})\n')
+        # Add observers if any exist in the workflow definition
+        if hasattr(workflow_def, 'observers'):
+            for observer in workflow_def.observers:
+                f.write(f"    .add_observer({observer})\n")
         f.write(")\n\n")
 
         # Main asynchronous function to run the workflow

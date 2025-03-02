@@ -28,7 +28,7 @@ from .sequence_tool import SequenceTool
 from .serpapi_search_tool import SerpApiSearchTool
 from .sql_query_tool import SQLQueryTool
 from .task_complete_tool import TaskCompleteTool
-from .tool import Tool, ToolArgument
+from .tool import Tool, ToolArgument, create_tool
 from .unified_diff_tool import UnifiedDiffTool
 from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
@@ -65,5 +65,6 @@ __all__ = [
     'ToolArgument',
     'UnifiedDiffTool',
     'WikipediaSearchTool',
-    'WriteFileTool'
+    'WriteFileTool',
+    "create_tool"
 ]

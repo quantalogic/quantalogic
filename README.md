@@ -42,6 +42,8 @@ At [QuantaLogic](https://www.quantalogic.app), we spotted a black hole: amazing 
 - [Quick Start](#quick-start)
 - [ReAct Framework: Dynamic Agents](#react-framework-dynamic-agents)
 - [Flow Module: Structured Workflows](#flow-module-structured-workflows)
+  - 📘 **[Workflow YAML DSL Specification](./quantalogic/flow/flow_yaml.md)**: Comprehensive guide to defining powerful, structured workflows using our Domain-Specific Language
+  - 📚 **[Flow YAML Documentation](https://quantalogic.github.io/quantalogic/flow/flow_yaml)**: Dive into the official documentation for a deeper understanding of Flow YAML and its applications
 - [ReAct vs. Flow: Pick Your Power](#react-vs-flow-pick-your-power)
 - [Using the CLI](#using-the-cli)
 - [Examples That Spark Joy](#examples-that-spark-joy)
@@ -311,7 +313,15 @@ Perfect for coding, debugging, or answering wild questions on the fly.
 
 ## Flow Module: Structured Workflows 
 
-The **Flow module** is your architect—building workflows that hum with precision. It’s all about nodes, transitions, and a steady rhythm, ideal for repeatable missions.
+The **Flow module** is your architect—building workflows that hum with precision. It's all about nodes, transitions, and a steady rhythm, ideal for repeatable missions.
+
+🔍 **Want to dive deeper?** Check out our comprehensive [Workflow YAML DSL Specification](./quantalogic/flow/flow_yaml.md), a detailed guide that walks you through defining powerful, structured workflows. From basic node configurations to complex transition logic, this documentation is your roadmap to mastering workflow design with QuantaLogic.
+
+📚 **For a deeper understanding of Flow YAML and its applications, please refer to the official [Flow YAML Documentation](https://quantalogic.github.io/quantalogic/flow/flow_yaml).**
+
+The Flow YAML documentation provides a comprehensive overview of the Flow YAML language, including its syntax, features, and best practices. It's a valuable resource for anyone looking to create complex workflows with QuantaLogic.
+
+Additionally, the Flow YAML documentation includes a number of examples and tutorials to help you get started with creating your own workflows. These examples cover a range of topics, from simple workflows to more complex scenarios, and are designed to help you understand how to use Flow YAML to create powerful and flexible workflows.
 
 ### The Building Blocks
 - **Nodes**: Tasks like functions or LLM calls. 
@@ -582,6 +592,83 @@ ruff format  # Shine that code
 mypy quantalogic  # Check types
 ruff check quantalogic  # Lint it
 ```
+
+### Create Custom Tools
+The `create_tool()` function transforms any Python function into a reusable Tool:
+
+```python
+from quantalogic.tools import create_tool
+
+def weather_lookup(city: str, country: str = "US") -> dict:
+    """Retrieve current weather for a given location.
+    
+    Args:
+        city: Name of the city to look up
+        country: Two-letter country code (default: US)
+    
+    Returns:
+        Dictionary with weather information
+    """
+    # Implement weather lookup logic here
+    return {"temperature": 22, "condition": "Sunny"}
+
+# Convert the function to a Tool
+weather_tool = create_tool(weather_lookup)
+
+# Now you can use it as a Tool
+print(weather_tool.to_markdown())  # Generate tool documentation
+result = weather_tool.execute(city="New York")  # Execute as a tool
+```
+
+#### Using Custom Tools with ReAct Agent
+
+Here's how to integrate custom tools with a ReAct Agent:
+
+```python
+from quantalogic import Agent
+from quantalogic.tools import create_tool, PythonTool
+
+# Create a custom stock price lookup tool
+def get_stock_price(symbol: str) -> str:
+    """Get the current price of a stock by its ticker symbol.
+    
+    Args:
+        symbol: Stock ticker symbol (e.g., AAPL, MSFT)
+    
+    Returns:
+        Current stock price information
+    """
+    # In a real implementation, you would fetch from an API
+    prices = {"AAPL": 185.92, "MSFT": 425.27, "GOOGL": 175.43}
+    if symbol in prices:
+        return f"{symbol} is currently trading at ${prices[symbol]}"
+    return f"Could not find price for {symbol}"
+
+# Create an agent with standard and custom tools
+agent = Agent(
+    model_name="gpt-4o",
+    tools=[
+        PythonTool(),  # Standard Python execution tool
+        create_tool(get_stock_price)  # Custom stock price tool
+    ]
+)
+
+# The agent can now use both tools to solve tasks
+result = agent.solve_task(
+    "Write a Python function to calculate investment growth, "  
+    "then analyze Apple stock's current price"
+)
+
+print(result)
+```
+
+In this example, the agent can seamlessly use both the standard `PythonTool` and your custom stock price lookup tool to complete the task.
+
+Key features of `create_tool()`:
+- 🔧 Automatically converts functions to Tools
+- 📝 Extracts metadata from function signature and docstring
+- 🔍 Supports both synchronous and asynchronous functions
+- 🛠️ Generates tool documentation and validation
 
 ---
 
