@@ -71,7 +71,7 @@ class WorkflowEngine:
     def __init__(self, workflow, parent_engine: Optional["WorkflowEngine"] = None):
         """Initialize the WorkflowEngine with a workflow and optional parent for sub-workflows."""
         self.workflow = workflow
-        self.context = {}
+        self.context: Dict[str, Any] = {}
         self.observers: List[WorkflowObserver] = []
         self.parent_engine = parent_engine  # Link to parent engine for sub-workflow observer propagation
 
@@ -302,7 +302,7 @@ class Workflow:
 
 
 class Nodes:
-    NODE_REGISTRY = {}  # Registry to hold node functions and metadata
+    NODE_REGISTRY: Dict[str, Tuple[Callable, List[str], Optional[str]]] = {}  # Registry to hold node functions and metadata
 
     @classmethod
     def define(cls, output: Optional[str] = None):
@@ -485,8 +485,8 @@ async def example_workflow():
     # Define Pydantic model for structured output
     class OrderDetails(BaseModel):
         order_id: str
-        items: List[str]
-        in_stock: bool
+        items_in_stock: List[str]
+        items_out_of_stock: List[str]
 
     # Define an example observer for progress
     async def progress_monitor(event: WorkflowEvent):
@@ -533,7 +533,9 @@ async def example_workflow():
         output="inventory_status",
     )
     async def check_inventory(items: List[str]) -> OrderDetails:
-        pass
+        # This is a placeholder function that would normally call an LLM
+        # The actual implementation is handled by the structured_llm_node decorator
+        return OrderDetails(order_id="123", items_in_stock=["item1"], items_out_of_stock=[])
 
     @Nodes.define(output="payment_status")
     async def process_payment(order: Dict[str, Any]) -> str:
@@ -572,11 +574,11 @@ async def example_workflow():
         .sequence("validate_order", "check_inventory")
         .then(
             "payment_shipping",
-            condition=lambda ctx: ctx.get("inventory_status").in_stock if ctx.get("inventory_status") else False,
+            condition=lambda ctx: len(ctx.get("inventory_status").items_out_of_stock) == 0 if ctx.get("inventory_status") else False,
         )
         .then(
             "notify_customer_out_of_stock",
-            condition=lambda ctx: not ctx.get("inventory_status").in_stock if ctx.get("inventory_status") else True,
+            condition=lambda ctx: len(ctx.get("inventory_status").items_out_of_stock) > 0 if ctx.get("inventory_status") else True,
         )
         .parallel("update_order_status", "send_confirmation_email")
         .node("update_order_status")

@@ -34,7 +34,7 @@ async def validate_input(genre: str, num_chapters: int) -> str:
     """Validate input parameters."""
     if not (1 <= num_chapters <= 20 and genre.lower() in ["science fiction", "fantasy", "mystery", "romance"]):
         raise ValueError(
-            f"Invalid input: num_chapters must be 1-20, genre must be one of science fiction, fantasy, mystery, romance"
+            "Invalid input: num_chapters must be 1-20, genre must be one of science fiction, fantasy, mystery, romance"
         )
     return "Input validated"
 

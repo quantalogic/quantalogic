@@ -50,14 +50,17 @@ def generate_executable_script(workflow_def: WorkflowDefinition, global_vars: di
         # Embed functions from workflow_def
         for func_name, func_def in workflow_def.functions.items():
             if func_def.type == "embedded":
-                f.write(func_def.code + "\n\n")
+                if func_def.code is not None:
+                    f.write(func_def.code + "\n\n")
+                else:
+                    f.write("\n\n")
 
         # Define workflow using chaining syntax
         f.write("# Define the workflow using simplified syntax with automatic node registration\n")
         f.write("workflow = (\n")
         f.write(f'    Workflow("{workflow_def.workflow.start}")\n')
         for trans in workflow_def.workflow.transitions:
-            from_node = trans.from_
+            _from_node = trans.from_
             to_node = trans.to
             condition = trans.condition or "None"
             if condition != "None":

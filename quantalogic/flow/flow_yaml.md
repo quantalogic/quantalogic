@@ -1,419 +1,506 @@
-# Quantalogic Flow YAML DSL Specification
 
-## 1. Introduction
+# Quantalogic Flow YAML DSL Specification 🚀
 
-The Quantalogic Flow YAML DSL (Domain Specific Language) offers a structured and human-readable way to define workflows. As of February 23, 2025, it provides a rich set of features for complex automation, including:
+## 1. Introduction 🌟
 
-*   **Function Execution**: Executes asynchronous Python functions, either embedded directly or sourced from PyPI packages, local files, or remote URLs.
-*   **Execution Flow**: Supports sequential, conditional, and parallel transitions between nodes.
-*   **Sub-Workflows**: Enables hierarchical workflows through nested sub-workflows.
-*   **LLM Integration**: Incorporates Large Language Model (LLM) nodes with plain text (`llm_node`) or structured output (`structured_llm_node`), using configurable prompts and parameters.
-*   **Context Management**: Maintains state across nodes using a shared context dictionary.
-*   **Robustness**: Provides configurable retries and timeouts for fault-tolerant execution.
-*   **Programmatic Control**: Managed via the `WorkflowManager` class for dynamic creation and execution.
+Welcome to the **Quantalogic Flow YAML DSL**—a powerful, human-readable way to craft workflows with the `quantalogic.flow` package! As of **March 1, 2025**, this DSL brings a suite of exciting features to automate complex tasks with ease:
 
-This DSL seamlessly integrates with the `Workflow`, `WorkflowEngine`, and `WorkflowManager` classes from the `quantalogic.flow` package, and it leverages the `Nodes` class for LLM functionality to minimize redundancy.
+- **Function Execution** ⚙️: Run async Python functions—embedded or sourced from PyPI, local files, or URLs.
+- **Execution Flow** ➡️: Define sequential, conditional, and parallel transitions.
+- **Sub-Workflows** 🌳: Build hierarchical workflows for modularity.
+- **LLM Integration** 🤖: Leverage Large Language Models with plain text or structured outputs.
+- **Context Management** 📦: Share state across nodes via a dynamic context.
+- **Robustness** 🛡️: Add retries, delays, and timeouts for reliability.
+- **Observers** 👀: Monitor execution with custom event handlers.
+- **Programmatic Power** 🧑‍💻: Control everything via the `WorkflowManager`.
 
-## 2. Workflow Structure
-
-A YAML workflow file consists of three main sections:
-
-*   **`functions`**: Defines Python functions used by nodes, supporting both inline code and external modules.
-*   **`nodes`**: Configures individual tasks, linking to functions, sub-workflows, or LLM setups.
-*   **`workflow`**: Specifies the execution flow, including the start node and transitions.
-
-```yaml
-functions:
-  # Function definitions
-nodes:
-  # Node configurations
-workflow:
-  # Start node and transitions
-```
+This DSL integrates seamlessly with `Workflow`, `WorkflowEngine`, and `Nodes` classes, powering everything from simple scripts to AI-driven workflows. Let’s dive in! 🎉
 
 ```mermaid
-graph LR
-    A[YAML Workflow File] --> B(functions);
-    A --> C(nodes);
-    A --> D(workflow);
-    style A fill:#f9f,stroke:#333,stroke-width:2px
+graph TD
+    A[YAML Workflow File] -->|Defines| B[functions ⚙️]
+    A -->|Configures| C[nodes 🧩]
+    A -->|Orchestrates| D[workflow 🌐]
+    style A fill:#f9f9ff,stroke:#333,stroke-width:2px,stroke-dasharray:5
+    style B fill:#e6f3ff,stroke:#0066cc
+    style C fill:#e6ffe6,stroke:#009933
+    style D fill:#fff0e6,stroke:#cc3300
 ```
 
-## 3. Functions
+## 2. Workflow Structure 🗺️
 
-The `functions` section maps function names to their implementations, which can be embedded in the YAML or sourced externally from Python modules.
+A workflow YAML file is split into three core sections:
 
-**Fields**
+- **`functions`**: Your toolbox of Python functions.
+- **`nodes`**: The building blocks (tasks) of your workflow.
+- **`workflow`**: The roadmap tying it all together.
 
-*   `type` (string, required): Specifies the function source. Options:
-    *   `"embedded"`: Inline Python code.
-    *   `"external"`: Module-based function.
-*   `code` (string, optional): Multi-line asynchronous Python code for embedded functions. Required if `type: embedded`.
-*   `module` (string, optional): Source of the external module for external functions. Can be:
-    *   A PyPI package name (e.g., `"requests"`, `"numpy"`).
-    *   A local file path (e.g., `"/path/to/module.py"`).
-    *   A remote URL (e.g., `"https://example.com/module.py"`). Required if `type: external`.
-*   `function` (string, optional): Name of the function within the module for external functions. Required if `type: external`.
-
-**Rules**
-
-*   Embedded functions must be asynchronous (using `async def`) and match the dictionary key name.
-*   External functions require both `module` and `function` fields; `code` must not be present.
-*   For PyPI modules, ensure the package is installed in the Python environment (e.g., via `pip install <module>`).
-
-**Examples**
-
-*   **Embedded Function**
+Here’s the skeleton:
 
 ```yaml
 functions:
-  validate_order:
+  # Your Python magic ✨
+nodes:
+  # Tasks to execute 🎯
+workflow:
+  # Flow control 🚦
+```
+
+## 3. Functions ⚙️
+
+The `functions` section defines reusable Python code—either embedded in the YAML or pulled from external sources.
+
+### Fields 📋
+
+- `type` (string, required): `"embedded"` (inline code) or `"external"` (module-based).
+- `code` (string, optional): Multi-line Python code for `embedded`. Use `|` for readability!
+- `module` (string, optional): Source for `external`. Options:
+  - PyPI package (e.g., `"requests"`).
+  - Local path (e.g., `"/path/to/module.py"`).
+  - URL (e.g., `"https://example.com/script.py"`).
+- `function` (string, optional): Function name in the module (for `external`).
+
+### Rules ✅
+
+- Embedded functions must be `async def` and match their dictionary key.
+- External functions need `module` and `function`; no `code` allowed.
+- PyPI modules must be installed (e.g., `pip install requests`).
+
+### Examples 🌈
+
+#### Embedded Function
+```yaml
+functions:
+  greet:
     type: embedded
     code: |
-      async def validate_order(order: dict) -> bool:
-          await asyncio.sleep(1)
-          return bool(order.get("items"))
+      async def greet(name: str) -> str:
+          return f"Hello, {name}!"
 ```
 
-*   **External Function from PyPI**
-
+#### External from PyPI
 ```yaml
 functions:
-  fetch_data:
+  fetch:
     type: external
     module: requests
     function: get
 ```
+*Note*: Run `pip install requests` first!
 
-Note: Requires `pip install requests` if not already installed.
-
-*   **External Function from Local File**
-
-```yaml
-functions:
-  process_data:
-    type: external
-    module: /path/to/my_module.py
-    function: process
-```
-
-*   **External Function from URL**
-
+#### Local File
 ```yaml
 functions:
   analyze:
     type: external
-    module: https://example.com/analyze.py
-    function: analyze_data
+    module: ./utils/analyze.py
+    function: process_data
+```
+
+#### Remote URL
+```yaml
+functions:
+  compute:
+    type: external
+    module: https://example.com/compute.py
+    function: calculate
 ```
 
 ```mermaid
-graph LR
-    A[Function Definition] --> B{Type: embedded/external};
-    B -- embedded --> C["Code (async def ...)"];
-    B -- external --> D[Module: PyPI, Path, or URL];
-    D --> E[Function Name];
-    style A fill:#ccf,stroke:#333,stroke-width:2px
+graph TD
+    A[Function Definition] --> B{Type?}
+    B -->|embedded| C[Code: async def ...]
+    B -->|external| D[Module: PyPI, Path, URL]
+    D --> E[Function Name]
+    style A fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
+    style B fill:#fff,stroke:#333
+    style C fill:#cce6ff,stroke:#0066cc
+    style D fill:#cce6ff,stroke:#0066cc
+    style E fill:#cce6ff,stroke:#0066cc
 ```
 
-## 4. Nodes
+## 4. Nodes 🧩
 
-Nodes represent individual tasks within the workflow, configurable as function executions, sub-workflows, or LLM operations.
+Nodes are the heartbeat of your workflow—each one’s a task, powered by functions, sub-workflows, or LLMs.
 
-**Fields**
+### Fields 📋
 
-*   `function` (string, optional): References a function from the `functions` section. Mutually exclusive with `sub_workflow` and `llm_config`.
-*   `sub_workflow` (object, optional): Defines a nested workflow. Mutually exclusive with `function` and `llm_config`.
-    *   `start` (string, required): Starting node of the sub-workflow.
-    *   `transitions` (list): Transition rules (see Workflow section).
-*   `llm_config` (object, optional): Configures an LLM-based node. Mutually exclusive with `function` and `sub_workflow`.
-    *   `model` (string, optional, default: `"gpt-3.5-turbo"`): LLM model (e.g., `"gemini/gemini-2.0-flash"`, `"gro k/xai"`).
-    *   `system_prompt` (string, optional): Defines the LLM’s role or context.
-    *   `prompt_template` (string, required, default: `"{{ input }}"`): Jinja2 template for the user prompt (e.g., `"Summarize {{ text }}"`).
-    *   `temperature` (float, optional, default: `0.7`): Randomness control (`0.0` to `1.0`).
-    *   `max_tokens` (integer, optional, default: `2000`): Maximum response tokens.
-    *   `top_p` (float, optional, default: `1.0`): Nucleus sampling (`0.0` to `1.0`).
-    *   `presence_penalty` (float, optional, default: `0.0`): Penalizes repetition (`-2.0` to `2.0`).
-    *   `frequency_penalty` (float, optional, default: `0.0`): Reduces word repetition (`-2.0` to `2.0`).
-    *   `stop` (list of strings, optional): Stop sequences (e.g., `["\n"]`).
-    *   `response_model` (string, optional): Pydantic model path for structured output (e.g., `"my_module:OrderDetails"`). If present, uses `structured_llm_node`; otherwise, uses `llm_node`.
-    *   `api_key` (string, optional): Custom API key for the LLM provider.
-*   `output` (string, optional): Context key for the node’s result. Defaults to `"<node_name>_result"` for function or LLM nodes if unspecified.
-*   `retries` (integer, optional, default: `3`): Number of retry attempts on failure (≥ `0`).
-*   `delay` (float, optional, default: `1.0`): Delay between retries in seconds (≥ `0`).
-*   `timeout` (float or null, optional, default: `null`): Execution timeout in seconds (≥ `0` or `null` for no timeout).
-*   `parallel` (boolean, optional, default: `false`): Enables parallel execution with other nodes.
+- `function` (string, optional): Links to a `functions` entry.
+- `sub_workflow` (object, optional): Nested workflow definition.
+  - `start` (string): Starting node.
+  - `transitions` (list): Flow rules (see Workflow section).
+- `llm_config` (object, optional): LLM setup.
+  - `model` (string, default: `"gpt-3.5-turbo"`): e.g., `"gemini/gemini-2.0-flash"`.
+  - `system_prompt` (string, optional): LLM’s role.
+  - `prompt_template` (string, default: `"{{ input }}"`): Jinja2 template (e.g., `"Summarize {{ text }}"`).
+  - `temperature` (float, default: `0.7`): Randomness (0.0–1.0).
+  - `max_tokens` (int, optional): Token limit (e.g., `2000`).
+  - `top_p` (float, default: `1.0`): Nucleus sampling (0.0–1.0).
+  - `presence_penalty` (float, default: `0.0`): Topic repetition (-2.0–2.0).
+  - `frequency_penalty` (float, default: `0.0`): Word repetition (-2.0–2.0).
+  - `response_model` (string, optional): Structured output model (e.g., `"my_module:OrderDetails"`).
+- `output` (string, optional): Context key for results (defaults to `<node_name>_result` for function/LLM nodes).
+- `retries` (int, default: `3`): Retry attempts (≥ 0).
+- `delay` (float, default: `1.0`): Seconds between retries (≥ 0).
+- `timeout` (float/null, default: `null`): Max runtime in seconds.
+- `parallel` (bool, default: `false`): Run concurrently?
 
-**Rules**
+### Rules ✅
 
-*   Each node must specify exactly one of `function`, `sub_workflow`, or `llm_config`.
-*   For `sub_workflow`, `output` is optional if the sub-workflow sets multiple context keys; inputs are derived from the start node’s requirements.
-*   For `llm_config`, inputs are extracted from `prompt_template` placeholders (e.g., `{{ text }}` implies `text` as an input).
+- Exactly one of `function`, `sub_workflow`, or `llm_config` per node.
+- LLM inputs come from `prompt_template` placeholders (e.g., `{{ text }}` → `text`).
 
-**Examples**
+### Examples 🌈
 
-*   **Function Node**
-
+#### Function Node
 ```yaml
 nodes:
   validate:
     function: validate_order
     output: is_valid
     retries: 2
-    delay: 0.5
     timeout: 5.0
 ```
 
-*   **Sub-Workflow Node**
-
+#### Sub-Workflow Node
 ```yaml
 nodes:
-  payment_shipping:
+  payment_flow:
     sub_workflow:
-      start: payment
+      start: pay
       transitions:
-        - from: payment
-          to: shipping
-    output: shipping_confirmation
+        - from: pay
+          to: ship
+    output: shipping_status
 ```
 
-*   **Plain LLM Node**
-
+#### Plain LLM Node
 ```yaml
 nodes:
   summarize:
     llm_config:
       model: "gro k/xai"
-      system_prompt: "You are a concise summarizer."
-      prompt_template: "Summarize this text: {{ text }}"
+      system_prompt: "You’re a concise summarizer."
+      prompt_template: "Summarize: {{ text }}"
       temperature: 0.5
-      max_tokens: 50
     output: summary
 ```
 
-*   **Structured LLM Node**
-
+#### Structured LLM Node
 ```yaml
 nodes:
-  check_inventory:
+  inventory_check:
     llm_config:
       model: "gemini/gemini-2.0-flash"
-      system_prompt: "Check inventory status."
-      prompt_template: "Are {{ items }} in stock?"
-      response_model: "my_module:InventoryStatus"
-    output: inventory_status
+      system_prompt: "Check stock."
+      prompt_template: "Items: {{ items }}"
+      response_model: "inventory:StockStatus"
+    output: stock
 ```
 
 ```mermaid
-graph LR
-    A[Node Definition] --> B{Choice: function, sub_workflow, llm_config};
-    B -- function --> C[Function Name];
-    B -- sub_workflow --> D[Start Node & Transitions];
-    B -- llm_config --> E[LLM Configuration];
-    style A fill:#ccf,stroke:#333,stroke-width:2px
+graph TD
+    A[Node] --> B{Type?}
+    B -->|function| C[Function Ref]
+    B -->|sub_workflow| D[Start + Transitions]
+    B -->|llm_config| E[LLM Setup]
+    E --> F{Structured?}
+    F -->|Yes| G[response_model]
+    F -->|No| H[Plain Text]
+    style A fill:#e6ffe6,stroke:#009933,stroke-width:2px
+    style B fill:#fff,stroke:#333
+    style C fill:#ccffcc,stroke:#009933
+    style D fill:#ccffcc,stroke:#009933
+    style E fill:#ccffcc,stroke:#009933
+    style F fill:#fff,stroke:#333
+    style G fill:#b3ffb3,stroke:#009933
+    style H fill:#b3ffb3,stroke:#009933
 ```
 
-## 5. Workflow
+## 5. Workflow 🌐
 
-The `workflow` section defines the top-level execution flow.
+The `workflow` section maps out how nodes connect and flow.
 
-**Fields**
+### Fields 📋
 
-*   `start` (string, optional): Name of the starting node.
-*   `transitions` (list, required): List of transition rules.
+- `start` (string, optional): First node to run.
+- `transitions` (list): Flow rules.
+  - `from` (string): Source node.
+  - `to` (string/list): Target(s)—string for sequential, list for parallel.
+  - `condition` (string, optional): Python expression (e.g., `"ctx['stock'].available"`).
 
-**Transition Fields**
+### Examples 🌈
 
-*   `from` (string, required): Source node.
-*   `to` (string or list, required): Target node(s). String for sequential, list for parallel execution.
-*   `condition` (string, optional): Python expression using `ctx` (e.g., `"ctx.get('in_stock')"`). Transition occurs if `True`.
-
-**Examples**
-
-*   **Sequential Transition**
-
+#### Sequential Flow
 ```yaml
 workflow:
   start: validate
   transitions:
     - from: validate
-      to: check_inventory
+      to: process
 ```
 
-*   **Conditional Transition**
-
+#### Conditional Flow
 ```yaml
 workflow:
-  start: check_inventory
+  start: inventory_check
   transitions:
-    - from: check_inventory
-      to: payment_shipping
-      condition: "ctx.get('inventory_status').in_stock"
+    - from: inventory_check
+      to: payment_flow
+      condition: "ctx['stock'].available"
 ```
 
-*   **Parallel Transition**
-
+#### Parallel Flow
 ```yaml
 workflow:
-  start: payment_shipping
+  start: payment_flow
   transitions:
-    - from: payment_shipping
-      to: [update_status, notify_customer]
+    - from: payment_flow
+      to: [update_db, send_email]
 ```
 
 ```mermaid
-graph LR
-    A[Workflow Definition] --> B(Start Node);
-    A --> C(Transitions);
-    C --> D{From Node};
-    D --> E{To Nodes};
-    E -- Sequential --> F[Single Node];
-    E -- Parallel --> G[List of Nodes];
-    C --> H{Condition Optional};
-    style A fill:#ccf,stroke:#333,stroke-width:2px
+graph TD
+    A[Workflow] --> B[Start Node]
+    A --> C[Transitions]
+    C --> D[From]
+    D --> E{To}
+    E -->|Sequential| F[Single Node]
+    E -->|Parallel| G[List of Nodes]
+    C --> H[Condition?]
+    H -->|Yes| I[ctx-based Logic]
+    style A fill:#fff0e6,stroke:#cc3300,stroke-width:2px
+    style B fill:#ffe6cc,stroke:#cc3300
+    style C fill:#ffe6cc,stroke:#cc3300
+    style D fill:#ffd9b3,stroke:#cc3300
+    style E fill:#fff,stroke:#333
+    style F fill:#ffd9b3,stroke:#cc3300
+    style G fill:#ffd9b3,stroke:#cc3300
+    style H fill:#fff,stroke:#333
+    style I fill:#ffd9b3,stroke:#cc3300
 ```
 
-## 6. Context
+## 6. Observers 👀
 
-The context (`ctx`) is a dictionary shared across the workflow and sub-workflows, storing node outputs. Examples:
+Add observers to watch workflow events (e.g., node start, completion, failures). Define them in `functions` and list them under `observers`.
 
-*   Function node: `ctx["is_valid"] = True`.
-*   Plain LLM node: `ctx["summary"] = "Brief text"`.
-*   Structured LLM node: `ctx["inventory_status"] = InventoryStatus(items=["item1"], in_stock=True)`.
-
-## 7. Execution Flow
-
-The `WorkflowEngine` executes the workflow as follows:
-
-1.  Begins at `workflow.start`.
-2.  Executes nodes, updating `ctx`:
-    *   **Function Nodes**: Calls the referenced function, storing the result in `output`.
-    *   **Sub-Workflow Nodes**: Runs the nested workflow, merging its context into the parent’s.
-    *   **LLM Nodes**: Uses `Nodes.llm_node` for text output or `Nodes.structured_llm_node` for structured output via `litellm` and `instructor`.
-3.  Evaluates transitions:
-    *   Conditions (if present) are checked against `ctx`.
-4.  Executes the next node(s) sequentially or in parallel based on `to`.
-5.  Continues until no further transitions remain.
-
-## 8. WorkflowManager
-
-The `WorkflowManager` class provides programmatic control over workflows:
-
-*   **Node Management**: Add, update, or remove nodes.
-*   **Transition Management**: Define execution flow.
-*   **Function Registration**: Embed or link to external functions.
-*   **YAML I/O**: Load/save workflows from/to YAML files.
-*   **Instantiation**: Builds a `Workflow` object with support for PyPI modules.
-
-**Example**
-
-```python
-manager = WorkflowManager()
-manager.add_function("fetch", "external", module="requests", function="get")
-manager.add_node("start", function="fetch", output="response")
-manager.set_start_node("start")
-manager.save_to_yaml("workflow.yaml")
-```
-
-If `requests` is missing, the manager raises:
-
-```text
-Failed to import module 'requests': No module named 'requests'. This may be a PyPI package. Ensure it is installed using 'pip install requests' or check if the module name is correct.
-```
-
-```mermaid
-graph LR
-    A[WorkflowManager] --> B(Add/Update/Remove Nodes & Transitions);
-    A --> C(Load/Save YAML);
-    A --> D(Instantiate Workflow);
-    style A fill:#ccf,stroke:#333,stroke-width:2px
-```
-
-## 9. Examples
-
-**Example 1: Simple Workflow with PyPI Module**
-
+### Example
 ```yaml
 functions:
-  fetch_page:
-    type: external
-    module: requests
-    function: get
+  log_event:
+    type: embedded
+    code: |
+      async def log_event(event):
+          print(f"{event.event_type}: {event.node_name}")
 nodes:
-  fetch:
-    function: fetch_page
-    output: page_content
+  task:
+    function: greet
 workflow:
-  start: fetch
+  start: task
+  transitions: []
+observers:
+  - log_event
+```
+
+## 7. Context 📦
+
+The `ctx` dictionary carries data across nodes:
+- `greet` → `ctx["greeting"] = "Hello, Alice!"`
+- `inventory_check` → `ctx["stock"] = StockStatus(...)`
+
+## 8. Execution Flow 🏃‍♂️
+
+The `WorkflowEngine` runs it all:
+1. Starts at `workflow.start`.
+2. Executes nodes, updating `ctx`.
+3. Follows transitions based on conditions or parallel rules.
+4. Notifies observers of events.
+5. Stops when no transitions remain.
+
+## 9. Converting Between Python and YAML 🔄
+
+The `quantalogic.flow` package provides tools to bridge Python-defined workflows and YAML definitions, making your workflows portable and standalone.
+
+### From Python to YAML with `flow_extractor.py` 📜
+Want to turn a Python workflow (using `Nodes` and `Workflow`) into a YAML file? Use `quantalogic/flow/flow_extractor.py`! The `extract_workflow_from_file` function parses a Python file, extracting nodes, transitions, functions, and globals into a `WorkflowDefinition`. Then, `WorkflowManager` saves it as YAML. This is perfect for sharing or archiving workflows defined programmatically.
+
+#### How It Works
+1. **Parse**: `WorkflowExtractor` uses Python’s `ast` module to analyze the file, identifying `@Nodes` decorators (e.g., `define`, `llm_node`) and `Workflow` chaining.
+2. **Extract**: It builds a `WorkflowDefinition` with nodes, transitions, embedded functions, and observers.
+3. **Save**: `WorkflowManager.save_to_yaml` writes it to a YAML file.
+
+#### Example
+```python
+# story_generator.py
+from quantalogic.flow import Nodes, Workflow
+
+@Nodes.define(output="greeting")
+async def say_hello(name: str) -> str:
+    return f"Hello, {name}!"
+
+workflow = Workflow("say_hello")
+
+# Convert to YAML
+from quantalogic.flow.flow_extractor import extract_workflow_from_file
+from quantalogic.flow.flow_manager import WorkflowManager
+
+wf_def, globals = extract_workflow_from_file("story_generator.py")
+manager = WorkflowManager(wf_def)
+manager.save_to_yaml("story_workflow.yaml")
+```
+**Output (`story_workflow.yaml`)**:
+```yaml
+functions:
+  say_hello:
+    type: embedded
+    code: |
+      @Nodes.define(output="greeting")
+      async def say_hello(name: str) -> str:
+          return f"Hello, {name}!"
+nodes:
+  say_hello:
+    function: say_hello
+    output: greeting
+    retries: 3
+    delay: 1.0
+workflow:
+  start: say_hello
   transitions: []
 ```
 
-Execution with `ctx = {"url": "https://example.com"}`:
+### From YAML to Standalone Python with `flow_generator.py` 🐍
+Need a self-contained Python script from a `WorkflowDefinition`? `quantalogic/flow/flow_generator.py` has you covered with `generate_executable_script`. It creates an executable file with embedded functions, dependencies, and a `main` function—ready to run anywhere with `uv run`.
 
-`fetch` → `ctx["page_content"] = <Response object>` (assuming `requests` is installed).
+#### How It Works
+1. **Generate**: Takes a `WorkflowDefinition` and global variables.
+2. **Structure**: Adds a shebang (`#!/usr/bin/env -S uv run`), dependencies, globals, functions, and workflow chaining.
+3. **Execute**: Sets permissions to make it runnable.
 
-**Example 2: E-commerce Workflow**
+#### Example
+```python
+from quantalogic.flow.flow_manager import WorkflowManager
+from quantalogic.flow.flow_generator import generate_executable_script
+
+manager = WorkflowManager()
+manager.load_from_yaml("story_workflow.yaml")
+generate_executable_script(manager.workflow, {}, "standalone_story.py")
+```
+**Output (`standalone_story.py`)**:
+```python
+#!/usr/bin/env -S uv run
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["loguru", "litellm", "pydantic>=2.0", "anyio", "quantalogic>=0.35", "jinja2", "instructor[litellm]"]
+# ///
+import anyio
+from loguru import logger
+from quantalogic.flow import Nodes, Workflow
+
+@Nodes.define(output="greeting")
+async def say_hello(name: str) -> str:
+    return f"Hello, {name}!"
+
+workflow = Workflow("say_hello")
+
+async def main():
+    initial_context = {"name": "World"}
+    engine = workflow.build()
+    result = await engine.run(initial_context)
+    logger.info(f"Workflow result: {result}")
+
+if __name__ == "__main__":
+    anyio.run(main)
+```
+Run it with `./standalone_story.py`—no extra setup needed (assuming `uv` is installed)!
+
+```mermaid
+graph TD
+    A[Python Workflow] -->|flow_extractor.py| B[WorkflowDefinition]
+    B -->|WorkflowManager| C[YAML File]
+    C -->|WorkflowManager| D[WorkflowDefinition]
+    D -->|flow_generator.py| E[Standalone Python Script]
+    style A fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
+    style B fill:#fff,stroke:#333
+    style C fill:#e6ffe6,stroke:#009933,stroke-width:2px
+    style D fill:#fff,stroke:#333
+    style E fill:#fff0e6,stroke:#cc3300,stroke-width:2px
+```
+
+## 10. WorkflowManager 🧑‍💻
+
+The `WorkflowManager` lets you build workflows programmatically:
+- Add nodes, transitions, functions, and observers.
+- Load/save YAML.
+- Instantiate a `Workflow` object.
+
+### Example
+```python
+manager = WorkflowManager()
+manager.add_function("say_hi", "embedded", code="async def say_hi(name): return f'Hi, {name}!'")
+manager.add_node("start", function="say_hi")
+manager.set_start_node("start")
+manager.save_to_yaml("hi.yaml")
+```
+
+## 11. Full Example: Order Processing 📦🤖
 
 ```yaml
 functions:
-  validate_order:
+  validate:
     type: embedded
     code: |
-      async def validate_order(order: dict) -> bool:
-          await asyncio.sleep(1)
-          return bool(order.get("items"))
-  process_payment:
-    type: external
-    module: stripe
-    function: create_charge
+      async def validate(order: dict) -> str:
+          return "valid" if order["items"] else "invalid"
+  track_usage:
+    type: embedded
+    code: |
+      def track_usage(event):
+          if event.usage:
+              print(f"{event.node_name}: {event.usage['total_tokens']} tokens")
 nodes:
-  validate:
-    function: validate_order
-    output: is_valid
-  inventory:
+  validate_order:
+    function: validate
+    output: validity
+  check_stock:
     llm_config:
       model: "gemini/gemini-2.0-flash"
       system_prompt: "Check inventory."
-      prompt_template: "Are {{ items }} in stock?"
-      response_model: "my_module:InventoryStatus"
-    output: inventory_status
-  payment:
-    function: process_payment
-    output: payment_status
+      prompt_template: "Items: {{ items }}"
+      response_model: "shop:Stock"
+    output: stock
   notify:
     llm_config:
-      prompt_template: "Notify: Order {{ order_id }} processed."
-    output: notification
+      prompt_template: "Order {{ order_id }} status: {{ validity }}"
+    output: message
 workflow:
-  start: validate
+  start: validate_order
   transitions:
-    - from: validate
-      to: inventory
-    - from: inventory
-      to: payment
-      condition: "ctx.get('inventory_status').in_stock"
-    - from: payment
+    - from: validate_order
+      to: check_stock
+      condition: "ctx['validity'] == 'valid'"
+    - from: check_stock
       to: notify
+observers:
+  - track_usage
 ```
 
-Execution with `ctx = {"order": {"items": ["item1"], "order_id": "123"}}`:
-
-*   `validate` → `ctx["is_valid"] = True`.
-*   `inventory` → `ctx["inventory_status"] = InventoryStatus(...)`.
-*   `payment` → `ctx["payment_status"] = <Stripe response>` (requires `pip install stripe`).
-*   `notify` → `ctx["notification"] = "Notify: Order 123 processed."`.
+### Execution
+With `ctx = {"order": {"items": ["book"], "order_id": "123"}}`:
+1. `validate_order` → `ctx["validity"] = "valid"`
+2. `check_stock` → `ctx["stock"] = Stock(...)`
+3. `notify` → `ctx["message"] = "Order 123 status: valid"`
+4. `track_usage` prints token usage for LLM nodes.
 
 ```mermaid
-graph LR
-    A[validate] --> B[inventory];
-    B -- "ctx.get('inventory_status').in_stock" --> C[payment];
-    C --> D[notify];
-    style A fill:#afa,stroke:#333,stroke-width:2px
-    style B fill:#afa,stroke:#333,stroke-width:2px
-    style C fill:#afa,stroke:#333,stroke-width:2px
-    style D fill:#afa,stroke:#333,stroke-width:2px
+graph TD
+    A["validate_order"] -->|"ctx['validity'] == 'valid'"| B["check_stock"]
+    B --> C["notify"]
+    style A fill:#e6ffe6,stroke:#009933,stroke-width:2px
+    style B fill:#e6ffe6,stroke:#009933,stroke-width:2px
+    style C fill:#e6ffe6,stroke:#009933,stroke-width:2px
 ```
 
-## 10. Conclusion
+## 12. Conclusion 🎉
 
-The Quantalogic Flow YAML DSL, as of February 23, 2025, provides a flexible and powerful framework for defining workflows. Enhanced support for PyPI modules via the `module` field in `functions` ensures seamless integration with external libraries, with clear error messages guiding users to install missing packages (e.g., `pip install requests`). Combined with sub-workflows, LLM nodes, and robust execution controls, it supports a wide range of applications, from simple tasks to complex, AI-driven processes, all manageable through the `WorkflowManager`.
+The Quantalogic Flow YAML DSL (March 1, 2025) is your go-to for crafting workflows—simple or sophisticated. With tools like `flow_extractor.py` and `flow_generator.py`, you can switch between Python and YAML effortlessly, making workflows portable and standalone. Add PyPI support, sub-workflows, LLM nodes, and observers, and you’ve got a versatile framework for automation and AI tasks. Pair it with `WorkflowManager` for maximum flexibility! 🚀
+
