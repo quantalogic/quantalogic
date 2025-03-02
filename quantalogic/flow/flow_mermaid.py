@@ -81,15 +81,15 @@ def generate_mermaid_diagram(
             raise ValueError(f"Invalid node name '{workflow_def.workflow.start}' for Mermaid")
         all_nodes.add(workflow_def.workflow.start)
     for trans in workflow_def.workflow.transitions:
-        if re.search(invalid_chars, trans.from_):
-            raise ValueError(f"Invalid node name '{trans.from_}' for Mermaid")
-        all_nodes.add(trans.from_)
-        if isinstance(trans.to, str):
-            if re.search(invalid_chars, trans.to):
-                raise ValueError(f"Invalid node name '{trans.to}' for Mermaid")
-            all_nodes.add(trans.to)
+        if re.search(invalid_chars, trans.from_node):
+            raise ValueError(f"Invalid node name '{trans.from_node}' for Mermaid")
+        all_nodes.add(trans.from_node)
+        if isinstance(trans.to_node, str):
+            if re.search(invalid_chars, trans.to_node):
+                raise ValueError(f"Invalid node name '{trans.to_node}' for Mermaid")
+            all_nodes.add(trans.to_node)
         else:
-            for to_node in trans.to:
+            for to_node in trans.to_node:
                 if re.search(invalid_chars, to_node):
                     raise ValueError(f"Invalid node name '{to_node}' for Mermaid")
                 all_nodes.add(to_node)
@@ -97,8 +97,8 @@ def generate_mermaid_diagram(
     # Determine which nodes have conditional transitions
     conditional_nodes: Set[str] = set()
     for trans in workflow_def.workflow.transitions:
-        if trans.condition and isinstance(trans.to, str):
-            conditional_nodes.add(trans.from_)
+        if trans.condition and isinstance(trans.to_node, str):
+            conditional_nodes.add(trans.from_node)
 
     # Generate node definitions and track types/shapes
     node_defs: List[str] = []
@@ -116,9 +116,9 @@ def generate_mermaid_diagram(
     # Generate arrows for transitions (all solid lines)
     arrows: List[str] = []
     for trans in workflow_def.workflow.transitions:
-        from_node = trans.from_
-        if isinstance(trans.to, str):
-            to_node = trans.to
+        from_node = trans.from_node
+        if isinstance(trans.to_node, str):
+            to_node = trans.to_node
             condition = trans.condition
             if condition:
                 cond = condition.replace('"', '\\"')[:30] + ("..." if len(condition) > 30 else "")
@@ -126,7 +126,7 @@ def generate_mermaid_diagram(
             else:
                 arrows.append(f'{from_node} --> {to_node}')
         else:
-            for to_node in trans.to:
+            for to_node in trans.to_node:
                 arrows.append(f'{from_node} --> {to_node}')  # Solid arrow for parallel
 
     # Assemble the Mermaid syntax
@@ -166,11 +166,11 @@ def generate_mermaid_diagram(
                 mermaid_code += f"    subgraph {node}_sub[Sub-Workflow: {node}]\n"
                 sub_nodes = {node_def.sub_workflow.start} if node_def.sub_workflow.start else set()
                 for trans in node_def.sub_workflow.transitions:
-                    sub_nodes.add(trans.from_)
-                    if isinstance(trans.to, str):
-                        sub_nodes.add(trans.to)
+                    sub_nodes.add(trans.from_node)
+                    if isinstance(trans.to_node, str):
+                        sub_nodes.add(trans.to_node)
                     else:
-                        sub_nodes.update(trans.to)
+                        sub_nodes.update(trans.to_node)
                 for sub_node in sub_nodes:
                     mermaid_code += f"        {sub_node}[[{sub_node}]]\n"
                 mermaid_code += "    end\n"
@@ -225,10 +225,10 @@ def main() -> None:
 
     # Define workflow structure
     manager.set_start_node("summarize_text")
-    manager.add_transition(from_="summarize_text", to=["sentiment_analysis", "keyword_extraction"])
-    manager.add_transition(from_="sentiment_analysis", to="publish", condition="ctx['sentiment'] == 'positive'")
-    manager.add_transition(from_="sentiment_analysis", to="revise", condition="ctx['sentiment'] == 'negative'")
-    manager.add_transition(from_="keyword_extraction", to="publish")
+    manager.add_transition(from_node="summarize_text", to_node=["sentiment_analysis", "keyword_extraction"])
+    manager.add_transition(from_node="sentiment_analysis", to_node="publish", condition="ctx['sentiment'] == 'positive'")
+    manager.add_transition(from_node="sentiment_analysis", to_node="revise", condition="ctx['sentiment'] == 'negative'")
+    manager.add_transition(from_node="keyword_extraction", to_node="publish")
 
     # Generate and print the diagram
     workflow_def = manager.workflow

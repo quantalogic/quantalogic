@@ -19,22 +19,20 @@ functions:
     function: null
   update_progress:
     type: embedded
-    code: |-
-      @Nodes.define(output='updated_context')
-      def update_progress(chapters, completed_chapters, chapter, **kwargs):
-          """Update the progress of chapter generation."""
-          chapters.append(chapter)
-          completed_chapters += 1
-          return {'chapters': chapters, 'completed_chapters': completed_chapters, **kwargs}
+    code: "@Nodes.define(output='updated_context')\nasync def update_progress(**context):\n    \"\"\"Update the progress of\
+      \ chapter generation.\n    \n    Takes the entire context dictionary and handles missing keys gracefully.\n    \"\"\"\
+      \n    chapters = context.get('chapters', [])\n    completed_chapters = context.get('completed_chapters', 0)\n    chapter\
+      \ = context.get('chapter', {})\n    updated_chapters = chapters.copy()\n    updated_chapters.append(chapter)\n    updated_context\
+      \ = {**context, 'chapters': updated_chapters, 'completed_chapters': completed_chapters + 1}\n    return updated_context"
     module: null
     function: null
   check_if_complete:
     type: embedded
-    code: |-
-      @Nodes.define(output='continue_generating')
-      def check_if_complete(completed_chapters, num_chapters, **kwargs):
-          """Check if all chapters have been generated."""
-          return completed_chapters < num_chapters
+    code: "@Nodes.define(output='continue_generating')\nasync def check_if_complete(completed_chapters=0, num_chapters=0,\
+      \ **kwargs):\n    \"\"\"Check if all chapters have been generated.\n    \n    Args:\n        completed_chapters: Number\
+      \ of chapters completed so far\n        num_chapters: Total number of chapters to generate\n        kwargs: Additional\
+      \ context parameters\n        \n    Returns:\n        bool: True if we should continue generating chapters, False otherwise\n\
+      \    \"\"\"\n    return completed_chapters < num_chapters"
     module: null
     function: null
 nodes:
@@ -99,16 +97,22 @@ nodes:
 workflow:
   start: generate_outline
   transitions:
-  - from: generate_outline
-    to: generate_chapter
+  - from_node: generate_outline
+    to_node: generate_chapter
     condition: null
-  - from: generate_chapter
-    to: update_progress
+  - from_node: generate_chapter
+    to_node: update_progress
     condition: null
-  - from: update_progress
-    to: check_if_complete
-    condition: 'lambda ctx: ctx[''continue_generating'']'
-  - from: check_if_complete
-    to: generate_chapter
-    condition: 'lambda ctx: ctx[''continue_generating'']'
+  - from_node: update_progress
+    to_node: check_if_complete
+    condition: null
+  - from_node: check_if_complete
+    to_node: generate_chapter
+    condition: 'lambda ctx: ctx.get(''continue_generating'', False)'
+  - from_node: generate_chapter
+    to_node: update_progress
+    condition: null
+  - from_node: update_progress
+    to_node: check_if_complete
+    condition: null
 observers: []

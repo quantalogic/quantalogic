@@ -60,8 +60,8 @@ def generate_executable_script(workflow_def: WorkflowDefinition, global_vars: di
         f.write("workflow = (\n")
         f.write(f'    Workflow("{workflow_def.workflow.start}")\n')
         for trans in workflow_def.workflow.transitions:
-            _from_node = trans.from_
-            to_node = trans.to
+            _from_node = trans.from_node
+            to_node = trans.to_node
             condition = trans.condition or "None"
             if condition != "None":
                 # Ensure condition is formatted as a lambda if not already

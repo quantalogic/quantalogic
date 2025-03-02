@@ -397,7 +397,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                     "sub_workflow": WorkflowStructure(
                         start=sub_extractor.start_node,
                         transitions=[
-                            TransitionDefinition(from_=t[0], to=t[1], condition=t[2]) for t in sub_extractor.transitions
+                            TransitionDefinition(from_node=t[0], to_node=t[1], condition=t[2]) for t in sub_extractor.transitions
                         ],
                     ),
                     "inputs": list(inputs.keys()),
@@ -495,7 +495,7 @@ def extract_workflow_from_file(file_path):
 
     # Construct TransitionDefinition objects
     transitions = [
-        TransitionDefinition(**{"from": from_node, "to": to_node, "condition": cond})
+        TransitionDefinition(from_node=from_node, to_node=to_node, condition=cond)
         for from_node, to_node, cond in extractor.transitions
     ]
 
@@ -551,11 +551,11 @@ def print_workflow_definition(workflow_def):
     print("Transitions:")
     for trans in workflow_def.workflow.transitions:
         condition_str = f" [Condition: {trans.condition}]" if trans.condition else ""
-        if isinstance(trans.to, list):
-            for to_node in trans.to:
-                print(f"- {trans.from_} -> {to_node}{condition_str}")
+        if isinstance(trans.to_node, list):
+            for to_node in trans.to_node:
+                print(f"- {trans.from_node} -> {to_node}{condition_str}")
         else:
-            print(f"- {trans.from_} -> {trans.to}{condition_str}")
+            print(f"- {trans.from_node} -> {trans.to_node}{condition_str}")
 
     print("\n#### Observers:")
     for observer in workflow_def.observers:

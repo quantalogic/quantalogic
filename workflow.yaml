@@ -42,8 +42,8 @@ nodes:
 workflow:
   start: start
   transitions:
-  - from: start
-    to: end
+  - from_node: start
+    to_node: end
     condition: null
 observers:
 - monitor

@@ -19,6 +19,7 @@ from quantalogic.flow import Nodes, Workflow
 
 MODEL = 'gemini/gemini-2.0-flash'
 DEFAULT_LLM_PARAMS = {'model': 'gemini/gemini-2.0-flash', 'temperature': 0.7, 'max_tokens': 1000}
+updated_context = {}
 initial_context = {'genre': 'science fiction', 'num_chapters': 3, 'completed_chapters': 0, 'style': 'descriptive'}
 
 @Nodes.llm_node(system_prompt='You are a creative writer skilled at generating stories.', prompt_template='Create a story outline for a {genre} story with {num_chapters} chapters.', output='outline', **DEFAULT_LLM_PARAMS)
@@ -32,15 +33,31 @@ def generate_chapter(outline, chapter_num, style):
     return {}
 
 @Nodes.define(output='updated_context')
-def update_progress(chapters, completed_chapters, chapter, **kwargs):
-    """Update the progress of chapter generation."""
-    chapters.append(chapter)
-    completed_chapters += 1
-    return {'chapters': chapters, 'completed_chapters': completed_chapters, **kwargs}
+async def update_progress(**context):
+    """Update the progress of chapter generation.
+    
+    Takes the entire context dictionary and handles missing keys gracefully.
+    """
+    chapters = context.get('chapters', [])
+    completed_chapters = context.get('completed_chapters', 0)
+    chapter = context.get('chapter', {})
+    updated_chapters = chapters.copy()
+    updated_chapters.append(chapter)
+    updated_context = {**context, 'chapters': updated_chapters, 'completed_chapters': completed_chapters + 1}
+    return updated_context
 
 @Nodes.define(output='continue_generating')
-def check_if_complete(completed_chapters, num_chapters, **kwargs):
-    """Check if all chapters have been generated."""
+async def check_if_complete(completed_chapters=0, num_chapters=0, **kwargs):
+    """Check if all chapters have been generated.
+    
+    Args:
+        completed_chapters: Number of chapters completed so far
+        num_chapters: Total number of chapters to generate
+        kwargs: Additional context parameters
+        
+    Returns:
+        bool: True if we should continue generating chapters, False otherwise
+    """
     return completed_chapters < num_chapters
 
 # Define the workflow using simplified syntax with automatic node registration
@@ -48,8 +65,10 @@ workflow = (
     Workflow("generate_outline")
     .then("generate_chapter", condition=None)
     .then("update_progress", condition=None)
-    .then("check_if_complete", condition=lambda ctx: ctx['continue_generating'])
-    .then("generate_chapter", condition=lambda ctx: ctx['continue_generating'])
+    .then("check_if_complete", condition=None)
+    .then("generate_chapter", condition=lambda ctx: ctx.get('continue_generating', False))
+    .then("update_progress", condition=None)
+    .then("check_if_complete", condition=None)
 )
 
 async def main():

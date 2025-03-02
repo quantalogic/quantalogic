@@ -65,7 +65,7 @@ class WorkflowManager:
         self.workflow.workflow.transitions = [
             t
             for t in self.workflow.workflow.transitions
-            if t.from_ != name and (isinstance(t.to, str) or name not in t.to)
+            if t.from_node != name and (isinstance(t.to_node, str) or name not in t.to_node)
         ]
         if self.workflow.workflow.start == name:
             self.workflow.workflow.start = None
@@ -99,27 +99,26 @@ class WorkflowManager:
 
     def add_transition(
         self,
-        from_: str,
-        to: Union[str, List[str]],
+        from_node: str,
+        to_node: Union[str, List[str]],
         condition: Optional[str] = None,
     ) -> None:
         """Add a transition between nodes, ensuring all nodes exist."""
-        if from_ not in self.workflow.nodes:
-            raise ValueError(f"Source node '{from_}' does not exist")
-        if isinstance(to, str):
-            if to not in self.workflow.nodes:
-                raise ValueError(f"Target node '{to}' does not exist")
+        if from_node not in self.workflow.nodes:
+            raise ValueError(f"Source node '{from_node}' does not exist")
+        if isinstance(to_node, str):
+            if to_node not in self.workflow.nodes:
+                raise ValueError(f"Target node '{to_node}' does not exist")
         else:
-            for t in to:
+            for t in to_node:
                 if t not in self.workflow.nodes:
                     raise ValueError(f"Target node '{t}' does not exist")
         # Create TransitionDefinition with named parameters
-        # Create a TransitionDefinition with the correct field names
-        # The field is defined with alias="from" in the schema
-        transition_dict = {"from": from_, "to": to}
-        if condition is not None:
-            transition_dict["condition"] = condition
-        transition = TransitionDefinition.model_validate(transition_dict)
+        transition = TransitionDefinition(
+            from_node=from_node,
+            to_node=to_node,
+            condition=condition
+        )
         self.workflow.workflow.transitions.append(transition)
 
     def set_start_node(self, name: str) -> None:
@@ -281,8 +280,8 @@ class WorkflowManager:
                 sub_workflows[node_name] = sub_wf
                 added_sub_nodes = set()
                 for trans in node_def.sub_workflow.transitions:
-                    from_node = trans.from_
-                    to_nodes = [trans.to] if isinstance(trans.to, str) else trans.to
+                    from_node = trans.from_node
+                    to_nodes = [trans.to_node] if isinstance(trans.to_node, str) else trans.to_node
                     if from_node not in added_sub_nodes:
                         sub_wf.node(from_node)
                         added_sub_nodes.add(from_node)
@@ -362,8 +361,8 @@ class WorkflowManager:
 
         added_nodes = set()
         for trans in self.workflow.workflow.transitions:
-            from_node = trans.from_
-            to_nodes = [trans.to] if isinstance(trans.to, str) else trans.to
+            from_node = trans.from_node
+            to_nodes = [trans.to_node] if isinstance(trans.to_node, str) else trans.to_node
             if from_node not in added_nodes and from_node not in sub_workflows:
                 wf.node(from_node)
                 added_nodes.add(from_node)
@@ -441,7 +440,7 @@ def main():
     manager.add_node(name="start", function="greet")
     manager.add_node(name="end", function="farewell")
     manager.set_start_node("start")
-    manager.add_transition(from_="start", to="end")
+    manager.add_transition(from_node="start", to_node="end")
     manager.add_observer("monitor")  # Add the observer
     manager.save_to_yaml("workflow.yaml")
     new_manager = WorkflowManager()

@@ -3,6 +3,8 @@
 
 ## 1. Introduction 🌟
 
+> **Note (March 2, 2025)**: The transition parameters have been updated from `from`/`to` to `from_node`/`to_node` for improved clarity and consistency.
+
 Welcome to the **Quantalogic Flow YAML DSL**—a powerful, human-readable way to craft workflows with the `quantalogic.flow` package! As of **March 1, 2025**, this DSL brings a suite of exciting features to automate complex tasks with ease:
 
 - **Function Execution** ⚙️: Run async Python functions—embedded or sourced from PyPI, local files, or URLs.
@@ -169,8 +171,8 @@ nodes:
     sub_workflow:
       start: pay
       transitions:
-        - from: pay
-          to: ship
+        - from_node: pay
+          to_node: ship
     output: shipping_status
 ```
 
@@ -225,8 +227,8 @@ The `workflow` section maps out how nodes connect and flow.
 
 - `start` (string, optional): First node to run.
 - `transitions` (list): Flow rules.
-  - `from` (string): Source node.
-  - `to` (string/list): Target(s)—string for sequential, list for parallel.
+  - `from_node` (string): Source node.
+  - `to_node` (string/list): Target(s)—string for sequential, list for parallel.
   - `condition` (string, optional): Python expression (e.g., `"ctx['stock'].available"`).
 
 ### Examples 🌈
@@ -236,8 +238,8 @@ The `workflow` section maps out how nodes connect and flow.
 workflow:
   start: validate
   transitions:
-    - from: validate
-      to: process
+    - from_node: validate
+      to_node: process
 ```
 
 #### Conditional Flow
@@ -245,8 +247,8 @@ workflow:
 workflow:
   start: inventory_check
   transitions:
-    - from: inventory_check
-      to: payment_flow
+    - from_node: inventory_check
+      to_node: payment_flow
       condition: "ctx['stock'].available"
 ```
 
@@ -255,16 +257,16 @@ workflow:
 workflow:
   start: payment_flow
   transitions:
-    - from: payment_flow
-      to: [update_db, send_email]
+    - from_node: payment_flow
+      to_node: [update_db, send_email]
 ```
 
 ```mermaid
 graph TD
     A[Workflow] --> B[Start Node]
     A --> C[Transitions]
-    C --> D[From]
-    D --> E{To}
+    C --> D[From Node]
+    D --> E{To Node}
     E -->|Sequential| F[Single Node]
     E -->|Parallel| G[List of Nodes]
     C --> H[Condition?]
@@ -475,11 +477,11 @@ nodes:
 workflow:
   start: validate_order
   transitions:
-    - from: validate_order
-      to: check_stock
+    - from_node: validate_order
+      to_node: check_stock
       condition: "ctx['validity'] == 'valid'"
-    - from: check_stock
-      to: notify
+    - from_node: check_stock
+      to_node: notify
 observers:
   - track_usage
 ```
