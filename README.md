@@ -13,6 +13,8 @@ Picture this: a CLI that’s as easy as a snap, a Python API that’s pure magic
 ![Video Demo](./examples/generated_tutorials/python/quantalogic_8s.gif)
 
 ---
+[Chinese Version](./README_CN.md)
+[French Version](./README_FR.md)
 
 ## Why QuantaLogic? 
 
