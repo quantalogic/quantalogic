@@ -8,7 +8,7 @@ import urllib
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
-import yaml
+import yaml  # type: ignore
 from loguru import logger
 from pydantic import BaseModel, ValidationError
 
@@ -16,6 +16,7 @@ from pydantic import BaseModel, ValidationError
 from quantalogic.flow.flow import Nodes, Workflow
 from quantalogic.flow.flow_manager_schema import (
     FunctionDefinition,
+    LLMConfig,
     NodeDefinition,
     TransitionDefinition,
     WorkflowDefinition,
@@ -41,10 +42,13 @@ class WorkflowManager:
         parallel: bool = False,
     ) -> None:
         """Add a new node to the workflow definition, supporting sub-workflows and LLM nodes."""
+        # Convert dict to LLMConfig if provided
+        llm_config_obj = LLMConfig(**llm_config) if llm_config is not None else None
+        
         node = NodeDefinition(
             function=function,
             sub_workflow=sub_workflow,
-            llm_config=llm_config,
+            llm_config=llm_config_obj,
             output=output or (f"{name}_result" if function or llm_config else None),
             retries=retries,
             delay=delay,
@@ -109,8 +113,13 @@ class WorkflowManager:
             for t in to:
                 if t not in self.workflow.nodes:
                     raise ValueError(f"Target node '{t}' does not exist")
-        # Use 'from' field name instead of the alias 'from_'
-        transition = TransitionDefinition(**{"from": from_, "to": to, "condition": condition})
+        # Create TransitionDefinition with named parameters
+        # Create a TransitionDefinition with the correct field names
+        # The field is defined with alias="from" in the schema
+        transition_dict = {"from": from_, "to": to}
+        if condition is not None:
+            transition_dict["condition"] = condition
+        transition = TransitionDefinition.model_validate(transition_dict)
         self.workflow.workflow.transitions.append(transition)
 
     def set_start_node(self, name: str) -> None:
@@ -174,8 +183,12 @@ class WorkflowManager:
                     temp_path = temp_file.name
                 module_name = f"temp_module_{hash(temp_path)}"
                 spec = importlib.util.spec_from_file_location(module_name, temp_path)
+                if spec is None:
+                    raise ValueError(f"Failed to create module spec from {temp_path}")
                 module = importlib.util.module_from_spec(spec)
                 sys.modules[module_name] = module
+                if spec.loader is None:
+                    raise ValueError(f"Module spec has no loader for {temp_path}")
                 spec.loader.exec_module(module)
                 os.remove(temp_path)
                 return module
@@ -186,8 +199,12 @@ class WorkflowManager:
             try:
                 module_name = f"local_module_{hash(source)}"
                 spec = importlib.util.spec_from_file_location(module_name, source)
+                if spec is None:
+                    raise ValueError(f"Failed to create module spec from {source}")
                 module = importlib.util.module_from_spec(spec)
                 sys.modules[module_name] = module
+                if spec.loader is None:
+                    raise ValueError(f"Module spec has no loader for {source}")
                 spec.loader.exec_module(module)
                 return module
             except Exception as e:
@@ -209,21 +226,40 @@ class WorkflowManager:
         functions: Dict[str, Callable] = {}
         for func_name, func_def in self.workflow.functions.items():
             if func_def.type == "embedded":
-                local_scope = {}
-                exec(func_def.code, local_scope)
-                if func_name not in local_scope:
-                    raise ValueError(f"Embedded function '{func_name}' not defined in code")
-                functions[func_name] = local_scope[func_name]
+                local_scope: Dict[str, Any] = {}
+                if func_def.code is not None:
+                    exec(func_def.code, local_scope)
+                    if func_name not in local_scope:
+                        raise ValueError(f"Embedded function '{func_name}' not defined in code")
+                    functions[func_name] = local_scope[func_name]
+                else:
+                    raise ValueError(f"Embedded function '{func_name}' has no code")
             elif func_def.type == "external":
                 try:
+                    if func_def.module is None:
+                        raise ValueError(f"External function '{func_name}' has no module specified")
                     module = self.import_module_from_source(func_def.module)
+                    if func_def.function is None:
+                        raise ValueError(f"External function '{func_name}' has no function name specified")
                     functions[func_name] = getattr(module, func_def.function)
                 except (ImportError, AttributeError) as e:
                     raise ValueError(f"Failed to import external function '{func_name}': {e}")
 
+        # Check if start node is set
         if not self.workflow.workflow.start:
             raise ValueError("Start node not set in workflow definition")
-        wf = Workflow(start_node=self.workflow.workflow.start)
+            
+        # We need to ensure we have a valid string for the start node
+        # First check if it's None and provide a fallback
+        if self.workflow.workflow.start is None:
+            logger.warning("Start node was None, using 'start' as default")
+            start_node_name = "start"
+        else:
+            # Otherwise convert to string
+            start_node_name = str(self.workflow.workflow.start)
+        
+        # Create the workflow with a valid start node
+        wf = Workflow(start_node=start_node_name)
 
         # Register observers
         for observer_name in self.workflow.observers:
@@ -235,7 +271,13 @@ class WorkflowManager:
         sub_workflows: Dict[str, Workflow] = {}
         for node_name, node_def in self.workflow.nodes.items():
             if node_def.sub_workflow:
-                sub_wf = Workflow(node_def.sub_workflow.start)
+                # Ensure we have a valid start node for the sub-workflow
+                if node_def.sub_workflow.start is None:
+                    logger.warning(f"Sub-workflow for node '{node_name}' has no start node, using '{node_name}_start' as default")
+                    start_node = f"{node_name}_start"
+                else:
+                    start_node = str(node_def.sub_workflow.start)
+                sub_wf = Workflow(start_node=start_node)
                 sub_workflows[node_name] = sub_wf
                 added_sub_nodes = set()
                 for trans in node_def.sub_workflow.transitions:
@@ -254,7 +296,9 @@ class WorkflowManager:
                     else:
                         sub_wf.then(to_nodes[0], condition=condition)
                 inputs = list(Nodes.NODE_REGISTRY[sub_wf.start_node][1])
-                wf.add_sub_workflow(node_name, sub_wf, inputs={k: k for k in inputs}, output=node_def.output)
+                # Ensure output is a string
+                output = node_def.output if node_def.output is not None else f"{node_name}_result"
+                wf.add_sub_workflow(node_name, sub_wf, inputs={k: k for k in inputs}, output=output)
             elif node_def.function:
                 if node_def.function not in functions:
                     raise ValueError(f"Function '{node_def.function}' for node '{node_name}' not found")
@@ -265,13 +309,15 @@ class WorkflowManager:
             elif node_def.llm_config:
                 llm_config = node_def.llm_config
                 # Extract inputs from prompt_template using regex
-                inputs = set(re.findall(r"{{\s*([^}]+?)\s*}}", llm_config.prompt_template))
+                # Extract inputs from prompt_template using regex
+                input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", llm_config.prompt_template))
                 cleaned_inputs = set()
-                for input_var in inputs:
+                for input_var in input_vars:
                     base_var = re.split(r"\s*[\+\-\*/]\s*", input_var.strip())[0].strip()
                     if base_var.isidentifier():
                         cleaned_inputs.add(base_var)
-                inputs_list = list(cleaned_inputs)
+                # Convert set to list for type compatibility
+                inputs_list: List[str] = list(cleaned_inputs)
 
                 # Define a dummy function to be decorated
                 async def dummy_func(**kwargs):

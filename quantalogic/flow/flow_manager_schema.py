@@ -158,7 +158,7 @@ class WorkflowDefinition(BaseModel):
     )
     nodes: Dict[str, NodeDefinition] = Field(default_factory=dict, description="Dictionary of node definitions.")
     workflow: WorkflowStructure = Field(
-        default_factory=WorkflowStructure, description="Main workflow structure with start node and transitions."
+        default_factory=lambda: WorkflowStructure(start=None), description="Main workflow structure with start node and transitions."
     )
     observers: List[str] = Field(
         default_factory=list, description="List of observer function names to monitor workflow execution."
