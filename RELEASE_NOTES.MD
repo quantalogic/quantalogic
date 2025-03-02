@@ -1,3 +1,8 @@
+## [v.0.51.0] (2025-03-02)
+
+- Add new flow library 
+- Add support for solve async task
+
 ## [v.0.35.0] (2025-02-06)
 
 - Add support of openrouter/google/gemini-2.0-flash-001    
