@@ -1,6 +1,6 @@
 # QuantaLogic Tools Reference
 
-This document contains detailed documentation for all tools available in the QuantaLogic framework.
+This document contains detailed documentation for all tools available in the QuantaLogic framework, based on the provided implementation code.
 
 ## Table of Contents
 
@@ -21,24 +21,36 @@ This document contains detailed documentation for all tools available in the Qua
    - [EditWholeContentTool](#editwholecontenttool)
    - [ReplaceInFileTool](#replaceinfiletool)
 
-4. [Search Tools](#search-tools)
-   - [RipgrepTool](#ripgreptool)
-   - [SearchDefinitionNames](#searchdefinitionnames)
+4. [Database Documentation Tools](#database-documentation-tools)
+   - [GenerateDatabaseReportTool](#generatedatabasereporttool)
 
-5. [Vision and LLM Tools](#vision-and-llm-tools)
-   - [LLMVisionTool](#llmvisiontool)
-   - [LLMTool](#llmtool)
+5. [SQL Query Tools](#sql-query-tools)
+   - [SQLQueryTool](#sqlquerytool)
 
 6. [Utility Tools](#utility-tools)
+   - [JinjaTool](#jinjatool)
    - [DownloadHttpFileTool](#downloadhttpfiletool)
    - [ListDirectoryTool](#listdirectorytool)
    - [MarkitdownTool](#markitdowntool)
-   - [UnifiedDiffTool](#unifieddifftool)
 
-7. [API Tools](#api-tools)
-   - [APITool](#apitool)
-   - [SerpAPISearchTool](#serpapisearchtool)
-   - [WikipediaSearchTool](#wikipediasearchtool)
+7. [Search Tools](#search-tools)
+   - [RipgrepTool](#ripgreptool)
+   - [SearchDefinitionNames](#searchdefinitionnames)
+
+8. [Vision and LLM Tools](#vision-and-llm-tools)
+   - [LLMImageGenerationTool](#llmimagegenerationtool)
+   - [LLMVisionTool](#llmvisiontool)
+   - [LLMTool](#llmtool)
+
+9. [Git Tools](#git-tools)
+   - [BitbucketOperationsTool](#bitbucketoperationstool)
+   - [GitOperationsTool](#gitoperationstool)
+
+10. [RAG Tools](#rag-tools)
+    - [RagTool](#ragtool)
+    - [RagToolBeta](#ragtoolbeta)
+    - [DocumentMetadata](#documentmetadata)
+    - [QueryResponse](#queryresponse)
 
 ## Argument Injection and Property Precedence
 
@@ -46,7 +58,7 @@ QuantaLogic tools support advanced argument injection with property precedence. 
 
 ### Implementation Details
 
-The argument injection mechanism is implemented in the Tool class (tool.py) through the `get_injectable_properties_in_execution()` method. This method:
+The argument injection mechanism is implemented in the `Tool` class (`quantalogic/tools/tool.py`) through the `get_injectable_properties_in_execution()` method. This method:
 
 1. Checks for matching property names in the tool's configuration
 2. Returns a dictionary of injectable properties
@@ -78,7 +90,7 @@ tool.execute(field1="argument_value")  # Prints "property_value"
 
 ### AgentTool
 
-The **Agent Tool** enables task delegation to another agent, providing specialized functionality for handling tasks.
+The **AgentTool** enables task delegation to another agent, providing specialized functionality for handling tasks. (Note: Full implementation not provided in the code; description based on original documentation.)
 
 #### Parameters
 
@@ -86,9 +98,9 @@ The **Agent Tool** enables task delegation to another agent, providing specializ
 |--------------|--------|-------------------------------------------------------------------------------------|---------------------------------|
 | `name`       | string | Internal name of the tool (default: "agent_tool")                                   | `agent_tool`                    |
 | `description`| string | Detailed description of the tool's purpose                                          | `Executes tasks using a specified agent` |
-| `agent_role` | string | The role of the agent (e.g., expert, assistant)                                   | `expert`                        |
-| `agent`      | Any    | The agent to delegate tasks to                                                     | `Agent` object                  |
-| `task`       | string | The task to delegate to the specified agent.                                       | `Summarize the latest news.`    |
+| `agent_role` | string | The role of the agent (e.g., expert, assistant)                                     | `expert`                        |
+| `agent`      | Any    | The agent to delegate tasks to                                                      | `Agent` object                  |
+| `task`       | string | The task to delegate to the specified agent                                         | `Summarize the latest news.`    |
 
 #### Key Characteristics
 - Uses Pydantic for validation
@@ -109,15 +121,15 @@ print(result)
 
 ### TaskCompleteTool
 
-The **Task Complete Tool** is used to respond to users after a task has been completed.
+The **TaskCompleteTool** is used to respond to users after a task has been completed. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter    | Type   | Description                                                                         | Example                              |
-|--------------|--------|-------------------------------------------------------------------------------------|-----------------------------------------|
-| `name`       | string | Internal name of the tool (default: "task_complete")                                | `task_complete`                        |
-| `description`| string | Description of the tool's purpose                                                   | `Replies to the user when the task is completed.` |
-| `answer`     | string | The answer to the user. Supports variable interpolation (e.g., `$var1$`)            | `The answer to the meaning of life`    |
+|--------------|--------|-------------------------------------------------------------------------------------|--------------------------------------|
+| `name`       | string | Internal name of the tool (default: "task_complete")                                | `task_complete`                      |
+| `description`| string | Description of the tool's purpose                                                  | `Replies to the user when the task is completed.` |
+| `answer`     | string | The answer to the user. Supports variable interpolation (e.g., `$var1$`)            | `The answer to the meaning of life`  |
 
 #### Key Characteristics
 - Supports simple string responses
@@ -132,16 +144,16 @@ print(response)
 
 ### InputQuestionTool
 
-The **Input Question Tool** prompts the user with a question and captures their input.
+The **InputQuestionTool** prompts the user with a question and captures their input. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter    | Type   | Description                                                                         | Example                       |
 |--------------|--------|-------------------------------------------------------------------------------------|-----------------------------|
 | `name`       | string | Internal name of the tool (default: "input_question_tool")                          | `input_question_tool`       |
-| `description`| string | Description of the tool's purpose                                                   | `Prompts the user with a question and captures their input.` |
-| `question`   | string | The question to ask the user.                                                       | `What is your favorite color?` |
-| `default`    | string | Optional default value if no input is provided.                                     | `blue`                      |
+| `description`| string | Description of the tool's purpose                                                  | `Prompts the user with a question and captures their input.` |
+| `question`   | string | The question to ask the user                                                       | `What is your favorite color?` |
+| `default`    | string | Optional default value if no input is provided                                     | `blue`                      |
 
 #### Key Characteristics
 - Uses `rich.prompt` for interactive input
@@ -161,18 +173,18 @@ print("User Response:", user_response)
 
 ### ExecuteBashCommandTool
 
-The **Execute Bash Command Tool** allows for the execution of bash commands and captures their output.
+The **ExecuteBashCommandTool** allows for the execution of bash commands and captures their output. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter    | Type   | Description                                                                         | Example                   |
-|--------------|--------|-------------------------------------------------------------------------------------|-----------------------------|
-| `name`       | string | Internal name of the tool (default: "execute_bash_tool")                            | `execute_bash_tool`         |
-| `description`| string | Description of the tool's purpose                                                   | `Executes a bash command and returns its output.` |
-| `command`    | string | The bash command to execute.                                                        | `ls -la`                    |
-| `working_dir`| string | The working directory where the command will be executed. Defaults to current dir.  | `/path/to/directory`        |
-| `timeout`    | int    | Maximum time in seconds to wait for the command to complete. Defaults to 60 seconds.| `60`                        |
-| `env`        | dict   | Optional environment variables to set for the command execution.                    | `{"PATH": "/custom/path"}` |
+|--------------|--------|-------------------------------------------------------------------------------------|---------------------------|
+| `name`       | string | Internal name of the tool (default: "execute_bash_tool")                            | `execute_bash_tool`       |
+| `description`| string | Description of the tool's purpose                                                  | `Executes a bash command and returns its output.` |
+| `command`    | string | The bash command to execute                                                        | `ls -la`                  |
+| `working_dir`| string | The working directory where the command will be executed. Defaults to current dir  | `/path/to/directory`      |
+| `timeout`    | int    | Maximum time in seconds to wait for the command to complete. Defaults to 60 seconds| `60`                      |
+| `env`        | dict   | Optional environment variables to set for the command execution                    | `{"PATH": "/custom/path"}`|
 
 #### Key Characteristics
 - Supports executing bash commands in a specified working directory
@@ -196,19 +208,19 @@ print(output)
 
 ### PythonTool
 
-The **Python Tool** executes Python scripts in an isolated Docker environment.
+The **PythonTool** executes Python scripts in an isolated Docker environment. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter         | Type    | Description                                                                   | Example                                    |
-|-------------------|---------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string  | Internal name of the tool (default: "python_tool")                            | `python_tool`                               |
-| `install_commands`| string  | Commands to install Python packages before running the script.                | `pip install rich requests`                 |
-| `script`          | string  | The Python script to execute.                                                 | `print("Hello, World!")`                    |
-| `version`         | string  | The Python version to use in the Docker container. (default: Python 3.x)      | `3.11`                                      |
-| `host_dir`        | string  | Absolute path on the host machine to mount for file access.                   | `./demo01/`                                 |
-| `memory_limit`    | string  | Optional memory limit for the Docker container.                               | `1g`                                        |
-| `environment_vars`| dict    | Environment variables to set inside the Docker container.                     | `{"ENV": "production", "DEBUG": "False"}`   |
+|-------------------|---------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string  | Internal name of the tool (default: "python_tool")                            | `python_tool`                              |
+| `install_commands`| string  | Commands to install Python packages before running the script                 | `pip install rich requests`                |
+| `script`          | string  | The Python script to execute                                                  | `print("Hello, World!")`                   |
+| `version`         | string  | The Python version to use in the Docker container. (default: Python 3.x)      | `3.11`                                     |
+| `host_dir`        | string  | Absolute path on the host machine to mount for file access                    | `./demo01/`                                |
+| `memory_limit`    | string  | Optional memory limit for the Docker container                                | `1g`                                       |
+| `environment_vars`| dict    | Environment variables to set inside the Docker container                      | `{"ENV": "production", "DEBUG": "False"}`  |
 
 #### Execution Environment Characteristics
 - Runs in an isolated Docker container
@@ -248,19 +260,19 @@ print("Script Output:", output)
 
 ### NodeJsTool
 
-The **Node.js Tool** executes Node.js scripts in an isolated Docker environment.
+The **NodeJsTool** executes Node.js scripts in an isolated Docker environment. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter         | Type    | Description                                                                   | Example                                    |
-|-------------------|---------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string  | Internal name of the tool (default: "nodejs_tool")                            | `nodejs_tool`                               |
-| `install_commands`| string  | Commands to install Node.js packages before running the script.               | `npm install chalk axios`                   |
-| `script`          | string  | The Node.js script to execute.                                                | `console.log('Hello, World!');`             |
-| `version`         | string  | The Node.js version to use in the Docker container. (default: Node.js LTS)    | `20`                                        |
-| `host_dir`        | string  | Absolute path on the host machine to mount for file access.                   | `./project/`                                |
-| `memory_limit`    | string  | Optional memory limit for the Docker container.                               | `1g`                                        |
-| `module_type`     | string  | The module system to use: 'esm' for ECMAScript Modules or 'commonjs'          | `esm`                                       |
+|-------------------|---------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string  | Internal name of the tool (default: "nodejs_tool")                            | `nodejs_tool`                              |
+| `install_commands`| string  | Commands to install Node.js packages before running the script                | `npm install chalk axios`                  |
+| `script`          | string  | The Node.js script to execute                                                 | `console.log('Hello, World!');`            |
+| `version`         | string  | The Node.js version to use in the Docker container. (default: Node.js LTS)    | `20`                                       |
+| `host_dir`        | string  | Absolute path on the host machine to mount for file access                    | `./project/`                               |
+| `memory_limit`    | string  | Optional memory limit for the Docker container                                | `1g`                                       |
+| `module_type`     | string  | The module system to use: 'esm' for ECMAScript Modules or 'commonjs'          | `esm`                                      |
 
 #### Execution Environment Characteristics
 - Runs in an isolated Docker container
@@ -301,19 +313,19 @@ print("Node.js Output:", output)
 
 ### ElixirTool
 
-The **Elixir Tool** executes Elixir code in an isolated Docker environment with Mix support.
+The **ElixirTool** executes Elixir code in an isolated Docker environment with Mix support. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter         | Type    | Description                                                                   | Example                                    |
-|-------------------|---------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string  | Internal name of the tool (default: "elixir_tool")                            | `elixir_tool`                               |
-| `mix_commands`    | string  | Mix commands to run before executing the script                               | `mix deps.get && mix compile`               |
-| `script`          | string  | Elixir code to execute.                                                       | `IO.puts("Hello from Elixir!")`             |
-| `version`         | string  | The Elixir version to use.                                                    | `1.15`                                      |
-| `host_dir`        | string  | Host directory to mount for file access.                                      | `./elixir_project/`                         |
-| `memory_limit`    | string  | Container memory limit.                                                       | `512m`                                      |
-| `environment_vars`| dict    | Environment variables to set.                                                 | `{"MIX_ENV": "prod"}`                       |
+|-------------------|---------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string  | Internal name of the tool (default: "elixir_tool")                            | `elixir_tool`                              |
+| `mix_commands`    | string  | Mix commands to run before executing the script                               | `mix deps.get && mix compile`              |
+| `script`          | string  | Elixir code to execute                                                        | `IO.puts("Hello from Elixir!")`            |
+| `version`         | string  | The Elixir version to use                                                     | `1.15`                                     |
+| `host_dir`        | string  | Host directory to mount for file access                                       | `./elixir_project/`                        |
+| `memory_limit`    | string  | Container memory limit                                                        | `512m`                                     |
+| `environment_vars`| dict    | Environment variables to set                                                  | `{"MIX_ENV": "prod"}`                      |
 
 #### Execution Environment Characteristics
 - Runs in an isolated Docker container using official Elixir Docker images
@@ -353,15 +365,15 @@ print("Elixir Output:", output)
 
 ### ReadFileTool
 
-The **ReadFileTool** reads content from local files or HTTP sources.
+The **ReadFileTool** reads content from local files or HTTP sources. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter    | Type   | Description                                                                   | Example                                    |
-|--------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`       | string | Internal name of the tool (default: "read_file_tool")                         | `read_file_tool`                            |
-| `description`| string | Description of the tool's purpose                                             | `Reads a local file or HTTP content`        |
-| `file_path`  | string | The path to the file or URL to read.                                          | `/path/to/file.txt` or `https://example.com/data.txt` |
+|--------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`       | string | Internal name of the tool (default: "read_file_tool")                         | `read_file_tool`                           |
+| `description`| string | Description of the tool's purpose                                             | `Reads a local file or HTTP content`       |
+| `file_path`  | string | The path to the file or URL to read                                           | `/path/to/file.txt` or `https://example.com/data.txt` |
 
 #### Key Characteristics
 - Supports reading local files and HTTP content
@@ -398,18 +410,18 @@ print("URL Content:", url_content)
 
 ### WriteFileTool
 
-The **WriteFileTool** writes content to a file with flexible configuration options.
+The **WriteFileTool** writes content to a file with flexible configuration options. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter     | Type   | Description                                                                   | Example                                    |
-|---------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`        | string | Internal name of the tool (default: "write_file_tool")                        | `write_file_tool`                           |
-| `description` | string | Description of the tool's purpose                                             | `Writes a file with the given content`      |
-| `file_path`   | string | The path to the file to write. Using an absolute path is recommended.         | `/path/to/file.txt`                         |
-| `content`     | string | The content to write to the file. Avoid adding newlines at the beginning or end. | `Hello, world!`                            |
-| `append_mode` | string | If true, content will be appended to the end of the file. Defaults to "False".| `"False"`                                   |
-| `overwrite`   | string | If true, existing files can be overwritten. Defaults to "False".              | `"False"`                                   |
+|---------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`        | string | Internal name of the tool (default: "write_file_tool")                        | `write_file_tool`                          |
+| `description` | string | Description of the tool's purpose                                             | `Writes a file with the given content`     |
+| `file_path`   | string | The path to the file to write. Using an absolute path is recommended          | `/path/to/file.txt`                        |
+| `content`     | string | The content to write to the file. Avoid adding newlines at the beginning or end | `Hello, world!`                           |
+| `append_mode` | string | If true, content will be appended to the end of the file. Defaults to "False" | `"False"`                                  |
+| `overwrite`   | string | If true, existing files can be overwritten. Defaults to "False"               | `"False"`                                  |
 
 #### Key Characteristics
 - Supports writing to files with multiple configuration options
@@ -459,16 +471,16 @@ write_tool.execute(
 
 ### EditWholeContentTool
 
-The **EditWholeContentTool** replaces the entire content of an existing file.
+The **EditWholeContentTool** replaces the entire content of an existing file. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter     | Type   | Description                                                                   | Example                                    |
-|---------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`        | string | Internal name of the tool (default: "edit_whole_content_tool")                | `edit_whole_content_tool`                   |
+|---------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`        | string | Internal name of the tool (default: "edit_whole_content_tool")                | `edit_whole_content_tool`                  |
 | `description` | string | Description of the tool's purpose                                             | `Edits the whole content of an existing file` |
-| `file_path`   | string | The path to the file to edit. Using an absolute path is recommended.          | `/path/to/file.txt`                         |
-| `content`     | string | The content to write to the file. Avoid adding newlines at the beginning or end. | `Hello, world!`                            |
+| `file_path`   | string | The path to the file to edit. Using an absolute path is recommended           | `/path/to/file.txt`                        |
+| `content`     | string | The content to write to the file. Avoid adding newlines at the beginning or end | `Hello, world!`                           |
 
 #### Key Characteristics
 - Replaces the entire content of an existing file
@@ -509,16 +521,16 @@ edit_tool.execute(
 
 ### ReplaceInFileTool
 
-The **ReplaceInFileTool** updates sections of content in an existing file using advanced SEARCH/REPLACE blocks.
+The **ReplaceInFileTool** updates sections of content in an existing file using advanced SEARCH/REPLACE blocks. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter     | Type   | Description                                                                   | Example                                    |
-|---------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`        | string | Internal name of the tool (default: "replace_in_file_tool")                   | `replace_in_file_tool`                      |
+|---------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`        | string | Internal name of the tool (default: "replace_in_file_tool")                   | `replace_in_file_tool`                     |
 | `description` | string | Description of the tool's purpose                                             | `Updates sections of content in an existing file` |
-| `path`        | string | The path of the file to modify. Absolute path recommended.                    | `./src/main.py`                             |
-| `diff`        | string | SEARCH/REPLACE blocks defining exact changes to be made in the code           | See Example Format Below                    |
+| `path`        | string | The path of the file to modify. Absolute path recommended                     | `./src/main.py`                            |
+| `diff`        | string | SEARCH/REPLACE blocks defining exact changes to be made in the code           | See Example Format Below                   |
 
 #### SEARCH/REPLACE Block Format
 ```
@@ -540,12 +552,10 @@ The **ReplaceInFileTool** updates sections of content in an existing file using 
    - SEARCH content must match file content exactly
    - Includes all characters, whitespace, indentation
    - Considers comments, docstrings, and other text
-
 2. **Replacement Rules**
    - Replaces only the first occurrence found
    - Multiple changes require separate SEARCH/REPLACE blocks
    - Include sufficient context to uniquely identify lines
-
 3. **Special Operations**
    - Empty REPLACE section deletes corresponding lines
    - Entire missing block leaves file unchanged
@@ -582,13 +592,13 @@ def new_function():
 
 ### GenerateDatabaseReportTool
 
-The **GenerateDatabaseReportTool** generates comprehensive database documentation reports, including ER diagrams, from a database connection string.
+The **GenerateDatabaseReportTool** generates comprehensive database documentation reports, including ER diagrams, from a database connection string. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter           | Type   | Description                                                                   | Example                                    |
-|---------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`              | string | Internal name of the tool (default: "generate_database_report_tool")          | `generate_database_report_tool`             |
+|---------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`              | string | Internal name of the tool (default: "generate_database_report_tool")          | `generate_database_report_tool`            |
 | `description`       | string | Description of the tool's purpose                                             | `Generates a comprehensive Markdown database documentation report with ER diagram` |
 | `connection_string` | string | SQLAlchemy-compatible database connection string                              | `postgresql://user:password@localhost/mydatabase` |
 
@@ -656,18 +666,18 @@ print(report)
 
 ### SQLQueryTool
 
-The **SQLQueryTool** executes SQL queries against a database and returns the results in a paginated markdown table format.
+The **SQLQueryTool** executes SQL queries against a database and returns the results in a paginated markdown table format. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter         | Type   | Description                                                                   | Example                                    |
-|-------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string | Internal name of the tool (default: "sql_query_tool")                         | `sql_query_tool`                            |
+|-------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string | Internal name of the tool (default: "sql_query_tool")                         | `sql_query_tool`                           |
 | `description`     | string | Description of the tool's purpose                                             | `Executes a SQL query and returns results in markdown table format with pagination support.` |
 | `connection_string`| string | SQLAlchemy-compatible database connection string                              | `postgresql://user:password@localhost/mydb` |
 | `query`           | string | The SQL query to execute                                                      | `SELECT * FROM customers WHERE country = 'France'` |
-| `start_row`       | int    | 1-based starting row number for results                                       | `1`                                         |
-| `end_row`         | int    | 1-based ending row number for results                                         | `100`                                       |
+| `start_row`       | int    | 1-based starting row number for results                                       | `1`                                        |
+| `end_row`         | int    | 1-based ending row number for results                                         | `100`                                      |
 
 #### Key Characteristics
 - Executes SQL queries against a database
@@ -739,16 +749,16 @@ print(results)
 
 ### JinjaTool
 
-The **JinjaTool** renders Jinja2 templates with access to the agent's variables.
+The **JinjaTool** renders Jinja2 templates with access to the agent's variables. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter         | Type   | Description                                                                   | Example                                    |
-|-------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string | Internal name of the tool (default: "jinja_tool")                             | `jinja_tool`                                |
+|-------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string | Internal name of the tool (default: "jinja_tool")                             | `jinja_tool`                               |
 | `description`     | string | Description of the tool's purpose                                             | `Renders Jinja2 templates with variable access` |
-| `inline_template` | string | Jinja2 template string to render                                              | `Hello, {{ var1 }}!`                        |
-| `need_variables`  | bool   | When True, provides access to the agent's variable store                      | `True`                                      |
+| `inline_template` | string | Jinja2 template string to render                                              | `Hello, {{ var1 }}!`                       |
+| `need_variables`  | bool   | When True, provides access to the agent's variable store                      | `True`                                     |
 
 #### Key Characteristics
 - Renders Jinja2 templates with variable interpolation
@@ -773,22 +783,217 @@ The **JinjaTool** renders Jinja2 templates with access to the agent's variables.
 - Template must be valid Jinja2 syntax
 - Variables must exist in agent's context
 
+### DownloadHttpFileTool
+
+The **DownloadHttpFileTool** downloads files from HTTP/HTTPS URLs to a local file system. (Note: Full implementation not provided; based on original documentation.)
+
+#### Parameters
+
+| Parameter         | Type   | Description                                                                   | Example                                    |
+|-------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string | Internal name of the tool (default: "download_http_file_tool")                | `download_http_file_tool`                  |
+| `description`     | string | Description of the tool's purpose                                             | `Downloads a file from an HTTP URL`        |
+| `url`             | string | The complete URL of the file to download                                      | `https://example.com/data.txt`             |
+| `output_path`     | string | The local file path where the downloaded file will be saved                   | `/path/to/save/data.txt`                   |
+
+#### Key Characteristics
+- Downloads files from HTTP and HTTPS URLs
+- Validates URL format before downloading
+- Supports saving to specified local paths
+- Provides download result feedback
+
+#### URL Validation
+- Checks for valid URL scheme and network location
+- Prevents invalid or malformed URL downloads
+- Ensures secure and reliable file retrieval
+
+#### Download Behavior
+- Supports various file types
+- Preserves original file content
+- Handles network and download errors
+- Returns descriptive operation result
+
+#### Security Considerations
+- Validates URL before download
+- No automatic execution of downloaded files
+- Relies on system-level file permissions
+
+#### Example Usage
+```python
+download_tool = DownloadHttpFileTool()
+result = download_tool.execute(
+    url="https://example.com/sample_file.txt", 
+    output_path="/path/to/save/sample_file.txt"
+)
+print(result)
+```
+
+#### Supported File Types
+- Text files
+- Binary files
+- Documents
+- Archives
+- Any downloadable file type
+
+#### Advanced Features
+- URL format validation
+- Flexible output path configuration
+- Error handling and reporting
+
+#### Restrictions
+- Requires valid HTTP/HTTPS URL
+- Limited by network connectivity
+- No file content execution
+- Dependent on system file write permissions
+
+### ListDirectoryTool
+
+The **ListDirectoryTool** provides advanced directory content listing with flexible filtering and pagination. (Note: Full implementation not provided; based on original documentation.)
+
+#### Parameters
+
+| Parameter         | Type   | Description                                                                   | Example                                    |
+|-------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string | Internal name of the tool (default: "list_directory_tool")                    | `list_directory_tool`                      |
+| `description`     | string | Description of the tool's purpose                                             | `Lists directory contents with .gitignore filtering` |
+| `directory_path`  | string | Absolute or relative path to target directory                                 | `~/documents/projects`                     |
+| `recursive`       | string | Enable recursive directory traversal (true/false)                             | `true`                                     |
+| `max_depth`       | int    | Maximum directory traversal depth                                             | `1`                                        |
+| `start_line`      | int    | First line to return in paginated results                                     | `1`                                        |
+| `end_line`        | int    | Last line to return in paginated results                                      | `200`                                      |
+
+#### Key Characteristics
+- Advanced directory content listing
+- .gitignore-aware file filtering
+- Recursive and depth-limited traversal
+- Pagination support
+- Flexible path handling
+
+#### Traversal Modes
+- **Flat Listing**: Single directory level
+- **Recursive Listing**: Explore nested directories
+- **Depth-Limited**: Control directory depth
+- **Pagination**: Manage large result sets
+
+#### Filtering Capabilities
+- Respects .gitignore rules
+- Supports absolute and relative paths
+- Handles tilde (`~`) expansion
+- Configurable result range
+
+#### Path Handling
+- Supports home directory expansion
+- Resolves relative and absolute paths
+- Handles various path representations
+
+#### Example Usage
+```python
+list_tool = ListDirectoryTool()
+results = list_tool.execute(
+    directory_path="~/projects", 
+    recursive="true", 
+    max_depth=2,
+    start_line=1, 
+    end_line=100
+)
+print(results)
+```
+
+#### Output Characteristics
+- Includes file/directory names
+- Provides file types
+- Shows file sizes
+- Indicates directory structure
+
+#### Advanced Features
+- .gitignore integration
+- Flexible traversal configuration
+- Pagination control
+- Detailed file information
+
+#### Restrictions
+- Performance may vary with large directories
+- Depth and line limits apply
+- Depends on filesystem access
+- Respects system file permissions
+
+### MarkitdownTool
+
+The **MarkitdownTool** converts various file formats to Markdown using the MarkItDown library. (Note: Full implementation not provided; based on original documentation.)
+
+#### Parameters
+
+| Parameter         | Type   | Description                                                                   | Example                                    |
+|-------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string | Internal name of the tool (default: "markitdown_tool")                        | `markitdown_tool`                          |
+| `description`     | string | Description of the tool's purpose                                             | `Converts files to Markdown`               |
+| `file_path`       | string | Path to the file to convert (local path or URL)                               | `/path/to/file.pdf` or `https://example.com/file.docx` |
+| `output_file_path`| string | Optional path to write the Markdown output                                    | `/path/to/output.md`                       |
+
+#### Supported Formats
+- PDF
+- PowerPoint
+- Word Documents
+- Excel
+- HTML
+- Plain Text
+- Other common document types
+
+#### Key Characteristics
+- Converts multiple file formats to Markdown
+- Supports local files and URLs
+- Optional output file generation
+- Preserves document structure
+- Handles large files with line limit
+
+#### URL and Path Handling
+- Direct file path support
+- HTTP/HTTPS URL conversion
+- Temporary file management
+- Flexible input methods
+
+#### Conversion Features
+- Semantic content extraction
+- Markdown formatting preservation
+- Handles complex document structures
+- Supports various encoding types
+
+#### Line Limit
+- Maximum 2000 lines returned
+- Prevents overwhelming output
+- Configurable in implementation
+
+#### Example Usage
+```python
+markitdown_tool = MarkitdownTool()
+result = markitdown_tool.execute(
+    file_path="/path/to/file.pdf",
+    output_file_path="/path/to/output.md"
+)
+print(result)
+```
+
+#### Restrictions
+- Requires compatible file formats
+- Limited to 2000 lines of output
+- Depends on MarkItDown library capabilities
+
 ## Search Tools
 
 ### RipgrepTool
 
-The **RipgrepTool** performs advanced text searches across files using ripgrep.
+The **RipgrepTool** performs advanced text searches across files using ripgrep. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter           | Type   | Description                                                                   | Example                                    |
-|---------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`              | string | Internal name of the tool (default: "ripgrep_search_tool")                    | `ripgrep_search_tool`                       |
+|---------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`              | string | Internal name of the tool (default: "ripgrep_search_tool")                    | `ripgrep_search_tool`                      |
 | `description`       | string | Description of the tool's purpose                                             | `Search files using ripgrep with regex and file filters` |
-| `cwd`               | string | Base path for relative searches                                               | `/project/root`                             |
-| `directory_path`    | string | The directory path to search in                                               | `./src`                                     |
-| `regex_rust_syntax` | string | The regex pattern to search for (using Rust regex syntax)                     | `fn\s+search_.*\(`                          |
-| `file_pattern`      | string | Optional glob pattern to filter files                                         | `**/*.py`                                   |
+| `cwd`               | string | Base path for relative searches                                               | `/project/root`                            |
+| `directory_path`    | string | The directory path to search in                                               | `./src`                                    |
+| `regex_rust_syntax` | string | The regex pattern to search for (using Rust regex syntax)                     | `fn\s+search_.*\(`                         |
+| `file_pattern`      | string | Optional glob pattern to filter files                                         | `**/*.py`                                  |
 
 #### Key Characteristics
 - Utilizes ripgrep for fast, powerful text searching
@@ -836,17 +1041,17 @@ print(results)
 
 ### SearchDefinitionNames
 
-The **SearchDefinitionNames** tool searches for code definition names across multiple programming languages using Tree-sitter.
+The **SearchDefinitionNames** tool searches for code definition names across multiple programming languages using Tree-sitter. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter           | Type   | Description                                                                   | Example                                    |
-|---------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`              | string | Internal name of the tool (default: "search_definition_names_tool")           | `search_definition_names_tool`              |
+|---------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`              | string | Internal name of the tool (default: "search_definition_names_tool")           | `search_definition_names_tool`             |
 | `description`       | string | Description of the tool's purpose                                             | `Searches for definition names in a directory` |
-| `directory_path`    | string | The path to the directory to search in                                        | `./project/src`                             |
-| `language_name`     | string | Optional specific programming language to search                              | `python`                                    |
-| `file_pattern`      | string | Optional glob pattern to filter files                                         | `**/*.py`                                   |
+| `directory_path`    | string | The path to the directory to search in                                        | `./project/src`                            |
+| `language_name`     | string | Optional specific programming language to search                              | `python`                                   |
+| `file_pattern`      | string | Optional glob pattern to filter files                                         | `**/*.py`                                  |
 
 #### Supported Languages
 - Python
@@ -906,26 +1111,35 @@ print(results)
 
 ## Vision and LLM Tools
 
-```markdown
-# LLM Image Generation Tool
+### LLMImageGenerationTool
 
-## Description
-The **LLM Image Generation Tool** is designed to generate images using either **DALL-E** or **Stable Diffusion** via **AWS Bedrock**. It supports various configurations such as image size, style, and quality settings, making it a versatile tool for creating high-quality images based on textual prompts.
+The **LLMImageGenerationTool** generates images using either DALL-E or Stable Diffusion via AWS Bedrock, with configurable settings for size, style, and quality.
 
-## Parameters
+#### Parameters
 
 | Parameter         | Type   | Required | Default Value | Description                                                                 |
 |-------------------|--------|----------|---------------|-----------------------------------------------------------------------------|
-| `prompt`          | string | Yes      | -             | Text description of the image to generate.                                 |
-| `provider`        | string | No       | `"dall-e"`    | Image generation provider (`dall-e` or `stable-diffusion`).                |
-| `size`            | string | No       | `"1024x1024"` | Size of the generated image.                                               |
-| `quality`         | string | No       | `"standard"`  | Quality level for DALL-E (`standard` or `hd`).                             |
-| `style`           | string | No       | `"vivid"`     | Style preference for DALL-E (`vivid` or `natural`).                        |
-| `negative_prompt` | string | No       | `""`          | What to avoid in the image (Stable Diffusion only).                        |
-| `cfg_scale`       | string | No       | `"7.5"`       | Classifier Free Guidance scale (Stable Diffusion only, range: 1.0-20.0).   |
+| `prompt`          | string | Yes      | -             | Text description of the image to generate                                   |
+| `provider`        | string | No       | `"dall-e"`    | Image generation provider (`dall-e` or `stable-diffusion`)                  |
+| `size`            | string | No       | `"1024x1024"` | Size of the generated image                                                |
+| `quality`         | string | No       | `"standard"`  | Quality level for DALL-E (`standard` or `hd`)                              |
+| `style`           | string | No       | `"vivid"`     | Style preference for DALL-E (`vivid` or `natural`)                         |
+| `negative_prompt` | string | No       | `""`          | What to avoid in the image (Stable Diffusion only)                         |
+| `cfg_scale`       | string | No       | `"7.5"`       | Classifier Free Guidance scale (Stable Diffusion only, range: 1.0-20.0)    |
 
-## Example Usage
+#### Key Characteristics
+- Supports DALL-E and Stable Diffusion providers
+- Configurable image size, quality, and style
+- Saves images with metadata in JSON format
+- Handles generation process with error reporting
 
+#### Generation Features
+- Text-to-image generation based on prompts
+- Customizable Stable Diffusion parameters (negative prompt, CFG scale)
+- DALL-E-specific quality and style options
+- Automatic file saving in `generated_images` directory
+
+#### Example Usage
 ```python
 from quantalogic.tools.image_generation import LLMImageGenerationTool
 
@@ -939,33 +1153,36 @@ image_path = tool.execute(prompt=prompt)
 print(f"Image saved at: {image_path}")
 ```
 
-### Example Output
-```plaintext
-Image saved at: generated_images/dall-e_20231015_143022.png
-```
+#### Output Format
+- Returns the file path of the saved image
+- Example: `generated_images/dall-e_20231015_143022.png`
+- Accompanied by a JSON metadata file with generation details
 
-### Notes:
-- The tool automatically saves the generated image in the `generated_images` directory.
-- Metadata about the image generation process (e.g., prompt, provider, model, etc.) is saved as a JSON file alongside the image.
-- For **Stable Diffusion**, the `negative_prompt` and `cfg_scale` parameters are used to control the generation process.
-- For **DALL-E**, the `quality` and `style` parameters are used to fine-tune the output.
-```
+#### Advanced Features
+- Flexible provider selection
+- Detailed metadata tracking
+- Configurable generation parameters
+
+#### Restrictions
+- Requires appropriate API access for DALL-E or AWS Bedrock
+- Saves files locally, requiring write permissions
+- Performance depends on provider availability
 
 ### LLMVisionTool
 
-The **LLMVisionTool** analyzes images using advanced multimodal language models.
+The **LLMVisionTool** analyzes images using advanced multimodal language models. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter         | Type   | Description                                                                   | Example                                    |
-|-------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string | Internal name of the tool (default: "llm_vision_tool")                        | `llm_vision_tool`                           |
-| `description`     | string | Description of the tool's purpose                                             | `Analyzes images using language models`     |
-| `system_prompt`   | string | System prompt to guide the model's behavior                                   | `You are an expert in image analysis`       |
-| `prompt`          | string | Question or instruction about the image                                       | `What is shown in this image?`              |
-| `image_url`       | string | URL of the image to analyze                                                   | `https://example.com/image.jpg`             |
-| `temperature`     | float  | Controls randomness of the model's output (0.0-1.0)                           | `0.7`                                       |
-| `model_name`      | string | Specific multimodal language model to use                                     | `openrouter/openai/gpt-4o-mini`              |
+|-------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string | Internal name of the tool (default: "llm_vision_tool")                        | `llm_vision_tool`                          |
+| `description`     | string | Description of the tool's purpose                                             | `Analyzes images using language models`    |
+| `system_prompt`   | string | System prompt to guide the model's behavior                                   | `You are an expert in image analysis`      |
+| `prompt`          | string | Question or instruction about the image                                       | `What is shown in this image?`             |
+| `image_url`       | string | URL of the image to analyze                                                   | `https://example.com/image.jpg`            |
+| `temperature`     | float  | Controls randomness of the model's output (0.0-1.0)                           | `0.7`                                      |
+| `model_name`      | string | Specific multimodal language model to use                                     | `openrouter/openai/gpt-4o-mini`            |
 
 #### Supported Models
 - OpenAI GPT-4o Mini (Default)
@@ -1014,18 +1231,18 @@ print(result)
 
 ### LLMTool
 
-The **LLMTool** generates answers to questions using advanced language models.
+The **LLMTool** generates answers to questions using advanced language models. (Note: Full implementation not provided; based on original documentation.)
 
 #### Parameters
 
 | Parameter         | Type   | Description                                                                   | Example                                    |
-|-------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string | Internal name of the tool (default: "llm_tool")                               | `llm_tool`                                  |
-| `description`     | string | Description of the tool's purpose                                             | `Generates answers using a language model`  |
-| `system_prompt`   | string | Persona or system prompt to guide the model's behavior                        | `You are an expert in machine learning`     |
-| `prompt`          | string | Question to ask the language model. Supports variable interpolation           | `What is the meaning of $var1$?`            |
-| `temperature`     | string | Creativity level (0.0-1.0): 0.0 no creativity, 1.0 full creativity            | `0.5`                                       |
-| `model_name`      | string | Specific language model to use                                                | `openrouter/openai/gpt-4o-mini`              |
+|-------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string | Internal name of the tool (default: "llm_tool")                               | `llm_tool`                                 |
+| `description`     | string | Description of the tool's purpose                                             | `Generates answers using a language model` |
+| `system_prompt`   | string | Persona or system prompt to guide the model's behavior                        | `You are an expert in machine learning`    |
+| `prompt`          | string | Question to ask the language model. Supports variable interpolation           | `What is the meaning of $var1$?`           |
+| `temperature`     | string | Creativity level (0.0-1.0): 0.0 no creativity, 1.0 full creativity            | `0.5`                                      |
+| `model_name`      | string | Specific language model to use                                                | `openrouter/openai/gpt-4o-mini`            |
 
 #### Operational Constraints
 - Total isolation from external resources
@@ -1080,419 +1297,345 @@ print(result)
 - Performance depends on model capabilities
 - Potential usage and cost limitations
 
-## Utility Tools
+## Git Tools
 
-### DownloadHttpFileTool
+### BitbucketOperationsTool
 
-The **DownloadHttpFileTool** downloads files from HTTP/HTTPS URLs to a local file system.
+The **BitbucketOperationsTool** performs various Bitbucket-specific Git operations like cloning, branching, committing, pushing, and pulling.
 
 #### Parameters
 
 | Parameter         | Type   | Description                                                                   | Example                                    |
-|-------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string | Internal name of the tool (default: "download_http_file_tool")                | `download_http_file_tool`                   |
-| `description`     | string | Description of the tool's purpose                                             | `Downloads a file from an HTTP URL`         |
-| `url`             | string | The complete URL of the file to download                                      | `https://example.com/data.txt`              |
-| `output_path`     | string | The local file path where the downloaded file will be saved                   | `/path/to/save/data.txt`                    |
+|-------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string | Internal name of the tool (default: "bitbucket_operations_tool")              | `bitbucket_operations_tool`                |
+| `description`     | string | Description of the tool's purpose                                             | `Performs Bitbucket operations including clone and commit` |
+| `access_token`    | string | Bitbucket access token for authentication                                     | `your_access_token_here`                   |
+| `operation`       | string | Operation to perform (e.g., `clone`, `create_branch`, `commit`, `push`, `pull`, `checkout`, `status`) | `clone`                                    |
+| `repo_url`        | string | URL of the Bitbucket repository (required for `clone`)                        | `https://bitbucket.org/workspace/repository.git` |
+| `repo_path`       | string | Local path to the repository                                                  | `/tmp/bitbucket_repos/repository`          |
+| `branch_name`     | string | Name of the branch (for `create_branch`, `push`, `checkout`)                  | `feature/new-feature`                      |
+| `commit_message`  | string | Message for the commit (for `commit`)                                         | `Add new feature`                          |
+| `files_to_commit` | string | Comma-separated list of files to commit (for `commit`)                        | `file1.py,file2.py`                        |
 
 #### Key Characteristics
-- Downloads files from HTTP and HTTPS URLs
-- Validates URL format before downloading
-- Supports saving to specified local paths
-- Provides download result feedback
+- Handles Bitbucket-specific Git operations
+- Supports authentication via access token
+- Manages repository cloning and local operations
+- Provides detailed operation status
 
-#### URL Validation
-- Checks for valid URL scheme and network location
-- Prevents invalid or malformed URL downloads
-- Ensures secure and reliable file retrieval
-
-#### Download Behavior
-- Supports various file types
-- Preserves original file content
-- Handles network and download errors
-- Returns descriptive operation result
-
-#### Security Considerations
-- Validates URL before download
-- No automatic execution of downloaded files
-- Relies on system-level file permissions
+#### Supported Operations
+- `clone`: Clone a repository
+- `create_branch`: Create and checkout a new branch
+- `commit`: Commit specified or all changes
+- `push`: Push changes to remote
+- `pull`: Pull updates from remote
+- `checkout`: Switch to an existing branch
+- `status`: Get repository status
 
 #### Example Usage
 ```python
-download_tool = DownloadHttpFileTool()
-result = download_tool.execute(
-    url="https://example.com/sample_file.txt", 
-    output_path="/path/to/save/sample_file.txt"
+tool = BitbucketOperationsTool(access_token="your_access_token_here")
+
+# Clone a repository
+result = tool.execute(
+    operation="clone",
+    repo_url="https://bitbucket.org/workspace/repository.git",
+    repo_path="/tmp/bitbucket_repos/repository"
+)
+print(result)
+
+# Create a new branch
+result = tool.execute(
+    operation="create_branch",
+    repo_path="/tmp/bitbucket_repos/repository",
+    branch_name="feature/new-feature"
 )
 print(result)
 ```
 
-#### Supported File Types
-- Text files
-- Binary files
-- Documents
-- Archives
-- Any downloadable file type
+#### Output Format
+- Returns a dictionary with `status` ("success" or "error") and `message`
+- Example: `{"status": "success", "message": "Repository cloned to /tmp/bitbucket_repos/repository"}`
 
 #### Advanced Features
-- URL format validation
-- Flexible output path configuration
-- Error handling and reporting
+- Token-based authentication for private repositories
+- Error logging and handling
+- Flexible file committing options
 
 #### Restrictions
-- Requires valid HTTP/HTTPS URL
-- Limited by network connectivity
-- No file content execution
-- Dependent on system file write permissions
+- Requires valid Bitbucket access token
+- Operations depend on repository existence and permissions
+- Limited to Bitbucket repositories
 
-### ListDirectoryTool
+### GitOperationsTool
 
-The **ListDirectoryTool** provides advanced directory content listing with flexible filtering and pagination.
+The **GitOperationsTool** provides a simple interface for common Git operations like creating branches, making commits, pushing, pulling, and checking out branches.
 
 #### Parameters
 
 | Parameter         | Type   | Description                                                                   | Example                                    |
-|-------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string | Internal name of the tool (default: "list_directory_tool")                    | `list_directory_tool`                       |
-| `description`     | string | Description of the tool's purpose                                             | `Lists directory contents with .gitignore filtering` |
-| `directory_path`  | string | Absolute or relative path to target directory                                 | `~/documents/projects`                      |
-| `recursive`       | string | Enable recursive directory traversal (true/false)                             | `true`                                      |
-| `max_depth`       | int    | Maximum directory traversal depth                                             | `1`                                         |
-| `start_line`      | int    | First line to return in paginated results                                     | `1`                                         |
-| `end_line`        | int    | Last line to return in paginated results                                      | `200`                                       |
+|-------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string | Internal name of the tool (default: "git_operations_tool")                    | `git_operations_tool`                      |
+| `description`     | string | Description of the tool's purpose                                             | `Performs Git operations on a repository`  |
+| `auth_token`      | string | Authentication token for private repositories                                 | `your_github_token`                        |
+| `repo_path`       | string | Local path to the Git repository                                              | `/path/to/repo`                            |
+| `operation`       | string | Git operation to perform (e.g., `create_branch`, `commit`, `push`, `pull`, `checkout`) | `create_branch`                            |
+| `branch_name`     | string | Name of the branch (for `create_branch`, `checkout`, `push`)                  | `feature/new-feature`                      |
+| `commit_message`  | string | Commit message (for `commit`)                                                 | `Add new feature implementation`           |
+| `files_to_commit` | string | Comma-separated list of files to commit or '.' for all (for `commit`)         | `file1.py,file2.py` or `.`                 |
 
 #### Key Characteristics
-- Advanced directory content listing
-- .gitignore-aware file filtering
-- Recursive and depth-limited traversal
-- Pagination support
-- Flexible path handling
+- Supports common Git operations
+- Handles authentication for private repositories
+- Validates repository state and remote configuration
+- Provides detailed error handling
 
-#### Traversal Modes
-- **Flat Listing**: Single directory level
-- **Recursive Listing**: Explore nested directories
-- **Depth-Limited**: Control directory depth
-- **Pagination**: Manage large result sets
-
-#### Filtering Capabilities
-- Respects .gitignore rules
-- Supports absolute and relative paths
-- Handles tilde (`~`) expansion
-- Configurable result range
-
-#### Path Handling
-- Supports home directory expansion
-- Resolves relative and absolute paths
-- Handles various path representations
+#### Supported Operations
+- `create_branch`: Create and checkout a new branch
+- `commit`: Commit specified or all changes with auto-generated message if none provided
+- `push`: Push changes to remote repository
+- `pull`: Pull latest changes from remote
+- `checkout`: Switch to an existing branch
 
 #### Example Usage
 ```python
-list_tool = ListDirectoryTool()
-results = list_tool.execute(
-    directory_path="~/projects", 
-    recursive="true", 
-    max_depth=2,
-    start_line=1, 
-    end_line=100
+tool = GitOperationsTool(auth_token="your_token_here")
+
+# Create a new branch
+tool.execute(
+    repo_path="/path/to/repo",
+    operation="create_branch",
+    branch_name="feature/new-feature"
 )
-print(results)
+
+# Make a commit
+tool.execute(
+    repo_path="/path/to/repo",
+    operation="commit",
+    commit_message="Add new feature",
+    files_to_commit="file1.py,file2.py"
+)
 ```
 
-#### Output Characteristics
-- Includes file/directory names
-- Provides file types
-- Shows file sizes
-- Indicates directory structure
+#### Output Format
+- Returns a string with operation result
+- Example: `Successfully created and checked out branch: feature/new-feature`
 
 #### Advanced Features
-- .gitignore integration
-- Flexible traversal configuration
-- Pagination control
-- Detailed file information
+- Automatic commit message generation based on changes
+- Authentication setup for HTTPS URLs
+- Detailed change analysis for commits
+- Support for multiple Git providers (GitHub, GitLab, Bitbucket, Azure DevOps)
 
 #### Restrictions
-- Performance may vary with large directories
-- Depth and line limits apply
-- Depends on filesystem access
-- Respects system file permissions
+- Requires existing Git repository at `repo_path`
+- Operations may fail with uncommitted changes for `checkout`
+- Depends on network access for `push` and `pull`
 
-### MarkitdownTool
+## RAG Tools
 
-The **MarkitdownTool** converts various file formats to Markdown using the MarkItDown library.
+### RagTool
+
+The **RagTool** is an advanced Retrieval Augmented Generation (RAG) tool with metadata tracking, source attribution, and configurable processing options using LlamaIndex.
 
 #### Parameters
 
-| Parameter         | Type   | Description                                                                   | Example                                    |
-|-------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string | Internal name of the tool (default: "markitdown_tool")                        | `markitdown_tool`                           |
-| `description`     | string | Description of the tool's purpose                                             | `Converts files to Markdown`                |
-| `file_path`       | string | Path to the file to convert (local path or URL)                               | `/path/to/file.pdf` or `https://example.com/file.docx` |
-| `output_file_path`| string | Optional path to write the Markdown output                                   | `/path/to/output.md`                        |
-
-#### Supported Formats
-- PDF
-- PowerPoint
-- Word Documents
-- Excel
-- HTML
-- Plain Text
-- Other common document types
+| Parameter            | Type         | Description                                                                   | Example                                    |
+|----------------------|--------------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`               | string       | Internal name of the tool (default: "rag_tool")                               | `rag_tool`                                 |
+| `description`        | string       | Description of the tool's purpose                                             | `Advanced RAG tool with metadata tracking` |
+| `vector_store`       | string       | Type of vector store to use (`chroma`, `faiss`)                               | `chroma`                                   |
+| `embedding_model`    | string       | Type of embedding model (`openai`, `huggingface`, `instructor`, `bedrock`)    | `openai`                                   |
+| `persist_dir`        | string       | Directory to persist the index                                                | `./storage/rag`                            |
+| `document_paths`     | List[str]    | List of paths to documents to index                                           | `["./docs/file1.pdf"]`                     |
+| `chunk_size`         | int          | Size of text chunks for processing                                            | `512`                                      |
+| `chunk_overlap`      | int          | Overlap between chunks                                                        | `50`                                       |
+| `similarity_top_k`   | int          | Number of similar chunks to retrieve                                          | `4`                                        |
+| `similarity_threshold`| float       | Minimum similarity score threshold                                            | `0.6`                                      |
+| `api_key`            | string       | API key for embeddings (e.g., OpenAI)                                         | `your_api_key`                             |
+| `query`              | string       | Query string for searching the index (execute method)                         | `What is the main topic?`                  |
+| `top_k`              | int          | Number of top results to consider (execute method)                            | `5`                                        |
+| `similarity_threshold`| float      | Minimum similarity score (execute method)                                     | `0.7`                                      |
 
 #### Key Characteristics
-- Converts multiple file formats to Markdown
-- Supports local files and URLs
-- Optional output file generation
-- Preserves document structure
-- Handles large files with line limit
+- Supports multiple vector stores and embedding models
+- Tracks document metadata
+- Provides source attribution in responses
+- Lazy loading of dependencies for efficiency
 
-#### URL and Path Handling
-- Direct file path support
-- HTTP/HTTPS URL conversion
-- Temporary file management
-- Flexible input methods
+#### Supported Vector Stores
+- Chroma
+- FAISS
 
-#### Conversion Features
-- Semantic content extraction
-- Markdown formatting preservation
-- Handles complex document structures
-- Supports various encoding types
+#### Supported Embedding Models
+- OpenAI
+- HuggingFace
+- Instructor
+- Bedrock
 
-#### Line Limit
-- Maximum 2000 lines returned
-- Prevents overwhelming output
-- Configurable in implementation
+#### Methods
+- `add_documents(document_path, custom_metadata)`: Adds documents with optional metadata
+- `execute(query, top_k, similarity_threshold)`: Queries the index and returns a `QueryResponse`
 
 #### Example Usage
 ```python
-markitdown_tool = MarkitdownTool()
-
-# Convert local file
-markdown_content = markitdown_tool.execute(
-    file_path="/path/to/document.pdf", 
-    output_file_path="/path/to/output.md"
+tool = RagTool(
+    vector_store="chroma",
+    embedding_model="openai",
+    persist_dir="./storage/rag",
+    document_paths=["./docs/file1.pdf"]
 )
-
-# Convert URL file
-markdown_content = markitdown_tool.execute(
-    file_path="https://example.com/report.docx"
-)
-print(markdown_content)
+response = tool.execute("What is the main topic?")
+print(response)
 ```
 
-#### Output Options
-- Return Markdown content directly
-- Write to specified output file
-- Supports console or file output
+#### Output Format
+- Returns a `QueryResponse` object with:
+  - `answer`: Generated response
+  - `sources`: List of source dictionaries
+  - `relevance_scores`: List of similarity scores
+  - `total_chunks_searched`: Number of chunks searched
+  - `query_time_ms`: Query execution time in milliseconds
 
 #### Advanced Features
-- Intelligent content parsing
-- Cross-format conversion
-- Minimal information loss
-- URL and local file support
+- Configurable chunking and similarity parameters
+- Persistent index storage
+- Detailed source tracking with metadata
+- Error handling with logging
 
 #### Restrictions
-- Line limit of 2000 lines
-- Depends on MarkItDown library capabilities
-- Performance varies by file complexity
-- Requires network access for URLs
+- Requires documents to be indexed before querying
+- Depends on external libraries (LlamaIndex, Chroma, etc.)
+- Performance varies with document size and query complexity
 
-### UnifiedDiffTool
+### RagToolBeta
 
-The **UnifiedDiffTool** applies unified diff patches to files with advanced error handling and validation.
+The **RagToolBeta** is a simpler RAG implementation using LlamaIndex, supporting multiple vector stores and embedding models.
 
 #### Parameters
 
-| Parameter         | Type   | Description                                                                   | Example                                    |
-|-------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string | Internal name of the tool (default: "unified_diff")                           | `unified_diff`                              |
-| `description`     | string | Description of the tool's purpose                                             | `Applies a unified diff patch to update a file` |
-| `file_path`       | string | Absolute path to the file to be patched                                       | `/path/to/file.txt`                         |
-| `patch`           | string | Unified diff patch content in CDATA format                                    | `<![CDATA[--- a/file.txt\n+++ b/file.txt\n@@ -1,3 +1,4 @@\n Hello, world!\n+New line!]]>` |
-
-#### Patch Parsing Features
-- Comprehensive patch content parsing
-- Metadata extraction
-- Hunk-level line tracking
-- Detailed line type classification
-
-#### Line Type Classification
-- **Context Lines**: Unchanged content
-- **Addition Lines**: New content
-- **Deletion Lines**: Removed content
-
-#### Patch Validation
-- Strict header parsing
-- Filename tracking
-- Metadata preservation
-- Comprehensive error handling
-
-#### Patch Application Modes
-- **Strict Mode**: Precise patch application
-- **Lenient Mode**: Tolerant patch application
-- Configurable application tolerance
-- Advanced context matching
-
-#### Error Handling
-- Custom `PatchError` with context
-- Detailed error reporting
-- Flexible error tolerance
-- Informative error messages
-
-#### Example Usage
-```python
-diff_tool = UnifiedDiffTool()
-result = diff_tool.execute(
-    file_path="/path/to/file.txt",
-    patch="""
-    <![CDATA[
-    --- a/file.txt
-    +++ b/file.txt
-    @@ -1,3 +1,4 @@
-     Hello, world!
-    +New line!
-    ]]>
-    """
-)
-print(result)
-```
-
-#### Advanced Features
-- Intelligent patch parsing
-- Precise line number tracking
-- Configurable application strictness
-- Comprehensive error diagnostics
-
-#### Patch Application Strategies
-- Context-aware line matching
-- Flexible offset tolerance
-- Preserves original file structure
-- Minimizes unintended modifications
-
-#### Restrictions
-- Requires valid unified diff format
-- Performance depends on patch complexity
-- Absolute file paths recommended
-- Potential data loss in complex patches
-
-## API Tools
-
-### APITool
-
-The **APITool** provides a flexible interface for interacting with various web APIs and services.
-
-#### Parameters
-
-| Parameter         | Type   | Description                                                                   | Example                                    |
-|-------------------|--------|-------------------------------------------------------------------------------|---------------------------------------------|
-| `name`            | string | Internal name of the tool (default: "api_tool")                               | `api_tool`                                  |
-| `description`     | string | Description of the tool's purpose                                             | `Interact with web APIs and services`       |
-| `method`          | string | HTTP method for the API request (GET, POST, PUT, DELETE, etc.)                | `GET`                                       |
-| `url`             | string | Complete URL of the API endpoint                                              | `https://api.example.com/users`             |
-| `headers`         | dict   | Optional HTTP headers for the request                                         | `{"Authorization": "Bearer token"}`         |
-| `params`          | dict   | Optional query parameters for GET requests                                    | `{"page": 1, "limit": 10}`                  |
-| `body`            | dict   | Optional request body for POST/PUT requests                                   | `{"name": "John", "email": "john@example.com"}` |
-| `timeout`         | float  | Request timeout in seconds                                                    | `5.0`                                       |
+| Parameter         | Type         | Description                                                                   | Example                                    |
+|-------------------|--------------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `name`            | string       | Internal name of the tool (default: "rag_tool")                               | `rag_tool`                                 |
+| `description`     | string       | Description of the tool's purpose                                             | `RAG tool for querying indexed documents`  |
+| `vector_store`    | string       | Vector store type (`chroma`, `faiss`)                                         | `chroma`                                   |
+| `embedding_model` | string       | Embedding model type (`openai`, `huggingface`, `instructor`, `bedrock`)       | `openai`                                   |
+| `persist_dir`     | string       | Directory for persistence                                                     | `./storage/rag`                            |
+| `document_paths`  | List[str]    | Optional list of paths to documents or directories to index                   | `["./docs/file1.pdf"]`                     |
+| `query`           | string       | Query string for searching (execute method)                                   | `What is the main topic?`                  |
 
 #### Key Characteristics
-- Flexible API interaction
-- Support for multiple HTTP methods
-- Configurable request parameters
-- Comprehensive error handling
-- Secure authentication support
+- Basic RAG functionality
+- Supports multiple vector stores and embedding models
+- Persists index to disk
+- Simpler than `RagTool` with fewer configuration options
 
-#### Request Configuration
-- Dynamic method selection
-- Customizable headers
-- Query parameter support
-- Request body configuration
-- Timeout management
+#### Supported Vector Stores
+- Chroma
+- FAISS
 
-#### Authentication Methods
-- Bearer token support
-- API key authentication
-- Basic authentication
-- OAuth 2.0 integration
-- Custom header-based auth
+#### Supported Embedding Models
+- OpenAI
+- HuggingFace
+- Instructor
+- Bedrock
 
-#### Response Handling
-- JSON parsing
-- XML support
-- Raw response access
-- Error code interpretation
-- Detailed response metadata
+#### Methods
+- `add_documents(document_path)`: Adds documents to the index
+- `execute(query)`: Queries the index and returns a response string
 
 #### Example Usage
 ```python
-api_tool = APITool()
-response = api_tool.execute(
-    method="GET",
-    url="https://api.example.com/users",
-    headers={"Authorization": "Bearer your_token"},
-    params={"page": 1, "limit": 10},
-    timeout=5.0
+tool = RagToolBeta(
+    vector_store="chroma",
+    embedding_model="openai",
+    persist_dir="./storage/rag",
+    document_paths=["./docs/file1.pdf"]
 )
-print(response.json())
+print(tool.execute("What is the main topic?"))
 ```
+
+#### Output Format
+- Returns a string response from the query engine
 
 #### Advanced Features
-- Intelligent request construction
-- Flexible authentication
-- Comprehensive error handling
-- Response type detection
-- Logging and tracing
-
-#### Error Handling
-- Network error detection
-- Timeout management
-- HTTP status code interpretation
-- Detailed error messages
-- Retry mechanism support
+- Automatic index persistence
+- Simple document loading from files or directories
+- Error logging
 
 #### Restrictions
-- Requires valid API endpoint
-- Network connectivity required
-- Depends on external service availability
-- Potential rate limiting
-- Security considerations for API access
+- No advanced configuration like chunk size or similarity threshold
+- Requires documents to be added before querying
+- Depends on LlamaIndex and related libraries
 
-### SerpAPI Search Tool
+### DocumentMetadata
 
-The **SerpAPI Search Tool** allows agents to perform web searches using the SerpAPI service.
-
-#### Parameters
-| Parameter | Type   | Description                     | Example                     |
-|-----------|--------|---------------------------------|-----------------------------|
-| query     | string | The search query to execute     | "latest AI research papers" |
-| location  | string | Geographic location for results | "United States"             |
-| num       | int    | Number of results to return     | 5                           |
-
-#### Example Usage
-```python
-from quantalogic.tools import SerpAPISearchTool
-
-search_tool = SerpAPISearchTool()
-results = search_tool.execute(query="latest AI research", location="United States", num=5)
-print(results)
-```
-
-### Wikipedia Search Tool
-
-The **Wikipedia Search Tool** enables agents to search and retrieve information from Wikipedia.
+The **DocumentMetadata** class defines metadata for indexed documents in the `RagTool`.
 
 #### Parameters
 
-| Parameter | Type   | Description                     | Example                     |
-|-----------|--------|---------------------------------|-----------------------------|
-| query     | string | The search query to execute     | "Artificial Intelligence"   |
-| lang      | string | Language code for results       | "en"                        |
-| sentences | int    | Number of summary sentences     | 3                           |
+| Parameter        | Type         | Description                                                                   | Example                                    |
+|------------------|--------------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `source_path`    | string       | Path to the document                                                          | `./docs/file1.pdf`                         |
+| `file_type`      | string       | File extension or type                                                        | `.pdf`                                     |
+| `creation_date`  | datetime     | File creation date                                                            | `2025-03-02 11:05:51`                      |
+| `last_modified`  | datetime     | File last modified date                                                       | `2025-03-02 11:05:51`                      |
+| `chunk_size`     | int          | Size of text chunks                                                           | `512`                                      |
+| `overlap`        | int          | Overlap between chunks                                                        | `50`                                       |
+| `custom_metadata`| Dict[str, Any] | Optional custom metadata                                                    | `{"author": "John Doe"}`                   |
+
+#### Key Characteristics
+- Structured metadata for document tracking
+- Supports custom metadata fields
+- Used internally by `RagTool`
 
 #### Example Usage
 ```python
-from quantalogic.tools import WikipediaSearchTool
-
-wiki_tool = WikipediaSearchTool()
-results = wiki_tool.execute(query="Artificial Intelligence", lang="en", sentences=3)
-print(results)
-
+metadata = DocumentMetadata(
+    source_path="./docs/file1.pdf",
+    file_type=".pdf",
+    creation_date=datetime.fromtimestamp(1614782751),
+    last_modified=datetime.fromtimestamp(1614782751),
+    chunk_size=512,
+    overlap=50
+)
 ```
+
+#### Restrictions
+- Used as a data model, not a standalone tool
+- Requires Pydantic for validation
+
+### QueryResponse
+
+The **QueryResponse** class structures the response from `RagTool` queries with source attribution.
+
+#### Parameters
+
+| Parameter           | Type         | Description                                                                   | Example                                    |
+|---------------------|--------------|-------------------------------------------------------------------------------|--------------------------------------------|
+| `answer`            | string       | Generated response to the query                                               | `The main topic is AI.`                    |
+| `sources`           | List[Dict]   | List of source dictionaries with content and metadata                         | `[ {"content": "AI is...", "source_path": "./docs/file1.pdf"} ]` |
+| `relevance_scores`  | List[float]  | List of similarity scores for each source                                     | `[0.95, 0.87]`                            |
+| `total_chunks_searched`| int       | Number of chunks searched                                                     | `10`                                       |
+| `query_time_ms`     | float        | Query execution time in milliseconds                                          | `123.45`                                   |
+
+#### Key Characteristics
+- Structured response format
+- Includes relevance scores and source details
+- Supports `len()` and `str()` operations
+
+#### Example Usage
+```python
+response = QueryResponse(
+    answer="The main topic is AI.",
+    sources=[{"content": "AI is...", "source_path": "./docs/file1.pdf"}],
+    relevance_scores=[0.95],
+    total_chunks_searched=10,
+    query_time_ms=123.45
+)
+print(response)  # Prints "The main topic is AI."
+```
+
+#### Restrictions
+- Used as a data model within `RagTool`
+- Requires Pydantic for validation
