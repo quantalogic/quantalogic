@@ -2,8 +2,6 @@
 
 ## 1. Introduction 🌟
 
-> **Note (March 2, 2025)**: The transition parameters have been updated from `from`/`to` to `from_node`/`to_node` for improved clarity and consistency.
-
 Welcome to the **Quantalogic Flow YAML DSL**—a powerful, human-readable way to craft workflows with the `quantalogic.flow` package! As of **March 1, 2025**, this DSL brings a suite of exciting features to automate complex tasks with ease:
 
 - **Function Execution** ⚙️: Run async Python functions—embedded or sourced from PyPI, local files, or URLs.
