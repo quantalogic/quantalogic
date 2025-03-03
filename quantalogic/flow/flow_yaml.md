@@ -288,6 +288,28 @@ Nodes are the tasks, powered by functions, sub-workflows, or LLMs.
   - `model` (string, default: `"gpt-3.5-turbo"`)
   - `system_prompt` (string, optional)
   - `prompt_template` (string, default: `"{{ input }}"`)
+  - `prompt_file` (string, optional): Path to an external Jinja2 template file. If provided, the template file will be loaded and rendered with the available context.
+
+To leverage the power of Jinja2 templating directly within your Quantalogic Flow YAML DSL, you can embed Jinja2 syntax within the `prompt_template` field of your `llm_config`. This allows you to dynamically generate prompts based on variables passed from previous nodes or defined within the flow itself. Simply enclose your Jinja2 expressions within `{{ ... }}`. Ensure that the variables you reference are accessible within the scope of the node execution.
+
+Here's an example:
+
+```yaml
+nodes:
+  - id: generate_email
+    type: llm
+    config:
+      llm_config:
+        model: "gpt-4"
+        prompt_template: "Write an email to {{ recipient }} about the upcoming {{ event }}."
+        temperature: 0.7
+    inputs:
+      recipient: ${get_user_details.outputs.email}
+      event: "Company Picnic"
+```
+
+In this example, the `prompt_template` will dynamically generate an email prompt using the `recipient` variable (fetched from the output of the `get_user_details` node) and the `event` variable, which is a hardcoded string in this case.  The LLM will then use the generated prompt to compose the email.
+
   - `temperature` (float, default: `0.7`)
   - `max_tokens` (int, optional)
   - `top_p` (float, default: `1.0`)
@@ -305,6 +327,29 @@ Nodes are the tasks, powered by functions, sub-workflows, or LLMs.
 - LLM inputs come from `prompt_template`.
 
 ### Examples 🌈
+To use an external Jinja2 template file for your `prompt_template` within a Quantalogic Flow YAML DSL node's `llm_config`, specify the path to your template file using the `prompt_file` field.  The Flow will then load and render this template using Jinja2 with the available context variables during execution. This promotes cleaner YAML and allows for easier template reuse and maintenance.
+
+Here's an example `llm_config` in your YAML:
+
+```yaml
+llm_config:
+  model: "gpt-3.5-turbo"
+  prompt_file: "templates/my_prompt.j2"
+  temperature: 0.7
+```
+
+And here's a corresponding example of the external Jinja2 template file (`templates/my_prompt.j2`):
+
+```jinja2
+You are a helpful assistant. The user has asked the following:
+
+{{ user_query }}
+
+Please provide a concise and accurate answer.
+```
+
+In this example, `{{ user_query }}` will be replaced by the value of the `user_query` variable available in the Flow's context when the template is rendered. Remember to ensure the path specified in `prompt_file` is relative to the Flow's execution directory or an absolute path.
+
 From the story generator:
 ```yaml
 nodes:
