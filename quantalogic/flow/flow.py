@@ -14,10 +14,11 @@
 import asyncio
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 import instructor
-from jinja2 import Template
+from jinja2 import Environment, FileSystemLoader, Template, TemplateNotFound
 from litellm import acompletion
 from loguru import logger
 from pydantic import BaseModel, ValidationError
@@ -348,13 +349,42 @@ class Nodes:
 
         return decorator
 
+    @staticmethod
+    def _load_prompt_from_file(prompt_file: str, context: Dict[str, Any]) -> str:
+        """Load and render a Jinja2 template from an external file."""
+        try:
+            file_path = Path(prompt_file).resolve()
+            directory = file_path.parent
+            filename = file_path.name
+            env = Environment(loader=FileSystemLoader(directory))
+            template = env.get_template(filename)
+            return template.render(**context)
+        except TemplateNotFound as e:
+            logger.error(f"Jinja2 template file '{prompt_file}' not found: {e}")
+            raise ValueError(f"Prompt file '{prompt_file}' not found")
+        except Exception as e:
+            logger.error(f"Error loading or rendering prompt file '{prompt_file}': {e}")
+            raise
+
+    @staticmethod
+    def _render_prompt(template: str, prompt_file: Optional[str], context: Dict[str, Any]) -> str:
+        """Render a prompt from either a template string or an external file."""
+        if prompt_file:
+            return Nodes._load_prompt_from_file(prompt_file, context)
+        try:
+            return Template(template).render(**context)
+        except Exception as e:
+            logger.error(f"Error rendering prompt template: {e}")
+            raise
+
     @classmethod
     def llm_node(
         cls,
         model: str,
         system_prompt: str,
-        prompt_template: str,
         output: str,
+        prompt_template: str = "",
+        prompt_file: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 2000,
         top_p: float = 1.0,
@@ -362,11 +392,11 @@ class Nodes:
         frequency_penalty: float = 0.0,
         **kwargs,
     ):
-        """Decorator for creating LLM nodes with plain text output."""
+        """Decorator for creating LLM nodes with plain text output, supporting external prompt files."""
 
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(**kwargs):
-                prompt = cls._render_prompt(prompt_template, kwargs)
+                prompt = cls._render_prompt(prompt_template, prompt_file, kwargs)
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
@@ -409,9 +439,10 @@ class Nodes:
         cls,
         model: str,
         system_prompt: str,
-        prompt_template: str,
-        response_model: Type[BaseModel],
         output: str,
+        response_model: Type[BaseModel],
+        prompt_template: str = "",
+        prompt_file: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 2000,
         top_p: float = 1.0,
@@ -419,7 +450,7 @@ class Nodes:
         frequency_penalty: float = 0.0,
         **kwargs,
     ):
-        """Decorator for creating LLM nodes with structured output using instructor."""
+        """Decorator for creating LLM nodes with structured output using instructor, supporting external prompt files."""
         try:
             client = instructor.from_litellm(acompletion)
         except ImportError:
@@ -428,7 +459,7 @@ class Nodes:
 
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(**kwargs):
-                prompt = cls._render_prompt(prompt_template, kwargs)
+                prompt = cls._render_prompt(prompt_template, prompt_file, kwargs)
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
@@ -469,15 +500,6 @@ class Nodes:
             return wrapped_func
 
         return decorator
-
-    @staticmethod
-    def _render_prompt(template: str, context: Dict[str, Any]) -> str:
-        """Render a Jinja2 template with the given context."""
-        try:
-            return Template(template).render(**context)
-        except Exception as e:
-            logger.error(f"Error rendering prompt template: {e}")
-            raise
 
 
 # Example workflow with observer integration and updated structured node
@@ -528,9 +550,9 @@ async def example_workflow():
     @Nodes.structured_llm_node(
         model="gemini/gemini-2.0-flash",
         system_prompt="You are an inventory checker. Respond with a JSON object containing 'order_id', 'items', and 'in_stock' (boolean).",
-        prompt_template="Check if the following items are in stock: {{ items }}. Return the result in JSON format with 'order_id' set to '123'.",
-        response_model=OrderDetails,
         output="inventory_status",
+        response_model=OrderDetails,
+        prompt_template="Check if the following items are in stock: {{ items }}. Return the result in JSON format with 'order_id' set to '123'.",
     )
     async def check_inventory(items: List[str]) -> OrderDetails:
         # This is a placeholder function that would normally call an LLM

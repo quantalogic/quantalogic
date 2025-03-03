@@ -317,15 +317,13 @@ class WorkflowManager:
                 )(func)
             elif node_def.llm_config:
                 llm_config = node_def.llm_config
-                # Extract inputs from prompt_template using regex
-                # Extract inputs from prompt_template using regex
-                input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", llm_config.prompt_template))
+                # Extract inputs from prompt_template if no prompt_file, otherwise assume inputs will be inferred at runtime
+                input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", llm_config.prompt_template)) if not llm_config.prompt_file else set()
                 cleaned_inputs = set()
                 for input_var in input_vars:
                     base_var = re.split(r"\s*[\+\-\*/]\s*", input_var.strip())[0].strip()
                     if base_var.isidentifier():
                         cleaned_inputs.add(base_var)
-                # Convert set to list for type compatibility
                 inputs_list: List[str] = list(cleaned_inputs)
 
                 # Define a dummy function to be decorated
@@ -339,6 +337,7 @@ class WorkflowManager:
                         model=llm_config.model,
                         system_prompt=llm_config.system_prompt or "",
                         prompt_template=llm_config.prompt_template,
+                        prompt_file=llm_config.prompt_file,  # Pass prompt_file if provided
                         response_model=response_model,
                         output=node_def.output or f"{node_name}_result",
                         temperature=llm_config.temperature,
@@ -354,6 +353,7 @@ class WorkflowManager:
                         model=llm_config.model,
                         system_prompt=llm_config.system_prompt or "",
                         prompt_template=llm_config.prompt_template,
+                        prompt_file=llm_config.prompt_file,  # Pass prompt_file if provided
                         output=node_def.output or f"{node_name}_result",
                         temperature=llm_config.temperature,
                         max_tokens=llm_config.max_tokens or 2000,

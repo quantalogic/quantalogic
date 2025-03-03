@@ -61,7 +61,10 @@ class LLMConfig(BaseModel):
     )
     system_prompt: Optional[str] = Field(None, description="System prompt defining the LLM's role or context.")
     prompt_template: str = Field(
-        default="{{ input }}", description="Jinja2 template for the user prompt (e.g., 'Summarize {{ text }}')."
+        default="{{ input }}", description="Jinja2 template for the user prompt (e.g., 'Summarize {{ text }}'). Ignored if prompt_file is set."
+    )
+    prompt_file: Optional[str] = Field(
+        None, description="Path to an external Jinja2 template file (e.g., 'prompts/summary.j2'). Takes precedence over prompt_template if provided."
     )
     temperature: float = Field(
         default=0.7, ge=0.0, le=1.0, description="Controls randomness of LLM output (0.0 to 1.0)."
@@ -83,6 +86,15 @@ class LLMConfig(BaseModel):
         ),
     )
     api_key: Optional[str] = Field(None, description="Custom API key for the LLM provider, if required.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_prompt_source(cls, data: Any) -> Any:
+        """Ensure prompt_file and prompt_template are used appropriately."""
+        prompt_file = data.get("prompt_file")
+        if prompt_file and not isinstance(prompt_file, str):
+            raise ValueError("prompt_file must be a string path to a Jinja2 template file")
+        return data
 
 
 class NodeDefinition(BaseModel):
