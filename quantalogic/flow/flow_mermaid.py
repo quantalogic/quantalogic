@@ -41,23 +41,28 @@ def generate_mermaid_diagram(
     workflow_def: WorkflowDefinition,
     include_subgraphs: bool = False,
     title: Optional[str] = None,
-    include_legend: bool = True
+    include_legend: bool = True,
+    diagram_type: str = "flowchart"
 ) -> str:
     """
-    Generate a Mermaid flowchart diagram from a WorkflowDefinition with pastel colors and optimal UX.
+    Generate a Mermaid diagram (flowchart or stateDiagram) from a WorkflowDefinition with pastel colors and optimal UX.
 
     Args:
         workflow_def: The workflow definition to visualize.
-        include_subgraphs: If True, nests sub-workflows in Mermaid subgraphs.
+        include_subgraphs: If True, nests sub-workflows in Mermaid subgraphs (flowchart only).
         title: Optional title for the diagram.
         include_legend: If True, adds a comment-based legend explaining node types.
+        diagram_type: Type of diagram to generate: "flowchart" (default) or "stateDiagram".
 
     Returns:
-        A string containing the Mermaid syntax for the flowchart.
+        A string containing the Mermaid syntax for the diagram.
 
     Raises:
-        ValueError: If node names contain invalid Mermaid characters.
+        ValueError: If node names contain invalid Mermaid characters or diagram_type is invalid.
     """
+    if diagram_type not in ("flowchart", "stateDiagram"):
+        raise ValueError(f"Invalid diagram_type '{diagram_type}'; must be 'flowchart' or 'stateDiagram'")
+
     # Pastel color scheme for a soft, user-friendly look
     node_styles: Dict[str, str] = {
         "function": "fill:#90CAF9,stroke:#42A5F5,stroke-width:2px",           # Pastel Blue
@@ -67,7 +72,7 @@ def generate_mermaid_diagram(
         "unknown": "fill:#CFD8DC,stroke:#B0BEC5,stroke-width:2px"            # Pastel Grey
     }
 
-    # Shape mappings for Mermaid syntax
+    # Shape mappings for flowchart syntax
     shape_syntax: Dict[str, Tuple[str, str]] = {
         "rect": ("[", "]"),      # Rectangle for standard nodes
         "diamond": ("{{", "}}")   # Diamond for decision points
@@ -100,89 +105,124 @@ def generate_mermaid_diagram(
         if trans.condition and isinstance(trans.to_node, str):
             conditional_nodes.add(trans.from_node)
 
-    # Generate node definitions and track types/shapes
-    node_defs: List[str] = []
+    # Shared node definitions and types
     node_types: Dict[str, str] = {}
-    node_shapes: Dict[str, str] = {}
-    for node in all_nodes:
-        node_def = workflow_def.nodes.get(node)
-        has_conditions = node in conditional_nodes
-        label, node_type, shape = get_node_label_and_type(node, node_def, has_conditions)
-        start_shape, end_shape = shape_syntax[shape]
-        node_defs.append(f'{node}{start_shape}"{label}"{end_shape}')
-        node_types[node] = node_type
-        node_shapes[node] = shape
-
-    # Generate arrows for transitions (all solid lines)
-    arrows: List[str] = []
-    for trans in workflow_def.workflow.transitions:
-        from_node = trans.from_node
-        if isinstance(trans.to_node, str):
-            to_node = trans.to_node
-            condition = trans.condition
-            if condition:
-                cond = condition.replace('"', '\\"')[:30] + ("..." if len(condition) > 30 else "")
-                arrows.append(f'{from_node} -->|"{cond}"| {to_node}')  # Solid arrow with condition
-            else:
-                arrows.append(f'{from_node} --> {to_node}')
-        else:
-            for to_node in trans.to_node:
-                arrows.append(f'{from_node} --> {to_node}')  # Solid arrow for parallel
+    node_shapes: Dict[str, str] = {}  # Only used for flowchart
 
     # Assemble the Mermaid syntax
     mermaid_code = "```mermaid\n"
-    mermaid_code += "graph TD\n"  # Top-down layout
+    if diagram_type == "flowchart":
+        mermaid_code += "graph TD\n"  # Top-down layout
+    else:  # stateDiagram
+        mermaid_code += "stateDiagram-v2\n"
+
     if title:
         mermaid_code += f"    %% Diagram: {title}\n"
 
     # Optional legend for UX
     if include_legend:
         mermaid_code += "    %% Legend:\n"
-        mermaid_code += "    %% - Rectangle: Process Step\n"
-        mermaid_code += "    %% - Diamond: Decision Point\n"
+        if diagram_type == "flowchart":
+            mermaid_code += "    %% - Rectangle: Process Step\n"
+            mermaid_code += "    %% - Diamond: Decision Point\n"
         mermaid_code += "    %% - Colors: Blue (Function), Green (Structured LLM), Purple (LLM), Orange (Sub-Workflow), Grey (Unknown)\n"
 
-    # Add node definitions
-    for node_def in node_defs:
-        mermaid_code += f"    {node_def}\n"
+    if diagram_type == "flowchart":
+        # Flowchart-specific: Generate node definitions with shapes
+        node_defs: List[str] = []
+        for node in all_nodes:
+            node_def_flow: Optional[NodeDefinition] = workflow_def.nodes.get(node)
+            has_conditions = node in conditional_nodes
+            label, node_type, shape = get_node_label_and_type(node, node_def_flow, has_conditions)
+            start_shape, end_shape = shape_syntax[shape]
+            node_defs.append(f'{node}{start_shape}"{label}"{end_shape}')
+            node_types[node] = node_type
+            node_shapes[node] = shape
 
-    # Add transition arrows
-    for arrow in arrows:
-        mermaid_code += f"    {arrow}\n"
+        # Add node definitions
+        for node_def_str in node_defs:
+            mermaid_code += f"    {node_def_str}\n"
 
-    # Add styles for node types (no stroke-dasharray for solid appearance)
-    for node, node_type in node_types.items():
-        if node_type in node_styles:
-            mermaid_code += f"    style {node} {node_styles[node_type]}\n"
+        # Generate arrows for transitions (all solid lines)
+        for trans in workflow_def.workflow.transitions:
+            from_node = trans.from_node
+            if isinstance(trans.to_node, str):
+                to_node = trans.to_node
+                condition = trans.condition
+                if condition:
+                    cond = condition.replace('"', '\\"')[:30] + ("..." if len(condition) > 30 else "")
+                    mermaid_code += f'    {from_node} -->|"{cond}"| {to_node}\n'
+                else:
+                    mermaid_code += f'    {from_node} --> {to_node}\n'
+            else:
+                for to_node in trans.to_node:
+                    mermaid_code += f'    {from_node} --> {to_node}\n'
 
-    # Highlight the start node with a thicker border
-    if workflow_def.workflow.start and workflow_def.workflow.start in node_types:
-        mermaid_code += f"    style {workflow_def.workflow.start} stroke-width:4px\n"
+        # Add styles for node types
+        for node, node_type in node_types.items():
+            if node_type in node_styles:
+                mermaid_code += f"    style {node} {node_styles[node_type]}\n"
 
-    # Optional: Subgraphs for sub-workflows
-    if include_subgraphs:
-        for node, node_def in workflow_def.nodes.items():
-            if node_def and node_def.sub_workflow:
-                mermaid_code += f"    subgraph {node}_sub[Sub-Workflow: {node}]\n"
-                sub_nodes = {node_def.sub_workflow.start} if node_def.sub_workflow.start else set()
-                for trans in node_def.sub_workflow.transitions:
-                    sub_nodes.add(trans.from_node)
-                    if isinstance(trans.to_node, str):
-                        sub_nodes.add(trans.to_node)
-                    else:
-                        sub_nodes.update(trans.to_node)
-                for sub_node in sub_nodes:
-                    mermaid_code += f"        {sub_node}[[{sub_node}]]\n"
-                mermaid_code += "    end\n"
+        # Highlight the start node
+        if workflow_def.workflow.start and workflow_def.workflow.start in node_types:
+            mermaid_code += f"    style {workflow_def.workflow.start} stroke-width:4px\n"
+
+        # Optional: Subgraphs for sub-workflows
+        if include_subgraphs:
+            for node, node_def_entry in workflow_def.nodes.items():
+                if node_def_entry and node_def_entry.sub_workflow:
+                    mermaid_code += f"    subgraph {node}_sub[Sub-Workflow: {node}]\n"
+                    sub_nodes: Set[str] = {node_def_entry.sub_workflow.start} if node_def_entry.sub_workflow.start else set()
+                    for trans in node_def_entry.sub_workflow.transitions:
+                        sub_nodes.add(trans.from_node)
+                        if isinstance(trans.to_node, str):
+                            sub_nodes.add(trans.to_node)
+                        else:
+                            sub_nodes.update(trans.to_node)
+                    for sub_node in sub_nodes:
+                        mermaid_code += f"        {sub_node}[[{sub_node}]]\n"
+                    mermaid_code += "    end\n"
+
+    else:  # stateDiagram
+        # StateDiagram-specific: Define states
+        for node in all_nodes:
+            node_def_state: Optional[NodeDefinition] = workflow_def.nodes.get(node)
+            has_conditions = node in conditional_nodes
+            label, node_type, _ = get_node_label_and_type(node, node_def_state, has_conditions)  # Shape unused
+            mermaid_code += f"    state \"{label}\" as {node}\n"
+            node_types[node] = node_type
+
+        # Start state
+        if workflow_def.workflow.start:
+            mermaid_code += f"    [*] --> {workflow_def.workflow.start}\n"
+
+        # Transitions
+        for trans in workflow_def.workflow.transitions:
+            from_node = trans.from_node
+            if isinstance(trans.to_node, str):
+                to_node = trans.to_node
+                condition = trans.condition
+                if condition:
+                    cond = condition.replace('"', '\\"')[:30] + ("..." if len(condition) > 30 else "")
+                    mermaid_code += f"    {from_node} --> {to_node} : {cond}\n"
+                else:
+                    mermaid_code += f"    {from_node} --> {to_node}\n"
+            else:
+                # Parallel transitions approximated with a note
+                for to_node in trans.to_node:
+                    mermaid_code += f"    {from_node} --> {to_node} : parallel\n"
+
+        # Add styles for node types
+        for node, node_type in node_types.items():
+            if node_type in node_styles:
+                mermaid_code += f"    style {node} {node_styles[node_type]}\n"
 
     mermaid_code += "```\n"
     return mermaid_code
 
 
 def main() -> None:
-    """
-    Create a complex workflow and print its improved Mermaid diagram representation.
-    """
+    """Create a complex workflow and print its improved Mermaid diagram representation."""
     manager = WorkflowManager()
 
     # Add functions
@@ -230,11 +270,13 @@ def main() -> None:
     manager.add_transition(from_node="sentiment_analysis", to_node="revise", condition="ctx['sentiment'] == 'negative'")
     manager.add_transition(from_node="keyword_extraction", to_node="publish")
 
-    # Generate and print the diagram
+    # Generate and print both diagrams
     workflow_def = manager.workflow
-    diagram = generate_mermaid_diagram(workflow_def, include_subgraphs=False, title="Content Processing Workflow")
-    print(diagram)
-
+    print("Flowchart (default):")
+    print(generate_mermaid_diagram(workflow_def, include_subgraphs=False, title="Content Processing Workflow"))
+    print("\nState Diagram:")
+    print(generate_mermaid_diagram(workflow_def, diagram_type="stateDiagram", title="Content Processing Workflow"))
+    
 
 if __name__ == "__main__":
     main()

@@ -2,6 +2,7 @@ import importlib
 import importlib.util
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import urllib
@@ -28,6 +29,34 @@ class WorkflowManager:
     def __init__(self, workflow: Optional[WorkflowDefinition] = None):
         """Initialize the WorkflowManager with an optional workflow definition."""
         self.workflow = workflow or WorkflowDefinition()
+        self._ensure_dependencies()
+
+    def _ensure_dependencies(self) -> None:
+        """Ensure all specified dependencies are installed or available."""
+        if not self.workflow.dependencies:
+            return
+
+        for dep in self.workflow.dependencies:
+            if dep.startswith("http://") or dep.startswith("https://"):
+                # Remote URL: handled by import_module_from_source later
+                logger.debug(f"Dependency '{dep}' is a remote URL, will be fetched during instantiation")
+            elif os.path.isfile(dep):
+                # Local file: handled by import_module_from_source later
+                logger.debug(f"Dependency '{dep}' is a local file, will be loaded during instantiation")
+            else:
+                # Assume PyPI package
+                try:
+                    # Check if the module is already installed
+                    module_name = dep.split(">")[0].split("<")[0].split("=")[0].strip()
+                    importlib.import_module(module_name)
+                    logger.debug(f"Dependency '{dep}' is already installed")
+                except ImportError:
+                    logger.info(f"Installing dependency '{dep}' via pip")
+                    try:
+                        subprocess.check_call([sys.executable, "-m", "pip", "install", dep])
+                        logger.debug(f"Successfully installed '{dep}'")
+                    except subprocess.CalledProcessError as e:
+                        raise ValueError(f"Failed to install dependency '{dep}': {e}")
 
     def add_node(
         self,
@@ -232,6 +261,9 @@ class WorkflowManager:
 
     def instantiate_workflow(self) -> Workflow:
         """Instantiates a Workflow object based on the definitions stored in the WorkflowManager."""
+        # Ensure dependencies are available before instantiation
+        self._ensure_dependencies()
+
         functions: Dict[str, Callable] = {}
         for func_name, func_def in self.workflow.functions.items():
             if func_def.type == "embedded":
@@ -317,15 +349,13 @@ class WorkflowManager:
                 )(func)
             elif node_def.llm_config:
                 llm_config = node_def.llm_config
-                # Extract inputs from prompt_template using regex
-                # Extract inputs from prompt_template using regex
-                input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", llm_config.prompt_template))
+                # Extract inputs from prompt_template if no prompt_file, otherwise assume inputs will be inferred at runtime
+                input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", llm_config.prompt_template)) if not llm_config.prompt_file else set()
                 cleaned_inputs = set()
                 for input_var in input_vars:
                     base_var = re.split(r"\s*[\+\-\*/]\s*", input_var.strip())[0].strip()
                     if base_var.isidentifier():
                         cleaned_inputs.add(base_var)
-                # Convert set to list for type compatibility
                 inputs_list: List[str] = list(cleaned_inputs)
 
                 # Define a dummy function to be decorated
@@ -339,6 +369,7 @@ class WorkflowManager:
                         model=llm_config.model,
                         system_prompt=llm_config.system_prompt or "",
                         prompt_template=llm_config.prompt_template,
+                        prompt_file=llm_config.prompt_file,  # Pass prompt_file if provided
                         response_model=response_model,
                         output=node_def.output or f"{node_name}_result",
                         temperature=llm_config.temperature,
@@ -354,6 +385,7 @@ class WorkflowManager:
                         model=llm_config.model,
                         system_prompt=llm_config.system_prompt or "",
                         prompt_template=llm_config.prompt_template,
+                        prompt_file=llm_config.prompt_file,  # Pass prompt_file if provided
                         output=node_def.output or f"{node_name}_result",
                         temperature=llm_config.temperature,
                         max_tokens=llm_config.max_tokens or 2000,
@@ -397,6 +429,7 @@ class WorkflowManager:
             data = yaml.safe_load(f)
         try:
             self.workflow = WorkflowDefinition.model_validate(data)
+            self._ensure_dependencies()  # Ensure dependencies after loading
         except ValidationError as e:
             raise ValueError(f"Invalid workflow YAML: {e}")
 
@@ -427,6 +460,7 @@ class WorkflowManager:
 def main():
     """Demonstrate usage of WorkflowManager with observer support."""
     manager = WorkflowManager()
+    manager.workflow.dependencies = ["requests>=2.28.0"]  # Example dependency
     manager.add_function(
         name="greet",
         type_="embedded",

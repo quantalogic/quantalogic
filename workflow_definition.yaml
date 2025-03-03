@@ -43,6 +43,7 @@ nodes:
       model: gemini/gemini-2.0-flash
       system_prompt: You are a creative writer skilled at generating stories.
       prompt_template: Create a story outline for a {genre} story with {num_chapters} chapters.
+      prompt_file: null
       temperature: 0.7
       max_tokens: 1000
       top_p: 1.0
@@ -63,6 +64,7 @@ nodes:
       model: gemini/gemini-2.0-flash
       system_prompt: You are a creative writer.
       prompt_template: 'Write chapter {chapter_num} for this story outline: {outline}. Style: {style}.'
+      prompt_file: null
       temperature: 0.7
       max_tokens: 1000
       top_p: 1.0

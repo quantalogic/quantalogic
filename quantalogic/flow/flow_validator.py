@@ -1,14 +1,12 @@
 import ast
 import re
 from collections import defaultdict
-from typing import Dict, List, Set, Optional
+from typing import Dict, List, Optional, Set
 
-from pydantic import ValidationError, BaseModel
+from pydantic import BaseModel
 
 from quantalogic.flow.flow_manager import WorkflowManager
 from quantalogic.flow.flow_manager_schema import (
-    FunctionDefinition,
-    LLMConfig,
     NodeDefinition,
     TransitionDefinition,
     WorkflowDefinition,
@@ -102,9 +100,7 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
                     predecessors[to_node].append(from_node)
 
     # Define function to get ancestors, handling cycles with a visited set
-    def get_ancestors(node: str, visited: Set[str] = None) -> Set[str]:
-        if visited is None:
-            visited = set()
+    def get_ancestors(node: str, visited: Set[str] = set()) -> Set[str]:
         if node in visited or node not in all_nodes:
             return set()
         visited.add(node)
@@ -130,15 +126,20 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
         full_node_name = node_name
 
         if node_def.function:
-            func_def = workflow_def.functions.get(node_def.function)
-            if func_def and func_def.type == "embedded" and func_def.code:
-                try:
-                    params = get_function_params(func_def.code, node_def.function)
-                    required_inputs = set(params)
-                except ValueError as e:
-                    issues.append(NodeError(node_name=node_name, description=f"Failed to parse function '{node_def.function}': {e}"))
+            maybe_func_def = workflow_def.functions.get(node_def.function)
+            if maybe_func_def is None:
+                issues.append(NodeError(
+                    node_name=node_name,
+                    description=f"Function '{node_def.function}' not found in workflow functions"
+                ))
             else:
-                pass
+                func_def = maybe_func_def  # Type is now definitely FunctionDefinition
+                if func_def.type == "embedded" and func_def.code:
+                    try:
+                        params = get_function_params(func_def.code, node_def.function)
+                        required_inputs = set(params)
+                    except ValueError as e:
+                        issues.append(NodeError(node_name=node_name, description=f"Failed to parse function '{node_def.function}': {e}"))
         elif node_def.llm_config:
             prompt_template = node_def.llm_config.prompt_template
             input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", prompt_template))
@@ -154,13 +155,23 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
                 if sub_node_def:
                     full_node_name = f"{node_name}/{sub_node_name}"
                     if sub_node_def.function:
-                        func_def = workflow_def.functions.get(sub_node_def.function)
-                        if func_def and func_def.type == "embedded" and func_def.code:
-                            try:
-                                params = get_function_params(func_def.code, sub_node_def.function)
-                                required_inputs = set(params)
-                            except ValueError as e:
-                                issues.append(NodeError(node_name=full_node_name, description=f"Failed to parse function '{sub_node_def.function}': {e}"))
+                        maybe_func_def = workflow_def.functions.get(sub_node_def.function)
+                        if maybe_func_def is None:
+                            issues.append(NodeError(
+                                node_name=full_node_name,
+                                description=f"Function '{sub_node_def.function}' not found in workflow functions"
+                            ))
+                        else:
+                            func_def = maybe_func_def  # Type is now definitely FunctionDefinition
+                            if func_def.type == "embedded" and func_def.code:
+                                try:
+                                    params = get_function_params(func_def.code, sub_node_def.function)
+                                    required_inputs = set(params)
+                                except ValueError as e:
+                                    issues.append(NodeError(
+                                        node_name=full_node_name,
+                                        description=f"Failed to parse function '{sub_node_def.function}': {e}"
+                                    ))
                     elif sub_node_def.llm_config:
                         prompt_template = sub_node_def.llm_config.prompt_template
                         input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", prompt_template))
@@ -176,7 +187,10 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
                         for input_name in required_inputs:
                             producer_node = output_to_node.get(input_name)
                             if producer_node is None or producer_node not in ancestors:
-                                issues.append(NodeError(node_name=full_node_name, description=f"Requires input '{input_name}', but it is not produced by any ancestor"))
+                                issues.append(NodeError(
+                                    node_name=full_node_name,
+                                    description=f"Requires input '{input_name}', but it is not produced by any ancestor"
+                                ))
             continue
 
         if not required_inputs:
@@ -186,7 +200,10 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
         for input_name in required_inputs:
             producer_node = output_to_node.get(input_name)
             if producer_node is None or producer_node not in ancestors:
-                issues.append(NodeError(node_name=full_node_name, description=f"Requires input '{input_name}', but it is not produced by any ancestor"))
+                issues.append(NodeError(
+                    node_name=full_node_name,
+                    description=f"Requires input '{input_name}', but it is not produced by any ancestor"
+                ))
 
     for observer in workflow_def.observers:
         if observer not in workflow_def.functions:

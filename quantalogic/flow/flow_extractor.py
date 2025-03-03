@@ -131,11 +131,11 @@ class WorkflowExtractor(ast.NodeVisitor):
                     llm_config = {
                         key: value
                         for key, value in kwargs.items()
-                        if key
-                        in [
+                        if key in [
                             "model",
                             "system_prompt",
                             "prompt_template",
+                            "prompt_file",  # Added to support external Jinja2 files
                             "temperature",
                             "max_tokens",
                             "top_p",
@@ -162,11 +162,11 @@ class WorkflowExtractor(ast.NodeVisitor):
                     llm_config = {
                         key: value
                         for key, value in kwargs.items()
-                        if key
-                        in [
+                        if key in [
                             "model",
                             "system_prompt",
                             "prompt_template",
+                            "prompt_file",  # Added to support external Jinja2 files
                             "temperature",
                             "max_tokens",
                             "top_p",
@@ -250,11 +250,11 @@ class WorkflowExtractor(ast.NodeVisitor):
                     llm_config = {
                         key: value
                         for key, value in kwargs.items()
-                        if key
-                        in [
+                        if key in [
                             "model",
                             "system_prompt",
                             "prompt_template",
+                            "prompt_file",  # Added to support external Jinja2 files
                             "temperature",
                             "max_tokens",
                             "top_p",
@@ -281,11 +281,11 @@ class WorkflowExtractor(ast.NodeVisitor):
                     llm_config = {
                         key: value
                         for key, value in kwargs.items()
-                        if key
-                        in [
+                        if key in [
                             "model",
                             "system_prompt",
                             "prompt_template",
+                            "prompt_file",  # Added to support external Jinja2 files
                             "temperature",
                             "max_tokens",
                             "top_p",
@@ -510,9 +510,6 @@ def extract_workflow_from_file(file_path):
     return workflow_def, extractor.global_vars
 
 
-# The generate_executable_script function has been moved to flow_generator.py
-
-
 def print_workflow_definition(workflow_def):
     """
     Utility function to print a WorkflowDefinition in a human-readable format.
@@ -541,6 +538,8 @@ def print_workflow_definition(workflow_def):
                 print("  Type: LLM")
             print(f"  Model: {node.llm_config.model}")
             print(f"  Prompt Template: {node.llm_config.prompt_template}")
+            if node.llm_config.prompt_file:  # Added to display external prompt file if present
+                print(f"  Prompt File: {node.llm_config.prompt_file}")
         elif node.sub_workflow:
             print("  Type: Sub-Workflow")
             print(f"  Start Node: {node.sub_workflow.start}")
