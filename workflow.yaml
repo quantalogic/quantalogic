@@ -47,3 +47,5 @@ workflow:
     condition: null
 observers:
 - monitor
+dependencies:
+- requests>=2.28.0

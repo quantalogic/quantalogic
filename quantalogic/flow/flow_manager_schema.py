@@ -174,6 +174,14 @@ class WorkflowDefinition(BaseModel):
     observers: List[str] = Field(
         default_factory=list, description="List of observer function names to monitor workflow execution."
     )
+    dependencies: List[str] = Field(
+        default_factory=list,
+        description=(
+            "List of Python module dependencies required by the workflow. "
+            "Examples: PyPI packages ('requests>=2.28.0'), local paths ('/path/to/module.py'), "
+            "or remote URLs ('https://example.com/module.py'). Processed during workflow instantiation."
+        ),
+    )
 
 
 # Resolve forward reference for sub_workflow in NodeDefinition

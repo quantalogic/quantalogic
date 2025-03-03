@@ -2,12 +2,12 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "loguru",
-#     "litellm",
-#     "pydantic>=2.0",
-#     "anyio",
-#     "jinja2",
-#     "instructor[litellm]"  # Required for structured_llm_node
+#     "loguru>=0.7.2",              # Logging utility
+#     "litellm>=1.0.0",             # LLM integration
+#     "pydantic>=2.0.0",            # Data validation and settings
+#     "anyio>=4.0.0",               # Async utilities
+#     "jinja2>=3.1.0",              # Templating engine
+#     "instructor[litellm]>=0.5.0"  # Structured LLM output with litellm integration
 # ]
 # ///
 
