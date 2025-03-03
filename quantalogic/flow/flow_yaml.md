@@ -32,11 +32,12 @@ graph TD
 
 ## 2. Workflow Structure 🗺️
 
-A workflow YAML file is divided into three core sections:
+A workflow YAML file is divided into four core sections:
 
 - **`functions`**: Python code definitions.
 - **`nodes`**: Task specifications.
 - **`workflow`**: Flow orchestration.
+- **`dependencies`**: Python module dependencies.
 
 Here’s the skeleton:
 
@@ -47,6 +48,8 @@ nodes:
   # Tasks 🎯
 workflow:
   # Flow control 🚦
+dependencies:
+  # Python module dependencies (optional)
 observers:
   # Event watchers 👀 (optional)
 ```
@@ -275,7 +278,33 @@ graph TD
 
 ---
 
-## 5. Nodes 🧩
+---
+
+## 5. Dependencies 🐍
+
+The `dependencies` section lists Python modules required by the workflow.
+
+### Fields 📋
+
+- `dependencies` (list, optional): A list of Python module dependencies. Each dependency can be a:
+    - PyPI package name (e.g., `requests>=2.28.0`).
+    - Local file path (e.g., `/path/to/module.py`).
+    - Remote URL (e.g., `https://example.com/module.py`).
+
+These dependencies are processed during workflow instantiation, ensuring that all required modules are available before the workflow starts.
+
+### Example 🌈
+
+```yaml
+dependencies:
+  - requests>=2.28.0
+  - /path/to/my_custom_module.py
+  - https://example.com/another_module.py
+```
+
+---
+
+## 6. Nodes 🧩
 
 Nodes are the tasks, powered by functions, sub-workflows, or LLMs.
 
