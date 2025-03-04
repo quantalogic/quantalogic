@@ -7,10 +7,14 @@
 #     "litellm",
 #     "pydantic>=2.0",
 #     "asyncio",
-#     "jinja2",  
-#     "py-zerox @ git+https://github.com/getomni-ai/zerox.git",  # Install directly from GitHub
-#     "pdf2image",  # Required for PDF to image conversion
-#     "pillow"  # Image processing library
+#     "jinja2",
+#     "py-zerox @ git+https://github.com/getomni-ai/zerox.git",
+#     "pdf2image",
+#     "pillow",
+#     "typer",
+#     "pathlib",
+#     "pathspec",
+#     "quantalogic"
 # ]
 # ///
 
@@ -19,24 +23,16 @@
 
 import asyncio
 import os
+import tempfile
+from pathlib import Path
 from typing import Optional, Union
 
+import typer
 from loguru import logger
-
-# Note: The PyPI package 'py-zerox' has issues with imports.
-# The GitHub version is recommended: https://github.com/getomni-ai/zerox/issues/47
 from pyzerox import zerox
 
-### Model Setup (Use only Vision Models) Refer: https://docs.litellm.ai/docs/providers ###
-
-## placeholder for additional model kwargs which might be required for some models
-kwargs = {}
-
-## system prompt to use for the vision model
-custom_system_prompt = None
-
-# to override
-# custom_system_prompt = "For the below PDF page, do something..something..." ## example
+# Import the flow API (assumes quantalogic/flow/flow.py is in your project structure)
+from quantalogic.flow.flow import Nodes, Workflow
 
 
 def validate_pdf_path(pdf_path: str) -> bool:
@@ -52,39 +48,20 @@ def validate_pdf_path(pdf_path: str) -> bool:
         return False
     return True
 
-
-async def convert_pdf_to_markdown(
-    pdf_path: str, 
-    model: str = "gpt-4o-mini", 
-    custom_system_prompt: Optional[str] = None, 
-    output_dir: Optional[str] = "./output_test",
-    select_pages: Optional[Union[int, list[int]]] = None,
-    **kwargs
+# Node to convert PDF to Markdown
+@Nodes.define(output="markdown_content")
+async def convert_node(
+    pdf_path: str,
+    model: str,
+    custom_system_prompt: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    select_pages: Optional[Union[int, list[int]]] = None
 ) -> str:
-    """
-    Convert a PDF to Markdown using Vision Language Models.
-
-    Args:
-        pdf_path (str): Path to the PDF file
-        model (str): Vision model to use for conversion
-        custom_system_prompt (str, optional): Custom system prompt for the model
-        output_dir (str, optional): Directory to save markdown files
-        select_pages (int or list[int], optional): Specific pages to convert
-        **kwargs: Additional arguments for the zerox function
-
-    Returns:
-        str: Pure Markdown content of the PDF
-    """
+    """Convert a PDF to Markdown using a vision model."""
     if not validate_pdf_path(pdf_path):
         raise ValueError("Invalid PDF path")
 
-    # Remove model from kwargs if present to avoid duplicate argument
-    kwargs.pop('model', None)
-    kwargs.pop('file_path', None)
-    kwargs.pop('output_dir', None)
-
     try:
-        # Explicitly set a default system prompt if none is provided
         if custom_system_prompt is None:
             custom_system_prompt = (
                 "Convert the PDF page to a clean, well-formatted Markdown document. "
@@ -92,48 +69,35 @@ async def convert_pdf_to_markdown(
                 "Return only pure Markdown content, excluding any metadata or non-Markdown elements."
             )
 
-        # Perform PDF to markdown conversion
         logger.info(f"Calling zerox with model: {model}, file: {pdf_path}")
         zerox_result = await zerox(
-            file_path=pdf_path, 
-            model=model, 
+            file_path=pdf_path,
+            model=model,
             system_prompt=custom_system_prompt,
             output_dir=output_dir,
-            select_pages=select_pages,
-            **kwargs
+            select_pages=select_pages
         )
 
-        # Log the raw result for debugging
-        logger.debug(f"zerox_result type: {type(zerox_result)}, content: {zerox_result}")
-
-        # Extract Markdown content from ZeroxOutput
         markdown_content = ""
         if hasattr(zerox_result, 'pages') and zerox_result.pages:
-            # Combine content from all pages
-            logger.info(f"Found {len(zerox_result.pages)} pages in ZeroxOutput")
             markdown_content = "\n\n".join(
-                page.content for page in zerox_result.pages 
+                page.content for page in zerox_result.pages
                 if hasattr(page, 'content') and page.content
             )
         elif isinstance(zerox_result, str):
-            logger.info("zerox_result is a string")
             markdown_content = zerox_result
         elif hasattr(zerox_result, 'markdown'):
-            logger.info("zerox_result has markdown attribute")
             markdown_content = zerox_result.markdown
         elif hasattr(zerox_result, 'text'):
-            logger.info("zerox_result has text attribute")
             markdown_content = zerox_result.text
         else:
-            # Fallback: convert to string and log a warning
             markdown_content = str(zerox_result)
-            logger.warning("Unexpected zerox_result type; converted to string as fallback.")
+            logger.warning("Unexpected zerox_result type; converted to string.")
 
-        # Validate the extracted content
         if not markdown_content.strip():
             logger.warning("Generated Markdown content is empty.")
             return ""
-        
+
         logger.info(f"Extracted Markdown content length: {len(markdown_content)} characters")
         return markdown_content
 
@@ -141,76 +105,89 @@ async def convert_pdf_to_markdown(
         logger.error(f"Error converting PDF to Markdown: {e}")
         raise
 
+# Node to save Markdown content to a file
+@Nodes.define(output="output_path")
+async def save_node(markdown_content: str, output_md: str) -> str:
+    """Save the Markdown content to the specified file path, overwriting if it exists."""
+    try:
+        output_path = Path(output_md)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", encoding="utf-8") as f:
+            f.write(markdown_content)
+        logger.info(f"Saved Markdown to: {output_path} (overwritten if existed)")
+        return str(output_path)
+    except Exception as e:
+        logger.error(f"Error saving Markdown to {output_md}: {e}")
+        raise
 
-async def main():
-    # Get the directory of the current script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # Example PDF path relative to this script's location
-    pdf_path = os.path.join(script_dir, "m2_the_geek.pdf")
-    
-    # Define output directory relative to this script's location
-    output_dir = os.path.join(script_dir, "output")
+# Define the workflow
+def create_pdf_to_md_workflow():
+    workflow = (
+        Workflow("convert_node")
+        .sequence("convert_node", "save_node")
+    )
+    return workflow
 
-    # Example model configurations
-    model_configs = {
-        "openai": {
-            "model": "gpt-4o-mini", 
-            "api_key": os.getenv("OPENAI_API_KEY", "")
-        },
-        "azure": {
-            "model": "azure/gpt-4o-mini",
-            "api_key": os.getenv("AZURE_API_KEY", ""),
-            "api_base": os.getenv("AZURE_API_BASE", ""),
-            "api_version": os.getenv("AZURE_API_VERSION", ""),
-        },
-        "vertex_ai": {
-            "model": "vertex_ai/gemini-1.5-flash-001",
-            "vertex_credentials": os.getenv("VERTEX_CREDENTIALS", ""),
-        },
-        "gemini": {
-            "model": "gemini/gemini-2.0-flash", 
-            "api_key": os.getenv("GEMINI_API_KEY", "")
-        },
+# Typer CLI app
+app = typer.Typer()
+
+@app.command()
+def convert(
+    input_pdf: str = typer.Argument(..., help="Path to the input PDF file"),
+    output_md: Optional[str] = typer.Argument(None, help="Path to save the output Markdown file (defaults to input_pdf_name.md)"),
+    model: str = typer.Option("gemini/gemini-2.0-flash", help="LiteLLM-compatible model name (e.g., 'openai/gpt-4o-mini', 'gemini/gemini-2.0-flash')"),
+    system_prompt: Optional[str] = typer.Option(None, help="Custom system prompt for the vision model")
+):
+    """
+    Convert a PDF file to Markdown using a two-step workflow: convert and save.
+
+    The model name should be in LiteLLM format, e.g., 'openai/gpt-4o-mini', 'gemini/gemini-2.0-flash'.
+    If output_md is not specified, it defaults to the input PDF name with a .md extension.
+    Existing files at output_md will be overwritten.
+
+    Ensure the appropriate environment variables are set for the chosen model:
+    - 'openai/gpt-4o-mini': Set OPENAI_API_KEY
+    - 'gemini/gemini-2.0-flash': Set GEMINI_API_KEY
+    - 'azure/gpt-4o-mini': Set AZURE_API_KEY, AZURE_API_BASE, AZURE_API_VERSION
+    - 'vertex_ai/gemini-1.5-flash-001': Set VERTEX_CREDENTIALS
+
+    Examples:
+        uv run pdf_to_md_flow.py convert input.pdf  # Saves to input.md
+        uv run pdf_to_md_flow.py convert input.pdf custom_output.md --model openai/gpt-4o-mini
+    """
+    if not validate_pdf_path(input_pdf):
+        typer.echo(f"Error: Invalid PDF path: {input_pdf}", err=True)
+        raise typer.Exit(code=1)
+
+    # Default output_md to input_pdf name with .md extension if not provided
+    if output_md is None:
+        output_md = str(Path(input_pdf).with_suffix(".md"))
+
+    # Create initial context for the workflow
+    initial_context = {
+        "pdf_path": input_pdf,
+        "model": model,
+        "custom_system_prompt": system_prompt,
+        "output_md": output_md
     }
 
-    # Select the model configuration you want to use
-    selected_config = model_configs["gemini"]
-    
-    try:
-        markdown_result = await convert_pdf_to_markdown(
-            pdf_path, 
-            model=selected_config["model"], 
-            custom_system_prompt=(
-                "Convert the entire PDF to a clean, well-structured Markdown document. "
-                "Preserve the original formatting, headings, and any code blocks or mathematical equations. "
-                "Return only pure Markdown content suitable for a standalone file, excluding any metadata."
-            ),
-            select_pages=None,  # Convert all pages
-            output_dir=output_dir,
-            **{k: v for k, v in selected_config.items() if k != 'model'}
-        )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        initial_context["output_dir"] = temp_dir
+        try:
+            # Build and run the workflow
+            workflow = create_pdf_to_md_workflow()
+            engine = workflow.build()
+            result = asyncio.run(engine.run(initial_context))
 
-        # Validate markdown result
-        if not markdown_result:
-            logger.warning("No markdown content was generated.")
-            return
+            output_path = result.get("output_path")
+            if not output_path:
+                typer.echo("Warning: No output path generated.", err=True)
+                raise typer.Exit(code=1)
 
-        # Save the markdown content to a file
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, "output.md")
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(markdown_result)
-
-        logger.success(f"PDF converted to Markdown: {output_path}")
-        logger.info(f"Generated markdown length: {len(markdown_result)} characters")
-
-    except Exception as e:
-        logger.error(f"Conversion failed: {e}")
-        # Optional: log the full traceback
-        import traceback
-        logger.error(traceback.format_exc())
-
+            typer.echo(f"PDF converted to Markdown: {output_path}")
+        except Exception as e:
+            typer.echo(f"Error during workflow execution: {e}", err=True)
+            raise typer.Exit(code=1)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    app()
