@@ -147,7 +147,7 @@ async def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Example PDF path relative to this script's location
-    pdf_path = os.path.join(script_dir, "code_symb_planer_2503.01700v1.pdf")
+    pdf_path = os.path.join(script_dir, "m2_the_geek.pdf")
     
     # Define output directory relative to this script's location
     output_dir = os.path.join(script_dir, "output")
