@@ -197,7 +197,6 @@ class MemGPT:
         archival_results = await self.search_memory(query, "archival")
         combined = recall_results + archival_results
         
-        # Time-weighted scoring
         time_weight = 0.2
         weighted_results = []
         for idx, (text, score) in enumerate(combined):
@@ -305,19 +304,82 @@ async def main():
     init_database(config.recall_storage.path, reset=True)
     init_database(config.archival_storage.path, reset=True)
 
-    interactions = [
-        "What am I working on?",
-        "/save The project deadline is March 15, 2025 in archival",
-        "/search project deadline in archival",
-        "/context Data preprocessing pipeline",
-        "What's the current focus?",
-        "When is the project deadline?"
+    # Extended realistic project scenario
+    project_interactions = [
+        # Phase 1: Project Setup
+        ("/save Project 'ClimateForecast' - Time-series prediction of extreme weather events in archival", None),
+        ("/save Team roles:\n- Alice: Data Engineering\n- Bob: ML Modeling\n- Carol: Deployment in recall", None),
+        ("/context Project initialization and team onboarding", None),
+        ("What's our current focus?", "Project initialization and team onboarding"),
+        
+        # Phase 2: Data Collection
+        ("/save Data sources:\n- NOAA historical data (1990-2023)\n- Real-time satellite feeds from GOES-R in archival", None),
+        ("/save First dataset received: 2TB CSV files, needs cleaning in recall", None),
+        ("What data sources are we using?", "NOAA historical data, real-time satellite feeds"),
+        
+        # Phase 3: Data Preprocessing
+        ("/context Data cleaning pipeline development", None),
+        ("/save Data issues found:\n- 15% missing values in precipitation data\n- Sensor calibration drift in temp data in recall", None),
+        ("How should we handle missing values?", "Considered interpolation or imputation"),
+        ("/save Chosen solution: Use spatial-temporal KNN imputation for missing values in archival", None),
+        
+        # Phase 4: Model Development
+        ("/context LSTM network architecture design", None),
+        ("/save Initial model config:\n- 3 LSTM layers (256 units)\n- Dropout=0.3\n- Sequence length=30 days in archival", None),
+        ("What's our current model architecture?", "3 LSTM layers with 256 units"),
+        
+        # Phase 5: Training & Validation
+        ("/save Training results:\n- Epoch 50: val_loss=0.42\n- Epoch 100: val_loss=0.38 in recall", None),
+        ("What's our best validation loss?", "0.38 at epoch 100"),
+        ("/save Issue: Training plateaus after epoch 120 in recall", None),
+        
+        # Phase 6: Model Optimization
+        ("/context Hyperparameter tuning", None),
+        ("/save New config:\n- Added attention layers\n- Reduced dropout to 0.2\n- Increased sequence length to 45 days in archival", None),
+        ("What changes did we make?", "Added attention layers, adjusted dropout"),
+        
+        # Phase 7: Deployment Prep
+        ("/context Production deployment planning", None),
+        ("/save Deployment requirements:\n- Docker container\n- TensorFlow Serving\n- AWS EC2 p3.8xlarge in archival", None),
+        ("What infrastructure do we need?", "Docker, TF Serving, AWS EC2"),
+        
+        # Phase 8: Project Management
+        ("/save Updated deadline: March 15, 2025 due to optimization phase in archival", None),
+        ("When is our final deadline?", "March 15, 2025"),
+        ("What's remaining in the project?", "Final optimization and deployment"),
+        
+        # Cross-phase information synthesis
+        ("Give project status report including:\n- Current phase\n- Key challenges\n- Next steps", None)
     ]
 
-    for query in interactions:
-        print(f"\nUser: {query}")
+    print("=== ClimateForecast Project Development ===")
+    print("System initialized with:")
+    print(f"- Model: {config.model}")
+    print(f"- Context Window: {config.context_window} tokens")
+    print(f"- Recall Storage: {config.recall_storage.path}")
+    print(f"- Archival Storage: {config.archival_storage.path}\n")
+
+    for day, (query, _) in enumerate(project_interactions, 1):
+        print(f"\n=== Day {day} ===")
+        print(f"User: {query}")
+        
+        await asyncio.sleep(0.2)  # Simulate processing delay
+        
         response = await memgpt.process(query)
         print(f"Assistant: {response}")
+        
+        if day % 5 == 0:
+            print("\n[System] Auto-saving progress...")
+            await memgpt.process("/save Periodic project snapshot in archival")
+            
+        if "deadline" in query.lower():
+            logger.debug("Cross-storage deadline verification performed")
+
+    # Final project review
+    print("\n=== Final Review ===")
+    print(await memgpt.process("/search project timeline in archival"))
+    print(await memgpt.process("/search remaining tasks in recall"))
+    print(await memgpt.process("Summarize our deployment strategy"))
 
 if __name__ == "__main__":
     asyncio.run(main())
