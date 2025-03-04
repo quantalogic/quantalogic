@@ -15,7 +15,7 @@ The **Quantalogic Flow YAML DSL** is a human-readable, declarative language for 
 - **Observers** 👀: Monitor execution with custom handlers.
 - **Programmatic Control** 🧑‍💻: Manage workflows via `WorkflowManager`.
 
-This DSL integrates with `Workflow`, `WorkflowEngine`, and `Nodes` classes, making it ideal for everything from simple scripts to AI-driven workflows. To illustrate, we’ll use a **Story Generator Workflow** as a running example, derived from `examples/qflow/story_generator_agent.py`. Let’s dive in! 🎉
+This DSL integrates with `Workflow`, `WorkflowEngine`, and `Nodes` classes, making it ideal for everything from simple scripts to AI-driven workflows. To illustrate, we’ll use a **Story Generator Workflow** as a running example, derived from `examples/flow/simple_story_generator/story_generator_agent.py`. Let’s dive in! 🎉
 
 ```mermaid
 graph TD
