@@ -15,6 +15,7 @@ Picture this: a CLI that’s as easy as a snap, a Python API that’s pure magic
 ---
 [Chinese Version](./README_CN.md)
 [French Version](./README_FR.md)
+[German Version](./README_DE.md)
 
 ## Why QuantaLogic? 
 
