@@ -22,15 +22,15 @@
 import asyncio
 import os
 from pathlib import Path
-from typing import List, Optional, Union, Annotated
+from typing import Annotated, List, Optional, Union
 
 import typer
-from rich.console import Console
-from rich.panel import Panel
-from rich.markdown import Markdown
 from loguru import logger
 from pydantic import BaseModel
 from pyzerox import zerox
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
 
 from quantalogic.flow.flow import Nodes, Workflow
 
@@ -152,7 +152,7 @@ async def extract_paper_info(first_100_lines: str) -> PaperInfo:
 @Nodes.llm_node(
     model=DEFAULT_MODEL,  # Use Gemini instead of OpenAI to avoid quota issues
     system_prompt="You are an AI expert who enjoys sharing interesting papers and articles with a professional audience.",
-    output="post_content",
+    output="draft_post_content",
     prompt_template="""
 ## The task to do
 As an AI expert that likes to share interesting papers and articles, write the best possible LinkedIn post to introduce a new research paper "{{paper_info.title}}" from {{paper_info.authors | join(', ') }}.
@@ -165,6 +165,7 @@ Structure the post in:
 WHY -> WHAT -> HOW
 
 Explain concepts clearly and simply, as if teaching a curious beginner, without citing any specific teaching methods.
+Use the Richard Feynman technique to ensure clarity and understanding. Never cite Feynman explicitly.
 
 ## Recommendations
 - Use Markdown formatting, keeping the post under 1300 words.
@@ -184,6 +185,33 @@ async def generate_linkedin_post(paper_info: PaperInfo) -> str:
     # This function serves as a placeholder for the node definition
     pass
 
+# Node 5: Format LinkedIn Post for publishing
+@Nodes.llm_node(
+    model=DEFAULT_MODEL,  # Use Gemini instead of OpenAI to avoid quota issues
+    system_prompt="You are an expert LinkedIn post formatter who prepares content for direct publishing.",
+    output="post_content",
+    prompt_template="""
+Format the following draft LinkedIn post for direct publishing:
+
+{{draft_post_content}}
+
+Instructions:
+1. Remove any draft indicators, meta-comments, or markdown formatting symbols like ## or **.
+2. Start directly with the title.
+3. Ensure the formatting is clean and ready for LinkedIn publishing.
+4. Keep all the valuable content but remove anything that suggests this is a draft or template.
+5. Maintain the 👉 emoji for section introductions.
+6. Output only the ready-to-publish content with no additional comments.
+7. Preserve paragraph breaks and bullet points in a LinkedIn-friendly format.
+8. Ensure no Hashtags or links are included in the post.
+"""
+)
+async def format_linkedin_post(draft_post_content: str) -> str:
+    """Clean and format the LinkedIn post for publishing."""
+    # The actual formatting is handled by the llm_node decorator
+    # This function serves as a placeholder for the node definition
+    pass
+
 # Define the Workflow
 def create_pdf_to_linkedin_workflow() -> Workflow:
     """Create a workflow to convert a PDF to a LinkedIn post."""
@@ -193,7 +221,8 @@ def create_pdf_to_linkedin_workflow() -> Workflow:
             "convert_pdf_to_markdown",      # Step 1: Convert PDF to Markdown
             "extract_first_100_lines",      # Step 2: Extract first 100 lines
             "extract_paper_info",           # Step 3: Extract title and authors
-            "generate_linkedin_post"        # Step 4: Generate LinkedIn post
+            "generate_linkedin_post",       # Step 4: Generate LinkedIn post draft
+            "format_linkedin_post"          # Step 5: Format the post for publishing
         )
     )
     return workflow
