@@ -15,6 +15,7 @@ Picture this: a CLI that’s as easy as a snap, a Python API that’s pure magic
 ---
 [Chinese Version](./README_CN.md)
 [French Version](./README_FR.md)
+[German Version](./README_DE.md)
 
 ## Why QuantaLogic? 
 
@@ -416,7 +417,7 @@ This example demonstrates:
 - Conditional branching for iterative chapter generation
 - Context management for tracking progress
 
-The full example is available at [examples/flow/story_generator_agent.py](./examples/flow/story_generator_agent.py).
+The full example is available at [examples/flow/story_generator/story_generator_agent.py](./examples/flow/story_generator/story_generator_agent.py).
 
 ### Flow Visualized
 ```mermaid
@@ -538,7 +539,7 @@ Let’s light up your imagination with these gems:
 | Code Screen       | Advanced code generation           | [06-code-screen.py](./examples/06-code-screen.py) |
 | Tutorial Writer   | Write technical tutorials          | [07-write-tutorial.py](./examples/07-write-tutorial.py) |
 | PRD Writer        | Product Requirements Document      | [08-prd-writer.py](./examples/08-prd-writer.py) |
-| Story Generator   | Flow-based story creation          | [story_generator_agent.py](./examples/flow/story_generator_agent.py) |
+| Story Generator   | Flow-based story creation          | [story_generator_agent.py](./examples/flow/story_generator/story_generator_agent.py) |
 | SQL Query         | Database query generation          | [09-sql-query.py](./examples/09-sql-query.py) |
 | Finance Agent     | Financial analysis and tasks       | [10-finance-agent.py](./examples/10-finance-agent.py) |
 | Textual Interface | Agent with textual UI               | [11-textual-agent-interface.py](./examples/11-textual-agent-interface.py) |

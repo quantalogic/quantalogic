@@ -415,7 +415,7 @@ Cet exemple démontre :
 - Branchement conditionnel pour la génération itérative de chapitres
 - Gestion du contexte pour le suivi des progrès
 
-L'exemple complet est disponible sur [examples/flow/story_generator_agent.py](./examples/flow/story_generator_agent.py).
+L'exemple complet est disponible sur [examples/flow/story_generator/story_generator_agent.py](./examples/flow/story_generator/story_generator_agent.py).
 
 ### Flow visualisé
 ```mermaid
@@ -537,7 +537,7 @@ Illuminons votre imagination avec ces joyaux :
 | Écran de code       | Génération de code avancée           | [06-code-screen.py](./examples/06-code-screen.py) |
 | Rédacteur de tutoriel   | Écrire des tutoriels techniques          | [07-write-tutorial.py](./examples/07-write-tutorial.py) |
 | Rédacteur PRD        | Document des exigences du produit      | [08-prd-writer.py](./examples/08-prd-writer.py) |
-| Générateur d'histoires   | Création d'histoires basée sur Flow          | [story_generator_agent.py](./examples/flow/story_generator_agent.py) |
+| Générateur d'histoires   | Création d'histoires basée sur Flow          | [story_generator_agent.py](./examples/flow/story_generator/story_generator_agent.py) |
 | Requête SQL         | Génération de requête de base de données          | [09-sql-query.py](./examples/09-sql-query.py) |
 | Agent financier     | Analyse financière et tâches       | [10-finance-agent.py](./examples/10-finance-agent.py) |
 | Interface textuelle | Agent avec interface textuelle               | [11-textual-agent-interface.py](./examples/11-textual-agent-interface.py) |

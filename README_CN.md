@@ -414,7 +414,7 @@ async def main():
 - 用于迭代章节生成的条件分支
 - 用于跟踪进度的上下文管理
 
-完整的示例可在 [examples/flow/story_generator_agent.py](./examples/flow/story_generator_agent.py) 中找到。
+完整的示例可在 [examples/flow/story_generator/story_generator_agent.py](./examples/flow/story_generator/story_generator_agent.py) 中找到。
 
 ### Flow 可视化
 ```mermaid
@@ -536,7 +536,7 @@ QuantaLogic AI 助手 - 一款用于各种任务的强大 AI 工具。
 | 代码屏幕       | 高级代码生成           | [06-code-screen.py](./examples/06-code-screen.py) |
 | 教程编写器   | 编写技术教程          | [07-write-tutorial.py](./examples/07-write-tutorial.py) |
 | PRD 编写器        | 产品需求文档      | [08-prd-writer.py](./examples/08-prd-writer.py) |
-| 故事生成器   | 基于 Flow 的故事创作          | [story_generator_agent.py](./examples/flow/story_generator_agent.py) |
+| 故事生成器   | 基于 Flow 的故事创作          | [story_generator_agent.py](./examples/flow/story_generator/story_generator_agent.py) |
 | SQL 查询         | 数据库查询生成          | [09-sql-query.py](./examples/09-sql-query.py) |
 | 金融代理     | 金融分析和任务       | [10-finance-agent.py](./examples/10-finance-agent.py) |
 | 文本界面 | 具有文本 UI 的代理               | [11-textual-agent-interface.py](./examples/11-textual-agent-interface.py) |

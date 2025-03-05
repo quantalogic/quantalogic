@@ -567,7 +567,7 @@ def main():
     import sys
     
     parser = argparse.ArgumentParser(description='Extract workflow from a Python file')
-    parser.add_argument('file_path', nargs='?', default="examples/qflow/story_generator_agent.py",
+    parser.add_argument('file_path', nargs='?', default="examples/flow/simple_story_generator/story_generator_agent.py",
                         help='Path to the Python file containing the workflow')
     parser.add_argument('--output', '-o', default="./generated_workflow.py",
                         help='Output path for the executable Python script')
