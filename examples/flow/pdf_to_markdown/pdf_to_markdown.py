@@ -8,7 +8,7 @@
 #     "pydantic>=2.0",
 #     "asyncio",
 #     "jinja2",
-#     "py-zerox @ git+https://github.com/getomni-ai/zerox.git",
+#     "py-zerox",
 #     "pdf2image",
 #     "pillow",
 #     "typer",

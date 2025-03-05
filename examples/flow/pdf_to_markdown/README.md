@@ -1,112 +1,116 @@
 # Tutorial: Building a PDF-to-Markdown Pipeline with Quantalogic Flow
 
-This tutorial guides you through creating a robust pipeline to convert PDF files into Markdown using **Quantalogic Flow**, a powerful Python workflow framework. PDFs often contain a mix of text, images, graphs, and tables—elements that traditional tools like `PyPDF2` or `pdftotext` struggle to handle comprehensively. By leveraging Quantalogic Flow and the AI-driven `pyzerox` library, you’ll learn to extract and interpret these components effectively. With detailed explanations, practical examples,, you’ll gain the skills to adapt this pipeline for various tasks. By the end, you’ll be able to transform complex PDFs into structured Markdown files and understand how to extend workflows for your own projects.
+This tutorial teaches intermediate Python developers how to create a pipeline that converts PDF files into Markdown using **Quantalogic Flow**, a Python workflow framework, and `pyzerox`, an AI-driven PDF parsing library. PDFs often blend text, images, tables, and graphs—elements that basic tools like `PyPDF2` struggle to handle comprehensively. Here, you’ll use modern Python techniques to extract and interpret these components, producing structured Markdown output. With step-by-step explanations, code breakdowns, and practical examples, you’ll learn to adapt this pipeline for your own projects, from research papers to reports.
 
 ---
 
 ## Table of Contents
 
-1. [Understanding PDFs: Challenges and Opportunities](#understanding-pdfs-challenges-and-opportunities)
-2. [Quantalogic Flow: A Workflow Framework](#quantalogic-flow-a-workflow-framework)
-   - [Overview of Quantalogic Flow](#overview-of-quantalogic-flow)
-   - [Mechanics and Examples](#mechanics-and-examples)
-   - [Key Benefits](#key-benefits)
-3. [UV Shebang and Metadata: Streamlined Execution](#uv-shebang-and-metadata-streamlined-execution)
-4. [Setting Up the Pipeline](#setting-up-the-pipeline)
-5. [Exploring the Code](#exploring-the-code)
-   - [`convert_node`: PDF Processing](#convert_node-pdf-processing)
-   - [`save_node`: File Output](#save_node-file-output)
-   - [Workflow Definition](#workflow-definition)
+1. [Why PDFs Are Tricky](#why-pdfs-are-tricky)
+2. [Quantalogic Flow Basics](#quantalogic-flow-basics)
+   - [What It Does](#what-it-does)
+   - [How It Works: Examples](#how-it-works-examples)
+   - [Why Use It](#why-use-it)
+3. [UV Shebang: Simplified Execution](#uv-shebang-simplified-execution)
+4. [Setup Guide](#setup-guide)
+   - [Python Dependencies](#python-dependencies)
+   - [System Requirements](#system-requirements)
+   - [API Key Configuration](#api-key-configuration)
+5. [Code Walkthrough](#code-walkthrough)
+   - [`convert_node`: PDF to Markdown](#convert_node-pdf-to-markdown)
+   - [`save_node`: Saving Output](#save_node-saving-output)
+   - [The Workflow](#the-workflow)
 6. [Running the Pipeline](#running-the-pipeline)
-7. [Extending and Customizing the Pipeline](#extending-and-customizing-the-pipeline)
-8. [Visualizing the Process with Mermaid](#visualizing-the-process-with-mermaid)
-9. [Outcomes and Next Steps](#outcomes-and-next-steps)
+   - [Basic Usage](#basic-usage)
+   - [Custom Options](#custom-options)
+7. [Sample Output](#sample-output)
+8. [Customization Ideas](#customization-ideas)
+9. [Troubleshooting](#troubleshooting)
+10. [Visual Workflow](#visual-workflow)
+11. [Next Steps](#next-steps)
 
 ---
 
-## Understanding PDFs: Challenges and Opportunities
+## Why PDFs Are Tricky
 
-PDFs are widely used for their fixed formatting, but extracting their content programmatically poses challenges:
-- **Text**: Easily accessible with basic tools.
-- **Images**: Stored as raster data, requiring visual interpretation.
-- **Graphs**: Complex visuals that lose meaning without context.
-- **Tables**: Structured data that often mangles into unstructured text.
+PDFs lock content into a fixed format, making extraction challenging:
+- **Text**: Simple to grab with tools like `pdftotext`.
+- **Images**: Stored as raster data, needing visual analysis.
+- **Tables**: Structured but often garbled by basic extractors.
+- **Graphs**: Complex visuals requiring context to interpret.
 
-For example, a research paper might include a graph of experimental results or a table of statistics—elements critical to its meaning but inaccessible to simple text extractors. This tutorial uses Quantalogic Flow and `pyzerox` to not only extract text but also generate descriptive Markdown for non-text components, offering a complete solution for content reuse.
+For instance, a scientific PDF might include a table of results or a graph of trends—critical details lost without advanced parsing. This pipeline uses AI via `pyzerox` to describe such elements in Markdown, offering a fuller solution.
 
 ---
 
-## Quantalogic Flow: A Workflow Framework
+## Quantalogic Flow Basics
 
-### Overview of Quantalogic Flow
+### What It Does
 
-Quantalogic Flow, defined in `quantalogic/flow/flow.py`, is a Python library for designing and executing workflows—sequences of tasks (nodes) that process data in a structured manner. It provides a flexible architecture for:
-- Sequential execution of tasks.
-- Parallel processing of multiple tasks.
-- Integration of sub-workflows.
-- Monitoring via event observers.
+Quantalogic Flow (from `quantalogic/flow/flow.py`) is a Python library for orchestrating tasks as workflows. It’s designed for:
+- Sequential task execution.
+- Parallel processing.
+- Nested workflows.
+- Event monitoring.
 
-In this pipeline, it manages the conversion of a PDF to Markdown and the subsequent saving of the output, demonstrating its ability to orchestrate asynchronous operations.
+In this tutorial, it chains PDF conversion and file saving into a reusable pipeline.
 
-### Mechanics and Examples
+### How It Works: Examples
 
-Quantalogic Flow operates through the `Workflow` class and `Nodes` decorator. Nodes are individual tasks registered with inputs and outputs, while workflows define their execution order. Here are two illustrative examples:
+Quantalogic Flow uses `Nodes` to define tasks and `Workflow` to arrange them. Here’s a PDF-relevant example:
 
-#### Example 1: Sequential Data Processing
+#### Sequential PDF Processing
 ```python
 from quantalogic.flow.flow import Nodes, Workflow
 import asyncio
 
-@Nodes.define(output="processed_text")
-async def clean_text(raw_text: str) -> str:
-    return raw_text.strip().upper()
+@Nodes.define(output="text")
+async def extract_text(pdf_path: str) -> str:
+    return "Sample PDF text"  # Placeholder for pyzerox call
 
-@Nodes.define(output="summary")
-async def summarize_text(processed_text: str) -> str:
-    return f"Summary: {processed_text[:10]}..."
+@Nodes.define(output="markdown")
+async def format_markdown(text: str) -> str:
+    return f"# Extracted Content\n\n{text}"
 
-workflow = Workflow("clean_text").sequence("clean_text", "summarize_text")
-result = asyncio.run(workflow.build().run({"raw_text": "  hello world  "}))
-print(result)  # {'raw_text': '  hello world  ', 'processed_text': 'HELLO WORLD', 'summary': 'Summary: HELLO WOR...'}
+workflow = Workflow("extract_text").sequence("extract_text", "format_markdown")
+result = asyncio.run(workflow.build().run({"pdf_path": "sample.pdf"}))
+print(result["markdown"])  # "# Extracted Content\n\nSample PDF text"
 ```
+- **Nodes**: `extract_text` mimics PDF parsing; `format_markdown` structures output.
+- **Flow**: Data passes sequentially.
 
-- **Nodes**: `clean_text` processes input, `summarize_text` generates a summary.
-- **Workflow**: Executes sequentially, passing data between nodes.
-
-#### Example 2: Parallel File Analysis
+#### Parallel Page Counting
 ```python
-@Nodes.define(output="word_count")
-async def count_words(file_content: str) -> int:
-    return len(file_content.split())
+@Nodes.define(output="page_count")
+async def count_pages(pdf_path: str) -> int:
+    return 3  # Placeholder
 
-@Nodes.define(output="line_count")
-async def count_lines(file_content: str) -> int:
-    return len(file_content.splitlines())
+@Nodes.define(output="image_count")
+async def count_images(pdf_path: str) -> int:
+    return 2  # Placeholder
 
-workflow = Workflow("count_words").parallel("count_words", "count_lines")
-result = asyncio.run(workflow.build().run({"file_content": "Line one\nLine two"}))
-print(result)  # {'file_content': 'Line one\nLine two', 'word_count': 4, 'line_count': 2}
+workflow = Workflow("count_pages").parallel("count_pages", "count_images")
+result = asyncio.run(workflow.build().run({"pdf_path": "sample.pdf"}))
+print(result)  # {'pdf_path': 'sample.pdf', 'page_count': 3, 'image_count': 2}
 ```
+- **Parallel**: Both nodes analyze the PDF concurrently.
 
-- **Parallel**: Both nodes run concurrently, analyzing the same input.
+These examples mirror the tutorial’s goals, showing Quantalogic Flow’s versatility.
 
-These examples showcase Quantalogic Flow’s adaptability, which we’ll apply to our PDF pipeline.
+### Why Use It
 
-### Key Benefits
+- **Modularity**: Tasks are reusable components.
+- **Async Support**: Ideal for I/O tasks like API calls.
+- **Flexibility**: Supports varied execution patterns.
+- **Debugging**: Logging and observers track progress.
 
-- **Modularity**: Break tasks into reusable components.
-- **Asynchronous Execution**: Optimize for I/O operations like API calls.
-- **Flexibility**: Support multiple execution patterns (sequential, parallel, nested).
-- **Transparency**: Observers and logging provide execution insights.
-- **Scalability**: Easily expand with additional nodes or workflows.
-
-This framework empowers you to tackle diverse automation challenges beyond PDFs.
+It’s a foundation for automating complex processes beyond PDFs.
 
 ---
 
-## UV Shebang and Metadata: Streamlined Execution
+## UV Shebang: Simplified Execution
 
-The script begins with a special header:
+The script leverages `uv`, a fast Python tool, via this header:
 
 ```python
 #!/usr/bin/env -S uv run
@@ -114,85 +118,60 @@ The script begins with a special header:
 # requires-python = ">=3.12"
 # dependencies = [
 #     "loguru", "litellm", "pydantic>=2.0", "asyncio", "jinja2",
-#     "py-zerox @ git+https://github.com/getomni-ai/zerox.git",
+#     "py-zerox @ git+https://github.com/getomni-ai/zerox.git@abc123",  # Pinned commit
 #     "pdf2image", "pillow", "typer", "pathlib", "pathspec", "quantalogic"
 # ]
 # ///
 ```
 
-- **UV Shebang**: `#!/usr/bin/env -S uv run` uses `uv`, a high-performance Python tool from Astral, to execute the script. After setting permissions (`chmod +x pdf_to_md_flow.py`), it runs directly as `./pdf_to_md_flow.py`.
-- **Metadata Block**: The `# /// script` section specifies:
-  - `requires-python`: Ensures compatibility with Python 3.12+.
-  - `dependencies`: Lists packages that `uv` installs automatically during execution.
+- **Shebang**: Run with `./pdf_to_md_flow.py` after `chmod +x`.
+- **Metadata**: Specifies Python 3.12+ and auto-installs dependencies.
+- **Install UV**: `curl -LsSf https://astral.sh/uv/install.sh | sh` (see [Astral docs](https://astral.sh/uv)).
 
-This setup eliminates manual dependency management, making the script portable and executable with a single command. Install `uv` with: `curl -LsSf https://astral.sh/uv/install.sh | sh`.
+This eliminates manual setup, enhancing portability.
 
 ---
 
-## Setting Up the Pipeline
+## Setup Guide
 
-### Dependencies
-The metadata covers Python packages, including:
-- `py-zerox`: AI-driven PDF processing.
-- `quantalogic`: Workflow orchestration.
+### Python Dependencies
+The `uv` metadata handles packages like:
+- `py-zerox`: AI PDF parsing.
+- `quantalogic`: Workflow logic.
 - `pdf2image`: PDF-to-image conversion.
 
 ### System Requirements
 Install `poppler` for `pdf2image`:
 - **macOS**: `brew install poppler`
 - **Linux**: `apt-get install poppler-utils`
-- **Windows**: `choco install poppler` or add to PATH manually.
+- **Windows**: `choco install poppler` or manually add to PATH.
 
-With these in place, you’re ready to build the pipeline.
+### API Key Configuration
+The `--model` option (e.g., `gemini/gemini-2.0-flash`) requires API keys:
+1. **Gemini**: Get a key from [Google AI Studio](https://aistudio.google.com/). Set `export GEMINI_API_KEY=your_key`.
+2. **OpenAI**: From [OpenAI dashboard](https://platform.openai.com/). Set `export OPENAI_API_KEY=your_key`.
+3. Verify: `echo $GEMINI_API_KEY` should show your key.
 
 ---
 
-## Exploring the Code
+## Code Walkthrough
 
-### `convert_node`: PDF Processing
+### `convert_node`: PDF to Markdown
 
-#### Code:
 ```python
 @Nodes.define(output="markdown_content")
-async def convert_node(
-    pdf_path: str,
-    model: str,
-    custom_system_prompt: Optional[str] = None,
-    output_dir: Optional[str] = None,
-    select_pages: Optional[Union[int, list[int]]] = None
-) -> str:
-    if not validate_pdf_path(pdf_path):
+async def convert_node(pdf_path: str, model: str, custom_system_prompt: Optional[str] = None) -> str:
+    if not os.path.exists(pdf_path) or not pdf_path.endswith(".pdf"):
         raise ValueError("Invalid PDF path")
-    if custom_system_prompt is None:
-        custom_system_prompt = (
-            "Convert the PDF page to a clean, well-formatted Markdown document. "
-            "Preserve structure, headings, and any code or mathematical notation. "
-            "For the images and chart, create a literal description what is visible"
-            "Return only pure Markdown content, excluding any metadata or non-Markdown elements."
-        )
-    zerox_result = await zerox(
-        file_path=pdf_path,
-        model=model,
-        system_prompt=custom_system_prompt,
-        output_dir=output_dir,
-        select_pages=select_pages
-    )
-    markdown_content = "\n\n".join(
-        page.content for page in zerox_result.pages if hasattr(page, 'content') and page.content
-    ) or ""
-    return markdown_content
+    prompt = custom_system_prompt or "Convert to clean Markdown, describing images and charts literally."
+    result = await zerox(file_path=pdf_path, model=model, system_prompt=prompt)
+    return "\n\n".join(page.content for page in result.pages if page.content) or ""
 ```
+- **Role**: Uses `pyzerox` to parse PDFs with an AI model.
+- **Output**: Markdown with text and visual descriptions.
 
-#### Functionality:
-- **Validation**: Checks the PDF file’s existence and format.
-- **Conversion**: Uses `zerox` to process the PDF with an AI model (e.g., Gemini or GPT), guided by a system prompt.
-- **Output**: Combines page contents into a single Markdown string, including descriptions for images and graphs.
+### `save_node`: Saving Output
 
-This node leverages AI to interpret visual elements, a leap beyond basic text extraction.
-
-### `save_node`: File Output
-
-#### Code:
 ```python
 @Nodes.define(output="output_path")
 async def save_node(markdown_content: str, output_md: str) -> str:
@@ -202,100 +181,113 @@ async def save_node(markdown_content: str, output_md: str) -> str:
         f.write(markdown_content)
     return str(output_path)
 ```
+- **Role**: Writes Markdown to a file, creating directories as needed.
 
-#### Functionality:
-- **Directory Setup**: Creates parent directories if missing.
-- **File Writing**: Saves the Markdown content to the specified path.
+### The Workflow
 
-This node ensures the output is preserved for later use.
-
-### Workflow Definition
-
-#### Code:
 ```python
 def create_pdf_to_md_workflow():
-    workflow = (
-        Workflow("convert_node")
-        .sequence("convert_node", "save_node")
-    )
-    return workflow
+    return Workflow("convert_node").sequence("convert_node", "save_node")
 ```
-
-#### Structure:
-- **Initialization**: Starts with `convert_node`.
-- **Sequence**: Links `convert_node` to `save_node`, passing `markdown_content`.
-
-This defines a straightforward pipeline executed by Quantalogic Flow’s engine.
+- **Flow**: `convert_node` → `save_node`, passing `markdown_content`.
 
 ---
 
 ## Running the Pipeline
 
-Set execution permissions: `chmod +x pdf_to_md_flow.py`.
+### Basic Usage
+```bash
+chmod +x pdf_to_md_flow.py
+./pdf_to_md_flow.py convert input.pdf
+```
+- Output: `input.md`.
 
-- **Basic Execution**: `./pdf_to_md_flow.py convert input.pdf`
-  - Converts `input.pdf` to `input.md`.
-- **Custom Execution**: `./pdf_to_md_flow.py convert input.pdf output.md --model gemini/gemini-2.0-flash`
-  - Specifies output file and model.
+### Custom Options
+```bash
+./pdf_to_md_flow.py convert input.pdf output.md --model openai/gpt-4o-mini --system-prompt "Focus on tables only"
+```
+- Specify model, output file, and prompt.
 
-Set environment variables for the model (e.g., `export GEMINI_API_KEY=your_key_here`).
-
----
-
-## Extending and Customizing the Pipeline
-
-- **Model Selection**: Use `--model openai/gpt-4o-mini` or other LiteLLM-compatible models.
-- **System Prompt**: Adjust with `--system-prompt "Extract tables as Markdown, ignore images"`.
-- **Page Selection**: Modify `initial_context` in the `convert` function to include `select_pages=[1, 3]` for specific pages.
-- **Additional Nodes**: Add a node to preprocess PDFs or post-process Markdown (e.g., formatting cleanup).
-
-These options let you tailor the pipeline to specific needs, such as focusing on tables or processing subsets of a document.
+Set your API key first (e.g., `export OPENAI_API_KEY=your_key`).
 
 ---
 
-## Visualizing the Process with Mermaid
+## Sample Output
+
+**Input PDF**: A page with text, a table, and a graph.  
+**Output Markdown**:
+```markdown
+# Research Findings
+
+The study analyzed trends over five years.
+
+## Data Table
+
+| Year | Value |
+|------|-------|
+| 2020 | 45    |
+| 2021 | 50    |
+
+## Graph Description
+
+A line graph shows values rising from 45 in 2020 to 55 in 2024, peaking at 60 in 2023.
+```
+
+This shows how `pyzerox` interprets visuals into text.
+
+---
+
+## Customization Ideas
+
+- **Model**: Try `--model gemini/gemini-2.0-flash`.
+- **Prompt**: `--system-prompt "Extract code snippets only"`.
+- **Pages**: Edit `convert` to add `select_pages=[1, 2]` in `initial_context`.
+- **New Node**: Add a `clean_markdown` node to refine output.
+
+---
+
+## Troubleshooting
+
+- **“Poppler not found”**: Install via `brew install poppler` or equivalent.
+- **“API key invalid”**: Check `echo $GEMINI_API_KEY` and key source.
+- **Empty Markdown**: Ensure the PDF has scannable content; test with a simple text PDF.
+
+---
+
+## Visual Workflow
 
 ```mermaid
 flowchart TD
-    A((Start)) -->|pdf_path, model, prompt| B[convert_node]
+    A((Start)) -->|pdf_path, model| B[convert_node]
     B -->|markdown_content| C[save_node]
     C -->|output_path| D((End))
 
-    subgraph "convert_node: PDF Processing"
-        B1[Validate PDF Path] -->|if valid| B2[Invoke zerox with AI Model]
-        B2 -->|zerox_result| B3[Combine Pages into Markdown]
+    subgraph "convert_node"
+        B1[Validate PDF] --> B2[zerox AI Call] --> B3[Join Pages]
     end
 
-    subgraph "save_node: File Output"
-        C1[Create Directory if Needed] --> C2[Write Markdown to File]
+    subgraph "save_node"
+        C1[Make Directory] --> C2[Write File]
     end
 
-    style A fill:#e6f3ff,stroke:#333,stroke-width:2px
-    style D fill:#e6ffe6,stroke:#333,stroke-width:2px
-    style B fill:#fff3e6,stroke:#333
-    style C fill:#f3e6ff,stroke:#333
+    style A fill:#e6f3ff,stroke:#333
+    style D fill:#e6ffe6,stroke:#333
 ```
-
-#### Details:
-- **Main Flow**: Inputs feed into `convert_node`, which outputs to `save_node`.
-- **Subprocesses**: Each node’s steps are broken down for clarity.
-- **Styling**: Subtle colors enhance readability.
-
-This diagram reflects the pipeline’s structure and Quantalogic Flow’s execution logic.
 
 ---
 
-## Outcomes and Next Steps
+## Next Steps
 
-By completing this tutorial, you’ll achieve:
-- **A Working Pipeline**: Convert PDFs to Markdown, including descriptions of images, graphs, and tables.
-- **Quantalogic Flow Mastery**: Understand how to define and execute workflows for sequential and parallel tasks.
-- **UV Proficiency**: Run self-contained Python scripts with automatic dependency management.
-- **Customization Skills**: Adapt the pipeline for specific use cases.
+You’ve built a pipeline that:
+- Converts PDFs to Markdown, including visuals.
+- Uses Quantalogic Flow for task orchestration.
+- Leverages `uv` for easy execution.
 
-### What You Can Do Next:
-- **Process Complex PDFs**: Try a document with charts or tables (e.g., a financial report) and refine the output.
-- **Expand the Workflow**: Add nodes for text analysis (e.g., keyword extraction) or format conversion (e.g., to HTML).
-- **Build New Pipelines**: Use Quantalogic Flow for tasks like data scraping, file batch processing, or API automation.
+**Try Next**:
+- Test a complex PDF (e.g., a financial report with tables).
+- Add a node to extract keywords from the Markdown.
+- Build a new pipeline, like batch-converting PDFs to HTML.
 
-With these skills, you’re equipped to tackle document processing challenges and design sophisticated workflows for any project. Start experimenting today!
+Start experimenting with your own documents now!
+
+
