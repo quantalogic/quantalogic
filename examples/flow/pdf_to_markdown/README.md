@@ -4,6 +4,31 @@ This tutorial teaches intermediate Python developers how to create a pipeline th
 
 ---
 
+## Quantalogic Flow Visualization
+
+```mermaid
+graph LR
+    A[PDF File] --> B[Workflow]
+    B --> C[convert_node]
+    C -->|markdown_content| D[save_node]
+    D --> E[Markdown File]
+    
+    style B fill:#f5f5f5,stroke:#333,stroke-width:1px
+    style C fill:#bbdefb,stroke:#1976d2,stroke-width:1px
+    style D fill:#bbdefb,stroke:#1976d2,stroke-width:1px
+    style A fill:#c8e6c9,stroke:#388e3c,stroke-width:1px
+    style E fill:#c8e6c9,stroke:#388e3c,stroke-width:1px
+```
+
+The diagram shows the simple flow of the PDF-to-Markdown conversion process:
+
+1. PDF file is input to the Quantalogic Workflow
+2. `convert_node` transforms PDF content to Markdown using AI
+3. `save_node` writes the processed content to a file
+4. Markdown file is produced as output
+
+---
+
 ## Table of Contents
 
 1. [Why PDFs Are Tricky](#why-pdfs-are-tricky)
