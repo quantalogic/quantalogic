@@ -55,14 +55,14 @@ def create_tool_instance(tool_class, **kwargs):
         return None
         
     try:
-        # Extract the name from the class name if not provided
-        if 'name' not in kwargs:
+        # Only set name if the class doesn't already define it
+        if 'name' not in kwargs and not hasattr(tool_class, 'name'):
             class_name = tool_class.__name__
             kwargs['name'] = class_name.lower().replace('tool', '')
             
         # Create and return the tool instance
         instance = tool_class(**kwargs)
-        logger.debug(f"Successfully created tool instance: {kwargs.get('name')}")
+        logger.debug(f"Successfully created tool instance: {tool_class.__name__}")
         return instance
     except Exception as e:
         logger.error(f"Failed to instantiate {tool_class.__name__}: {str(e)}")
@@ -72,33 +72,33 @@ def create_tool_instance(tool_class, **kwargs):
 TOOL_IMPORTS = {
     # LLM Tools
     "llm": lambda: _import_tool("quantalogic.tools.llm_tool", "LLMTool"),
-    "llm_vision": lambda: _import_tool("quantalogic.tools.llm_tool", "LLMVisionTool"),
-    "llm_image_generation": lambda: _import_tool("quantalogic.tools.llm_tool", "LLMImageGenerationTool"),
+    "llm_vision": lambda: _import_tool("quantalogic.tools.llm_vision_tool", "LLMVisionTool"),
+    "llm_image_generation": lambda: _import_tool("quantalogic.tools.image_generation.dalle_e", "LLMImageGenerationTool"),
     
     # File Tools
-    "download_http_file": lambda: _import_tool("quantalogic.tools.download_file_tool", "PrepareDownloadTool"),
+    "download_http_file": lambda: _import_tool("quantalogic.tools.utilities", "PrepareDownloadTool"),
     "write_file": lambda: _import_tool("quantalogic.tools.write_file_tool", "WriteFileTool"),
-    "edit_whole_content": lambda: _import_tool("quantalogic.tools.file_tools", "EditWholeContentTool"),
-    "read_file_block": lambda: _import_tool("quantalogic.tools.file_tools", "ReadFileBlockTool"),
-    "read_file": lambda: _import_tool("quantalogic.tools.file_tools", "ReadFileTool"),
-    "replace_in_file": lambda: _import_tool("quantalogic.tools.file_tools", "ReplaceInFileTool"),
-    "list_directory": lambda: _import_tool("quantalogic.tools.file_tools", "ListDirectoryTool"),
+    "edit_whole_content": lambda: _import_tool("quantalogic.tools", "EditWholeContentTool"),
+    "read_file_block": lambda: _import_tool("quantalogic.tools", "ReadFileBlockTool"),
+    "read_file": lambda: _import_tool("quantalogic.tools", "ReadFileTool"),
+    "replace_in_file": lambda: _import_tool("quantalogic.tools", "ReplaceInFileTool"),
+    "list_directory": lambda: _import_tool("quantalogic.tools", "ListDirectoryTool"),
     
     # Search Tools
     "duck_duck_go_search": lambda: _import_tool("quantalogic.tools", "DuckDuckGoSearchTool"),
     "wikipedia_search": lambda: _import_tool("quantalogic.tools", "WikipediaSearchTool"),
-    "google_news": lambda: _import_tool("quantalogic.tools", "GoogleNewsTool"),
+    "google_news": lambda: _import_tool("quantalogic.tools.google_packages", "GoogleNewsTool"),
     "search_definition_names": lambda: _import_tool("quantalogic.tools", "SearchDefinitionNames"),
     "ripgrep": lambda: _import_tool("quantalogic.tools", "RipgrepTool"),
     
     # Execution Tools
-    "execute_bash_command": lambda: _import_tool("quantalogic.tools.execution_tools", "ExecuteBashCommandTool"),
-    "nodejs": lambda: _import_tool("quantalogic.tools.execution_tools", "NodeJsTool"),
-    "python": lambda: _import_tool("quantalogic.tools.execution_tools", "PythonTool"),
-    "safe_python_interpreter": lambda: _import_tool("quantalogic.tools.execution_tools", "SafePythonInterpreterTool"),
+    "execute_bash_command": lambda: _import_tool("quantalogic.tools", "ExecuteBashCommandTool"),
+    "nodejs": lambda: _import_tool("quantalogic.tools", "NodeJsTool"),
+    "python": lambda: _import_tool("quantalogic.tools", "PythonTool"),
+    "safe_python_interpreter": lambda: _import_tool("quantalogic.tools", "SafePythonInterpreterTool"),
     
     # Database Tools
-    "sql_query": lambda: _import_tool("quantalogic.tools.database", "SQLQueryTool"),
+    "sql_query": lambda: _import_tool("quantalogic.tools", "SQLQueryTool"),
     "sql_query_advanced": lambda: _import_tool("quantalogic.tools.database", "SQLQueryToolAdvanced"),
     
     # Document Tools
@@ -140,7 +140,8 @@ TOOL_IMPORTS = {
     "sequence": lambda: _import_tool("quantalogic.tools.utilities", "SequenceTool"),
     "csv_processor": lambda: _import_tool("quantalogic.tools.utilities", "CSVProcessorTool"),
     "mermaid_validator_tool": lambda: _import_tool("quantalogic.tools.utilities", "MermaidValidatorTool"),
-    "download_file_tool": lambda: _import_tool("quantalogic.tools.download_file_tool", "PrepareDownloadTool"),
+    "download_file_tool": lambda: _import_tool("quantalogic.tools.utilities", "PrepareDownloadTool"),
+    "vscode_server_tool": lambda: _import_tool("quantalogic.tools.utilities.vscode_tool", "VSCodeServerTool"),
 }
 
 def create_custom_agent(
@@ -175,61 +176,135 @@ def create_custom_agent(
     # Create event emitter
     event_emitter = EventEmitter()
 
-    # Define tool configurations using create_tool_instance for proper instantiation
+    def get_llm_params(params: dict) -> dict:
+        """Get common parameters for LLM-based tools."""
+        return {
+            "model_name": params.get("model_name", model_name),
+            "on_token": console_print_token if not no_stream else None,
+            "event_emitter": event_emitter
+        }
+
+    # Define tool configurations with default parameters
     tool_configs = {
-        "llm": lambda params: create_tool_instance(TOOL_IMPORTS["llm"](), **params),
-        "llm_vision": lambda params: create_tool_instance(TOOL_IMPORTS["llm_vision"](), **params) if vision_model_name else None,
-        "llm_image_generation": lambda params: create_tool_instance(TOOL_IMPORTS["llm_image_generation"](), **params),
-        "download_http_file": lambda params: create_tool_instance(TOOL_IMPORTS["download_http_file"](), **params),
-        "duck_duck_go_search": lambda params: create_tool_instance(TOOL_IMPORTS["duck_duck_go_search"](), **params),
-        "write_file": lambda params: create_tool_instance(TOOL_IMPORTS["write_file"](), **params),
-        "task_complete": lambda params: create_tool_instance(TOOL_IMPORTS["task_complete"](), **params),
-        "edit_whole_content": lambda params: create_tool_instance(TOOL_IMPORTS["edit_whole_content"](), name="edit_whole_content", **params),
-        "execute_bash_command": lambda params: create_tool_instance(TOOL_IMPORTS["execute_bash_command"](), name="execute_bash_command", **params),
-        "input_question": lambda params: create_tool_instance(TOOL_IMPORTS["input_question"](), name="input_question", **params),
-        "list_directory": lambda params: create_tool_instance(TOOL_IMPORTS["list_directory"](), name="list_directory", **params),
-        "markitdown": lambda params: create_tool_instance(TOOL_IMPORTS["markitdown"](), name="markitdown", **params),
-        "nodejs": lambda params: create_tool_instance(TOOL_IMPORTS["nodejs"](), name="nodejs", **params),
-        "python": lambda params: create_tool_instance(TOOL_IMPORTS["python"](), name="python", **params),
-        "read_file_block": lambda params: create_tool_instance(TOOL_IMPORTS["read_file_block"](), name="read_file_block", **params),
-        "read_file": lambda params: create_tool_instance(TOOL_IMPORTS["read_file"](), name="read_file", **params),
-        "read_html": lambda params: create_tool_instance(TOOL_IMPORTS["read_html"](), name="read_html", **params),
-        "replace_in_file": lambda params: create_tool_instance(TOOL_IMPORTS["replace_in_file"](), name="replace_in_file", **params),
-        "ripgrep": lambda params: create_tool_instance(TOOL_IMPORTS["ripgrep"](), name="ripgrep", **params),
-        "safe_python_interpreter": lambda params: create_tool_instance(TOOL_IMPORTS["safe_python_interpreter"](), name="safe_python_interpreter", **params),
-        "search_definition_names": lambda params: create_tool_instance(TOOL_IMPORTS["search_definition_names"](), name="search_definition_names", **params),
-        "wikipedia_search": lambda params: create_tool_instance(TOOL_IMPORTS["wikipedia_search"](), name="wikipedia_search", **params),
-        "google_news": lambda params: create_tool_instance(TOOL_IMPORTS["google_news"](), name="google_news", **params),
-        "presentation_llm": lambda params: create_tool_instance(TOOL_IMPORTS["presentation_llm"](), name="presentation_llm", **params),
-        "sequence": lambda params: create_tool_instance(TOOL_IMPORTS["sequence"](), name="sequence", **params),
-        "sql_query": lambda params: create_tool_instance(TOOL_IMPORTS["sql_query"](), name="sql_query", **params),
-        "sql_query_advanced": lambda params: create_tool_instance(TOOL_IMPORTS["sql_query_advanced"](), name="sql_query_advanced", **params),
-        "clone_repo_tool": lambda params: create_tool_instance(TOOL_IMPORTS["clone_repo_tool"](), name="clone_repo_tool", **params),
-        "bitbucket_clone_repo_tool": lambda params: create_tool_instance(TOOL_IMPORTS["bitbucket_clone_repo_tool"](), name="bitbucket_clone_repo_tool", **params),
-        "bitbucket_operations_tool": lambda params: create_tool_instance(TOOL_IMPORTS["bitbucket_operations_tool"](), name="bitbucket_operations_tool", **params),
-        "git_operations_tool": lambda params: create_tool_instance(TOOL_IMPORTS["git_operations_tool"](), name="git_operations_tool", **params),
-        "markdown_to_pdf": lambda params: create_tool_instance(TOOL_IMPORTS["markdown_to_pdf"](), name="markdown_to_pdf", **params),
-        "markdown_to_pptx": lambda params: create_tool_instance(TOOL_IMPORTS["markdown_to_pptx"](), name="markdown_to_pptx", **params),
-        "markdown_to_html": lambda params: create_tool_instance(TOOL_IMPORTS["markdown_to_html"](), name="markdown_to_html", **params),
-        "markdown_to_epub": lambda params: create_tool_instance(TOOL_IMPORTS["markdown_to_epub"](), name="markdown_to_epub", **params),
-        "markdown_to_ipynb": lambda params: create_tool_instance(TOOL_IMPORTS["markdown_to_ipynb"](), name="markdown_to_ipynb", **params),
-        "markdown_to_latex": lambda params: create_tool_instance(TOOL_IMPORTS["markdown_to_latex"](), name="markdown_to_latex", **params),
-        "markdown_to_docx": lambda params: create_tool_instance(TOOL_IMPORTS["markdown_to_docx"](), name="markdown_to_docx", **params),
-        "csv_processor": lambda params: create_tool_instance(TOOL_IMPORTS["csv_processor"](), name="csv_processor", **params),
-        "mermaid_validator_tool": lambda params: create_tool_instance(TOOL_IMPORTS["mermaid_validator_tool"](), name="mermaid_validator_tool", **params),
-        "download_file_tool": lambda params: create_tool_instance(TOOL_IMPORTS["download_file_tool"](), name="download_file_tool", **params),
-        "email_tool": lambda params: create_tool_instance(TOOL_IMPORTS["email_tool"](), name="email_tool", **params),
-        "callendar_tool": lambda params: create_tool_instance(TOOL_IMPORTS["callendar_tool"](), name="callendar_tool", **params),
-        "weather_tool": lambda params: create_tool_instance(TOOL_IMPORTS["weather_tool"](), name="weather_tool", **params),
-        "nasa_neows_tool": lambda params: create_tool_instance(TOOL_IMPORTS["nasa_neows_tool"](), name="nasa_neows_tool", **params),
-        "nasa_apod_tool": lambda params: create_tool_instance(TOOL_IMPORTS["nasa_apod_tool"](), name="nasa_apod_tool", **params),
-        "product_hunt_tool": lambda params: create_tool_instance(TOOL_IMPORTS["product_hunt_tool"](), name="product_hunt_tool", **params),
-        "rag_tool": lambda params: create_tool_instance(TOOL_IMPORTS["rag_tool"](), name="rag_tool", **params),
+        # LLM Tools with shared parameters
+        "llm": lambda params: create_tool_instance(TOOL_IMPORTS["llm"](), **get_llm_params(params)),
+        "llm_vision": lambda params: create_tool_instance(TOOL_IMPORTS["llm_vision"](),
+            model_name=params.get("vision_model_name") or vision_model_name,
+            on_token=console_print_token if not no_stream else None,
+            event_emitter=event_emitter
+        ) if vision_model_name else None,
+        "llm_image_generation": lambda params: create_tool_instance(TOOL_IMPORTS["llm_image_generation"](),
+            provider="dall-e",
+            model_name="openai/dall-e-3",
+            on_token=console_print_token if not no_stream else None
+        ),
         
-        # Special handling for Composio tools
-        "email_tool": lambda params: create_tool_instance(TOOL_IMPORTS["email_tool"](), action="EMAIL", name="email_tool", **params),
-        "callendar_tool": lambda params: create_tool_instance(TOOL_IMPORTS["callendar_tool"](), action="CALLENDAR", name="callendar_tool", **params),
-        "weather_tool": lambda params: create_tool_instance(TOOL_IMPORTS["weather_tool"](), action="WEATHER", name="weather_tool", **params),
+        # Simple tools without parameters
+        "download_http_file": lambda _: create_tool_instance(TOOL_IMPORTS["download_http_file"]()),
+        "duck_duck_go_search": lambda _: create_tool_instance(TOOL_IMPORTS["duck_duck_go_search"]()),
+        "write_file": lambda _: create_tool_instance(TOOL_IMPORTS["write_file"]()),
+        "task_complete": lambda _: create_tool_instance(TOOL_IMPORTS["task_complete"]()),
+        "edit_whole_content": lambda _: create_tool_instance(TOOL_IMPORTS["edit_whole_content"]()),
+        "execute_bash_command": lambda _: create_tool_instance(TOOL_IMPORTS["execute_bash_command"]()),
+        "input_question": lambda _: create_tool_instance(TOOL_IMPORTS["input_question"]()),
+        "list_directory": lambda _: create_tool_instance(TOOL_IMPORTS["list_directory"]()),
+        "markitdown": lambda _: create_tool_instance(TOOL_IMPORTS["markitdown"]()),
+        "nodejs": lambda _: create_tool_instance(TOOL_IMPORTS["nodejs"]()),
+        "python": lambda _: create_tool_instance(TOOL_IMPORTS["python"]()),
+        "read_file_block": lambda _: create_tool_instance(TOOL_IMPORTS["read_file_block"]()),
+        "read_file": lambda _: create_tool_instance(TOOL_IMPORTS["read_file"]()),
+        "read_html": lambda _: create_tool_instance(TOOL_IMPORTS["read_html"]()),
+        "replace_in_file": lambda _: create_tool_instance(TOOL_IMPORTS["replace_in_file"]()),
+        "ripgrep": lambda _: create_tool_instance(TOOL_IMPORTS["ripgrep"]()),
+        "search_definition_names": lambda _: create_tool_instance(TOOL_IMPORTS["search_definition_names"]()),
+        "wikipedia_search": lambda _: create_tool_instance(TOOL_IMPORTS["wikipedia_search"]()),
+        "google_news": lambda _: create_tool_instance(TOOL_IMPORTS["google_news"]()),
+        
+        # Tools with specific configurations
+        "safe_python_interpreter": lambda _: create_tool_instance(TOOL_IMPORTS["safe_python_interpreter"](),
+            allowed_modules=["math", "numpy", "pandas", "datetime", "random", "statistics", "decimal"]
+        ),
+        
+        # LLM-based tools with additional parameters
+        "presentation_llm": lambda params: create_tool_instance(TOOL_IMPORTS["presentation_llm"](),
+            **get_llm_params(params),
+            additional_info=params.get("additional_info", "")
+        ),
+        "sequence": lambda params: create_tool_instance(TOOL_IMPORTS["sequence"](),
+            **get_llm_params(params)
+        ),
+        
+        # Database tools
+        "sql_query": lambda params: create_tool_instance(TOOL_IMPORTS["sql_query"](),
+            **get_llm_params(params),
+            connection_string=params.get("connection_string", "")
+        ),
+        "sql_query_advanced": lambda params: create_tool_instance(TOOL_IMPORTS["sql_query_advanced"](),
+            **get_llm_params(params),
+            connection_string=params.get("connection_string", "")
+        ),
+        
+        # Git tools
+        "clone_repo_tool": lambda params: create_tool_instance(TOOL_IMPORTS["clone_repo_tool"](),
+            auth_token=params.get("auth_token", "")
+        ),
+        "bitbucket_clone_repo_tool": lambda params: create_tool_instance(TOOL_IMPORTS["bitbucket_clone_repo_tool"](),
+            access_token=params.get("access_token", "")
+        ),
+        "bitbucket_operations_tool": lambda params: create_tool_instance(TOOL_IMPORTS["bitbucket_operations_tool"](),
+            access_token=params.get("access_token", "")
+        ),
+        "git_operations_tool": lambda params: create_tool_instance(TOOL_IMPORTS["git_operations_tool"](),
+            auth_token=params.get("auth_token", "")
+        ),
+        
+        # Document conversion tools
+        "markdown_to_pdf": lambda _: create_tool_instance(TOOL_IMPORTS["markdown_to_pdf"]()),
+        "markdown_to_pptx": lambda _: create_tool_instance(TOOL_IMPORTS["markdown_to_pptx"]()),
+        "markdown_to_html": lambda _: create_tool_instance(TOOL_IMPORTS["markdown_to_html"]()),
+        "markdown_to_epub": lambda _: create_tool_instance(TOOL_IMPORTS["markdown_to_epub"]()),
+        "markdown_to_ipynb": lambda _: create_tool_instance(TOOL_IMPORTS["markdown_to_ipynb"]()),
+        "markdown_to_latex": lambda _: create_tool_instance(TOOL_IMPORTS["markdown_to_latex"]()),
+        "markdown_to_docx": lambda _: create_tool_instance(TOOL_IMPORTS["markdown_to_docx"]()),
+        
+        # Utility tools
+        "csv_processor": lambda _: create_tool_instance(TOOL_IMPORTS["csv_processor"]()),
+        "mermaid_validator_tool": lambda _: create_tool_instance(TOOL_IMPORTS["mermaid_validator_tool"]()),
+        "download_file_tool": lambda _: create_tool_instance(TOOL_IMPORTS["download_file_tool"]()),
+        
+        # Composio tools
+        "email_tool": lambda _: create_tool_instance(TOOL_IMPORTS["email_tool"](),
+            action="GMAIL_SEND_EMAIL",
+            name="email_tool",
+            description="Send emails via Gmail",
+            need_validation=False
+        ),
+        "callendar_tool": lambda _: create_tool_instance(TOOL_IMPORTS["callendar_tool"](),
+            action="GOOGLECALENDAR_CREATE_EVENT",
+            name="callendar_tool",
+            description="Create events in Google Calendar",
+            need_validation=False
+        ),
+        "weather_tool": lambda _: create_tool_instance(TOOL_IMPORTS["weather_tool"](),
+            action="WEATHERMAP_WEATHER",
+            name="weather_tool",
+            description="Get weather information for a location"
+        ),
+        
+        # NASA tools
+        "nasa_neows_tool": lambda _: create_tool_instance(TOOL_IMPORTS["nasa_neows_tool"]()),
+        "nasa_apod_tool": lambda _: create_tool_instance(TOOL_IMPORTS["nasa_apod_tool"]()),
+        "product_hunt_tool": lambda _: create_tool_instance(TOOL_IMPORTS["product_hunt_tool"]()),
+        
+        # RAG tool
+        "rag_tool": lambda params: create_tool_instance(TOOL_IMPORTS["rag_tool"](),
+            vector_store=params.get("vector_store", "chroma"),
+            embedding_model=params.get("embedding_model", "openai"),
+            persist_dir=storage_dir,
+            document_paths=params.get("document_paths", [])
+        ),
+        
+        "vscode_server_tool": lambda _: create_tool_instance(TOOL_IMPORTS["vscode_server_tool"]())
     }
 
     # Log available tool types before processing
