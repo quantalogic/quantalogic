@@ -2,18 +2,20 @@
 
 ## 1. Introduction 🌟
 
-The **Quantalogic Flow YAML DSL** is a human-readable, declarative language for defining workflows within the `quantalogic.flow` Python package. As of **March 5, 2025**, it offers a robust feature set for task automation:
+The **Quantalogic Flow YAML DSL** is a human-readable, declarative language for defining workflows within the `quantalogic.flow` Python package. As of **March 5, 2025**, it’s packed with features for task automation:
 
 - **Function Execution** ⚙️: Run async Python functions from embedded code, PyPI, local files, or URLs.
 - **Execution Flow** ➡️: Support sequential, conditional, parallel, branching, and converging transitions.
 - **Sub-Workflows** 🌳: Enable hierarchical, modular designs.
 - **LLM Integration** 🤖: Harness Large Language Models for text or structured outputs.
+- **Template Nodes** 📝: Render dynamic content with Jinja2 templates.
+- **Input Mapping** 🔗: Flexibly map node parameters to context or custom logic.
 - **Context Management** 📦: Share state dynamically across nodes.
 - **Robustness** 🛡️: Include retries, delays, and timeouts.
 - **Observers** 👀: Monitor execution with custom handlers.
 - **Programmatic Control** 🧑‍💻: Manage workflows via `WorkflowManager`.
 
-This DSL integrates with `Workflow`, `WorkflowEngine`, and `Nodes` classes, making it versatile for simple scripts to complex AI-driven workflows. We’ll use an updated **Story Generator Workflow** as a running example, derived from `examples/flow/simple_story_generator/story_generator_agent.py`, now enhanced with branching and convergence. Let’s dive in! 🎉
+This DSL integrates with `Workflow`, `WorkflowEngine`, and `Nodes` classes, making it versatile for everything from simple scripts to complex AI-driven workflows. We’ll use an updated **Story Generator Workflow** as a running example, derived from `examples/flow/simple_story_generator/story_generator_agent.py`, now enhanced with branching, convergence, input mapping, and template nodes. Let’s dive in! 🎉
 
 ```mermaid
 graph TD
@@ -33,7 +35,7 @@ graph TD
 A workflow YAML file comprises five core sections:
 
 - **`functions`**: Python code definitions.
-- **`nodes`**: Task specifications.
+- **`nodes`**: Task specifications with input mappings and template support.
 - **`workflow`**: Flow orchestration with branching and convergence.
 - **`dependencies`**: Python module dependencies.
 - **`observers`**: Event monitoring.
@@ -44,7 +46,7 @@ Here’s the skeleton:
 functions:
   # Python magic ✨
 nodes:
-  # Tasks 🎯
+  # Tasks with input mappings & templates 🎯
 workflow:
   # Flow control with branches & convergence 🚦
 dependencies:
@@ -54,7 +56,7 @@ observers:
 ```
 
 ### Story Generator Example
-We’ll evolve the Story Generator to include branching (e.g., based on story tone) and convergence (e.g., finalizing the story), showcasing the new features step-by-step.
+We’ll evolve the Story Generator to include branching (e.g., based on story tone), convergence (e.g., finalizing the story), **input mapping** for flexible parameter passing, and a **template node** to format chapter summaries—showcasing these shiny new features step-by-step.
 
 ---
 
@@ -62,7 +64,7 @@ We’ll evolve the Story Generator to include branching (e.g., based on story to
 
 ### Python Version (`story_generator_agent.py`)
 
-This updated script generates a story with tone-based branching and convergence:
+This updated script generates a story with tone-based branching, convergence, input mapping, and a template node:
 
 ```python
 #!/usr/bin/env python
@@ -96,12 +98,16 @@ async def generate_chapter(outline: str, chapter_num: int, style: str):
 async def generate_dramatic_chapter(outline: str, chapter_num: int):
     return ""
 
+@Nodes.template_node(output="chapter_summary", template="Chapter {chapter_num}: {chapter}")
+async def summarize_chapter(rendered_content: str, chapter: str, chapter_num: int):
+    return rendered_content
+
 @Nodes.define(output="updated_context")
 async def update_progress(**context):
     chapters = context.get('chapters', [])
     completed_chapters = context.get('completed_chapters', 0)
-    chapter = context.get('chapter', '')
-    updated_chapters = chapters + [chapter]
+    chapter_summary = context.get('chapter_summary', '')
+    updated_chapters = chapters + [chapter_summary]
     return {**context, "chapters": updated_chapters, "completed_chapters": completed_chapters + 1}
 
 @Nodes.define(output="continue_generating")
@@ -114,14 +120,17 @@ async def finalize_story(chapters: list):
 
 workflow = (
     Workflow("generate_outline")
+    .node("generate_outline", inputs_mapping={"genre": "story_genre", "num_chapters": "chapter_count"})
     .then("analyze_tone")
     .branch([
         ("generate_chapter", lambda ctx: ctx.get("tone") == "light"),
         ("generate_dramatic_chapter", lambda ctx: ctx.get("tone") == "dark")
     ])
+    .then("summarize_chapter")
     .then("update_progress")
     .then("check_if_complete")
     .then("generate_chapter", condition=lambda ctx: ctx.get("continue_generating", False))
+    .then("summarize_chapter")
     .then("update_progress")
     .then("check_if_complete")
     .converge("finalize_story")
@@ -134,8 +143,8 @@ workflow.add_observer(story_observer)
 if __name__ == "__main__":
     async def main():
         initial_context = {
-            "genre": "science fiction",
-            "num_chapters": 3,
+            "story_genre": "science fiction",
+            "chapter_count": 3,
             "chapters": [],
             "completed_chapters": 0,
             "style": "descriptive"
@@ -148,7 +157,7 @@ if __name__ == "__main__":
 
 ### YAML Version (`story_generator_workflow.yaml`)
 
-Here’s the updated YAML with branching and convergence:
+Here’s the updated YAML with branching, convergence, input mapping, and a template node:
 
 ```yaml
 functions:
@@ -158,8 +167,8 @@ functions:
       async def update_progress(**context):
           chapters = context.get('chapters', [])
           completed_chapters = context.get('completed_chapters', 0)
-          chapter = context.get('chapter', '')
-          updated_chapters = chapters + [chapter]
+          chapter_summary = context.get('chapter_summary', '')
+          updated_chapters = chapters + [chapter_summary]
           return {**context, "chapters": updated_chapters, "completed_chapters": completed_chapters + 1}
   check_if_complete:
     type: embedded
@@ -185,6 +194,9 @@ nodes:
       prompt_template: "Create a story outline for a {genre} story with {num_chapters} chapters."
       temperature: 0.7
       max_tokens: 1000
+    inputs_mapping:
+      genre: "story_genre"
+      num_chapters: "chapter_count"
     output: outline
   analyze_tone:
     llm_config:
@@ -201,6 +213,9 @@ nodes:
       prompt_template: "Write chapter {chapter_num} for this story outline: {outline}. Style: {style}."
       temperature: 0.7
       max_tokens: 1000
+    inputs_mapping:
+      chapter_num: "completed_chapters"
+      style: "style"
     output: chapter
   generate_dramatic_chapter:
     llm_config:
@@ -209,7 +224,15 @@ nodes:
       prompt_template: "Write a dramatic chapter {chapter_num} for this outline: {outline}."
       temperature: 0.7
       max_tokens: 1000
+    inputs_mapping:
+      chapter_num: "completed_chapters"
     output: chapter
+  summarize_chapter:
+    template_config:
+      template: "Chapter {chapter_num}: {chapter}"
+    inputs_mapping:
+      chapter_num: "completed_chapters"
+    output: chapter_summary
   update_progress:
     function: update_progress
     output: updated_context
@@ -232,8 +255,10 @@ workflow:
         - to_node: generate_dramatic_chapter
           condition: "ctx['tone'] == 'dark'"
     - from_node: generate_chapter
-      to_node: update_progress
+      to_node: summarize_chapter
     - from_node: generate_dramatic_chapter
+      to_node: summarize_chapter
+    - from_node: summarize_chapter
       to_node: update_progress
     - from_node: update_progress
       to_node: check_if_complete
@@ -254,29 +279,32 @@ graph TD
     A[generate_outline] --> B[analyze_tone]
     B -->|"'light'"| C[generate_chapter]
     B -->|"'dark'"| D[generate_dramatic_chapter]
-    C --> E[update_progress]
+    C --> E[summarize_chapter]
     D --> E
-    E --> F[check_if_complete]
-    F -->|"ctx['continue_generating']"| C
-    F --> G[finalize_story]
-    E --> G
+    E --> F[update_progress]
+    F --> G[check_if_complete]
+    G -->|"ctx['continue_generating']"| C
+    G --> H[finalize_story]
+    F --> H
     style A fill:#e6ffe6,stroke:#009933,stroke-width:2px
     style B fill:#e6ffe6,stroke:#009933,stroke-width:2px
     style C fill:#e6ffe6,stroke:#009933,stroke-width:2px
     style D fill:#e6ffe6,stroke:#009933,stroke-width:2px
     style E fill:#e6ffe6,stroke:#009933,stroke-width:2px
     style F fill:#e6ffe6,stroke:#009933,stroke-width:2px
-    style G fill:#fff0e6,stroke:#cc3300,stroke-width:2px,stroke-dasharray:5
+    style G fill:#e6ffe6,stroke:#009933,stroke-width:2px
+    style H fill:#fff0e6,stroke:#cc3300,stroke-width:2px,stroke-dasharray:5
 ```
 
 #### Execution
-With `initial_context = {"genre": "science fiction", "num_chapters": 3, "chapters": [], "completed_chapters": 0, "style": "descriptive"}`:
-1. `generate_outline` creates an outline.
+With `initial_context = {"story_genre": "science fiction", "chapter_count": 3, "chapters": [], "completed_chapters": 0, "style": "descriptive"}`:
+1. `generate_outline` uses input mapping (`story_genre`, `chapter_count`) to create an outline.
 2. `analyze_tone` determines the story’s tone.
-3. Branches to `generate_chapter` (light tone) or `generate_dramatic_chapter` (dark tone).
-4. `update_progress` updates chapters and count.
-5. `check_if_complete` loops back if more chapters are needed.
-6. Converges at `finalize_story` to compile the final story.
+3. Branches to `generate_chapter` (light tone) or `generate_dramatic_chapter` (dark tone), mapping `chapter_num` to `completed_chapters`.
+4. `summarize_chapter` formats the chapter using a template, mapping `chapter_num`.
+5. `update_progress` updates chapters and count with the summary.
+6. `check_if_complete` loops back if more chapters are needed.
+7. Converges at `finalize_story` to compile the final story.
 
 ---
 
@@ -347,7 +375,7 @@ dependencies:
 
 ## 6. Nodes 🧩
 
-Nodes define tasks, powered by functions, sub-workflows, or LLMs.
+Nodes define tasks, now enhanced with **input mappings** and **template nodes**, alongside functions, sub-workflows, and LLMs.
 
 ### Fields 📋
 - `function` (string, optional): Links to `functions`.
@@ -366,40 +394,60 @@ Nodes define tasks, powered by functions, sub-workflows, or LLMs.
   - `presence_penalty` (float, default: `0.0`)
   - `frequency_penalty` (float, default: `0.0`)
   - `response_model` (string, optional)
-- `output` (string, optional): Context key.
+- `template_config` (object, optional):
+  - `template` (string, default: `""`): Jinja2 template string.
+  - `template_file` (string, optional): Path to a Jinja2 template file (overrides `template`).
+- `inputs_mapping` (dict, optional): Maps node parameters to context keys or lambda expressions (e.g., `"lambda ctx: ctx['x'] + 1"`).
+- `output` (string, optional): Context key for the result.
 - `retries` (int, default: `3`)
 - `delay` (float, default: `1.0`)
 - `timeout` (float/null, default: `null`)
 - `parallel` (bool, default: `false`)
 
 ### Rules ✅
-- Exactly one of `function`, `sub_workflow`, or `llm_config`.
-- LLM inputs derived from `prompt_template` or `prompt_file`.
+- Exactly one of `function`, `sub_workflow`, `llm_config`, or `template_config`.
+- LLM and template inputs derived from `prompt_template`/`template` or `prompt_file`/`template_file`, overridden by `inputs_mapping`.
+- `inputs_mapping` values can be strings (context keys) or serialized lambdas.
 
 ### Examples 🌈
-Using an external Jinja2 template:
+Using a template node with an external Jinja2 file:
 ```yaml
 nodes:
-  generate_email:
-    llm_config:
-      model: "gpt-4"
-      prompt_file: "templates/email.j2"
-      temperature: 0.7
-    output: email
+  format_report:
+    template_config:
+      template_file: "templates/report.j2"
+    inputs_mapping:
+      title: "report_title"
+      data: "report_data"
+    output: formatted_report
 ```
-(`templates/email.j2`: `Write an email to {{ recipient }} about {{ event }}.`)
+(`templates/report.j2`: `Report: {{ title }}\nData: {{ data }}`)
 
-From the story generator:
+With input mapping and an LLM:
 ```yaml
 nodes:
-  analyze_tone:
+  generate_outline:
     llm_config:
       model: "gemini/gemini-2.0-flash"
-      system_prompt: "You are a creative writer."
-      prompt_template: "Analyze the tone of this outline: {outline}."
+      system_prompt: "You are a creative writer skilled at generating stories."
+      prompt_template: "Create a story outline for a {genre} story with {num_chapters} chapters."
       temperature: 0.7
       max_tokens: 1000
-    output: tone
+    inputs_mapping:
+      genre: "story_genre"
+      num_chapters: "chapter_count"
+    output: outline
+```
+
+From the story generator (template node):
+```yaml
+nodes:
+  summarize_chapter:
+    template_config:
+      template: "Chapter {chapter_num}: {chapter}"
+    inputs_mapping:
+      chapter_num: "completed_chapters"
+    output: chapter_summary
 ```
 
 ```mermaid
@@ -408,24 +456,32 @@ graph TD
     B -->|function| C[Function Ref]
     B -->|sub_workflow| D[Start + Transitions + Convergence]
     B -->|llm_config| E[LLM Setup]
-    E --> F{Structured?}
-    F -->|Yes| G[response_model]
-    F -->|No| H[Plain Text]
+    B -->|template_config| F[Template Setup]
+    A --> G[Inputs Mapping?]
+    G -->|Yes| H[Context Keys or Lambdas]
+    E --> I{Structured?}
+    I -->|Yes| J[response_model]
+    I -->|No| K[Plain Text]
+    F --> L[Jinja2 Template]
     style A fill:#e6ffe6,stroke:#009933,stroke-width:2px
     style B fill:#fff,stroke:#333
     style C fill:#ccffcc,stroke:#009933
     style D fill:#ccffcc,stroke:#009933
     style E fill:#ccffcc,stroke:#009933
-    style F fill:#fff,stroke:#333
-    style G fill:#b3ffb3,stroke:#009933
+    style F fill:#ccffcc,stroke:#009933
+    style G fill:#fff,stroke:#333
     style H fill:#b3ffb3,stroke:#009933
+    style I fill:#fff,stroke:#333
+    style J fill:#b3ffb3,stroke:#009933
+    style K fill:#b3ffb3,stroke:#009933
+    style L fill:#b3ffb3,stroke:#009933
 ```
 
 ---
 
 ## 7. Workflow 🌐
 
-The `workflow` section orchestrates execution, now with branching and convergence.
+The `workflow` section orchestrates execution, leveraging branching and convergence.
 
 ### Fields 📋
 - `start` (string, optional): First node.
@@ -452,8 +508,10 @@ workflow:
         - to_node: generate_dramatic_chapter
           condition: "ctx['tone'] == 'dark'"
     - from_node: generate_chapter
-      to_node: update_progress
+      to_node: summarize_chapter
     - from_node: generate_dramatic_chapter
+      to_node: summarize_chapter
+    - from_node: summarize_chapter
       to_node: update_progress
     - from_node: update_progress
       to_node: check_if_complete
@@ -497,7 +555,7 @@ graph TD
 
 `validate_workflow_definition()` ensures integrity:
 - Checks node connectivity, circular references, undefined nodes, missing start.
-- Validates branch conditions and convergence points (at least two incoming transitions).
+- Validates branch conditions, convergence points (at least two incoming transitions), and input mappings.
 - Returns `NodeError` objects (`node_name`, `description`).
 
 ### Example
@@ -525,9 +583,9 @@ observers:
 
 ## 10. Context 📦
 
-The `ctx` dictionary shares data:
-- `generate_outline` → `ctx["outline"]`
-- `analyze_tone` → `ctx["tone"]`
+The `ctx` dictionary shares data, enhanced by input mappings:
+- `generate_outline` → `ctx["outline"]` (mapped from `story_genre`, `chapter_count`)
+- `summarize_chapter` → `ctx["chapter_summary"]` (mapped from `completed_chapters`)
 - `finalize_story` → `ctx["final_story"]`
 
 ---
@@ -536,7 +594,7 @@ The `ctx` dictionary shares data:
 
 The `WorkflowEngine`:
 1. Starts at `workflow.start`.
-2. Executes nodes, updates `ctx`.
+2. Executes nodes, applying input mappings and updating `ctx`.
 3. Follows transitions (sequential, parallel, or branching) based on conditions.
 4. Converges at specified nodes.
 5. Notifies observers.
@@ -581,13 +639,22 @@ graph TD
 
 ## 13. WorkflowManager 🧑‍💻
 
-Programmatic workflow creation:
+Programmatic workflow creation with new features:
 ```python
 manager = WorkflowManager()
-manager.add_node("start", llm_config={"model": "grok/xai", "prompt_template": "Say hi"})
+manager.add_node(
+    "start",
+    llm_config={"model": "grok/xai", "prompt_template": "Say hi to {name}"},
+    inputs_mapping={"name": "user_name"}
+)
+manager.add_node(
+    "format",
+    template_config={"template": "Message: {text}"},
+    inputs_mapping={"text": "start_result"}
+)
 manager.set_start_node("start")
-manager.add_transition("start", "end")
-manager.add_convergence_node("end")
+manager.add_transition("start", "format")
+manager.add_convergence_node("format")
 manager.save_to_yaml("hi.yaml")
 ```
 
@@ -595,4 +662,5 @@ manager.save_to_yaml("hi.yaml")
 
 ## 14. Conclusion 🎉
 
-The Quantalogic Flow YAML DSL (March 5, 2025) is a powerful, flexible tool for workflow automation, exemplified by the updated Story Generator case study. With new support for branching and convergence, alongside LLMs, sub-workflows, and conversion tools, it seamlessly bridges Python and YAML. Whether crafting dynamic stories or managing complex processes, this DSL, paired with `WorkflowManager`, unlocks efficient, scalable workflows. 🚀
+The Quantalogic Flow YAML DSL (March 5, 2025) is a powerful, flexible tool for workflow automation, exemplified by the updated Story Generator case study. With new **input mapping** and **template nodes**, alongside LLMs, sub-workflows, branching, convergence, and conversion tools, it seamlessly bridges Python and YAML. Whether crafting dynamic stories with formatted chapters or managing complex processes, this DSL, paired with `WorkflowManager`, unlocks efficient, scalable workflows. 🚀
+
