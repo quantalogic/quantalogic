@@ -73,6 +73,11 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
             if llm.temperature < 0 or llm.temperature > 1:
                 issues.append(NodeError(node_name=name, description=f"Has invalid temperature: {llm.temperature}"))
 
+        if node_def.template_config:
+            template = node_def.template_config
+            if not template.template and not template.template_file:
+                issues.append(NodeError(node_name=name, description="Missing 'template' or 'template_file' in template_config"))
+
     # Validate main workflow structure
     issues.extend(validate_workflow_structure(workflow_def.workflow, workflow_def.nodes, is_main=True))
     issues.extend(check_circular_transitions(workflow_def))
@@ -131,6 +136,24 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
         required_inputs = set()
         full_node_name = node_name
 
+        # Handle inputs_mapping
+        if node_def.inputs_mapping:
+            for input_name, mapping in node_def.inputs_mapping.items():
+                if mapping.startswith("lambda ctx:"):
+                    try:
+                        # Basic syntax check for lambda
+                        compile(mapping, "<string>", "eval")
+                    except SyntaxError:
+                        issues.append(NodeError(
+                            node_name=node_name,
+                            description=f"Invalid lambda expression in inputs_mapping for '{input_name}': {mapping}"
+                        ))
+                elif not mapping.isidentifier():
+                    issues.append(NodeError(
+                        node_name=node_name,
+                        description=f"Invalid context key in inputs_mapping for '{input_name}': {mapping}"
+                    ))
+
         if node_def.function:
             maybe_func_def = workflow_def.functions.get(node_def.function)
             if maybe_func_def is None:
@@ -149,6 +172,15 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
         elif node_def.llm_config:
             prompt_template = node_def.llm_config.prompt_template or ""
             input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", prompt_template))
+            cleaned_inputs = set()
+            for var in input_vars:
+                base_var = re.split(r"\s*[\+\-\*/]\s*", var.strip())[0].strip()
+                if base_var.isidentifier():
+                    cleaned_inputs.add(base_var)
+            required_inputs = cleaned_inputs
+        elif node_def.template_config:
+            template = node_def.template_config.template or ""
+            input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", template))
             cleaned_inputs = set()
             for var in input_vars:
                 base_var = re.split(r"\s*[\+\-\*/]\s*", var.strip())[0].strip()
@@ -185,10 +217,30 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
                         if base_var.isidentifier():
                             cleaned_inputs.add(base_var)
                     required_inputs = cleaned_inputs
+                elif sub_node_def.template_config:
+                    template = sub_node_def.template_config.template or ""
+                    input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", template))
+                    cleaned_inputs = set()
+                    for var in input_vars:
+                        base_var = re.split(r"\s*[\+\-\*/]\s*", var.strip())[0].strip()
+                        if base_var.isidentifier():
+                            cleaned_inputs.add(base_var)
+                    required_inputs = cleaned_inputs
 
                 if required_inputs:
                     ancestors = get_ancestors(full_node_name)
                     for input_name in required_inputs:
+                        # Check if input is mapped
+                        if node_def.inputs_mapping and input_name in node_def.inputs_mapping:
+                            mapping = node_def.inputs_mapping[input_name]
+                            if not mapping.startswith("lambda ctx:") and mapping in output_to_node:
+                                producer_node = output_to_node.get(mapping)
+                                if producer_node not in ancestors:
+                                    issues.append(NodeError(
+                                        node_name=full_node_name,
+                                        description=f"inputs_mapping for '{input_name}' maps to '{mapping}', but it is not produced by an ancestor"
+                                    ))
+                            continue
                         producer_node = output_to_node.get(input_name)
                         if producer_node is None or producer_node not in ancestors:
                             issues.append(NodeError(
@@ -202,6 +254,17 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
 
         ancestors = get_ancestors(full_node_name)
         for input_name in required_inputs:
+            # Check if input is mapped
+            if node_def.inputs_mapping and input_name in node_def.inputs_mapping:
+                mapping = node_def.inputs_mapping[input_name]
+                if not mapping.startswith("lambda ctx:") and mapping in output_to_node:
+                    producer_node = output_to_node.get(mapping)
+                    if producer_node not in ancestors:
+                        issues.append(NodeError(
+                            node_name=full_node_name,
+                            description=f"inputs_mapping for '{input_name}' maps to '{mapping}', but it is not produced by an ancestor"
+                        ))
+                continue
             producer_node = output_to_node.get(input_name)
             if producer_node is None or producer_node not in ancestors:
                 issues.append(NodeError(
@@ -219,10 +282,10 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
         if conv_node not in workflow_def.nodes:
             issues.append(NodeError(node_name=conv_node, description="Convergence node is not defined in nodes"))
         # Check if the convergence node has multiple incoming transitions
-        incoming = [t for t in workflow_def.workflow.transitions if 
-                    (isinstance(t.to_node, str) and t.to_node == conv_node) or 
-                    (isinstance(t.to_node, list) and any(isinstance(tn, str) and tn == conv_node or 
-                                                        isinstance(tn, BranchCondition) and tn.to_node == conv_node 
+        incoming = [t for t in workflow_def.workflow.transitions if
+                    (isinstance(t.to_node, str) and t.to_node == conv_node) or
+                    (isinstance(t.to_node, list) and any(isinstance(tn, str) and tn == conv_node or
+                                                        isinstance(tn, BranchCondition) and tn.to_node == conv_node
                                                         for tn in t.to_node))]
         if len(incoming) < 2:
             issues.append(NodeError(node_name=conv_node, description="Convergence node has fewer than 2 incoming transitions"))
@@ -230,7 +293,7 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
     return issues
 
 
-def validate_workflow_structure(structure: WorkflowStructure, nodes: Dict[str, NodeDefinition], 
+def validate_workflow_structure(structure: WorkflowStructure, nodes: Dict[str, NodeDefinition],
                               is_main: bool = False) -> List[NodeError]:
     """Validate a WorkflowStructure for consistency, including branch and converge support."""
     issues: List[NodeError] = []
@@ -243,7 +306,7 @@ def validate_workflow_structure(structure: WorkflowStructure, nodes: Dict[str, N
     for trans in structure.transitions:
         if trans.from_node not in nodes:
             issues.append(NodeError(node_name=trans.from_node, description="Transition from undefined node"))
-        
+
         to_nodes: List[Union[str, BranchCondition]] = [trans.to_node] if isinstance(trans.to_node, str) else trans.to_node
         for to_node in to_nodes:
             target_node = to_node if isinstance(to_node, str) else to_node.to_node
@@ -254,7 +317,7 @@ def validate_workflow_structure(structure: WorkflowStructure, nodes: Dict[str, N
                     compile(to_node.condition, "<string>", "eval")
                 except SyntaxError:
                     issues.append(NodeError(node_name=trans.from_node, description=f"Invalid branch condition syntax: {to_node.condition}"))
-        
+
         if trans.condition and isinstance(trans.to_node, str):
             try:
                 compile(trans.condition, "<string>", "eval")
@@ -273,16 +336,16 @@ def check_circular_transitions(workflow_def: WorkflowDefinition) -> List[NodeErr
             cycle_nodes = list(path)[list(path).index(node):] + [node]
             cycle = " -> ".join(cycle_nodes)
             cycle_transitions = [
-                t for t in path_transitions 
-                if t.from_node in cycle_nodes and 
-                   ((isinstance(t.to_node, str) and t.to_node in cycle_nodes) or 
-                    (isinstance(t.to_node, list) and any((isinstance(tn, str) and tn in cycle_nodes) or 
-                                                        (isinstance(tn, BranchCondition) and tn.to_node in cycle_nodes) 
+                t for t in path_transitions
+                if t.from_node in cycle_nodes and
+                   ((isinstance(t.to_node, str) and t.to_node in cycle_nodes) or
+                    (isinstance(t.to_node, list) and any((isinstance(tn, str) and tn in cycle_nodes) or
+                                                        (isinstance(tn, BranchCondition) and tn.to_node in cycle_nodes)
                                                         for tn in t.to_node)))
             ]
             # Check if all transitions in the cycle are unconditional
-            if all((t.condition is None if isinstance(t.to_node, str) else 
-                    all(isinstance(tn, str) or (isinstance(tn, BranchCondition) and tn.condition is None) for tn in t.to_node)) 
+            if all((t.condition is None if isinstance(t.to_node, str) else
+                    all(isinstance(tn, str) or (isinstance(tn, BranchCondition) and tn.condition is None) for tn in t.to_node))
                    for t in cycle_transitions):
                 issues.append(NodeError(node_name=None, description=f"Unconditional circular transition detected: {cycle}"))
             return
@@ -314,7 +377,7 @@ def check_circular_transitions(workflow_def: WorkflowDefinition) -> List[NodeErr
 
 
 def main():
-    """Build a sample workflow with branch and converge using WorkflowManager and validate it."""
+    """Build a sample workflow with branch, converge, template node, and input mapping using WorkflowManager and validate it."""
     manager = WorkflowManager()
 
     # Define functions
@@ -325,7 +388,7 @@ def main():
     )
     manager.add_function(
         name="say_goodbye",
-        type_="embedded",  # Changed to embedded for simplicity
+        type_="embedded",
         code="def say_goodbye():\n    return 'Goodbye, World!'"
     )
     manager.add_function(
@@ -341,20 +404,31 @@ def main():
 
     # Add nodes for main workflow
     manager.add_node(name="start", function="say_hello", output="text")
-    manager.add_node(name="check", function="check_condition", output="result")
+    manager.add_node(name="check", function="check_condition", output="result",
+                     inputs_mapping={"text": "text"})  # Mapping input to context key
     manager.add_node(name="goodbye", function="say_goodbye", output="farewell")
-    manager.add_node(name="finalize", function="finalize", output="status")
+    manager.add_node(name="finalize", function="finalize", output="status",
+                     inputs_mapping={"text": "lambda ctx: ctx['farewell'] if ctx['result'] == 'no' else ctx['ai_result']"})
     manager.add_node(name="outro", function="non_existent")  # Intentional: undefined function
-    
+
     # Add LLM node with valid temperature
     manager.add_node(
         name="ai_node",
         llm_config={
-            "model": "gpt-3.5-turbo", 
-            "prompt_template": "{{text}}", 
+            "model": "gpt-3.5-turbo",
+            "prompt_template": "{{text}}",
             "temperature": 0.7
         },
         output="ai_result"
+    )
+
+    # Add template node
+    manager.add_node(
+        name="template_node",
+        template_config={
+            "template": "Response: {{text}} - {{result}}"
+        },
+        output="template_output"
     )
 
     # Add nodes and sub-workflow
@@ -376,6 +450,7 @@ def main():
     )
     manager.add_transition(from_node="ai_node", to_node="finalize")
     manager.add_transition(from_node="goodbye", to_node="finalize")
+    manager.add_transition(from_node="finalize", to_node="template_node")
     manager.add_transition(from_node="start", to_node="outro")
     manager.add_transition(from_node="outro", to_node="start")  # Intentional: circular
     manager.add_convergence_node("finalize")
