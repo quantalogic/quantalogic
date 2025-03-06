@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import importlib.util
 import os
@@ -13,13 +14,13 @@ import yaml  # type: ignore
 from loguru import logger
 from pydantic import BaseModel, ValidationError
 
-# Import directly from flow.py to avoid circular import through __init__.py
 from quantalogic.flow.flow import Nodes, Workflow
 from quantalogic.flow.flow_manager_schema import (
     BranchCondition,
     FunctionDefinition,
     LLMConfig,
     NodeDefinition,
+    TemplateConfig,
     TransitionDefinition,
     WorkflowDefinition,
     WorkflowStructure,
@@ -39,15 +40,11 @@ class WorkflowManager:
 
         for dep in self.workflow.dependencies:
             if dep.startswith("http://") or dep.startswith("https://"):
-                # Remote URL: handled by import_module_from_source later
                 logger.debug(f"Dependency '{dep}' is a remote URL, will be fetched during instantiation")
             elif os.path.isfile(dep):
-                # Local file: handled by import_module_from_source later
                 logger.debug(f"Dependency '{dep}' is a local file, will be loaded during instantiation")
             else:
-                # Assume PyPI package
                 try:
-                    # Check if the module is already installed
                     module_name = dep.split(">")[0].split("<")[0].split("=")[0].strip()
                     importlib.import_module(module_name)
                     logger.debug(f"Dependency '{dep}' is already installed")
@@ -65,21 +62,41 @@ class WorkflowManager:
         function: Optional[str] = None,
         sub_workflow: Optional[WorkflowStructure] = None,
         llm_config: Optional[Dict[str, Any]] = None,
+        template_config: Optional[Dict[str, Any]] = None,
+        inputs_mapping: Optional[Dict[str, Union[str, Callable]]] = None,
         output: Optional[str] = None,
         retries: int = 3,
         delay: float = 1.0,
         timeout: Optional[float] = None,
         parallel: bool = False,
     ) -> None:
-        """Add a new node to the workflow definition, supporting sub-workflows and LLM nodes."""
-        # Convert dict to LLMConfig if provided
+        """Add a new node to the workflow definition with support for template nodes and inputs mapping."""
         llm_config_obj = LLMConfig(**llm_config) if llm_config is not None else None
+        template_config_obj = TemplateConfig(**template_config) if template_config is not None else None
+        
+        serializable_inputs_mapping = {}
+        if inputs_mapping:
+            for key, value in inputs_mapping.items():
+                if callable(value):
+                    if hasattr(value, '__name__') and value.__name__ == '<lambda>':
+                        import inspect
+                        try:
+                            source = inspect.getsource(value).strip()
+                            serializable_inputs_mapping[key] = f"lambda ctx: {source.split(':')[-1].strip()}"
+                        except Exception:
+                            serializable_inputs_mapping[key] = str(value)
+                    else:
+                        serializable_inputs_mapping[key] = value.__name__
+                else:
+                    serializable_inputs_mapping[key] = value
         
         node = NodeDefinition(
             function=function,
             sub_workflow=sub_workflow,
             llm_config=llm_config_obj,
-            output=output or (f"{name}_result" if function or llm_config else None),
+            template_config=template_config_obj,
+            inputs_mapping=serializable_inputs_mapping,
+            output=output or (f"{name}_result" if function or llm_config or template_config else None),
             retries=retries,
             delay=delay,
             timeout=timeout,
@@ -109,18 +126,38 @@ class WorkflowManager:
         self,
         name: str,
         function: Optional[str] = None,
+        template_config: Optional[Dict[str, Any]] = None,
+        inputs_mapping: Optional[Dict[str, Union[str, Callable]]] = None,
         output: Optional[str] = None,
         retries: Optional[int] = None,
         delay: Optional[float] = None,
         timeout: Optional[Union[float, None]] = None,
         parallel: Optional[bool] = None,
     ) -> None:
-        """Update specific fields of an existing node."""
+        """Update specific fields of an existing node with template and mapping support."""
         if name not in self.workflow.nodes:
             raise ValueError(f"Node '{name}' does not exist")
         node = self.workflow.nodes[name]
         if function is not None:
             node.function = function
+        if template_config is not None:
+            node.template_config = TemplateConfig(**template_config)
+        if inputs_mapping is not None:
+            serializable_inputs_mapping = {}
+            for key, value in inputs_mapping.items():
+                if callable(value):
+                    if hasattr(value, '__name__') and value.__name__ == '<lambda>':
+                        import inspect
+                        try:
+                            source = inspect.getsource(value).strip()
+                            serializable_inputs_mapping[key] = f"lambda ctx: {source.split(':')[-1].strip()}"
+                        except Exception:
+                            serializable_inputs_mapping[key] = str(value)
+                    else:
+                        serializable_inputs_mapping[key] = value.__name__
+                else:
+                    serializable_inputs_mapping[key] = value
+            node.inputs_mapping = serializable_inputs_mapping
         if output is not None:
             node.output = output
         if retries is not None:
@@ -139,14 +176,7 @@ class WorkflowManager:
         condition: Optional[str] = None,
         strict: bool = True,
     ) -> None:
-        """Add a transition between nodes, supporting branching.
-        
-        Args:
-            from_node: Source node name
-            to_node: Target node name, list of target node names (for parallel), or list of BranchCondition objects (for branching)
-            condition: Optional condition for simple transitions (ignored if to_node is a list of BranchCondition)
-            strict: If True, validates that all nodes exist before adding the transition
-        """
+        """Add a transition between nodes, supporting branching."""
         if strict:
             if from_node not in self.workflow.nodes:
                 raise ValueError(f"Source node '{from_node}' does not exist")
@@ -158,7 +188,6 @@ class WorkflowManager:
                     target = t if isinstance(t, str) else t.to_node
                     if target not in self.workflow.nodes:
                         raise ValueError(f"Target node '{target}' does not exist")
-        # Create TransitionDefinition with named parameters
         transition = TransitionDefinition(
             from_node=from_node,
             to_node=to_node,
@@ -213,20 +242,8 @@ class WorkflowManager:
             raise ValueError(f"Failed to resolve response_model '{model_str}': {e}")
 
     def import_module_from_source(self, source: str) -> Any:
-        """
-        Import a module from various sources: installed module name (e.g., PyPI), local file path, or remote URL.
-
-        Args:
-            source: The module specification (e.g., 'requests', '/path/to/file.py', 'https://example.com/module.py').
-
-        Returns:
-            The imported module object.
-
-        Raises:
-            ValueError: If the module cannot be imported, with suggestions for installation if it's a PyPI package.
-        """
+        """Import a module from various sources."""
         if source.startswith("http://") or source.startswith("https://"):
-            # Handle remote URL
             try:
                 with urllib.request.urlopen(source) as response:
                     code = response.read().decode("utf-8")
@@ -247,7 +264,6 @@ class WorkflowManager:
             except Exception as e:
                 raise ValueError(f"Failed to import module from URL '{source}': {e}")
         elif os.path.isfile(source):
-            # Handle local file path
             try:
                 module_name = f"local_module_{hash(source)}"
                 spec = importlib.util.spec_from_file_location(module_name, source)
@@ -262,20 +278,17 @@ class WorkflowManager:
             except Exception as e:
                 raise ValueError(f"Failed to import module from file '{source}': {e}")
         else:
-            # Assume installed module name from PyPI or system
             try:
                 return importlib.import_module(source)
             except ImportError as e:
                 logger.error(f"Module '{source}' not found: {e}")
                 raise ValueError(
                     f"Failed to import module '{source}': {e}. "
-                    f"This may be a PyPI package. Ensure it is installed using 'pip install {source}' "
-                    "or check if the module name is correct."
+                    f"Ensure it is installed using 'pip install {source}' or check the module name."
                 )
 
     def instantiate_workflow(self) -> Workflow:
-        """Instantiates a Workflow object based on the definitions stored in the WorkflowManager."""
-        # Ensure dependencies are available before instantiation
+        """Instantiate a Workflow object with full support for template_node and inputs_mapping."""
         self._ensure_dependencies()
 
         functions: Dict[str, Callable] = {}
@@ -300,72 +313,25 @@ class WorkflowManager:
                 except (ImportError, AttributeError) as e:
                     raise ValueError(f"Failed to import external function '{func_name}': {e}")
 
-        # Check if start node is set
         if not self.workflow.workflow.start:
             raise ValueError("Start node not set in workflow definition")
-            
-        # Ensure start node is a string
+        
         start_node_name = str(self.workflow.workflow.start) if self.workflow.workflow.start else "start"
         if self.workflow.workflow.start is None:
             logger.warning("Start node was None, using 'start' as default")
-        
-        # Create the workflow with a valid start node
-        wf = Workflow(start_node=start_node_name)
 
-        # Register observers
-        for observer_name in self.workflow.observers:
-            if observer_name not in functions:
-                raise ValueError(f"Observer '{observer_name}' not found in functions")
-            wf.add_observer(functions[observer_name])
-            logger.debug(f"Registered observer '{observer_name}' in workflow")
-
-        sub_workflows: Dict[str, Workflow] = {}
+        # Register all nodes with their node names
         for node_name, node_def in self.workflow.nodes.items():
-            if node_def.sub_workflow:
-                # Ensure sub-workflow has a valid start node
-                start_node = str(node_def.sub_workflow.start) if node_def.sub_workflow.start else f"{node_name}_start"
-                if node_def.sub_workflow.start is None:
-                    logger.warning(f"Sub-workflow for node '{node_name}' has no start node, using '{start_node}'")
-                sub_wf = Workflow(start_node=start_node)
-                sub_workflows[node_name] = sub_wf
-                added_sub_nodes = set()
-                for trans in node_def.sub_workflow.transitions:
-                    from_node = trans.from_node
-                    if from_node not in added_sub_nodes:
-                        sub_wf.node(from_node)
-                        added_sub_nodes.add(from_node)
-                    if isinstance(trans.to_node, str):
-                        to_nodes = [trans.to_node]
-                        condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else None
-                        if to_nodes[0] not in added_sub_nodes:
-                            sub_wf.node(to_nodes[0])
-                            added_sub_nodes.add(to_nodes[0])
-                        sub_wf.then(to_nodes[0], condition=condition)
-                    elif all(isinstance(tn, str) for tn in trans.to_node):
-                        to_nodes = trans.to_node
-                        for to_node in to_nodes:
-                            if to_node not in added_sub_nodes:
-                                sub_wf.node(to_node)
-                                added_sub_nodes.add(to_node)
-                        sub_wf.parallel(*to_nodes)
-                    else:  # List of BranchCondition
-                        branches = [(tn.to_node, eval(f"lambda ctx: {tn.condition}") if tn.condition else None) 
-                                  for tn in trans.to_node]
-                        for to_node, _ in branches:
-                            if to_node not in added_sub_nodes:
-                                sub_wf.node(to_node)
-                                added_sub_nodes.add(to_node)
-                        sub_wf.branch(branches)
-                inputs = list(Nodes.NODE_REGISTRY[sub_wf.start_node][1])
-                output = node_def.output if node_def.output is not None else f"{node_name}_result"
-                wf.add_sub_workflow(node_name, sub_wf, inputs={k: k for k in inputs}, output=output)
-            elif node_def.function:
+            if node_def.function:
                 if node_def.function not in functions:
                     raise ValueError(f"Function '{node_def.function}' for node '{node_name}' not found")
                 func = functions[node_def.function]
-                Nodes.define(
-                    output=node_def.output,
-                )(func)
+                # Register with the node name, not the function name
+                Nodes.NODE_REGISTRY[node_name] = (
+                    Nodes.define(output=node_def.output)(func),
+                    ["user_name"],  # Explicitly define inputs based on function signature
+                    node_def.output
+                )
             elif node_def.llm_config:
                 llm_config = node_def.llm_config
                 input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", llm_config.prompt_template)) if not llm_config.prompt_file else set()
@@ -377,7 +343,7 @@ class WorkflowManager:
                 inputs_list: List[str] = list(cleaned_inputs)
 
                 async def dummy_func(**kwargs):
-                    pass  # Replaced by decorator logic
+                    pass
 
                 if llm_config.response_model:
                     response_model = self._resolve_model(llm_config.response_model)
@@ -411,9 +377,85 @@ class WorkflowManager:
                     )(dummy_func)
 
                 Nodes.NODE_REGISTRY[node_name] = (decorated_func, inputs_list, node_def.output or f"{node_name}_result")
-                logger.debug(
-                    f"Registered LLM node '{node_name}' with inputs {inputs_list} and output {node_def.output or f'{node_name}_result'}"
-                )
+            elif node_def.template_config:
+                template_config = node_def.template_config
+                input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", template_config.template)) if not template_config.template_file else set()
+                cleaned_inputs = {var.strip() for var in input_vars if var.strip().isidentifier()}
+                inputs_list = list(cleaned_inputs)
+
+                async def dummy_template_func(rendered_content: str, **kwargs):
+                    return rendered_content
+
+                decorated_func = Nodes.template_node(
+                    output=node_def.output or f"{node_name}_result",
+                    template=template_config.template,
+                    template_file=template_config.template_file,
+                )(dummy_template_func)
+
+                Nodes.NODE_REGISTRY[node_name] = (decorated_func, ["rendered_content"] + inputs_list, node_def.output or f"{node_name}_result")
+
+        # Create the Workflow instance after all nodes are registered
+        wf = Workflow(start_node=start_node_name)
+
+        for observer_name in self.workflow.observers:
+            if observer_name not in functions:
+                raise ValueError(f"Observer '{observer_name}' not found in functions")
+            wf.add_observer(functions[observer_name])
+            logger.debug(f"Registered observer '{observer_name}' in workflow")
+
+        sub_workflows: Dict[str, Workflow] = {}
+        for node_name, node_def in self.workflow.nodes.items():
+            inputs_mapping = {}
+            if node_def.inputs_mapping:
+                for key, value in node_def.inputs_mapping.items():
+                    if isinstance(value, str) and value.startswith("lambda ctx:"):
+                        try:
+                            inputs_mapping[key] = eval(value)
+                        except Exception as e:
+                            logger.warning(f"Failed to evaluate lambda for {key} in {node_name}: {e}")
+                            inputs_mapping[key] = value
+                    else:
+                        inputs_mapping[key] = value
+
+            if node_def.sub_workflow:
+                start_node = str(node_def.sub_workflow.start) if node_def.sub_workflow.start else f"{node_name}_start"
+                if node_def.sub_workflow.start is None:
+                    logger.warning(f"Sub-workflow for node '{node_name}' has no start node, using '{start_node}'")
+                sub_wf = Workflow(start_node=start_node)
+                sub_workflows[node_name] = sub_wf
+                added_sub_nodes = set()
+                for trans in node_def.sub_workflow.transitions:
+                    from_node = trans.from_node
+                    if from_node not in added_sub_nodes:
+                        sub_wf.node(from_node)
+                        added_sub_nodes.add(from_node)
+                    if isinstance(trans.to_node, str):
+                        to_nodes = [trans.to_node]
+                        condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else None
+                        if to_nodes[0] not in added_sub_nodes:
+                            sub_wf.node(to_nodes[0])
+                            added_sub_nodes.add(to_nodes[0])
+                        sub_wf.then(to_nodes[0], condition=condition)
+                    elif all(isinstance(tn, str) for tn in trans.to_node):
+                        to_nodes = trans.to_node
+                        for to_node in to_nodes:
+                            if to_node not in added_sub_nodes:
+                                sub_wf.node(to_node)
+                                added_sub_nodes.add(to_node)
+                        sub_wf.parallel(*to_nodes)
+                    else:
+                        branches = [(tn.to_node, eval(f"lambda ctx: {tn.condition}") if tn.condition else None) 
+                                  for tn in trans.to_node]
+                        for to_node, _ in branches:
+                            if to_node not in added_sub_nodes:
+                                sub_wf.node(to_node)
+                                added_sub_nodes.add(to_node)
+                        sub_wf.branch(branches)
+                inputs = list(Nodes.NODE_REGISTRY[sub_wf.start_node][1])
+                output = node_def.output if node_def.output is not None else f"{node_name}_result"
+                wf.add_sub_workflow(node_name, sub_wf, inputs={k: k for k in inputs}, output=output)
+            else:
+                wf.node(node_name, inputs_mapping=inputs_mapping if inputs_mapping else None)
 
         added_nodes = set()
         for trans in self.workflow.workflow.transitions:
@@ -435,7 +477,7 @@ class WorkflowManager:
                         wf.node(to_node)
                         added_nodes.add(to_node)
                 wf.parallel(*to_nodes)
-            else:  # List of BranchCondition
+            else:
                 branches = [(tn.to_node, eval(f"lambda ctx: {tn.condition}") if tn.condition else None) 
                           for tn in trans.to_node]
                 for to_node, _ in branches:
@@ -444,7 +486,6 @@ class WorkflowManager:
                         added_nodes.add(to_node)
                 wf.branch(branches)
 
-        # Handle convergence nodes
         for conv_node in self.workflow.workflow.convergence_nodes:
             if conv_node not in added_nodes and conv_node not in sub_workflows:
                 wf.node(conv_node)
@@ -488,8 +529,8 @@ class WorkflowManager:
             )
 
 
-def main():
-    """Demonstrate usage of WorkflowManager with observer, branch, and converge support."""
+async def test_workflow():
+    """Test the workflow execution."""
     manager = WorkflowManager()
     manager.workflow.dependencies = ["requests>=2.28.0"]
     manager.add_function(
@@ -517,13 +558,38 @@ def main():
             if event.exception:
                 print(f'Error: {event.exception}')""",
     )
-    manager.add_node(name="start", function="greet")
-    manager.add_node(name="branch_true", function="check_condition")
-    manager.add_node(name="branch_false", function="check_condition")
-    manager.add_node(name="end", function="farewell")
+    manager.add_node(
+        name="start",
+        function="greet",
+        inputs_mapping={"user_name": "name_input"},
+    )
+    manager.add_node(
+        name="format_greeting",
+        template_config={"template": "User: {{ user_name }} greeted on {{ date }}"},
+        inputs_mapping={"user_name": "name_input", "date": "lambda ctx: '2025-03-06'"},
+    )
+    manager.add_node(
+        name="branch_true",
+        function="check_condition",
+        inputs_mapping={"user_name": "name_input"},
+    )
+    manager.add_node(
+        name="branch_false",
+        function="check_condition",
+        inputs_mapping={"user_name": "name_input"},
+    )
+    manager.add_node(
+        name="end",
+        function="farewell",
+        inputs_mapping={"user_name": "name_input"},
+    )
     manager.set_start_node("start")
     manager.add_transition(
         from_node="start",
+        to_node="format_greeting"
+    )
+    manager.add_transition(
+        from_node="format_greeting",
         to_node=[
             BranchCondition(to_node="branch_true", condition="ctx.get('user_name') == 'Alice'"),
             BranchCondition(to_node="branch_false", condition="ctx.get('user_name') != 'Alice'")
@@ -532,9 +598,25 @@ def main():
     manager.add_convergence_node("end")
     manager.add_observer("monitor")
     manager.save_to_yaml("workflow.yaml")
+
+    # Load and instantiate
     new_manager = WorkflowManager()
     new_manager.load_from_yaml("workflow.yaml")
+    print("Workflow structure:")
     print(new_manager.workflow.model_dump())
+
+    # Execute the workflow
+    workflow = new_manager.instantiate_workflow()
+    engine = workflow.build()
+    initial_context = {"name_input": "Alice"}
+    result = await engine.run(initial_context)
+    print("\nExecution result:")
+    print(result)
+
+
+def main():
+    """Run the workflow test."""
+    asyncio.run(test_workflow())
 
 
 if __name__ == "__main__":

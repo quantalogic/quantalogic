@@ -9,6 +9,7 @@ from quantalogic.flow.flow_manager_schema import (
     BranchCondition,
     FunctionDefinition,
     NodeDefinition,
+    TemplateConfig,
     TransitionDefinition,
     WorkflowDefinition,
     WorkflowStructure,
@@ -21,7 +22,7 @@ class WorkflowExtractor(ast.NodeVisitor):
 
     This class parses Python source code to identify workflow components defined with Nodes decorators
     and Workflow construction, including branch and converge patterns, building a WorkflowDefinition
-    compatible with WorkflowManager.
+    compatible with WorkflowManager. Fully supports input mappings and template nodes.
     """
 
     def __init__(self):
@@ -113,6 +114,8 @@ class WorkflowExtractor(ast.NodeVisitor):
                         kwargs[kw.arg] = kw.value.value
                     elif kw.arg == "response_model" and isinstance(kw.value, ast.Name):
                         kwargs[kw.arg] = ast.unparse(kw.value)
+                    elif kw.arg == "transformer" and isinstance(kw.value, ast.Lambda):
+                        kwargs[kw.arg] = ast.unparse(kw.value)
 
             if decorator_name:
                 func_name = node.name
@@ -126,6 +129,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         "inputs": inputs,
                         "output": output,
                     }
+                    logger.debug(f"Registered function node '{func_name}' with output '{output}'")
                 elif decorator_name == "llm_node":
                     llm_config = {
                         key: value
@@ -149,6 +153,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         "inputs": inputs,
                         "output": llm_config.get("output"),
                     }
+                    logger.debug(f"Registered LLM node '{func_name}' with model '{llm_config.get('model')}'")
                 elif decorator_name == "validate_node":
                     output = kwargs.get("output")
                     self.nodes[func_name] = {
@@ -157,6 +162,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         "inputs": inputs,
                         "output": output,
                     }
+                    logger.debug(f"Registered validate node '{func_name}' with output '{output}'")
                 elif decorator_name == "structured_llm_node":
                     llm_config = {
                         key: value
@@ -181,6 +187,30 @@ class WorkflowExtractor(ast.NodeVisitor):
                         "inputs": inputs,
                         "output": llm_config.get("output"),
                     }
+                    logger.debug(f"Registered structured LLM node '{func_name}' with model '{llm_config.get('model')}'")
+                elif decorator_name == "template_node":
+                    template_config = {
+                        "template": kwargs.get("template", ""),
+                        "template_file": kwargs.get("template_file"),
+                    }
+                    if "rendered_content" not in inputs:
+                        inputs.insert(0, "rendered_content")
+                    self.nodes[func_name] = {
+                        "type": "template",
+                        "template_config": template_config,
+                        "inputs": inputs,
+                        "output": kwargs.get("output"),
+                    }
+                    logger.debug(f"Registered template node '{func_name}' with config: {template_config}")
+                elif decorator_name == "transform_node":
+                    output = kwargs.get("output")
+                    self.nodes[func_name] = {
+                        "type": "function",
+                        "function": func_name,
+                        "inputs": inputs,
+                        "output": output,
+                    }
+                    logger.debug(f"Registered transform node '{func_name}' with output '{output}'")
                 else:
                     logger.warning(f"Unsupported decorator 'Nodes.{decorator_name}' in function '{func_name}'")
 
@@ -228,6 +258,8 @@ class WorkflowExtractor(ast.NodeVisitor):
                         kwargs[kw.arg] = kw.value.value
                     elif kw.arg == "response_model" and isinstance(kw.value, ast.Name):
                         kwargs[kw.arg] = ast.unparse(kw.value)
+                    elif kw.arg == "transformer" and isinstance(kw.value, ast.Lambda):
+                        kwargs[kw.arg] = ast.unparse(kw.value)
 
             if decorator_name:
                 func_name = node.name
@@ -241,6 +273,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         "inputs": inputs,
                         "output": output,
                     }
+                    logger.debug(f"Registered function node '{func_name}' with output '{output}'")
                 elif decorator_name == "llm_node":
                     llm_config = {
                         key: value
@@ -264,6 +297,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         "inputs": inputs,
                         "output": llm_config.get("output"),
                     }
+                    logger.debug(f"Registered LLM node '{func_name}' with model '{llm_config.get('model')}'")
                 elif decorator_name == "validate_node":
                     output = kwargs.get("output")
                     self.nodes[func_name] = {
@@ -272,6 +306,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         "inputs": inputs,
                         "output": output,
                     }
+                    logger.debug(f"Registered validate node '{func_name}' with output '{output}'")
                 elif decorator_name == "structured_llm_node":
                     llm_config = {
                         key: value
@@ -296,6 +331,30 @@ class WorkflowExtractor(ast.NodeVisitor):
                         "inputs": inputs,
                         "output": llm_config.get("output"),
                     }
+                    logger.debug(f"Registered structured LLM node '{func_name}' with model '{llm_config.get('model')}'")
+                elif decorator_name == "template_node":
+                    template_config = {
+                        "template": kwargs.get("template", ""),
+                        "template_file": kwargs.get("template_file"),
+                    }
+                    if "rendered_content" not in inputs:
+                        inputs.insert(0, "rendered_content")
+                    self.nodes[func_name] = {
+                        "type": "template",
+                        "template_config": template_config,
+                        "inputs": inputs,
+                        "output": kwargs.get("output"),
+                    }
+                    logger.debug(f"Registered template node '{func_name}' with config: {template_config}")
+                elif decorator_name == "transform_node":
+                    output = kwargs.get("output")
+                    self.nodes[func_name] = {
+                        "type": "function",
+                        "function": func_name,
+                        "inputs": inputs,
+                        "output": output,
+                    }
+                    logger.debug(f"Registered transform node '{func_name}' with output '{output}'")
                 else:
                     logger.warning(f"Unsupported decorator 'Nodes.{decorator_name}' in function '{func_name}'")
 
@@ -340,7 +399,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                 next_node = expr.args[0].value if expr.args else None
                 condition = None
                 for keyword in expr.keywords:
-                    if keyword.arg == "condition":
+                    if keyword.arg == "condition" and keyword.value:
                         condition = ast.unparse(keyword.value)
                 if previous_node and next_node:
                     self.transitions.append(TransitionDefinition(from_node=previous_node, to_node=next_node, condition=condition))
@@ -349,8 +408,9 @@ class WorkflowExtractor(ast.NodeVisitor):
 
             elif method_name == "sequence":
                 nodes = [arg.value for arg in expr.args]
-                if previous_node:
+                if previous_node and nodes:
                     self.transitions.append(TransitionDefinition(from_node=previous_node, to_node=nodes[0]))
+                    logger.debug(f"Added sequence start transition: {previous_node} -> {nodes[0]}")
                 for i in range(len(nodes) - 1):
                     self.transitions.append(TransitionDefinition(from_node=nodes[i], to_node=nodes[i + 1]))
                     logger.debug(f"Added sequence transition: {nodes[i]} -> {nodes[i + 1]}")
@@ -385,34 +445,64 @@ class WorkflowExtractor(ast.NodeVisitor):
 
             elif method_name == "node":
                 node_name = expr.args[0].value if expr.args else None
-                if node_name and previous_node:
-                    self.transitions.append(TransitionDefinition(from_node=previous_node, to_node=node_name))
-                    logger.debug(f"Added node transition: {previous_node} -> {node_name}")
+                inputs_mapping = None
+                for keyword in expr.keywords:
+                    if keyword.arg == "inputs_mapping" and isinstance(keyword.value, ast.Dict):
+                        inputs_mapping = {}
+                        for k, v in zip(keyword.value.keys, keyword.value.values):
+                            key = k.value if isinstance(k, ast.Constant) else ast.unparse(k)
+                            if isinstance(v, ast.Constant):
+                                inputs_mapping[key] = v.value
+                            elif isinstance(v, ast.Lambda):
+                                inputs_mapping[key] = f"lambda ctx: {ast.unparse(v.body)}"
+                            else:
+                                inputs_mapping[key] = ast.unparse(v)
+                if node_name:
+                    if node_name in self.nodes and inputs_mapping:
+                        self.nodes[node_name]["inputs_mapping"] = inputs_mapping
+                        logger.debug(f"Added inputs_mapping to node '{node_name}': {inputs_mapping}")
+                    if previous_node:
+                        self.transitions.append(TransitionDefinition(from_node=previous_node, to_node=node_name))
+                        logger.debug(f"Added node transition: {previous_node} -> {node_name}")
                 return node_name
 
             elif method_name == "add_sub_workflow":
-                sub_wf_name = expr.args[0].value
-                sub_wf_obj = expr.args[1]
+                sub_wf_name = expr.args[0].value if expr.args else None
+                sub_wf_obj = expr.args[1] if len(expr.args) > 1 else None
                 inputs = {}
+                inputs_mapping = None
+                output = None
                 if len(expr.args) > 2 and isinstance(expr.args[2], ast.Dict):
-                    inputs = {k.value: v.value for k, v in zip(expr.args[2].keys, expr.args[2].values)}
-                output = expr.args[3].value if len(expr.args) > 3 else None
-                sub_extractor = WorkflowExtractor()
-                sub_extractor.process_workflow_expr(sub_wf_obj, f"{var_name}_{sub_wf_name}")
-                self.nodes[sub_wf_name] = {
-                    "type": "sub_workflow",
-                    "sub_workflow": WorkflowStructure(
-                        start=sub_extractor.start_node,
-                        transitions=sub_extractor.transitions,
-                        convergence_nodes=sub_extractor.convergence_nodes,
-                    ),
-                    "inputs": list(inputs.keys()),
-                    "output": output,
-                }
-                self.observers.extend(sub_extractor.observers)
-                logger.debug(f"Added sub-workflow node '{sub_wf_name}' with start '{sub_extractor.start_node}'")
-                if previous_node:
-                    self.transitions.append(TransitionDefinition(from_node=previous_node, to_node=sub_wf_name))
+                    inputs_mapping = {}
+                    for k, v in zip(expr.args[2].keys, expr.args[2].values):
+                        key = k.value if isinstance(k, ast.Constant) else ast.unparse(k)
+                        if isinstance(v, ast.Constant):
+                            inputs_mapping[key] = v.value
+                        elif isinstance(v, ast.Lambda):
+                            inputs_mapping[key] = f"lambda ctx: {ast.unparse(v.body)}"
+                        else:
+                            inputs_mapping[key] = ast.unparse(v)
+                    inputs = list(inputs_mapping.keys())
+                if len(expr.args) > 3:
+                    output = expr.args[3].value
+                if sub_wf_name and sub_wf_obj:
+                    sub_extractor = WorkflowExtractor()
+                    sub_extractor.process_workflow_expr(sub_wf_obj, f"{var_name}_{sub_wf_name}")
+                    self.nodes[sub_wf_name] = {
+                        "type": "sub_workflow",
+                        "sub_workflow": WorkflowStructure(
+                            start=sub_extractor.start_node,
+                            transitions=sub_extractor.transitions,
+                            convergence_nodes=sub_extractor.convergence_nodes,
+                        ),
+                        "inputs": inputs,
+                        "inputs_mapping": inputs_mapping,
+                        "output": output,
+                    }
+                    self.observers.extend(sub_extractor.observers)
+                    logger.debug(f"Added sub-workflow node '{sub_wf_name}' with start '{sub_extractor.start_node}' and inputs_mapping: {inputs_mapping}")
+                    if previous_node:
+                        self.transitions.append(TransitionDefinition(from_node=previous_node, to_node=sub_wf_name))
                 return sub_wf_name
 
             elif method_name == "add_observer":
@@ -456,6 +546,7 @@ def extract_workflow_from_file(file_path):
         if node_info["type"] == "function":
             nodes[name] = NodeDefinition(
                 function=node_info["function"],
+                inputs_mapping=node_info.get("inputs_mapping"),
                 output=node_info["output"],
                 retries=3,
                 delay=1.0,
@@ -466,6 +557,7 @@ def extract_workflow_from_file(file_path):
             llm_config = LLMConfig(**node_info["llm_config"])
             nodes[name] = NodeDefinition(
                 llm_config=llm_config,
+                inputs_mapping=node_info.get("inputs_mapping"),
                 output=node_info["output"],
                 retries=3,
                 delay=1.0,
@@ -476,6 +568,18 @@ def extract_workflow_from_file(file_path):
             llm_config = LLMConfig(**node_info["llm_config"])
             nodes[name] = NodeDefinition(
                 llm_config=llm_config,
+                inputs_mapping=node_info.get("inputs_mapping"),
+                output=node_info["output"],
+                retries=3,
+                delay=1.0,
+                timeout=None,
+                parallel=False,
+            )
+        elif node_info["type"] == "template":
+            template_config = TemplateConfig(**node_info["template_config"])
+            nodes[name] = NodeDefinition(
+                template_config=template_config,
+                inputs_mapping=node_info.get("inputs_mapping"),
                 output=node_info["output"],
                 retries=3,
                 delay=1.0,
@@ -485,6 +589,7 @@ def extract_workflow_from_file(file_path):
         elif node_info["type"] == "sub_workflow":
             nodes[name] = NodeDefinition(
                 sub_workflow=node_info["sub_workflow"],
+                inputs_mapping=node_info.get("inputs_mapping"),
                 output=node_info["output"],
                 retries=3,
                 delay=1.0,
@@ -492,6 +597,19 @@ def extract_workflow_from_file(file_path):
                 parallel=False,
             )
 
+    # Optional: Deduplicate transitions (uncomment if desired)
+    # seen = set()
+    # unique_transitions = []
+    # for t in extractor.transitions:
+    #     key = (t.from_node, str(t.to_node), t.condition)
+    #     if key not in seen:
+    #         seen.add(key)
+    #         unique_transitions.append(t)
+    # workflow_structure = WorkflowStructure(
+    #     start=extractor.start_node,
+    #     transitions=unique_transitions,
+    #     convergence_nodes=extractor.convergence_nodes,
+    # )
     workflow_structure = WorkflowStructure(
         start=extractor.start_node,
         transitions=extractor.transitions,
@@ -538,9 +656,16 @@ def print_workflow_definition(workflow_def):
             print(f"  Prompt Template: {node.llm_config.prompt_template}")
             if node.llm_config.prompt_file:
                 print(f"  Prompt File: {node.llm_config.prompt_file}")
+        elif node.template_config:
+            print("  Type: Template")
+            print(f"  Template: {node.template_config.template}")
+            if node.template_config.template_file:
+                print(f"  Template File: {node.template_config.template_file}")
         elif node.sub_workflow:
             print("  Type: Sub-Workflow")
             print(f"  Start Node: {node.sub_workflow.start}")
+        if node.inputs_mapping:
+            print(f"  Inputs Mapping: {node.inputs_mapping}")
         print(f"  Output: {node.output or 'None'}")
 
     print("\n#### Workflow Structure:")

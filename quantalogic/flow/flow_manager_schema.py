@@ -4,13 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class FunctionDefinition(BaseModel):
-    """
-    Definition of a function used in the workflow.
-
-    This model supports both embedded functions (inline code) and external functions sourced
-    from Python modules, including PyPI packages, local files, or remote URLs.
-    """
-
+    """Definition of a function used in the workflow."""
     type: str = Field(
         ...,
         description="Type of function source. Must be 'embedded' for inline code or 'external' for module-based functions.",
@@ -55,16 +49,15 @@ class FunctionDefinition(BaseModel):
 
 class LLMConfig(BaseModel):
     """Configuration for LLM-based nodes."""
-
     model: str = Field(
         default="gpt-3.5-turbo", description="The LLM model to use (e.g., 'gpt-3.5-turbo', 'gemini/gemini-2.0-flash')."
     )
     system_prompt: Optional[str] = Field(None, description="System prompt defining the LLM's role or context.")
     prompt_template: str = Field(
-        default="{{ input }}", description="Jinja2 template for the user prompt (e.g., 'Summarize {{ text }}'). Ignored if prompt_file is set."
+        default="{{ input }}", description="Jinja2 template for the user prompt. Ignored if prompt_file is set."
     )
     prompt_file: Optional[str] = Field(
-        None, description="Path to an external Jinja2 template file (e.g., 'prompts/summary.j2'). Takes precedence over prompt_template if provided."
+        None, description="Path to an external Jinja2 template file. Takes precedence over prompt_template."
     )
     temperature: float = Field(
         default=0.7, ge=0.0, le=1.0, description="Controls randomness of LLM output (0.0 to 1.0)."
@@ -77,13 +70,10 @@ class LLMConfig(BaseModel):
     frequency_penalty: float = Field(
         default=0.0, ge=-2.0, le=2.0, description="Penalty for repeating words (-2.0 to 2.0)."
     )
-    stop: Optional[List[str]] = Field(None, description="List of stop sequences for LLM generation (e.g., ['\\n']).")
+    stop: Optional[List[str]] = Field(None, description="List of stop sequences for LLM generation.")
     response_model: Optional[str] = Field(
         None,
-        description=(
-            "Path to a Pydantic model for structured output (e.g., 'my_module:OrderDetails'). "
-            "If specified, uses structured_llm_node; otherwise, uses llm_node."
-        ),
+        description="Path to a Pydantic model for structured output (e.g., 'my_module:OrderDetails')."
     )
     api_key: Optional[str] = Field(None, description="Custom API key for the LLM provider, if required.")
 
@@ -97,13 +87,30 @@ class LLMConfig(BaseModel):
         return data
 
 
+class TemplateConfig(BaseModel):
+    """Configuration for template-based nodes."""
+    template: str = Field(
+        default="", description="Jinja2 template string to render. Ignored if template_file is set."
+    )
+    template_file: Optional[str] = Field(
+        None, description="Path to an external Jinja2 template file. Takes precedence over template."
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_template_source(cls, data: Any) -> Any:
+        """Ensure template_file and template are used appropriately."""
+        template_file = data.get("template_file")
+        template = data.get("template")
+        if not template and not template_file:
+            raise ValueError("Either 'template' or 'template_file' must be provided")
+        if template_file and not isinstance(template_file, str):
+            raise ValueError("template_file must be a string path to a Jinja2 template file")
+        return data
+
+
 class NodeDefinition(BaseModel):
-    """
-    Definition of a workflow node.
-
-    A node must specify exactly one of 'function', 'sub_workflow', or 'llm_config'.
-    """
-
+    """Definition of a workflow node with template_node and inputs_mapping support."""
     function: Optional[str] = Field(
         None, description="Name of the function to execute (references a FunctionDefinition)."
     )
@@ -111,12 +118,14 @@ class NodeDefinition(BaseModel):
         None, description="Nested workflow definition for sub-workflow nodes."
     )
     llm_config: Optional[LLMConfig] = Field(None, description="Configuration for LLM-based nodes.")
+    template_config: Optional[TemplateConfig] = Field(None, description="Configuration for template-based nodes.")
+    inputs_mapping: Optional[Dict[str, str]] = Field(
+        None,
+        description="Mapping of node inputs to context keys or stringified lambda expressions (e.g., 'lambda ctx: value')."
+    )
     output: Optional[str] = Field(
         None,
-        description=(
-            "Context key to store the node's result. Defaults to '<node_name>_result' "
-            "for function or LLM nodes if not specified."
-        ),
+        description="Context key to store the node's result. Defaults to '<node_name>_result' if applicable."
     )
     retries: int = Field(default=3, ge=0, description="Number of retry attempts on failure.")
     delay: float = Field(default=1.0, ge=0.0, description="Delay in seconds between retries.")
@@ -127,30 +136,29 @@ class NodeDefinition(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def check_function_or_sub_workflow_or_llm(cls, data: Any) -> Any:
-        """Ensure a node has exactly one of 'function', 'sub_workflow', or 'llm_config'."""
+    def check_function_or_sub_workflow_or_llm_or_template(cls, data: Any) -> Any:
+        """Ensure a node has exactly one of 'function', 'sub_workflow', 'llm_config', or 'template_config'."""
         func = data.get("function")
         sub_wf = data.get("sub_workflow")
         llm = data.get("llm_config")
-        if sum(x is not None for x in (func, sub_wf, llm)) != 1:
-            raise ValueError("Node must have exactly one of 'function', 'sub_workflow', or 'llm_config'")
+        template = data.get("template_config")
+        if sum(x is not None for x in (func, sub_wf, llm, template)) != 1:
+            raise ValueError("Node must have exactly one of 'function', 'sub_workflow', 'llm_config', or 'template_config'")
         return data
 
 
 class BranchCondition(BaseModel):
     """Definition of a branch condition for a transition."""
-
     to_node: str = Field(
         ..., description="Target node name for this branch."
     )
     condition: Optional[str] = Field(
-        None, description="Python expression using 'ctx' for conditional branching (e.g., 'ctx.get(\"in_stock\")')."
+        None, description="Python expression using 'ctx' for conditional branching."
     )
 
 
 class TransitionDefinition(BaseModel):
-    """Definition of a transition between nodes, including support for branching."""
-
+    """Definition of a transition between nodes."""
     from_node: str = Field(
         ...,
         description="Source node name for the transition.",
@@ -158,27 +166,20 @@ class TransitionDefinition(BaseModel):
     to_node: Union[str, List[Union[str, BranchCondition]]] = Field(
         ...,
         description=(
-            "Target node(s). Can be:"
-            " - A string for a single sequential transition."
-            " - A list of strings for parallel execution."
-            " - A list of BranchCondition objects for conditional branching."
+            "Target node(s). Can be: a string, list of strings (parallel), or list of BranchCondition (branching)."
         ),
     )
     condition: Optional[str] = Field(
         None,
-        description=(
-            "Python expression using 'ctx' for simple transitions (e.g., 'ctx.get(\"in_stock\")'). "
-            "Ignored if to_node is a list of BranchCondition objects."
-        ),
+        description="Python expression using 'ctx' for simple transitions."
     )
 
 
 class WorkflowStructure(BaseModel):
-    """Structure defining the workflow's execution flow, including branch and converge support."""
-
+    """Structure defining the workflow's execution flow."""
     start: Optional[str] = Field(None, description="Name of the starting node.")
     transitions: List[TransitionDefinition] = Field(
-        default_factory=list, description="List of transitions between nodes, including branches."
+        default_factory=list, description="List of transitions between nodes."
     )
     convergence_nodes: List[str] = Field(
         default_factory=list, description="List of nodes where branches converge."
@@ -187,26 +188,20 @@ class WorkflowStructure(BaseModel):
 
 class WorkflowDefinition(BaseModel):
     """Top-level definition of the workflow."""
-
     functions: Dict[str, FunctionDefinition] = Field(
-        default_factory=dict, description="Dictionary of function definitions used in the workflow."
+        default_factory=dict, description="Dictionary of function definitions."
     )
     nodes: Dict[str, NodeDefinition] = Field(default_factory=dict, description="Dictionary of node definitions.")
     workflow: WorkflowStructure = Field(
-        default_factory=lambda: WorkflowStructure(start=None), description="Main workflow structure with start node, transitions, and convergence points."
+        default_factory=lambda: WorkflowStructure(start=None), description="Main workflow structure."
     )
     observers: List[str] = Field(
-        default_factory=list, description="List of observer function names to monitor workflow execution."
+        default_factory=list, description="List of observer function names."
     )
     dependencies: List[str] = Field(
         default_factory=list,
-        description=(
-            "List of Python module dependencies required by the workflow. "
-            "Examples: PyPI packages ('requests>=2.28.0'), local paths ('/path/to/module.py'), "
-            "or remote URLs ('https://example.com/module.py'). Processed during workflow instantiation."
-        ),
+        description="List of Python module dependencies."
     )
 
 
-# Resolve forward reference for sub_workflow in NodeDefinition
 NodeDefinition.model_rebuild()
