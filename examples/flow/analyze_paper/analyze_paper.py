@@ -2,18 +2,18 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "loguru>=0.7.2",              # Logging utility
-#     "litellm>=1.0.0",             # LLM integration
-#     "pydantic>=2.0.0",            # Data validation and settings
-#     "asyncio",                    # Async utilities
-#     "jinja2>=3.1.0",              # Templating engine
-#     "py-zerox",                   # PDF processing
-#     "pdf2image",                  # PDF to image conversion
-#     "pillow",                     # Image handling
-#     "quantalogic",                # Workflow framework
-#     "instructor[litellm]>=0.5.0", # Structured LLM output
-#     "typer>=0.9.0",               # Command line interface
-#     "rich>=13.0.0"                # Rich text and formatting
+#     "loguru>=0.7.2",
+#     "litellm>=1.0.0",
+#     "pydantic>=2.0.0",
+#     "asyncio",
+#     "jinja2>=3.1.0",
+#     "py-zerox",
+#     "pdf2image",
+#     "pillow",
+#     "quantalogic",
+#     "instructor[litellm]>=0.5.2",
+#     "typer>=0.9.0",
+#     "rich>=13.0.0"
 # ]
 # ///
 # System dependencies:
@@ -22,7 +22,7 @@
 import asyncio
 import os
 from pathlib import Path
-from typing import Annotated, List, Optional, Union
+from typing import Annotated, List, Optional, Tuple, Union
 
 import typer
 from loguru import logger
@@ -38,8 +38,10 @@ from quantalogic.flow.flow import Nodes, Workflow
 app = typer.Typer(help="Convert a PDF to a LinkedIn post using LLMs")
 console = Console()
 
-# Default model to use (Gemini Flash 2.0)
-DEFAULT_MODEL = "gemini/gemini-2.0-flash"
+# Default models for different phases
+DEFAULT_TEXT_EXTRACTION_MODEL = "gemini/gemini-2.0-flash"
+DEFAULT_CLEANING_MODEL = "gemini/gemini-2.0-flash"
+DEFAULT_WRITING_MODEL = "deepseek/deepseek-reasoner"
 
 # Define a Pydantic model for structured output of title and authors
 class PaperInfo(BaseModel):
@@ -55,13 +57,11 @@ async def convert_pdf_to_markdown(
     output_dir: Optional[str] = None,
     select_pages: Optional[Union[int, List[int]]] = None
 ) -> str:
-    """Convert a PDF to Markdown using a vision model, preserving original functionality."""
-    # Expand tilde in paths
+    """Convert a PDF to Markdown using a vision model."""
     pdf_path = os.path.expanduser(pdf_path)
     if output_dir:
         output_dir = os.path.expanduser(output_dir)
         
-    # Validate the PDF file path
     if not pdf_path:
         logger.error("PDF path is required")
         raise ValueError("PDF path is required")
@@ -72,7 +72,6 @@ async def convert_pdf_to_markdown(
         logger.error(f"File must be a PDF: {pdf_path}")
         raise ValueError(f"File must be a PDF: {pdf_path}")
 
-    # Set default system prompt if none provided
     if custom_system_prompt is None:
         custom_system_prompt = (
             "Convert the PDF page to a clean, well-formatted Markdown document. "
@@ -91,7 +90,6 @@ async def convert_pdf_to_markdown(
             select_pages=select_pages
         )
 
-        # Handle different possible outputs from zerox
         markdown_content = ""
         if hasattr(zerox_result, 'pages') and zerox_result.pages:
             markdown_content = "\n\n".join(
@@ -114,7 +112,6 @@ async def convert_pdf_to_markdown(
 
         logger.info(f"Extracted Markdown content length: {len(markdown_content)} characters")
         return markdown_content
-
     except Exception as e:
         logger.error(f"Error converting PDF to Markdown: {e}")
         raise
@@ -122,10 +119,10 @@ async def convert_pdf_to_markdown(
 # Node 2: Extract First 100 Lines
 @Nodes.define(output="first_100_lines")
 async def extract_first_100_lines(markdown_content: str) -> str:
-    """Extract the first 100 lines from the Markdown content for title and author extraction."""
+    """Extract the first 100 lines from the Markdown content."""
     try:
         lines = markdown_content.splitlines()
-        first_100 = lines[:100]  # Take first 100 lines as per requirement
+        first_100 = lines[:100]
         result = "\n".join(first_100)
         logger.info(f"Extracted {len(first_100)} lines from Markdown content")
         return result
@@ -135,7 +132,7 @@ async def extract_first_100_lines(markdown_content: str) -> str:
 
 # Node 3: Extract Title and Authors using Structured LLM
 @Nodes.structured_llm_node(
-    model=DEFAULT_MODEL,  # Use Gemini instead of OpenAI to avoid quota issues
+    model=DEFAULT_CLEANING_MODEL,
     system_prompt="You are an AI assistant tasked with extracting the title and authors from a research paper's Markdown text.",
     output="paper_info",
     response_model=PaperInfo,
@@ -143,19 +140,33 @@ async def extract_first_100_lines(markdown_content: str) -> str:
                     "The title is typically the first heading or prominent text, and authors are usually listed below it:\n\n{{first_100_lines}}"
 )
 async def extract_paper_info(first_100_lines: str) -> PaperInfo:
-    """Extract title and authors from the first 100 lines using a structured LLM."""
-    # The actual extraction is handled by the structured_llm_node decorator
-    # This function serves as a placeholder for the node definition
+    """Extract title and authors from the first 100 lines."""
     pass
 
-# Node 4: Generate LinkedIn Post using LLM
+# Node 4: Convert PaperInfo to Strings
+@Nodes.define(output=("title_str", "authors_str"))
+async def convert_paper_info_to_strings(paper_info: PaperInfo) -> Tuple[str, str]:
+    """Convert PaperInfo object to separate title and authors strings."""
+    try:
+        title_str = paper_info.title
+        authors_str = ", ".join(paper_info.authors)
+        logger.info(f"Converted PaperInfo to strings: title='{title_str}', authors='{authors_str}'")
+        return title_str, authors_str
+    except Exception as e:
+        logger.error(f"Error converting PaperInfo to strings: {e}")
+        raise
+
+# Node 5: Generate LinkedIn Post using LLM
 @Nodes.llm_node(
-    model=DEFAULT_MODEL,  # Use Gemini instead of OpenAI to avoid quota issues
+    model=DEFAULT_WRITING_MODEL,
     system_prompt="You are an AI expert who enjoys sharing interesting papers and articles with a professional audience.",
     output="draft_post_content",
     prompt_template="""
 ## The task to do
-As an AI expert that likes to share interesting papers and articles, write the best possible LinkedIn post to introduce a new research paper "{{paper_info.title}}" from {{paper_info.authors | join(', ') }}.
+As an AI expert that likes to share interesting papers and articles, write the best possible LinkedIn post to introduce a new research paper "{{title_str}}" from {{authors_str}}. Use the full Markdown content of the paper provided below to inform your post.
+
+## Paper Content
+{{markdown_content}}
 
 ## Message to convey
 Start with an intriguing question to capture attention, applying a psychology framework to maximize engagement and encourage sharing.
@@ -179,15 +190,13 @@ Use the Richard Feynman technique to ensure clarity and understanding. Never cit
 - Suggest a compelling title for the post.
 """
 )
-async def generate_linkedin_post(paper_info: PaperInfo) -> str:
-    """Generate a LinkedIn post in Markdown based on the paper's title and authors."""
-    # The actual generation is handled by the llm_node decorator
-    # This function serves as a placeholder for the node definition
+async def generate_linkedin_post(title_str: str, authors_str: str, markdown_content: str) -> str:
+    """Generate a LinkedIn post in Markdown using title, authors, and full markdown content."""
     pass
 
-# Node 5: Format LinkedIn Post for publishing
+# Node 6: Format LinkedIn Post for publishing
 @Nodes.llm_node(
-    model=DEFAULT_MODEL,  # Use Gemini instead of OpenAI to avoid quota issues
+    model=DEFAULT_WRITING_MODEL,
     system_prompt="You are an expert LinkedIn post formatter who prepares content for direct publishing.",
     output="post_content",
     prompt_template="""
@@ -208,47 +217,50 @@ Instructions:
 )
 async def format_linkedin_post(draft_post_content: str) -> str:
     """Clean and format the LinkedIn post for publishing."""
-    # The actual formatting is handled by the llm_node decorator
-    # This function serves as a placeholder for the node definition
     pass
 
 # Define the Workflow
 def create_pdf_to_linkedin_workflow() -> Workflow:
     """Create a workflow to convert a PDF to a LinkedIn post."""
-    workflow = (
+    return (
         Workflow("convert_pdf_to_markdown")
         .sequence(
-            "convert_pdf_to_markdown",      # Step 1: Convert PDF to Markdown
-            "extract_first_100_lines",      # Step 2: Extract first 100 lines
-            "extract_paper_info",           # Step 3: Extract title and authors
-            "generate_linkedin_post",       # Step 4: Generate LinkedIn post draft
-            "format_linkedin_post"          # Step 5: Format the post for publishing
+            "convert_pdf_to_markdown",
+            "extract_first_100_lines",
+            "extract_paper_info",
+            "convert_paper_info_to_strings",
+            "generate_linkedin_post",
+            "format_linkedin_post"
         )
     )
-    return workflow
 
 # Function to Run the Workflow
-async def run_workflow(pdf_path: str, model: str, output_dir: Optional[str] = None) -> dict:
-    """Execute the workflow with the given PDF path and model."""
-    # Expand tilde in paths
+async def run_workflow(
+    pdf_path: str,
+    text_extraction_model: str,
+    cleaning_model: str,
+    writing_model: str,
+    output_dir: Optional[str] = None
+) -> dict:
+    """Execute the workflow with the given PDF path and models."""
     pdf_path = os.path.expanduser(pdf_path)
     if output_dir:
         output_dir = os.path.expanduser(output_dir)
         
-    # Validate inputs
     if not os.path.exists(pdf_path):
         logger.error(f"PDF file not found: {pdf_path}")
         raise ValueError(f"PDF file not found: {pdf_path}")
 
-    # Initial context for the workflow
     initial_context = {
         "pdf_path": pdf_path,
-        "model": model,  # Model for PDF conversion and LLM tasks
+        "model": text_extraction_model,
+        "text_extraction_model": text_extraction_model,
+        "cleaning_model": cleaning_model,
+        "writing_model": writing_model,
         "output_dir": output_dir if output_dir else str(Path(pdf_path).parent)
     }
 
     try:
-        # Build and run the workflow
         workflow = create_pdf_to_linkedin_workflow()
         engine = workflow.build()
         result = await engine.run(initial_context)
@@ -266,26 +278,28 @@ async def run_workflow(pdf_path: str, model: str, output_dir: Optional[str] = No
 @app.command()
 def analyze(
     pdf_path: Annotated[str, typer.Argument(help="Path to the PDF file (supports ~ expansion)")],
-    model: Annotated[str, typer.Option(help="LLM model to use")] = DEFAULT_MODEL,
+    text_extraction_model: Annotated[str, typer.Option(help="LLM model for PDF text extraction")] = DEFAULT_TEXT_EXTRACTION_MODEL,
+    cleaning_model: Annotated[str, typer.Option(help="LLM model for title/author extraction")] = DEFAULT_CLEANING_MODEL,
+    writing_model: Annotated[str, typer.Option(help="LLM model for article writing and formatting")] = DEFAULT_WRITING_MODEL,
     output_dir: Annotated[Optional[str], typer.Option(help="Directory to save output files (supports ~ expansion)")] = None,
     save: Annotated[bool, typer.Option(help="Save output to a markdown file")] = True,
 ):
-    """
-    Convert a PDF paper to a LinkedIn post using an LLM workflow.
-    
-    This tool processes academic papers in PDF format and generates
-    engaging LinkedIn content based on the extracted information.
-    """
+    """Convert a PDF paper to a LinkedIn post using an LLM workflow."""
     try:
         with console.status(f"Processing [bold blue]{pdf_path}[/]..."):
-            result = asyncio.run(run_workflow(pdf_path, model, output_dir))
+            result = asyncio.run(run_workflow(
+                pdf_path,
+                text_extraction_model,
+                cleaning_model,
+                writing_model,
+                output_dir
+            ))
         
         post_content = result["post_content"]
         console.print("\n[bold green]Generated LinkedIn Post:[/]")
         console.print(Panel(Markdown(post_content), border_style="blue"))
         
         if save:
-            # Expand tilde in output path
             pdf_path_expanded = os.path.expanduser(pdf_path)
             output_path = Path(pdf_path_expanded).with_suffix(".md")
             with output_path.open("w", encoding="utf-8") as f:
