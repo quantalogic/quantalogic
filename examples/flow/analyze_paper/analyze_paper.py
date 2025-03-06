@@ -11,9 +11,10 @@
 #     "pdf2image",
 #     "pillow",
 #     "quantalogic",
-#     "instructor[litellm]>=0.5.2",
+#     "instructor>=0.5.2",  # Updated to remove [litellm] since it's not an extra
 #     "typer>=0.9.0",
-#     "rich>=13.0.0"
+#     "rich>=13.0.0",
+#     "pyperclip>=1.8.2"
 # ]
 # ///
 # System dependencies:
@@ -31,6 +32,8 @@ from pyzerox import zerox
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
+import pyperclip
 
 from quantalogic.flow.flow import Nodes, Workflow
 
@@ -114,6 +117,21 @@ async def convert_pdf_to_markdown(
         return markdown_content
     except Exception as e:
         logger.error(f"Error converting PDF to Markdown: {e}")
+        raise
+
+# New Node: Save Markdown Content
+@Nodes.define(output="markdown_file_path")
+async def save_markdown_content(markdown_content: str, pdf_path: str) -> str:
+    """Save the extracted markdown content to a file."""
+    try:
+        pdf_path_expanded = os.path.expanduser(pdf_path)
+        output_path = Path(pdf_path_expanded).with_suffix(".extracted.md")
+        with output_path.open("w", encoding="utf-8") as f:
+            f.write(markdown_content)
+        logger.info(f"Saved extracted markdown content to: {output_path}")
+        return str(output_path)
+    except Exception as e:
+        logger.error(f"Error saving markdown content: {e}")
         raise
 
 # Node 2: Extract First 100 Lines
@@ -219,6 +237,22 @@ async def format_linkedin_post(draft_post_content: str) -> str:
     """Clean and format the LinkedIn post for publishing."""
     pass
 
+# New Node: Copy to Clipboard (Conditional)
+@Nodes.define(output="clipboard_status")
+async def copy_to_clipboard(post_content: str, do_copy: bool) -> str:
+    """Copy the final LinkedIn post content to clipboard if do_copy is True."""
+    if do_copy:
+        try:
+            pyperclip.copy(post_content)
+            logger.info("Copied LinkedIn post content to clipboard")
+            return "Content copied to clipboard"
+        except Exception as e:
+            logger.error(f"Error copying to clipboard: {e}")
+            raise
+    else:
+        logger.info("Clipboard copying skipped as per user preference")
+        return "Clipboard copying skipped"
+
 # Define the Workflow
 def create_pdf_to_linkedin_workflow() -> Workflow:
     """Create a workflow to convert a PDF to a LinkedIn post."""
@@ -226,11 +260,13 @@ def create_pdf_to_linkedin_workflow() -> Workflow:
         Workflow("convert_pdf_to_markdown")
         .sequence(
             "convert_pdf_to_markdown",
+            "save_markdown_content",
             "extract_first_100_lines",
             "extract_paper_info",
             "convert_paper_info_to_strings",
             "generate_linkedin_post",
-            "format_linkedin_post"
+            "format_linkedin_post",
+            "copy_to_clipboard"
         )
     )
 
@@ -240,7 +276,8 @@ async def run_workflow(
     text_extraction_model: str,
     cleaning_model: str,
     writing_model: str,
-    output_dir: Optional[str] = None
+    output_dir: Optional[str] = None,
+    copy_to_clipboard_flag: bool = True
 ) -> dict:
     """Execute the workflow with the given PDF path and models."""
     pdf_path = os.path.expanduser(pdf_path)
@@ -257,7 +294,8 @@ async def run_workflow(
         "text_extraction_model": text_extraction_model,
         "cleaning_model": cleaning_model,
         "writing_model": writing_model,
-        "output_dir": output_dir if output_dir else str(Path(pdf_path).parent)
+        "output_dir": output_dir if output_dir else str(Path(pdf_path).parent),
+        "do_copy": copy_to_clipboard_flag
     }
 
     try:
@@ -275,6 +313,25 @@ async def run_workflow(
         logger.error(f"Error during workflow execution: {e}")
         raise
 
+async def display_results(post_content: str, markdown_file_path: str, copy_to_clipboard_flag: bool):
+    """Async helper function to display results with animation."""
+    console.print("\n[bold green]Generated LinkedIn Post:[/]")
+    console.print(Panel(Markdown(post_content), border_style="blue"))
+    
+    if copy_to_clipboard_flag:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True
+        ) as progress:
+            progress.add_task("[cyan]Copying to clipboard...", total=None)
+            await asyncio.sleep(1)  # Simulate some processing time for effect
+        console.print("[green]✓ Content copied to clipboard![/]")
+    else:
+        console.print("[yellow]Clipboard copying skipped as per user preference[/]")
+    
+    console.print(f"[green]✓ Extracted markdown saved to:[/] {markdown_file_path}")
+
 @app.command()
 def analyze(
     pdf_path: Annotated[str, typer.Argument(help="Path to the PDF file (supports ~ expansion)")],
@@ -283,6 +340,7 @@ def analyze(
     writing_model: Annotated[str, typer.Option(help="LLM model for article writing and formatting")] = DEFAULT_WRITING_MODEL,
     output_dir: Annotated[Optional[str], typer.Option(help="Directory to save output files (supports ~ expansion)")] = None,
     save: Annotated[bool, typer.Option(help="Save output to a markdown file")] = True,
+    copy_to_clipboard_flag: Annotated[bool, typer.Option(help="Copy the final post to clipboard")] = True
 ):
     """Convert a PDF paper to a LinkedIn post using an LLM workflow."""
     try:
@@ -292,19 +350,22 @@ def analyze(
                 text_extraction_model,
                 cleaning_model,
                 writing_model,
-                output_dir
+                output_dir,
+                copy_to_clipboard_flag
             ))
         
         post_content = result["post_content"]
-        console.print("\n[bold green]Generated LinkedIn Post:[/]")
-        console.print(Panel(Markdown(post_content), border_style="blue"))
+        markdown_file_path = result.get("markdown_file_path", "Not saved")
+        
+        # Run the async display function
+        asyncio.run(display_results(post_content, markdown_file_path, copy_to_clipboard_flag))
         
         if save:
             pdf_path_expanded = os.path.expanduser(pdf_path)
             output_path = Path(pdf_path_expanded).with_suffix(".md")
             with output_path.open("w", encoding="utf-8") as f:
                 f.write(post_content)
-            console.print(f"[green]Saved LinkedIn post to:[/] {output_path}")
+            console.print(f"[green]✓ Final LinkedIn post saved to:[/] {output_path}")
             logger.info(f"Saved LinkedIn post to: {output_path}")
     
     except Exception as e:
