@@ -16,6 +16,7 @@ from pydantic import BaseModel, ValidationError
 # Import directly from flow.py to avoid circular import through __init__.py
 from quantalogic.flow.flow import Nodes, Workflow
 from quantalogic.flow.flow_manager_schema import (
+    BranchCondition,
     FunctionDefinition,
     LLMConfig,
     NodeDefinition,
@@ -94,10 +95,15 @@ class WorkflowManager:
         self.workflow.workflow.transitions = [
             t
             for t in self.workflow.workflow.transitions
-            if t.from_node != name and (isinstance(t.to_node, str) or name not in t.to_node)
+            if t.from_node != name and (isinstance(t.to_node, str) or all(
+                isinstance(tn, str) and tn != name or isinstance(tn, BranchCondition) and tn.to_node != name
+                for tn in t.to_node
+            ))
         ]
         if self.workflow.workflow.start == name:
             self.workflow.workflow.start = None
+        if name in self.workflow.workflow.convergence_nodes:
+            self.workflow.workflow.convergence_nodes.remove(name)
 
     def update_node(
         self,
@@ -129,18 +135,17 @@ class WorkflowManager:
     def add_transition(
         self,
         from_node: str,
-        to_node: Union[str, List[str]],
+        to_node: Union[str, List[Union[str, BranchCondition]]],
         condition: Optional[str] = None,
         strict: bool = True,
     ) -> None:
-        """Add a transition between nodes.
+        """Add a transition between nodes, supporting branching.
         
         Args:
             from_node: Source node name
-            to_node: Target node name or list of target node names
-            condition: Optional condition for the transition
-            strict: If True, validates that all nodes exist before adding the transition.
-                   If False, allows adding transitions to non-existent nodes.
+            to_node: Target node name, list of target node names (for parallel), or list of BranchCondition objects (for branching)
+            condition: Optional condition for simple transitions (ignored if to_node is a list of BranchCondition)
+            strict: If True, validates that all nodes exist before adding the transition
         """
         if strict:
             if from_node not in self.workflow.nodes:
@@ -150,8 +155,9 @@ class WorkflowManager:
                     raise ValueError(f"Target node '{to_node}' does not exist")
             else:
                 for t in to_node:
-                    if t not in self.workflow.nodes:
-                        raise ValueError(f"Target node '{t}' does not exist")
+                    target = t if isinstance(t, str) else t.to_node
+                    if target not in self.workflow.nodes:
+                        raise ValueError(f"Target node '{target}' does not exist")
         # Create TransitionDefinition with named parameters
         transition = TransitionDefinition(
             from_node=from_node,
@@ -165,6 +171,14 @@ class WorkflowManager:
         if name not in self.workflow.nodes:
             raise ValueError(f"Node '{name}' does not exist")
         self.workflow.workflow.start = name
+
+    def add_convergence_node(self, name: str) -> None:
+        """Add a convergence node to the workflow."""
+        if name not in self.workflow.nodes:
+            raise ValueError(f"Node '{name}' does not exist")
+        if name not in self.workflow.workflow.convergence_nodes:
+            self.workflow.workflow.convergence_nodes.append(name)
+            logger.debug(f"Added convergence node '{name}'")
 
     def add_function(
         self,
@@ -290,14 +304,10 @@ class WorkflowManager:
         if not self.workflow.workflow.start:
             raise ValueError("Start node not set in workflow definition")
             
-        # We need to ensure we have a valid string for the start node
-        # First check if it's None and provide a fallback
+        # Ensure start node is a string
+        start_node_name = str(self.workflow.workflow.start) if self.workflow.workflow.start else "start"
         if self.workflow.workflow.start is None:
             logger.warning("Start node was None, using 'start' as default")
-            start_node_name = "start"
-        else:
-            # Otherwise convert to string
-            start_node_name = str(self.workflow.workflow.start)
         
         # Create the workflow with a valid start node
         wf = Workflow(start_node=start_node_name)
@@ -312,32 +322,41 @@ class WorkflowManager:
         sub_workflows: Dict[str, Workflow] = {}
         for node_name, node_def in self.workflow.nodes.items():
             if node_def.sub_workflow:
-                # Ensure we have a valid start node for the sub-workflow
+                # Ensure sub-workflow has a valid start node
+                start_node = str(node_def.sub_workflow.start) if node_def.sub_workflow.start else f"{node_name}_start"
                 if node_def.sub_workflow.start is None:
-                    logger.warning(f"Sub-workflow for node '{node_name}' has no start node, using '{node_name}_start' as default")
-                    start_node = f"{node_name}_start"
-                else:
-                    start_node = str(node_def.sub_workflow.start)
+                    logger.warning(f"Sub-workflow for node '{node_name}' has no start node, using '{start_node}'")
                 sub_wf = Workflow(start_node=start_node)
                 sub_workflows[node_name] = sub_wf
                 added_sub_nodes = set()
                 for trans in node_def.sub_workflow.transitions:
                     from_node = trans.from_node
-                    to_nodes = [trans.to_node] if isinstance(trans.to_node, str) else trans.to_node
                     if from_node not in added_sub_nodes:
                         sub_wf.node(from_node)
                         added_sub_nodes.add(from_node)
-                    for to_node in to_nodes:
-                        if to_node not in added_sub_nodes:
-                            sub_wf.node(to_node)
-                            added_sub_nodes.add(to_node)
-                    condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else None
-                    if len(to_nodes) > 1:
-                        sub_wf.parallel(*to_nodes)  # No condition support in parallel as per original
-                    else:
+                    if isinstance(trans.to_node, str):
+                        to_nodes = [trans.to_node]
+                        condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else None
+                        if to_nodes[0] not in added_sub_nodes:
+                            sub_wf.node(to_nodes[0])
+                            added_sub_nodes.add(to_nodes[0])
                         sub_wf.then(to_nodes[0], condition=condition)
+                    elif all(isinstance(tn, str) for tn in trans.to_node):
+                        to_nodes = trans.to_node
+                        for to_node in to_nodes:
+                            if to_node not in added_sub_nodes:
+                                sub_wf.node(to_node)
+                                added_sub_nodes.add(to_node)
+                        sub_wf.parallel(*to_nodes)
+                    else:  # List of BranchCondition
+                        branches = [(tn.to_node, eval(f"lambda ctx: {tn.condition}") if tn.condition else None) 
+                                  for tn in trans.to_node]
+                        for to_node, _ in branches:
+                            if to_node not in added_sub_nodes:
+                                sub_wf.node(to_node)
+                                added_sub_nodes.add(to_node)
+                        sub_wf.branch(branches)
                 inputs = list(Nodes.NODE_REGISTRY[sub_wf.start_node][1])
-                # Ensure output is a string
                 output = node_def.output if node_def.output is not None else f"{node_name}_result"
                 wf.add_sub_workflow(node_name, sub_wf, inputs={k: k for k in inputs}, output=output)
             elif node_def.function:
@@ -349,7 +368,6 @@ class WorkflowManager:
                 )(func)
             elif node_def.llm_config:
                 llm_config = node_def.llm_config
-                # Extract inputs from prompt_template if no prompt_file, otherwise assume inputs will be inferred at runtime
                 input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", llm_config.prompt_template)) if not llm_config.prompt_file else set()
                 cleaned_inputs = set()
                 for input_var in input_vars:
@@ -358,18 +376,16 @@ class WorkflowManager:
                         cleaned_inputs.add(base_var)
                 inputs_list: List[str] = list(cleaned_inputs)
 
-                # Define a dummy function to be decorated
                 async def dummy_func(**kwargs):
-                    pass  # This will be replaced by the decorator logic
+                    pass  # Replaced by decorator logic
 
                 if llm_config.response_model:
-                    # Structured LLM node
                     response_model = self._resolve_model(llm_config.response_model)
                     decorated_func = Nodes.structured_llm_node(
                         model=llm_config.model,
                         system_prompt=llm_config.system_prompt or "",
                         prompt_template=llm_config.prompt_template,
-                        prompt_file=llm_config.prompt_file,  # Pass prompt_file if provided
+                        prompt_file=llm_config.prompt_file,
                         response_model=response_model,
                         output=node_def.output or f"{node_name}_result",
                         temperature=llm_config.temperature,
@@ -380,12 +396,11 @@ class WorkflowManager:
                         api_key=llm_config.api_key,
                     )(dummy_func)
                 else:
-                    # Plain LLM node
                     decorated_func = Nodes.llm_node(
                         model=llm_config.model,
                         system_prompt=llm_config.system_prompt or "",
                         prompt_template=llm_config.prompt_template,
-                        prompt_file=llm_config.prompt_file,  # Pass prompt_file if provided
+                        prompt_file=llm_config.prompt_file,
                         output=node_def.output or f"{node_name}_result",
                         temperature=llm_config.temperature,
                         max_tokens=llm_config.max_tokens or 2000,
@@ -395,7 +410,6 @@ class WorkflowManager:
                         api_key=llm_config.api_key,
                     )(dummy_func)
 
-                # Register the node in NODE_REGISTRY with proper inputs
                 Nodes.NODE_REGISTRY[node_name] = (decorated_func, inputs_list, node_def.output or f"{node_name}_result")
                 logger.debug(
                     f"Registered LLM node '{node_name}' with inputs {inputs_list} and output {node_def.output or f'{node_name}_result'}"
@@ -404,19 +418,38 @@ class WorkflowManager:
         added_nodes = set()
         for trans in self.workflow.workflow.transitions:
             from_node = trans.from_node
-            to_nodes = [trans.to_node] if isinstance(trans.to_node, str) else trans.to_node
             if from_node not in added_nodes and from_node not in sub_workflows:
                 wf.node(from_node)
                 added_nodes.add(from_node)
-            for to_node in to_nodes:
-                if to_node not in added_nodes and to_node not in sub_workflows:
-                    wf.node(to_node)
-                    added_nodes.add(to_node)
-            condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else None
-            if len(to_nodes) > 1:
-                wf.parallel(*to_nodes)
-            else:
+            if isinstance(trans.to_node, str):
+                to_nodes = [trans.to_node]
+                condition = eval(f"lambda ctx: {trans.condition}") if trans.condition else None
+                if to_nodes[0] not in added_nodes and to_nodes[0] not in sub_workflows:
+                    wf.node(to_nodes[0])
+                    added_nodes.add(to_nodes[0])
                 wf.then(to_nodes[0], condition=condition)
+            elif all(isinstance(tn, str) for tn in trans.to_node):
+                to_nodes = trans.to_node
+                for to_node in to_nodes:
+                    if to_node not in added_nodes and to_node not in sub_workflows:
+                        wf.node(to_node)
+                        added_nodes.add(to_node)
+                wf.parallel(*to_nodes)
+            else:  # List of BranchCondition
+                branches = [(tn.to_node, eval(f"lambda ctx: {tn.condition}") if tn.condition else None) 
+                          for tn in trans.to_node]
+                for to_node, _ in branches:
+                    if to_node not in added_nodes and to_node not in sub_workflows:
+                        wf.node(to_node)
+                        added_nodes.add(to_node)
+                wf.branch(branches)
+
+        # Handle convergence nodes
+        for conv_node in self.workflow.workflow.convergence_nodes:
+            if conv_node not in added_nodes and conv_node not in sub_workflows:
+                wf.node(conv_node)
+                added_nodes.add(conv_node)
+            wf.converge(conv_node)
 
         return wf
 
@@ -429,7 +462,7 @@ class WorkflowManager:
             data = yaml.safe_load(f)
         try:
             self.workflow = WorkflowDefinition.model_validate(data)
-            self._ensure_dependencies()  # Ensure dependencies after loading
+            self._ensure_dependencies()
         except ValidationError as e:
             raise ValueError(f"Invalid workflow YAML: {e}")
 
@@ -437,13 +470,11 @@ class WorkflowManager:
         """Save the workflow to a YAML file using aliases and multi-line block scalars for code."""
         file_path = Path(file_path)
 
-        # Custom representer to use multi-line block scalars for multi-line strings
         def str_representer(dumper, data):
-            if "\n" in data:  # Use block scalar for multi-line strings
+            if "\n" in data:
                 return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
             return dumper.represent_scalar("tag:yaml.org,2002:str", data)
 
-        # Add the custom representer to the SafeDumper
         yaml.add_representer(str, str_representer, Dumper=yaml.SafeDumper)
 
         with file_path.open("w") as f:
@@ -453,18 +484,23 @@ class WorkflowManager:
                 default_flow_style=False,
                 sort_keys=False,
                 allow_unicode=True,
-                width=120,  # Wider width to reduce wrapping
+                width=120,
             )
 
 
 def main():
-    """Demonstrate usage of WorkflowManager with observer support."""
+    """Demonstrate usage of WorkflowManager with observer, branch, and converge support."""
     manager = WorkflowManager()
-    manager.workflow.dependencies = ["requests>=2.28.0"]  # Example dependency
+    manager.workflow.dependencies = ["requests>=2.28.0"]
     manager.add_function(
         name="greet",
         type_="embedded",
         code="def greet(user_name): return f'Hello, {user_name}!'",
+    )
+    manager.add_function(
+        name="check_condition",
+        type_="embedded",
+        code="def check_condition(user_name): return len(user_name) > 3",
     )
     manager.add_function(
         name="farewell",
@@ -482,10 +518,19 @@ def main():
                 print(f'Error: {event.exception}')""",
     )
     manager.add_node(name="start", function="greet")
+    manager.add_node(name="branch_true", function="check_condition")
+    manager.add_node(name="branch_false", function="check_condition")
     manager.add_node(name="end", function="farewell")
     manager.set_start_node("start")
-    manager.add_transition(from_node="start", to_node="end")
-    manager.add_observer("monitor")  # Add the observer
+    manager.add_transition(
+        from_node="start",
+        to_node=[
+            BranchCondition(to_node="branch_true", condition="ctx.get('user_name') == 'Alice'"),
+            BranchCondition(to_node="branch_false", condition="ctx.get('user_name') != 'Alice'")
+        ]
+    )
+    manager.add_convergence_node("end")
+    manager.add_observer("monitor")
     manager.save_to_yaml("workflow.yaml")
     new_manager = WorkflowManager()
     new_manager.load_from_yaml("workflow.yaml")

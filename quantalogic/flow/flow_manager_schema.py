@@ -137,27 +137,51 @@ class NodeDefinition(BaseModel):
         return data
 
 
+class BranchCondition(BaseModel):
+    """Definition of a branch condition for a transition."""
+
+    to_node: str = Field(
+        ..., description="Target node name for this branch."
+    )
+    condition: Optional[str] = Field(
+        None, description="Python expression using 'ctx' for conditional branching (e.g., 'ctx.get(\"in_stock\")')."
+    )
+
+
 class TransitionDefinition(BaseModel):
-    """Definition of a transition between nodes."""
+    """Definition of a transition between nodes, including support for branching."""
 
     from_node: str = Field(
         ...,
         description="Source node name for the transition.",
     )
-    to_node: Union[str, List[str]] = Field(
-        ..., description="Target node(s). A string for sequential, a list for parallel execution."
+    to_node: Union[str, List[Union[str, BranchCondition]]] = Field(
+        ...,
+        description=(
+            "Target node(s). Can be:"
+            " - A string for a single sequential transition."
+            " - A list of strings for parallel execution."
+            " - A list of BranchCondition objects for conditional branching."
+        ),
     )
     condition: Optional[str] = Field(
-        None, description="Python expression using 'ctx' for conditional transitions (e.g., 'ctx.get(\"in_stock\")')."
+        None,
+        description=(
+            "Python expression using 'ctx' for simple transitions (e.g., 'ctx.get(\"in_stock\")'). "
+            "Ignored if to_node is a list of BranchCondition objects."
+        ),
     )
 
 
 class WorkflowStructure(BaseModel):
-    """Structure defining the workflow's execution flow."""
+    """Structure defining the workflow's execution flow, including branch and converge support."""
 
     start: Optional[str] = Field(None, description="Name of the starting node.")
     transitions: List[TransitionDefinition] = Field(
-        default_factory=list, description="List of transitions between nodes."
+        default_factory=list, description="List of transitions between nodes, including branches."
+    )
+    convergence_nodes: List[str] = Field(
+        default_factory=list, description="List of nodes where branches converge."
     )
 
 
@@ -169,7 +193,7 @@ class WorkflowDefinition(BaseModel):
     )
     nodes: Dict[str, NodeDefinition] = Field(default_factory=dict, description="Dictionary of node definitions.")
     workflow: WorkflowStructure = Field(
-        default_factory=lambda: WorkflowStructure(start=None), description="Main workflow structure with start node and transitions."
+        default_factory=lambda: WorkflowStructure(start=None), description="Main workflow structure with start node, transitions, and convergence points."
     )
     observers: List[str] = Field(
         default_factory=list, description="List of observer function names to monitor workflow execution."

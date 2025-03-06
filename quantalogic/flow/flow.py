@@ -7,7 +7,7 @@
 #     "pydantic>=2.0.0",            # Data validation and settings
 #     "anyio>=4.0.0",               # Async utilities
 #     "jinja2>=3.1.0",              # Templating engine
-#     "instructor[litellm]>=0.5.0"  # Structured LLM output with litellm integration
+#     "instructor"  # Structured LLM output with litellm integration
 # ]
 # ///
 
@@ -268,6 +268,30 @@ class Workflow:
         else:
             logger.warning("No current node set for transition")
         self.current_node = next_node
+        return self
+
+    def branch(self, branches: List[Tuple[str, Optional[Callable]]]) -> "Workflow":
+        """Add multiple conditional branches from the current node."""
+        if not self.current_node:
+            logger.warning("No current node set for branching")
+            return self
+        for next_node, condition in branches:
+            if next_node not in self.nodes:
+                self._register_node(next_node)
+            self.transitions.setdefault(self.current_node, []).append((next_node, condition))
+            logger.debug(f"Added branch from {self.current_node} to {next_node} with condition {condition}")
+        return self
+
+    def converge(self, convergence_node: str) -> "Workflow":
+        """Set a convergence point for all previous branches."""
+        if convergence_node not in self.nodes:
+            self._register_node(convergence_node)
+        # Find all leaf nodes (nodes with no outgoing transitions) and point them to convergence_node
+        for node in self.nodes:
+            if (node not in self.transitions or not self.transitions[node]) and node != convergence_node:
+                self.transitions.setdefault(node, []).append((convergence_node, None))
+                logger.debug(f"Added convergence from {node} to {convergence_node}")
+        self.current_node = convergence_node
         return self
 
     def parallel(self, *nodes: str):
@@ -594,18 +618,12 @@ async def example_workflow():
             "payment_shipping", payment_shipping_sub_wf, inputs={"order": "order"}, output="shipping_confirmation"
         )
         .sequence("validate_order", "check_inventory")
-        .then(
-            "payment_shipping",
-            condition=lambda ctx: len(ctx.get("inventory_status").items_out_of_stock) == 0 if ctx.get("inventory_status") else False,
-        )
-        .then(
-            "notify_customer_out_of_stock",
-            condition=lambda ctx: len(ctx.get("inventory_status").items_out_of_stock) > 0 if ctx.get("inventory_status") else True,
-        )
-        .parallel("update_order_status", "send_confirmation_email")
-        .node("update_order_status")
-        .node("send_confirmation_email")
-        .node("notify_customer_out_of_stock")
+        .branch([
+            ("payment_shipping", lambda ctx: len(ctx.get("inventory_status").items_out_of_stock) == 0 if ctx.get("inventory_status") else False),
+            ("notify_customer_out_of_stock", lambda ctx: len(ctx.get("inventory_status").items_out_of_stock) > 0 if ctx.get("inventory_status") else True)
+        ])
+        .converge("update_order_status")
+        .sequence("update_order_status", "send_confirmation_email")
     )
 
     # Execute workflow

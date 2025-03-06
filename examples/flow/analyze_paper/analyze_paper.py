@@ -11,7 +11,7 @@
 #     "pdf2image",
 #     "pillow",
 #     "quantalogic",
-#     "instructor>=0.5.2",  # Updated to remove [litellm] since it's not an extra
+#     "instructor>=0.5.2",
 #     "typer>=0.9.0",
 #     "rich>=13.0.0",
 #     "pyperclip>=1.8.2"
@@ -25,6 +25,7 @@ import os
 from pathlib import Path
 from typing import Annotated, List, Optional, Tuple, Union
 
+import pyperclip
 import typer
 from loguru import logger
 from pydantic import BaseModel
@@ -33,12 +34,11 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
-import pyperclip
 
 from quantalogic.flow.flow import Nodes, Workflow
 
 # Initialize Typer app and rich console
-app = typer.Typer(help="Convert a PDF to a LinkedIn post using LLMs")
+app = typer.Typer(help="Convert a file (PDF, text, or Markdown) to a LinkedIn post using LLMs")
 console = Console()
 
 # Default models for different phases
@@ -51,29 +51,65 @@ class PaperInfo(BaseModel):
     title: str
     authors: List[str]
 
+# New Node: Check File Type
+@Nodes.define(output="file_type")
+async def check_file_type(file_path: str) -> str:
+    """Determine the file type based on its extension."""
+    file_path = os.path.expanduser(file_path)
+    if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
+        raise ValueError(f"File not found: {file_path}")
+    ext = Path(file_path).suffix.lower()
+    if ext == ".pdf":
+        return "pdf"
+    elif ext == ".txt":
+        return "text"
+    elif ext == ".md":
+        return "markdown"
+    else:
+        logger.error(f"Unsupported file type: {ext}")
+        raise ValueError(f"Unsupported file type: {ext}")
+
+# New Node: Read Text or Markdown File
+@Nodes.define(output="markdown_content")
+async def read_text_or_markdown(file_path: str, file_type: str) -> str:
+    """Read content from a text or markdown file."""
+    if file_type not in ["text", "markdown"]:
+        logger.error(f"Node 'read_text_or_markdown' called with invalid file_type: {file_type}")
+        raise ValueError(f"Expected 'text' or 'markdown', got {file_type}")
+    try:
+        file_path = os.path.expanduser(file_path)
+        with open(file_path, encoding="utf-8") as f:
+            content = f.read()
+        logger.info(f"Read {file_type} content from {file_path}, length: {len(content)} characters")
+        return content
+    except Exception as e:
+        logger.error(f"Error reading {file_type} file {file_path}: {e}")
+        raise
+
 # Node 1: Convert PDF to Markdown
 @Nodes.define(output="markdown_content")
 async def convert_pdf_to_markdown(
-    pdf_path: str,
+    file_path: str,
     model: str,
     custom_system_prompt: Optional[str] = None,
     output_dir: Optional[str] = None,
     select_pages: Optional[Union[int, List[int]]] = None
 ) -> str:
     """Convert a PDF to Markdown using a vision model."""
-    pdf_path = os.path.expanduser(pdf_path)
+    file_path = os.path.expanduser(file_path)
     if output_dir:
         output_dir = os.path.expanduser(output_dir)
         
-    if not pdf_path:
-        logger.error("PDF path is required")
-        raise ValueError("PDF path is required")
-    if not os.path.exists(pdf_path):
-        logger.error(f"PDF file not found: {pdf_path}")
-        raise ValueError(f"PDF file not found: {pdf_path}")
-    if not pdf_path.lower().endswith(".pdf"):
-        logger.error(f"File must be a PDF: {pdf_path}")
-        raise ValueError(f"File must be a PDF: {pdf_path}")
+    if not file_path:
+        logger.error("File path is required")
+        raise ValueError("File path is required")
+    if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
+        raise ValueError(f"File not found: {file_path}")
+    if not file_path.lower().endswith(".pdf"):
+        logger.error(f"File must be a PDF: {file_path}")
+        raise ValueError(f"File must be a PDF: {file_path}")
 
     if custom_system_prompt is None:
         custom_system_prompt = (
@@ -84,9 +120,9 @@ async def convert_pdf_to_markdown(
         )
 
     try:
-        logger.info(f"Calling zerox with model: {model}, file: {pdf_path}")
+        logger.info(f"Calling zerox with model: {model}, file: {file_path}")
         zerox_result = await zerox(
-            file_path=pdf_path,
+            file_path=file_path,
             model=model,
             system_prompt=custom_system_prompt,
             output_dir=output_dir,
@@ -119,13 +155,13 @@ async def convert_pdf_to_markdown(
         logger.error(f"Error converting PDF to Markdown: {e}")
         raise
 
-# New Node: Save Markdown Content
+# Node: Save Markdown Content
 @Nodes.define(output="markdown_file_path")
-async def save_markdown_content(markdown_content: str, pdf_path: str) -> str:
+async def save_markdown_content(markdown_content: str, file_path: str) -> str:
     """Save the extracted markdown content to a file."""
     try:
-        pdf_path_expanded = os.path.expanduser(pdf_path)
-        output_path = Path(pdf_path_expanded).with_suffix(".extracted.md")
+        file_path_expanded = os.path.expanduser(file_path)
+        output_path = Path(file_path_expanded).with_suffix(".extracted.md")
         with output_path.open("w", encoding="utf-8") as f:
             f.write(markdown_content)
         logger.info(f"Saved extracted markdown content to: {output_path}")
@@ -134,7 +170,7 @@ async def save_markdown_content(markdown_content: str, pdf_path: str) -> str:
         logger.error(f"Error saving markdown content: {e}")
         raise
 
-# Node 2: Extract First 100 Lines
+# Node: Extract First 100 Lines
 @Nodes.define(output="first_100_lines")
 async def extract_first_100_lines(markdown_content: str) -> str:
     """Extract the first 100 lines from the Markdown content."""
@@ -148,7 +184,7 @@ async def extract_first_100_lines(markdown_content: str) -> str:
         logger.error(f"Error extracting first 100 lines: {e}")
         raise
 
-# Node 3: Extract Title and Authors using Structured LLM
+# Node: Extract Title and Authors using Structured LLM
 @Nodes.structured_llm_node(
     model=DEFAULT_CLEANING_MODEL,
     system_prompt="You are an AI assistant tasked with extracting the title and authors from a research paper's Markdown text.",
@@ -161,7 +197,7 @@ async def extract_paper_info(first_100_lines: str) -> PaperInfo:
     """Extract title and authors from the first 100 lines."""
     pass
 
-# Node 4: Convert PaperInfo to Strings
+# Node: Convert PaperInfo to Strings
 @Nodes.define(output=("title_str", "authors_str"))
 async def convert_paper_info_to_strings(paper_info: PaperInfo) -> Tuple[str, str]:
     """Convert PaperInfo object to separate title and authors strings."""
@@ -174,7 +210,7 @@ async def convert_paper_info_to_strings(paper_info: PaperInfo) -> Tuple[str, str
         logger.error(f"Error converting PaperInfo to strings: {e}")
         raise
 
-# Node 5: Generate LinkedIn Post using LLM
+# Node: Generate LinkedIn Post using LLM
 @Nodes.llm_node(
     model=DEFAULT_WRITING_MODEL,
     system_prompt="You are an AI expert who enjoys sharing interesting papers and articles with a professional audience.",
@@ -197,7 +233,7 @@ Explain concepts clearly and simply, as if teaching a curious beginner, without 
 Use the Richard Feynman technique to ensure clarity and understanding. Never cite Feynman explicitly.
 
 ## Recommendations
-- Use Markdown formatting, keeping the post under 1300 words.
+- Use Markdown formatting, keeping the post under {{max_word_count}} words.
 - Follow best practices for tutorials: short paragraphs, bullet points, and subheadings.
 - Maintain a professional tone.
 - Avoid emojis, bold, or italic text.
@@ -208,11 +244,26 @@ Use the Richard Feynman technique to ensure clarity and understanding. Never cit
 - Suggest a compelling title for the post.
 """
 )
-async def generate_linkedin_post(title_str: str, authors_str: str, markdown_content: str) -> str:
-    """Generate a LinkedIn post in Markdown using title, authors, and full markdown content."""
+async def generate_linkedin_post(title_str: str, authors_str: str, markdown_content: str, max_word_count: int) -> str:
+    """Generate a LinkedIn post in Markdown using title, authors, full markdown content, and maximum word count."""
     pass
 
-# Node 6: Format LinkedIn Post for publishing
+# Node: Save Draft LinkedIn Post
+@Nodes.define(output="draft_post_file_path")
+async def save_draft_post_content(draft_post_content: str, file_path: str) -> str:
+    """Save the draft LinkedIn post content to a markdown file."""
+    try:
+        file_path_expanded = os.path.expanduser(file_path)
+        output_path = Path(file_path_expanded).with_suffix(".draft.md")
+        with output_path.open("w", encoding="utf-8") as f:
+            f.write(draft_post_content)
+        logger.info(f"Saved draft LinkedIn post to: {output_path}")
+        return str(output_path)
+    except Exception as e:
+        logger.error(f"Error saving draft post content: {e}")
+        raise
+
+# Node: Format LinkedIn Post for publishing
 @Nodes.llm_node(
     model=DEFAULT_WRITING_MODEL,
     system_prompt="You are an expert LinkedIn post formatter who prepares content for direct publishing.",
@@ -237,7 +288,7 @@ async def format_linkedin_post(draft_post_content: str) -> str:
     """Clean and format the LinkedIn post for publishing."""
     pass
 
-# New Node: Copy to Clipboard (Conditional)
+# Node: Copy to Clipboard (Conditional)
 @Nodes.define(output="clipboard_status")
 async def copy_to_clipboard(post_content: str, do_copy: bool) -> str:
     """Copy the final LinkedIn post content to clipboard if do_copy is True."""
@@ -253,18 +304,24 @@ async def copy_to_clipboard(post_content: str, do_copy: bool) -> str:
         logger.info("Clipboard copying skipped as per user preference")
         return "Clipboard copying skipped"
 
-# Define the Workflow
-def create_pdf_to_linkedin_workflow() -> Workflow:
-    """Create a workflow to convert a PDF to a LinkedIn post."""
+# Define the Updated Workflow
+def create_file_to_linkedin_workflow() -> Workflow:
+    """Create a workflow to convert a file (PDF, text, or Markdown) to a LinkedIn post."""
     return (
-        Workflow("convert_pdf_to_markdown")
+        Workflow("check_file_type")
+        .node("check_file_type")
+        .branch([
+            ("convert_pdf_to_markdown", lambda ctx: ctx["file_type"] == "pdf"),
+            ("read_text_or_markdown", lambda ctx: ctx["file_type"] in ["text", "markdown"])
+        ])
+        .converge("save_markdown_content")
         .sequence(
-            "convert_pdf_to_markdown",
             "save_markdown_content",
             "extract_first_100_lines",
             "extract_paper_info",
             "convert_paper_info_to_strings",
             "generate_linkedin_post",
+            "save_draft_post_content",
             "format_linkedin_post",
             "copy_to_clipboard"
         )
@@ -272,34 +329,36 @@ def create_pdf_to_linkedin_workflow() -> Workflow:
 
 # Function to Run the Workflow
 async def run_workflow(
-    pdf_path: str,
+    file_path: str,
     text_extraction_model: str,
     cleaning_model: str,
     writing_model: str,
     output_dir: Optional[str] = None,
-    copy_to_clipboard_flag: bool = True
+    copy_to_clipboard_flag: bool = True,
+    max_word_count: int = 800
 ) -> dict:
-    """Execute the workflow with the given PDF path and models."""
-    pdf_path = os.path.expanduser(pdf_path)
+    """Execute the workflow with the given file path and models."""
+    file_path = os.path.expanduser(file_path)
     if output_dir:
         output_dir = os.path.expanduser(output_dir)
         
-    if not os.path.exists(pdf_path):
-        logger.error(f"PDF file not found: {pdf_path}")
-        raise ValueError(f"PDF file not found: {pdf_path}")
+    if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
+        raise ValueError(f"File not found: {file_path}")
 
     initial_context = {
-        "pdf_path": pdf_path,
+        "file_path": file_path,
         "model": text_extraction_model,
         "text_extraction_model": text_extraction_model,
         "cleaning_model": cleaning_model,
         "writing_model": writing_model,
-        "output_dir": output_dir if output_dir else str(Path(pdf_path).parent),
-        "do_copy": copy_to_clipboard_flag
+        "output_dir": output_dir if output_dir else str(Path(file_path).parent),
+        "do_copy": copy_to_clipboard_flag,
+        "max_word_count": max_word_count
     }
 
     try:
-        workflow = create_pdf_to_linkedin_workflow()
+        workflow = create_file_to_linkedin_workflow()
         engine = workflow.build()
         result = await engine.run(initial_context)
         
@@ -313,7 +372,7 @@ async def run_workflow(
         logger.error(f"Error during workflow execution: {e}")
         raise
 
-async def display_results(post_content: str, markdown_file_path: str, copy_to_clipboard_flag: bool):
+async def display_results(post_content: str, markdown_file_path: str, draft_post_file_path: str, copy_to_clipboard_flag: bool):
     """Async helper function to display results with animation."""
     console.print("\n[bold green]Generated LinkedIn Post:[/]")
     console.print(Panel(Markdown(post_content), border_style="blue"))
@@ -331,38 +390,42 @@ async def display_results(post_content: str, markdown_file_path: str, copy_to_cl
         console.print("[yellow]Clipboard copying skipped as per user preference[/]")
     
     console.print(f"[green]✓ Extracted markdown saved to:[/] {markdown_file_path}")
+    console.print(f"[green]✓ Draft LinkedIn post saved to:[/] {draft_post_file_path}")
 
 @app.command()
 def analyze(
-    pdf_path: Annotated[str, typer.Argument(help="Path to the PDF file (supports ~ expansion)")],
+    file_path: Annotated[str, typer.Argument(help="Path to the file (PDF, .txt, or .md; supports ~ expansion)")],
     text_extraction_model: Annotated[str, typer.Option(help="LLM model for PDF text extraction")] = DEFAULT_TEXT_EXTRACTION_MODEL,
     cleaning_model: Annotated[str, typer.Option(help="LLM model for title/author extraction")] = DEFAULT_CLEANING_MODEL,
     writing_model: Annotated[str, typer.Option(help="LLM model for article writing and formatting")] = DEFAULT_WRITING_MODEL,
     output_dir: Annotated[Optional[str], typer.Option(help="Directory to save output files (supports ~ expansion)")] = None,
     save: Annotated[bool, typer.Option(help="Save output to a markdown file")] = True,
-    copy_to_clipboard_flag: Annotated[bool, typer.Option(help="Copy the final post to clipboard")] = True
+    copy_to_clipboard_flag: Annotated[bool, typer.Option(help="Copy the final post to clipboard")] = True,
+    max_word_count: Annotated[int, typer.Option(help="Maximum word count for the LinkedIn post")] = 800
 ):
-    """Convert a PDF paper to a LinkedIn post using an LLM workflow."""
+    """Convert a file (PDF, text, or Markdown) to a LinkedIn post using an LLM workflow."""
     try:
-        with console.status(f"Processing [bold blue]{pdf_path}[/]..."):
+        with console.status(f"Processing [bold blue]{file_path}[/]..."):
             result = asyncio.run(run_workflow(
-                pdf_path,
+                file_path,
                 text_extraction_model,
                 cleaning_model,
                 writing_model,
                 output_dir,
-                copy_to_clipboard_flag
+                copy_to_clipboard_flag,
+                max_word_count
             ))
         
         post_content = result["post_content"]
         markdown_file_path = result.get("markdown_file_path", "Not saved")
+        draft_post_file_path = result.get("draft_post_file_path", "Not saved")
         
         # Run the async display function
-        asyncio.run(display_results(post_content, markdown_file_path, copy_to_clipboard_flag))
+        asyncio.run(display_results(post_content, markdown_file_path, draft_post_file_path, copy_to_clipboard_flag))
         
         if save:
-            pdf_path_expanded = os.path.expanduser(pdf_path)
-            output_path = Path(pdf_path_expanded).with_suffix(".md")
+            file_path_expanded = os.path.expanduser(file_path)
+            output_path = Path(file_path_expanded).with_suffix(".md")
             with output_path.open("w", encoding="utf-8") as f:
                 f.write(post_content)
             console.print(f"[green]✓ Final LinkedIn post saved to:[/] {output_path}")
