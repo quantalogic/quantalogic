@@ -36,8 +36,13 @@ jobs:
         restore-keys: |
           venv-${{ runner.os }}-${{ matrix.python-version }}-
     
-    - name: Install dependencies
-      run: poetry install --with dev
+    - name: Build package
+      run: poetry build
+    
+    - name: Install package
+      run: |
+        pip install dist/*.whl
+        poetry install --with dev
     
     # - name: Run type checking
     #   run: poetry run mypy quantalogic
