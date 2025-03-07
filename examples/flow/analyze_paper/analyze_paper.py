@@ -244,7 +244,7 @@ Explain concepts clearly and simply, as if teaching a curious beginner, without 
 Use the Richard Feynman technique to ensure clarity and understanding. Never cite Feynman explicitly.
 
 ## Recommendations
-- Use Markdown formatting, keeping the post arround or under {{max_word_count}} words.
+- Use Markdown formatting, keeping the post arround or under {{max_character_count}} characters.
 - Follow best practices for tutorials: short paragraphs, bullet points, and subheadings.
 - Maintain a professional tone.
 - Avoid emojis, bold, or italic text.
@@ -255,8 +255,8 @@ Use the Richard Feynman technique to ensure clarity and understanding. Never cit
 - Suggest a compelling title for the post.
 """
 )
-async def generate_linkedin_post(title_str: str, authors_str: str, markdown_content: str, max_word_count: int) -> str:
-    """Generate a LinkedIn post in Markdown using title, authors, full markdown content, and maximum word count."""
+async def generate_linkedin_post(title_str: str, authors_str: str, markdown_content: str, max_character_count: int) -> str:
+    """Generate a LinkedIn post in Markdown using title, authors, full markdown content, and maximum character count."""
     pass
 
 # Node: Save Draft LinkedIn Post
@@ -298,6 +298,39 @@ async def format_linkedin_post(draft_post_content: str) -> str:
     """Clean and format the LinkedIn post for publishing."""
     pass
 
+# Node: Clean Markdown Syntax with Regex
+@Nodes.define(output="cleaned_post_content")
+async def clean_markdown_syntax(post_content: str) -> str:
+    """Clean any remaining markdown syntax from the post content using regex."""
+    import re
+    try:
+        # Remove bold syntax
+        cleaned = re.sub(r'\*\*(.*?)\*\*', r'\1', post_content)
+        # Remove italic syntax (both * and _)
+        cleaned = re.sub(r'\*(.*?)\*', r'\1', cleaned)
+        cleaned = re.sub(r'_(.*?)_', r'\1', cleaned)
+        # Remove header syntax
+        cleaned = re.sub(r'^#+\s+', '', cleaned, flags=re.MULTILINE)
+        # Remove horizontal rules
+        cleaned = re.sub(r'^\s*[-*_]{3,}\s*$', '\n', cleaned, flags=re.MULTILINE)
+        # Remove code blocks
+        cleaned = re.sub(r'```[^\n]*\n(.*?)\n```', r'\1', cleaned, flags=re.DOTALL)
+        # Remove inline code
+        cleaned = re.sub(r'`([^`]*)`', r'\1', cleaned)
+        # Remove blockquotes
+        cleaned = re.sub(r'^>\s+', '', cleaned, flags=re.MULTILINE)
+        # Remove link syntax but keep text
+        cleaned = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', cleaned)
+        # Remove HTML tags
+        cleaned = re.sub(r'<[^>]+>', '', cleaned)
+        
+        logger.info("Successfully cleaned Markdown syntax from post content")
+        return cleaned.strip()
+    except Exception as e:
+        logger.error(f"Error cleaning Markdown syntax: {e}")
+        # Return original content if there's an error
+        return post_content
+
 # Node: Copy to Clipboard (Conditional)
 @Nodes.define(output="clipboard_status")
 async def copy_to_clipboard(post_content: str, do_copy: bool) -> str:
@@ -330,7 +363,8 @@ def create_file_to_linkedin_workflow() -> Workflow:
     wf.node("extract_authors_str")
     wf.node("generate_linkedin_post", inputs_mapping={"model": "writing_model"})
     wf.node("save_draft_post_content")
-    wf.node("format_linkedin_post", inputs_mapping={"model": "cleaning_model"})  # Fixed to use cleaning_model
+    wf.node("format_linkedin_post", inputs_mapping={"model": "cleaning_model"})
+    wf.node("clean_markdown_syntax")  # Add the new node to the workflow
     wf.node("copy_to_clipboard")
     
     # Define the workflow structure with explicit transitions to prevent loops
@@ -352,7 +386,8 @@ def create_file_to_linkedin_workflow() -> Workflow:
     wf.transitions["extract_authors_str"] = [("generate_linkedin_post", None)]
     wf.transitions["generate_linkedin_post"] = [("save_draft_post_content", None)]
     wf.transitions["save_draft_post_content"] = [("format_linkedin_post", None)]
-    wf.transitions["format_linkedin_post"] = [("copy_to_clipboard", None)]
+    wf.transitions["format_linkedin_post"] = [("clean_markdown_syntax", None)]  # Add transition to new node
+    wf.transitions["clean_markdown_syntax"] = [("copy_to_clipboard", None)]  # Add transition from new node
     
     return wf
 
@@ -364,7 +399,7 @@ async def run_workflow(
     writing_model: str,
     output_dir: Optional[str] = None,
     copy_to_clipboard_flag: bool = True,
-    max_word_count: int = 1000
+    max_character_count: int = 3000
 ) -> dict:
     """Execute the workflow with the given file path and models."""
     file_path = os.path.expanduser(file_path)
@@ -384,7 +419,7 @@ async def run_workflow(
         "writing_model": writing_model,
         "output_dir": output_dir if output_dir else str(Path(file_path).parent),
         "do_copy": copy_to_clipboard_flag,
-        "max_word_count": max_word_count
+        "max_character_count": max_character_count
     }
 
     try:
@@ -431,7 +466,7 @@ def analyze(
     output_dir: Annotated[Optional[str], typer.Option(help="Directory to save output files (supports ~ expansion)")] = None,
     save: Annotated[bool, typer.Option(help="Save output to a markdown file")] = True,
     copy_to_clipboard_flag: Annotated[bool, typer.Option(help="Copy the final post to clipboard")] = True,
-    max_word_count: Annotated[int, typer.Option(help="Maximum word count for the LinkedIn post")] = 800
+    max_character_count: Annotated[int, typer.Option(help="Maximum character count for the LinkedIn post")] = 3000
 ):
     """Convert a file (PDF, text, or Markdown) to a LinkedIn post using an LLM workflow."""
     try:
@@ -443,7 +478,7 @@ def analyze(
                 writing_model,
                 output_dir,
                 copy_to_clipboard_flag,
-                max_word_count
+                max_character_count
             ))
         
         post_content = result["post_content"]
