@@ -23,7 +23,7 @@
 import asyncio
 import os
 from pathlib import Path
-from typing import Annotated, List, Optional, Tuple, Union
+from typing import Annotated, List, Optional, Union
 
 import pyperclip
 import typer
@@ -44,7 +44,9 @@ console = Console()
 # Default models for different phases
 DEFAULT_TEXT_EXTRACTION_MODEL = "gemini/gemini-2.0-flash"
 DEFAULT_CLEANING_MODEL = "gemini/gemini-2.0-flash"
-DEFAULT_WRITING_MODEL = "deepseek/deepseek-reasoner"
+#DEFAULT_WRITING_MODEL = "deepseek/deepseek-reasoner"
+#DEFAULT_WRITING_MODEL = "openrouter/openai/gpt-4o-mini"
+DEFAULT_WRITING_MODEL = "openrouter/deepseek/deepseek-r1"
 
 # Define a Pydantic model for structured output of title and authors
 class PaperInfo(BaseModel):
@@ -186,7 +188,6 @@ async def extract_first_100_lines(markdown_content: str) -> str:
 
 # Node: Extract Title and Authors using Structured LLM
 @Nodes.structured_llm_node(
-    model=DEFAULT_CLEANING_MODEL,
     system_prompt="You are an AI assistant tasked with extracting the title and authors from a research paper's Markdown text.",
     output="paper_info",
     response_model=PaperInfo,
@@ -197,22 +198,32 @@ async def extract_paper_info(first_100_lines: str) -> PaperInfo:
     """Extract title and authors from the first 100 lines."""
     pass
 
-# Node: Convert PaperInfo to Strings
-@Nodes.define(output=("title_str", "authors_str"))
-async def convert_paper_info_to_strings(paper_info: PaperInfo) -> Tuple[str, str]:
-    """Convert PaperInfo object to separate title and authors strings."""
+# Node: Extract Title String
+@Nodes.define(output="title_str")
+async def extract_title_str(paper_info: PaperInfo) -> str:
+    """Extract title string from PaperInfo object."""
     try:
         title_str = paper_info.title
-        authors_str = ", ".join(paper_info.authors)
-        logger.info(f"Converted PaperInfo to strings: title='{title_str}', authors='{authors_str}'")
-        return title_str, authors_str
+        logger.info(f"Extracted title: '{title_str}'")
+        return title_str
     except Exception as e:
-        logger.error(f"Error converting PaperInfo to strings: {e}")
+        logger.error(f"Error extracting title: {e}")
+        raise
+
+# Node: Extract Authors String
+@Nodes.define(output="authors_str")
+async def extract_authors_str(paper_info: PaperInfo) -> str:
+    """Extract authors string from PaperInfo object."""
+    try:
+        authors_str = ", ".join(paper_info.authors)
+        logger.info(f"Extracted authors: '{authors_str}'")
+        return authors_str
+    except Exception as e:
+        logger.error(f"Error extracting authors: {e}")
         raise
 
 # Node: Generate LinkedIn Post using LLM
 @Nodes.llm_node(
-    model=DEFAULT_WRITING_MODEL,
     system_prompt="You are an AI expert who enjoys sharing interesting papers and articles with a professional audience.",
     output="draft_post_content",
     prompt_template="""
@@ -233,7 +244,7 @@ Explain concepts clearly and simply, as if teaching a curious beginner, without 
 Use the Richard Feynman technique to ensure clarity and understanding. Never cite Feynman explicitly.
 
 ## Recommendations
-- Use Markdown formatting, keeping the post under {{max_word_count}} words.
+- Use Markdown formatting, keeping the post arround or under {{max_word_count}} words.
 - Follow best practices for tutorials: short paragraphs, bullet points, and subheadings.
 - Maintain a professional tone.
 - Avoid emojis, bold, or italic text.
@@ -265,7 +276,6 @@ async def save_draft_post_content(draft_post_content: str, file_path: str) -> st
 
 # Node: Format LinkedIn Post for publishing
 @Nodes.llm_node(
-    model=DEFAULT_WRITING_MODEL,
     system_prompt="You are an expert LinkedIn post formatter who prepares content for direct publishing.",
     output="post_content",
     prompt_template="""
@@ -304,28 +314,47 @@ async def copy_to_clipboard(post_content: str, do_copy: bool) -> str:
         logger.info("Clipboard copying skipped as per user preference")
         return "Clipboard copying skipped"
 
-# Define the Updated Workflow
+# Define the Updated Workflow with Model Fix and Loop Prevention
 def create_file_to_linkedin_workflow() -> Workflow:
     """Create a workflow to convert a file (PDF, text, or Markdown) to a LinkedIn post."""
-    return (
-        Workflow("check_file_type")
-        .node("check_file_type")
-        .branch([
-            ("convert_pdf_to_markdown", lambda ctx: ctx["file_type"] == "pdf"),
-            ("read_text_or_markdown", lambda ctx: ctx["file_type"] in ["text", "markdown"])
-        ])
-        .converge("save_markdown_content")
-        .sequence(
-            "save_markdown_content",
-            "extract_first_100_lines",
-            "extract_paper_info",
-            "convert_paper_info_to_strings",
-            "generate_linkedin_post",
-            "save_draft_post_content",
-            "format_linkedin_post",
-            "copy_to_clipboard"
-        )
-    )
+    wf = Workflow("check_file_type")
+    
+    # Add all nodes with input mappings for dynamic model passing
+    wf.node("check_file_type")
+    wf.node("convert_pdf_to_markdown", inputs_mapping={"model": "text_extraction_model"})
+    wf.node("read_text_or_markdown")
+    wf.node("save_markdown_content")
+    wf.node("extract_first_100_lines")
+    wf.node("extract_paper_info", inputs_mapping={"model": "cleaning_model"})
+    wf.node("extract_title_str")
+    wf.node("extract_authors_str")
+    wf.node("generate_linkedin_post", inputs_mapping={"model": "writing_model"})
+    wf.node("save_draft_post_content")
+    wf.node("format_linkedin_post", inputs_mapping={"model": "cleaning_model"})  # Fixed to use cleaning_model
+    wf.node("copy_to_clipboard")
+    
+    # Define the workflow structure with explicit transitions to prevent loops
+    wf.current_node = "check_file_type"
+    wf.branch([
+        ("convert_pdf_to_markdown", lambda ctx: ctx["file_type"] == "pdf"),
+        ("read_text_or_markdown", lambda ctx: ctx["file_type"] in ["text", "markdown"])
+    ])
+    
+    # Explicitly set transitions from branches to convergence point
+    wf.transitions["convert_pdf_to_markdown"] = [("save_markdown_content", None)]
+    wf.transitions["read_text_or_markdown"] = [("save_markdown_content", None)]
+    
+    # Define linear sequence after convergence without re-converging
+    wf.transitions["save_markdown_content"] = [("extract_first_100_lines", None)]
+    wf.transitions["extract_first_100_lines"] = [("extract_paper_info", None)]
+    wf.transitions["extract_paper_info"] = [("extract_title_str", None)]
+    wf.transitions["extract_title_str"] = [("extract_authors_str", None)]
+    wf.transitions["extract_authors_str"] = [("generate_linkedin_post", None)]
+    wf.transitions["generate_linkedin_post"] = [("save_draft_post_content", None)]
+    wf.transitions["save_draft_post_content"] = [("format_linkedin_post", None)]
+    wf.transitions["format_linkedin_post"] = [("copy_to_clipboard", None)]
+    
+    return wf
 
 # Function to Run the Workflow
 async def run_workflow(
@@ -335,7 +364,7 @@ async def run_workflow(
     writing_model: str,
     output_dir: Optional[str] = None,
     copy_to_clipboard_flag: bool = True,
-    max_word_count: int = 800
+    max_word_count: int = 1000
 ) -> dict:
     """Execute the workflow with the given file path and models."""
     file_path = os.path.expanduser(file_path)
@@ -346,9 +375,10 @@ async def run_workflow(
         logger.error(f"File not found: {file_path}")
         raise ValueError(f"File not found: {file_path}")
 
+    # Initial context with model keys for dynamic mapping
     initial_context = {
         "file_path": file_path,
-        "model": text_extraction_model,
+        "model": text_extraction_model,  # Kept for compatibility, though redundant
         "text_extraction_model": text_extraction_model,
         "cleaning_model": cleaning_model,
         "writing_model": writing_model,

@@ -12,11 +12,11 @@
 # ///
 
 import asyncio
+import inspect  # Added for accurate parameter detection
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type
-import inspect  # Added for accurate parameter detection
 
 import instructor
 from jinja2 import Environment, FileSystemLoader, Template, TemplateNotFound
@@ -466,7 +466,6 @@ class Nodes:
     @classmethod
     def llm_node(
         cls,
-        model: str,
         system_prompt: str,
         output: str,
         prompt_template: str = "",
@@ -480,12 +479,19 @@ class Nodes:
     ):
         """Decorator for creating LLM nodes with plain text output, supporting external prompt files."""
         def decorator(func: Callable) -> Callable:
-            async def wrapped_func(**kwargs):
-                prompt = cls._render_template(prompt_template, prompt_file, kwargs)
+            async def wrapped_func(model: str, **func_kwargs):
+                prompt = cls._render_template(prompt_template, prompt_file, func_kwargs)
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
                 ]
+                
+                # Log the model and a preview of the prompt
+                truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
+                logger.info(f"LLM node {func.__name__} using model: {model}")
+                logger.debug(f"System prompt: {system_prompt[:100]}...")
+                logger.debug(f"User prompt preview: {truncated_prompt}")
+                
                 try:
                     response = await acompletion(
                         model=model,
@@ -511,9 +517,9 @@ class Nodes:
                     logger.error(f"Error in LLM node {func.__name__}: {e}")
                     raise
 
-            # Get parameter names from function signature
+            # Get parameter names from function signature and add 'model'
             sig = inspect.signature(func)
-            inputs = [param.name for param in sig.parameters.values()]
+            inputs = ['model'] + [param.name for param in sig.parameters.values()]
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
             cls.NODE_REGISTRY[func.__name__] = (wrapped_func, inputs, output)
             return wrapped_func
@@ -522,7 +528,6 @@ class Nodes:
     @classmethod
     def structured_llm_node(
         cls,
-        model: str,
         system_prompt: str,
         output: str,
         response_model: Type[BaseModel],
@@ -543,12 +548,20 @@ class Nodes:
             raise ImportError("Instructor is required for structured_llm_node")
 
         def decorator(func: Callable) -> Callable:
-            async def wrapped_func(**kwargs):
-                prompt = cls._render_template(prompt_template, prompt_file, kwargs)
+            async def wrapped_func(model: str, **func_kwargs):
+                prompt = cls._render_template(prompt_template, prompt_file, func_kwargs)
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
                 ]
+                
+                # Log the model and a preview of the prompt
+                truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
+                logger.info(f"Structured LLM node {func.__name__} using model: {model}")
+                logger.debug(f"System prompt: {system_prompt[:100]}...")
+                logger.debug(f"User prompt preview: {truncated_prompt}")
+                logger.debug(f"Expected response model: {response_model.__name__}")
+                
                 try:
                     structured_response, raw_response = await client.chat.completions.create_with_completion(
                         model=model,
@@ -577,9 +590,9 @@ class Nodes:
                     logger.error(f"Error in structured LLM node {func.__name__}: {e}")
                     raise
 
-            # Get parameter names from function signature
+            # Get parameter names from function signature and add 'model'
             sig = inspect.signature(func)
-            inputs = [param.name for param in sig.parameters.values()]
+            inputs = ['model'] + [param.name for param in sig.parameters.values()]
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
             cls.NODE_REGISTRY[func.__name__] = (wrapped_func, inputs, output)
             return wrapped_func
@@ -663,7 +676,6 @@ async def example_workflow():
         return "Order validated" if order.get("items") else "Invalid order"
 
     @Nodes.structured_llm_node(
-        model="gemini/gemini-2.0-flash",
         system_prompt="You are an inventory checker. Respond with a JSON object containing 'order_id', 'items_in_stock', and 'items_out_of_stock'.",
         output="inventory_status",
         response_model=OrderDetails,
@@ -717,7 +729,7 @@ async def example_workflow():
         .node("validate_order", inputs_mapping={"order": "customer_order"})
         .node("transform_items")
         .node("format_order_message")  # Add the new template node
-        .node("check_inventory")
+        .node("check_inventory", inputs_mapping={"model": lambda ctx: "gemini/gemini-2.0-flash"})
         .add_sub_workflow(
             "payment_shipping",
             payment_shipping_sub_wf,
