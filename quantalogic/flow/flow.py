@@ -143,16 +143,17 @@ class WorkflowEngine:
             # Prepare inputs with mappings
             input_mappings = self.workflow.node_input_mappings.get(current_node, {})
             inputs = {}
-            for param in self.workflow.node_inputs[current_node]:
-                if param in input_mappings:
-                    mapping = input_mappings[param]
-                    if callable(mapping):
-                        inputs[param] = mapping(self.context)
-                    elif isinstance(mapping, str):
-                        inputs[param] = self.context.get(mapping)
-                    else:
-                        inputs[param] = mapping  # Direct value
+            # Add all mapped inputs
+            for key, mapping in input_mappings.items():
+                if callable(mapping):
+                    inputs[key] = mapping(self.context)
+                elif isinstance(mapping, str):
+                    inputs[key] = self.context.get(mapping)
                 else:
+                    inputs[key] = mapping  # Direct value
+            # For parameters in node_inputs that are not mapped, get from context
+            for param in self.workflow.node_inputs[current_node]:
+                if param not in inputs:
                     inputs[param] = self.context.get(param)
 
             result = None
@@ -477,30 +478,43 @@ class Nodes:
         frequency_penalty: float = 0.0,
         **kwargs,
     ):
-        """Decorator for creating LLM nodes with plain text output, supporting external prompt files."""
+        """Decorator for creating LLM nodes with plain text output, supporting dynamic parameters via input mappings."""
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(model: str, **func_kwargs):
-                prompt = cls._render_template(prompt_template, prompt_file, func_kwargs)
+                # Extract parameters from func_kwargs if provided, else use defaults
+                system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
+                prompt_template_to_use = func_kwargs.pop("prompt_template", prompt_template)
+                prompt_file_to_use = func_kwargs.pop("prompt_file", prompt_file)
+                temperature_to_use = func_kwargs.pop("temperature", temperature)
+                max_tokens_to_use = func_kwargs.pop("max_tokens", max_tokens)
+                top_p_to_use = func_kwargs.pop("top_p", top_p)
+                presence_penalty_to_use = func_kwargs.pop("presence_penalty", presence_penalty)
+                frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
+
+                # Use only signature parameters for template rendering
+                sig = inspect.signature(func)
+                template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
+                prompt = cls._render_template(prompt_template_to_use, prompt_file_to_use, template_vars)
                 messages = [
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": system_prompt_to_use},
                     {"role": "user", "content": prompt},
                 ]
                 
                 # Log the model and a preview of the prompt
                 truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
                 logger.info(f"LLM node {func.__name__} using model: {model}")
-                logger.debug(f"System prompt: {system_prompt[:100]}...")
+                logger.debug(f"System prompt: {system_prompt_to_use[:100]}...")
                 logger.debug(f"User prompt preview: {truncated_prompt}")
                 
                 try:
                     response = await acompletion(
                         model=model,
                         messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        top_p=top_p,
-                        presence_penalty=presence_penalty,
-                        frequency_penalty=frequency_penalty,
+                        temperature=temperature_to_use,
+                        max_tokens=max_tokens_to_use,
+                        top_p=top_p_to_use,
+                        presence_penalty=presence_penalty_to_use,
+                        frequency_penalty=frequency_penalty_to_use,
                         drop_params=True,
                         **kwargs,
                     )
@@ -540,7 +554,7 @@ class Nodes:
         frequency_penalty: float = 0.0,
         **kwargs,
     ):
-        """Decorator for creating LLM nodes with structured output using instructor, supporting external prompt files."""
+        """Decorator for creating LLM nodes with structured output, supporting dynamic parameters via input mappings."""
         try:
             client = instructor.from_litellm(acompletion)
         except ImportError:
@@ -549,16 +563,29 @@ class Nodes:
 
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(model: str, **func_kwargs):
-                prompt = cls._render_template(prompt_template, prompt_file, func_kwargs)
+                # Extract parameters from func_kwargs if provided, else use defaults
+                system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
+                prompt_template_to_use = func_kwargs.pop("prompt_template", prompt_template)
+                prompt_file_to_use = func_kwargs.pop("prompt_file", prompt_file)
+                temperature_to_use = func_kwargs.pop("temperature", temperature)
+                max_tokens_to_use = func_kwargs.pop("max_tokens", max_tokens)
+                top_p_to_use = func_kwargs.pop("top_p", top_p)
+                presence_penalty_to_use = func_kwargs.pop("presence_penalty", presence_penalty)
+                frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
+
+                # Use only signature parameters for template rendering
+                sig = inspect.signature(func)
+                template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
+                prompt = cls._render_template(prompt_template_to_use, prompt_file_to_use, template_vars)
                 messages = [
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": system_prompt_to_use},
                     {"role": "user", "content": prompt},
                 ]
                 
                 # Log the model and a preview of the prompt
                 truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
                 logger.info(f"Structured LLM node {func.__name__} using model: {model}")
-                logger.debug(f"System prompt: {system_prompt[:100]}...")
+                logger.debug(f"System prompt: {system_prompt_to_use[:100]}...")
                 logger.debug(f"User prompt preview: {truncated_prompt}")
                 logger.debug(f"Expected response model: {response_model.__name__}")
                 
@@ -567,11 +594,11 @@ class Nodes:
                         model=model,
                         messages=messages,
                         response_model=response_model,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        top_p=top_p,
-                        presence_penalty=presence_penalty,
-                        frequency_penalty=frequency_penalty,
+                        temperature=temperature_to_use,
+                        max_tokens=max_tokens_to_use,
+                        top_p=top_p_to_use,
+                        presence_penalty=presence_penalty_to_use,
+                        frequency_penalty=frequency_penalty_to_use,
                         drop_params=True,
                         **kwargs,
                     )
@@ -605,15 +632,27 @@ class Nodes:
         template: str = "",
         template_file: Optional[str] = None,
     ):
-        """Decorator for creating nodes that apply a Jinja2 template to inputs."""
+        """Decorator for creating nodes that apply a Jinja2 template to inputs, supporting dynamic parameters."""
         def decorator(func: Callable) -> Callable:
-            async def wrapped_func(**kwargs):
+            async def wrapped_func(**func_kwargs):
+                # Extract template parameters from func_kwargs if provided, else use defaults
+                template_to_use = func_kwargs.pop("template", template)
+                template_file_to_use = func_kwargs.pop("template_file", template_file)
+
+                # Use only signature parameters (excluding rendered_content) for template rendering
+                sig = inspect.signature(func)
+                expected_params = [p.name for p in sig.parameters.values() if p.name != 'rendered_content']
+                template_vars = {k: v for k, v in func_kwargs.items() if k in expected_params}
+                rendered_content = cls._render_template(template_to_use, template_file_to_use, template_vars)
+
+                # Filter func_kwargs for the function call
+                filtered_kwargs = {k: v for k, v in func_kwargs.items() if k in expected_params}
+
                 try:
-                    rendered_content = cls._render_template(template, template_file, kwargs)
                     if asyncio.iscoroutinefunction(func):
-                        result = await func(rendered_content=rendered_content, **kwargs)
+                        result = await func(rendered_content=rendered_content, **filtered_kwargs)
                     else:
-                        result = func(rendered_content=rendered_content, **kwargs)
+                        result = func(rendered_content=rendered_content, **filtered_kwargs)
                     logger.debug(f"Template node {func.__name__} rendered: {rendered_content[:50]}...")
                     return result
                 except Exception as e:
@@ -631,7 +670,7 @@ class Nodes:
         return decorator
 
 
-# Example workflow with observer integration, updated nodes, input mappings, and new template node
+# Example workflow with observer integration, updated nodes, input mappings, and dynamic parameters
 async def example_workflow():
     # Define Pydantic model for structured output
     class OrderDetails(BaseModel):
@@ -721,15 +760,23 @@ async def example_workflow():
     # Instantiate token usage observer
     token_observer = TokenUsageObserver()
 
-    # Main workflow incorporating the sub-workflow, input mappings, and new nodes
+    # Main workflow with dynamic parameter overrides
     workflow = (
         Workflow("validate_order")
         .add_observer(progress_monitor)
         .add_observer(token_observer)
         .node("validate_order", inputs_mapping={"order": "customer_order"})
         .node("transform_items")
-        .node("format_order_message")  # Add the new template node
-        .node("check_inventory", inputs_mapping={"model": lambda ctx: "gemini/gemini-2.0-flash"})
+        .node("format_order_message", inputs_mapping={
+            "items": "items",
+            "template": "Custom order: {{ items | join(', ') }}"  # Dynamic override
+        })
+        .node("check_inventory", inputs_mapping={
+            "model": lambda ctx: "gemini/gemini-2.0-flash",
+            "items": "transformed_items",
+            "temperature": 0.5,  # Dynamic override
+            "max_tokens": 1000   # Dynamic override
+        })
         .add_sub_workflow(
             "payment_shipping",
             payment_shipping_sub_wf,
