@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic"
-version = "0.54.0"
+version = "0.55.0"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
@@ -169,7 +169,7 @@ docs-deploy = "quantalogic.docs_cli:deploy_docs"
 
 # Build system configuration
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=1.0.0", "python>=3.10,<3.13"]
 build-backend = "poetry.core.masonry.api"
 
 # Ruff linting configuration
