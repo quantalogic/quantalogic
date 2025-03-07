@@ -8,7 +8,7 @@ packages = [{include = "quantalogic"}]
 
 # Core dependencies required for the base Agent and ToolManager
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
+python = "<4.0,>=3.11"
 pydantic = "^2.10.4"
 litellm = "^1.56.4"
 rich = "^13.9.4"
@@ -169,7 +169,7 @@ docs-deploy = "quantalogic.docs_cli:deploy_docs"
 
 # Build system configuration
 [build-system]
-requires = ["poetry-core>=1.0.0", "python>=3.10,<3.13"]
+requires = ["poetry-core>=1.0.0", "python>=3.11,<4.0"]
 build-backend = "poetry.core.masonry.api"
 
 # Ruff linting configuration
