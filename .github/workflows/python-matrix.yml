@@ -44,8 +44,8 @@ jobs:
         pip install dist/*.whl
         poetry install --with dev
     
-    # - name: Run type checking
-    #   run: poetry run mypy quantalogic
-    
-    # - name: Run tests
-    #   run: poetry run pytest
+    - name: Run type checking
+      run: poetry run mypy quantalogic
+
+    - name: Run tests
+      run: poetry run pytest
