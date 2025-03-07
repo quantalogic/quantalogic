@@ -520,7 +520,13 @@ QuantaLogic AI 助手 - 一款用于各种任务的强大 AI 工具。
 
 ## 激发灵感的示例
 
-让我们用这些宝石点亮您的想象力：
+探索我们的示例集合，了解 QuantaLogic 的实际应用：
+
+- [Flow 示例](./examples/flow/README.md)：展示 Quantalogic Flow 功能的实用工作流程
+- [Agent 示例](./examples/agent/README.md)：使用 ReAct 框架的动态代理
+- [工具示例](./examples/tools/README.md)：探索我们强大的工具集成
+
+每个示例都附有详细的文档和可运行的代码。
 
 ### 视频魔术
 [![教程演示](./examples/generated_tutorials/python/quantalogic_long.mp4)](./examples/generated_tutorials/python/quantalogic_long.mp4)

@@ -523,7 +523,13 @@ Use a `.env` file or export these variables in your shell for seamless integrati
 
 ## Examples That Spark Joy 
 
-Let’s light up your imagination with these gems:
+Explore our collection of examples to see QuantaLogic in action:
+
+- [Flow Examples](./examples/flow/README.md): Discover practical workflows showcasing Quantalogic Flow capabilities
+- [Agent Examples](./examples/agent/README.md): See dynamic agents in action with the ReAct framework
+- [Tool Examples](./examples/tools/README.md): Explore our powerful tool integrations
+
+Each example comes with detailed documentation and ready-to-run code.
 
 ### Video Magic
 [![Tutorial Demo](./examples/generated_tutorials/python/quantalogic_long.mp4)](./examples/generated_tutorials/python/quantalogic_long.mp4)
