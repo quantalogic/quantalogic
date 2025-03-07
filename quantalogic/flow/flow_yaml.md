@@ -435,7 +435,7 @@ nodes:
       max_tokens: 1000
     inputs_mapping:
       genre: "story_genre"
-      num_chapters: "chapter_count"
+      num_chapters: "lambda ctx: ctx['chapter_count'] + 1"
     output: outline
 ```
 
@@ -476,6 +476,90 @@ graph TD
     style K fill:#b3ffb3,stroke:#009933
     style L fill:#b3ffb3,stroke:#009933
 ```
+
+---
+
+## 6. Input Mapping with LLM Nodes and Template Nodes 🔗
+
+Input mapping allows flexible parameter passing to nodes, enabling dynamic behavior based on workflow context. This is particularly powerful when combined with LLM nodes and template nodes.
+
+### Implementation Details
+
+- **Input Mapping Types**:
+  - Direct context references (e.g., "story_genre")
+  - Lambda expressions (e.g., "lambda ctx: ctx['chapter_count'] + 1")
+  - Static values
+
+- **Supported Node Types**:
+  - LLM nodes
+  - Template nodes
+  - Function nodes
+  - Sub-workflow nodes
+
+### LLM Node Input Mapping
+
+LLM nodes support input mapping for both system prompts and user prompts:
+
+```yaml
+nodes:
+  generate_outline:
+    llm_config:
+      model: "gemini/gemini-2.0-flash"
+      system_prompt: "You are a creative writer skilled in {genre} stories."
+      prompt_template: "Create a story outline for a {genre} story with {num_chapters} chapters."
+    inputs_mapping:
+      genre: "story_genre"  # Map from context
+      num_chapters: "lambda ctx: ctx['chapter_count'] + 1"  # Dynamic value
+    output: outline
+```
+
+### Template Node Input Mapping
+
+Template nodes use mapped inputs in Jinja2 templates:
+
+```yaml
+nodes:
+  summarize_chapter:
+    template_config:
+      template: "Chapter {chapter_num}: {chapter}\n\nSummary: {summary}"
+    inputs_mapping:
+      chapter_num: "current_chapter"
+      chapter: "lambda ctx: ctx['chapters'][ctx['current_chapter']]"
+      summary: "lambda ctx: ctx['summaries'][ctx['current_chapter']]"
+    output: chapter_summary
+```
+
+### Combined Example
+
+Here's an example combining both LLM and template nodes with input mapping:
+
+```yaml
+nodes:
+  generate_character:
+    llm_config:
+      model: "gemini/gemini-2.0-flash"
+      system_prompt: "You are a character designer."
+      prompt_template: "Create a character for a {genre} story."
+    inputs_mapping:
+      genre: "story_genre"
+    output: character_description
+
+  format_character:
+    template_config:
+      template: "Character Profile:\n\n{description}\n\nTraits: {traits}"
+    inputs_mapping:
+      description: "character_description"
+      traits: "lambda ctx: ', '.join(ctx['character_traits'])"
+    output: formatted_character
+```
+
+### Key Points
+
+- Use `inputs_mapping` to map context values to node parameters
+- Support both direct context references and lambda expressions
+- Works seamlessly with LLM, template, and other node types
+- Enables dynamic, context-aware workflows
+- Input mapping is validated against node parameters
 
 ---
 
@@ -663,4 +747,3 @@ manager.save_to_yaml("hi.yaml")
 ## 14. Conclusion 🎉
 
 The Quantalogic Flow YAML DSL (March 5, 2025) is a powerful, flexible tool for workflow automation, exemplified by the updated Story Generator case study. With new **input mapping** and **template nodes**, alongside LLMs, sub-workflows, branching, convergence, and conversion tools, it seamlessly bridges Python and YAML. Whether crafting dynamic stories with formatted chapters or managing complex processes, this DSL, paired with `WorkflowManager`, unlocks efficient, scalable workflows. 🚀
-
