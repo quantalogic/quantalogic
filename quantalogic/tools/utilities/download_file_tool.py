@@ -45,14 +45,16 @@ class PrepareDownloadTool(Tool):
         ),
     ]
 
-    def __init__(self, upload_dir: str = "/tmp/data", base_url: str = "http://localhost:8082"):
+    def __init__(self, upload_dir: str = "/tmp/data", base_url: str = "http://localhost:8082", name: str = None):
         """Initialize the tool with upload directory path.
         
         Args:
             upload_dir: Directory where files are served from. Defaults to /tmp/data.
             base_url: Base URL of the server. Defaults to http://localhost:8082.
         """
-        super().__init__()
+        super().__init__() 
+        if name:
+            self.name = name
         self.upload_dir = upload_dir
         self.base_url = base_url.rstrip('/')
         # Ensure upload directory exists

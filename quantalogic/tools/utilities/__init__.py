@@ -10,12 +10,14 @@ from loguru import logger
 from .csv_processor_tool import CSVProcessorTool
 from .download_file_tool import PrepareDownloadTool
 from .mermaid_validator_tool import MermaidValidatorTool
+from .vscode_tool import VSCodeServerTool
 
 # Define __all__ to control what is imported with `from ... import *`
 __all__ = [
     'CSVProcessorTool',
     'PrepareDownloadTool',
     'MermaidValidatorTool',
+    'VSCodeServerTool',
 ]
 
 # Optional: Add logging for import confirmation

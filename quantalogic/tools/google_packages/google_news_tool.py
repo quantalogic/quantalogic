@@ -4,18 +4,20 @@ This tool provides a sophisticated interface to fetch, analyze, and format news 
 from Google News using multiple sources and advanced filtering capabilities.
 """
 
+from datetime import datetime, timedelta
+from typing import List, Optional, Dict, Any
+import json
+from urllib.parse import quote_plus
 import asyncio
-from typing import Any, Dict, List
-
 import aiohttp
-import html2text
 from bs4 import BeautifulSoup
 from gnews import GNews
 from loguru import logger
+from pydantic import Field, validator, ConfigDict 
+import html2text
 
+from quantalogic.tools.tool import Tool, ToolArgument 
 from quantalogic.event_emitter import EventEmitter
-from quantalogic.tools.llm_tool import LLMTool
-from quantalogic.tools.tool import Tool, ToolArgument
 
 
 class NewsArticle:
@@ -155,151 +157,19 @@ class GoogleNewsTool(Tool):
         ),
     ]
 
-    def __init__(
-        self,
-        model_name: str | None = None,
-        on_token: Any | None = None,
-        event_emitter: EventEmitter | None = None,
-    ):
+    def __init__(self, name: str | None = None):
         """Initialize the GoogleNewsTool.
         
         Args:
-            model_name (str | None): Name of the LLM model to use for summarization
-            on_token (Any | None): Token callback for streaming
-            event_emitter (EventEmitter | None): Event emitter for the tool
+            name (str | None): Optional name override for the tool
         """
         super().__init__()
-        self.model_name = model_name
-        self.on_token = on_token
-        self.event_emitter = event_emitter
-        if model_name:
-            self.llm_tool = LLMTool(
-                model_name=model_name,
-                on_token=on_token,
-                event_emitter=event_emitter,
-            )
-
-    def _summarize_article(self, article: Dict[str, Any]) -> str:
-        """Summarize a news article using LLM.
-        
-        Args:
-            article (Dict[str, Any]): Article data including title and description
-            
-        Returns:
-            str: Summarized article content
-        """
-        if not hasattr(self, 'llm_tool'):
-            return article.get('description', '')
-
-        prompt = f"""
-        Summarize this news article concisely and professionally:
-        
-        Title: {article.get('title', '')}
-        Description: {article.get('description', '')}
-        
-        Provide a 2-3 sentence summary that captures the key points.
-        """
-
-        try:
-            summary = self.llm_tool.execute(
-                system_prompt="You are a professional news summarizer. Create clear, accurate, and concise summaries.",
-                prompt=prompt,
-                temperature="0.3"
-            )
-            return summary
-        except Exception as e:
-            logger.error(f"Error summarizing article: {e}")
-            return article.get('description', '')
+        if name:
+            self.name = name
 
     def _format_html_output(self, articles: List[Dict[str, Any]], query: str) -> str:
         """Format articles as HTML with a modern, clean design."""
-        css_styles = """
-            body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                line-height: 1.6;
-                max-width: 1200px;
-                margin: 0 auto;
-                padding: 20px;
-                background-color: #f5f5f5;
-            }
-            .header {
-                background-color: #2c3e50;
-                color: white;
-                padding: 20px;
-                border-radius: 8px;
-                margin-bottom: 20px;
-            }
-            .article {
-                background-color: white;
-                padding: 20px;
-                margin-bottom: 20px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            .article h2 {
-                color: #2c3e50;
-                margin-top: 0;
-            }
-            .article-meta {
-                color: #666;
-                font-size: 0.9em;
-                margin-bottom: 10px;
-            }
-            .summary {
-                border-left: 4px solid #2c3e50;
-                padding-left: 15px;
-                margin: 15px 0;
-            }
-            .source-link {
-                display: inline-block;
-                margin-top: 10px;
-                color: #3498db;
-                text-decoration: none;
-            }
-            .source-link:hover {
-                text-decoration: underline;
-            }
-        """
-
-        articles_html = []
-        for article in articles:
-            article_html = f"""
-                <div class="article">
-                    <h2>{article.get('title', 'No Title')}</h2>
-                    <div class="article-meta">
-                        <span>Source: {article.get('source', {}).get('title', 'Unknown')}</span>
-                        <span> • </span>
-                        <span>Published: {article.get('published_date', 'Unknown date')}</span>
-                    </div>
-                    <div class="summary">
-                        {article.get('summary', 'No summary available')}
-                    </div>
-                    <a href="{article.get('link', '#')}" class="source-link" target="_blank">Read full article →</a>
-                </div>
-            """
-            articles_html.append(article_html)
-
-        html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                    {css_styles}
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <h1>News Results for: {query}</h1>
-                    <p>Found {len(articles)} articles</p>
-                </div>
-                {''.join(articles_html)}
-            </body>
-            </html>
-        """
-        
-        return html_content.strip()
+        return json.dumps(articles, indent=2)
 
     def _fetch_article_data(self, articles: List[NewsArticle]) -> List[NewsArticle]:
         """Fetch detailed data for multiple articles."""
@@ -318,38 +188,6 @@ class GoogleNewsTool(Tool):
             return articles
 
         return loop.run_until_complete(fetch_all())
-
-    def _format_results(self, articles: List[NewsArticle], analyze: bool) -> str:
-        """Format news results with optional analysis data."""
-        results = ["=== Advanced Google News Results ===\n"]
-        
-        for i, article in enumerate(articles, 1):
-            results.extend([
-                f"{i}. {article.title}",
-                f"   Source: {article.source} | Date: {article.date}",
-                f"   URL: {article.url}",
-                ""
-            ])
-            
-            if analyze and article.summary:
-                results.extend([
-                    "   Summary:",
-                    f"   {article.summary}",
-                    "",
-                    "   Key Topics:",
-                    f"   {', '.join(article.keywords[:5])}",
-                    "",
-                    "   Sentiment Analysis:",
-                    "   Overall tone: " + self._interpret_sentiment(article.sentiment),
-                    f"   - Positive: {article.sentiment.get('pos', 0)*100:.1f}% ({self._get_sentiment_level(article.sentiment.get('pos', 0))})",
-                    f"   - Negative: {article.sentiment.get('neg', 0)*100:.1f}% ({self._get_sentiment_level(article.sentiment.get('neg', 0))})",
-                    f"   - Neutral:  {article.sentiment.get('neu', 0)*100:.1f}% ({self._get_sentiment_level(article.sentiment.get('neu', 0))})",
-                    ""
-                ])
-            
-            results.append("")
-        
-        return "\n".join(results)
 
     def _get_sentiment_level(self, score: float) -> str:
         """Convert sentiment score to descriptive level."""
@@ -388,7 +226,7 @@ class GoogleNewsTool(Tool):
         sort_by: str = "relevance",
         analyze: bool = True,
     ) -> str:
-        """Execute the Google News search with summarization and HTML formatting.
+        """Execute the Google News search and return full articles in JSON format.
 
         Args:
             query (str): Search query
@@ -400,7 +238,7 @@ class GoogleNewsTool(Tool):
             analyze (bool, optional): Whether to analyze results. Defaults to True.
 
         Returns:
-            str: HTML formatted news results with summaries
+            str: JSON-formatted string containing list of article dictionaries with full content
         """
         try:
             # Input validation
@@ -442,22 +280,23 @@ class GoogleNewsTool(Tool):
             if sort_by == "date":
                 articles.sort(key=lambda x: x.date if x.date else "", reverse=True)
             
-            # Process and summarize each article
+            # Process and return full article data
             processed_articles = []
             for article in articles:
-                article_copy = {
+                processed_article = {
                     'title': article.title,
-                    'link': article.url,
-                    'source': {'title': article.source},
-                    'published_date': article.date,
-                    'description': article.full_text if hasattr(article, 'full_text') else '',
+                    'url': article.url,
+                    'source': article.source,
+                    'date': article.date,
+                    'full_text': article.full_text if hasattr(article, 'full_text') else '',
+                    'keywords': article.keywords if hasattr(article, 'keywords') else [],
+                    'sentiment': article.sentiment if hasattr(article, 'sentiment') else {},
+                    'summary': article.summary if hasattr(article, 'summary') else ''
                 }
-                article_copy['summary'] = self._summarize_article(article_copy)
-                processed_articles.append(article_copy)
+                processed_articles.append(processed_article)
 
-            # Format results as HTML
-            html_output = self._format_html_output(processed_articles, query)
-            return html_output
+            # Return pretty-printed JSON string, matching DuckDuckGo tool format
+            return json.dumps(processed_articles, indent=4, ensure_ascii=False)
 
         except Exception as e:
             logger.error(f"Error in GoogleNewsTool: {e}")
