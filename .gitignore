@@ -179,3 +179,7 @@ cython_debug/
 .tasks/
 
 sample.db
+
+.venv*/
+
+quantalogic/tools/composio/*.log.*
