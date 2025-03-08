@@ -59,6 +59,12 @@ A more advanced version for complex narrative generation.
 
 [Explore Advanced Storytelling ➡️](./story_generator/README.md)
 
+### 5. 🤔 Questions and Answers
+**🤔 Purpose**: Dive into the world of questions and answers!  
+This script extracts facts from a markdown file and generates an educational questionnaire based on those facts. It utilizes Pydantic for data validation, Typer for command-line interface creation, and a node-based architecture to process facts and generate questions. The script also evaluates the quality of generated questions, ensuring they are relevant, plausible, and clear. This functionality is particularly useful for creating educational content automatically from markdown documents.
+
+[Explore Questions and Answers ➡️](questions_and_answers/README.md)
+
 ---
 
 Each project comes with its own detailed README.md where you'll find:
