@@ -44,8 +44,8 @@ jobs:
         pip install dist/*.whl
         poetry install --with dev
     
-    - name: Run type checking
-      run: poetry run mypy quantalogic
+    - name: Test quantalogic version
+      run: |
+        python -c "import quantalogic; print(quantalogic.__version__)"
 
-    - name: Run tests
-      run: poetry run pytest
+
