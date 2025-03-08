@@ -180,6 +180,9 @@ class WorkflowEngine:
                 output_key = self.workflow.node_outputs[current_node]
                 if output_key:
                     self.context[output_key] = result
+                elif isinstance(result, dict):  # Update context if node returns a dict and output is None
+                    self.context.update(result)
+                    logger.debug(f"Updated context with {result} from node {current_node}")
                 await self._notify_observers(
                     WorkflowEvent(
                         event_type=WorkflowEventType.NODE_COMPLETED,
