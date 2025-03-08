@@ -46,7 +46,7 @@ At [QuantaLogic](https://www.quantalogic.app), we spotted a black hole: amazing 
 - [ReAct Framework: Dynamic Agents](#react-framework-dynamic-agents)
 - [Flow Module: Structured Workflows](#flow-module-structured-workflows)
   - 📘 **[Workflow YAML DSL Specification](./quantalogic/flow/flow_yaml.md)**: Comprehensive guide to defining powerful, structured workflows using our Domain-Specific Language
-  - 📚 **[Flow YAML Documentation](https://quantalogic.github.io/quantalogic/flow/flow_yaml)**: Dive into the official documentation for a deeper understanding of Flow YAML and its applications
+  - 📚 **[Flow YAML Documentation](./quantalogic/flow/flow_yaml)**: Dive into the official documentation for a deeper understanding of Flow YAML and its applications
 - [ReAct vs. Flow: Pick Your Power](#react-vs-flow-pick-your-power)
 - [Using the CLI](#using-the-cli)
 - [Examples That Spark Joy](#examples-that-spark-joy)
@@ -523,7 +523,13 @@ Use a `.env` file or export these variables in your shell for seamless integrati
 
 ## Examples That Spark Joy 
 
-Let’s light up your imagination with these gems:
+Explore our collection of examples to see QuantaLogic in action:
+
+- [Flow Examples](./examples/flow/README.md): Discover practical workflows showcasing Quantalogic Flow capabilities
+- [Agent Examples](./examples/agent/README.md): See dynamic agents in action with the ReAct framework
+- [Tool Examples](./examples/tools/README.md): Explore our powerful tool integrations
+
+Each example comes with detailed documentation and ready-to-run code.
 
 ### Video Magic
 [![Tutorial Demo](./examples/generated_tutorials/python/quantalogic_long.mp4)](./examples/generated_tutorials/python/quantalogic_long.mp4)

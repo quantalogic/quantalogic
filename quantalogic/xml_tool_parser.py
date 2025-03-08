@@ -4,7 +4,10 @@ This module provides functionality for parsing tool arguments from XML-like
 input, with support for validation and error handling.
 """
 
-from typing import Self
+try:
+    from typing import Self  # Python 3.11+
+except ImportError:
+    from typing_extensions import Self  # Python 3.10 compatibility
 
 from loguru import logger
 from pydantic import BaseModel, Field

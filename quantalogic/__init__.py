@@ -1,6 +1,7 @@
 """QuantaLogic package initialization."""
 
 import warnings
+from importlib.metadata import version as get_version
 
 # Suppress specific warnings related to Pydantic's V2 configuration changes
 warnings.filterwarnings(
@@ -9,6 +10,12 @@ warnings.filterwarnings(
     module="pydantic.*",
     message=".*config keys have changed in V2:.*|.*'fields' config key is removed in V2.*",
 )
+
+try:
+    __version__: str = get_version("quantalogic")
+except Exception as e:
+    __version__ = "unknown"
+    print(f"Unable to retrieve version: {e}")
 
 # Import public API
 from .agent import Agent  # noqa: E402

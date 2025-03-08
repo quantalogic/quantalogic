@@ -43,8 +43,8 @@ Chez [QuantaLogic](https://www.quantalogic.app), nous avons repéré un trou noi
 - [Démarrage rapide](#démarrage-rapide)
 - [Framework ReAct : Agents dynamiques](#react-framework-agents-dynamiques)
 - [Module Flow : Flux de travail structurés](#flow-module-flux-de-travail-structurés)
-  - 📘 **[Spécification DSL YAML du flux de travail](./quantalogic/flow/flow_yaml.md)** : Guide complet pour définir des flux de travail puissants et structurés à l'aide de notre langage spécifique au domaine
-  - 📚 **[Documentation YAML du flux de travail](https://quantalogic.github.io/quantalogic/flow/flow_yaml)** : Plongez dans la documentation officielle pour une compréhension plus approfondie de Flow YAML et de ses applications
+  - **[Spécification DSL YAML du flux de travail](./quantalogic/flow/flow_yaml.md)** : Guide complet pour définir des flux de travail puissants et structurés à l'aide de notre langage spécifique au domaine
+  - **[Documentation YAML du flux de travail](https://quantalogic.github.io/quantalogic/flow/flow_yaml)** : Plongez dans la documentation officielle pour une compréhension plus approfondie de Flow YAML et de ses applications
 - [ReAct vs. Flow : Choisissez votre puissance](#react-vs-flow-choisissez-votre-puissance)
 - [Utilisation de l'interface de ligne de commande](#utilisation-de-linterface-de-ligne-de-commande)
 - [Exemples qui suscitent la joie](#exemples-qui-suscitent-la-joie)
@@ -124,7 +124,7 @@ result = agent.solve_task(
 print(result)
 ```
 
-### Exemple d'agent asynchrone 🌊
+### Exemple d'agent asynchrone 
 
 ```python
 import asyncio
@@ -147,7 +147,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### Exemples de surveillance des événements 🔍
+### Exemples de surveillance des événements 
 
 #### Surveillance synchrone des événements avec des outils financiers
 ```python
@@ -293,7 +293,7 @@ graph TD
     B --> C{Raisonner avec LLM}
     C --> D[Appeler les outils]
     D --> E[Obtenir les résultats]
-    E --> F{Tâche terminée ?}
+    E --> F[Tâche terminée ?]
     F -->|Non| C
     F -->|Oui| G[Fournir la réponse]
     G --> H[Vous : Heureux !]
@@ -316,9 +316,9 @@ Parfait pour coder, déboguer ou répondre à des questions folles à la volée.
 
 Le **module Flow** est votre architecte—construisant des flux de travail qui bourdonnent avec précision. Il s'agit de nœuds, de transitions et d'un rythme régulier, idéal pour les missions répétables.
 
-🔍 **Vous voulez approfondir ?** Consultez notre [Spécification DSL YAML du flux de travail](./quantalogic/flow/flow_yaml.md) complète, un guide détaillé qui vous explique comment définir des flux de travail puissants et structurés. De la configuration de base des nœuds à la logique de transition complexe, cette documentation est votre feuille de route pour maîtriser la conception de flux de travail avec QuantaLogic.
+**[Spécification DSL YAML du flux de travail](./quantalogic/flow/flow_yaml.md)** : Guide complet pour définir des flux de travail puissants et structurés à l'aide de notre langage spécifique au domaine
 
-📚 **Pour une compréhension plus approfondie de Flow YAML et de ses applications, veuillez vous référer à la [Documentation YAML du flux de travail](https://quantalogic.github.io/quantalogic/flow/flow_yaml) officielle.**
+**[Documentation YAML du flux de travail](https://quantalogic.github.io/quantalogic/flow/flow_yaml)** : Plongez dans la documentation officielle pour une compréhension plus approfondie de Flow YAML et de ses applications
 
 La documentation Flow YAML fournit une vue d'ensemble complète du langage Flow YAML, y compris sa syntaxe, ses fonctionnalités et ses meilleures pratiques. C'est une ressource précieuse pour quiconque cherche à créer des flux de travail complexes avec QuantaLogic.
 
@@ -521,7 +521,13 @@ Utilisez un fichier `.env` ou exportez ces variables dans votre shell pour une i
 
 ## Exemples qui suscitent la joie
 
-Illuminons votre imagination avec ces joyaux :
+Découvrez notre collection d'exemples pour voir QuantaLogic en action :
+
+- [Exemples de Flow](./examples/flow/README.md) : Découvrez des workflows pratiques mettant en valeur les capacités de Quantalogic Flow
+- [Exemples d'Agents](./examples/agent/README.md) : Voyez des agents dynamiques en action avec le framework ReAct
+- [Exemples d'Outils](./examples/tools/README.md) : Explorez nos puissantes intégrations d'outils
+
+Chaque exemple est accompagné d'une documentation détaillée et de code prêt à l'emploi.
 
 ### Magie vidéo
 [![Tutoriel démo](./examples/generated_tutorials/python/quantalogic_long.mp4)](./examples/generated_tutorials/python/quantalogic_long.mp4)
@@ -666,10 +672,10 @@ print(result)
 Dans cet exemple, l'agent peut utiliser de manière transparente à la fois l'outil `PythonTool` standard et votre outil personnalisé de recherche de prix des actions pour terminer la tâche.
 
 Principales caractéristiques de `create_tool()` :
-- 🔧 Convertit automatiquement les fonctions en outils
-- 📝 Extrait les métadonnées de la signature de la fonction et de la chaîne de documentation
-- 🔍 Prend en charge les fonctions synchrones et asynchrones
-- 🛠️ Génère la documentation et la validation de l'outil
+- Convertit automatiquement les fonctions en outils
+- Extrait les métadonnées de la signature de la fonction et de la chaîne de documentation
+- Prend en charge les fonctions synchrones et asynchrones
+- Génère la documentation et la validation de l'outil
 
 ---
 

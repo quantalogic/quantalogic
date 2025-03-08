@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic"
-version = "0.54.0"
+version = "0.55.0"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
@@ -8,7 +8,7 @@ packages = [{include = "quantalogic"}]
 
 # Core dependencies required for the base Agent and ToolManager
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "<4.0,>=3.10"
 pydantic = "^2.10.4"
 litellm = "^1.56.4"
 rich = "^13.9.4"
@@ -43,6 +43,7 @@ tree-sitter-go = "^0.23.4"
 tree-sitter-rust = "^0.23.2"
 fuzzywuzzy = "^0.18.0"
 types-pyyaml = "^6.0.12.20241230"
+typing-extensions = "^4.12.2"
 
 [tool.poetry.group.file-tools]
 optional = false
@@ -169,12 +170,12 @@ docs-deploy = "quantalogic.docs_cli:deploy_docs"
 
 # Build system configuration
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 # Ruff linting configuration
 [tool.ruff]
-target-version = "py312"
+target-version = "py310"
 line-length = 88
 
 [tool.ruff.lint]

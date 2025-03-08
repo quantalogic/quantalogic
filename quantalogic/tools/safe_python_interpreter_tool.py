@@ -11,7 +11,12 @@ Description:
 from __future__ import annotations
 
 import concurrent.futures
-from typing import Any, List, Literal, Self
+from typing import Any, List, Literal
+
+try:
+    from typing import Self  # Python 3.11+
+except ImportError:
+    from typing_extensions import Self  # Python 3.10 compatibility
 
 from loguru import logger
 from pydantic import Field, model_validator

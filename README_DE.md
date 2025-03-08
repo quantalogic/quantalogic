@@ -524,35 +524,13 @@ Verwende eine `.env`-Datei oder exportiere diese Variablen in deiner Shell für 
 
 ## Beispiele, die Freude bereiten
 
-Lass uns deine Fantasie mit diesen Juwelen beflügeln:
+Entdecke unsere Sammlung von Beispielen, um QuantaLogic in Aktion zu sehen:
 
-### Videomagie
-[![Tutorial Demo](./examples/generated_tutorials/python/quantalogic_long.mp4)](./examples/generated_tutorials/python/quantalogic_long.mp4)
+- [Flow-Beispiele](./examples/flow/README.md): Praktische Workflows, die die Fähigkeiten von Quantalogic Flow zeigen
+- [Agenten-Beispiele](./examples/agent/README.md): Dynamische Agenten in Aktion mit dem ReAct-Framework
+- [Tool-Beispiele](./examples/tools/README.md): Erkunde unsere leistungsstarken Tool-Integrationen
 
-### Praktische Beispiele
-| Name              | Was macht es?                       | Datei                                       |
-|-------------------|------------------------------------|--------------------------------------------|
-| Einfacher Agent   | Grundlegende ReAct-Agenten-Demo    | [01-simple-agent.py](./examples/01-simple-agent.py) |
-| Ereignisüberwachung| Agent mit Ereignisverfolgung       | [02-agent-with-event-monitoring.py](./examples/02-agent-with-event-monitoring.py) |
-| Interpreter-Modus | Agent mit Interpreter              | [03-agent-with-interpreter.py](./examples/03-agent-with-interpreter.py) |
-| Agentenzusammenfassung| Aufgabenzusammenfassung generieren | [04-agent-summary-task.py](./examples/04-agent-summary-task.py) |
-| Codegenerierung   | Grundlegende Codegenerierung       | [05-code.py](./examples/05-code.py) |
-| Code-Screen       | Erweiterte Codegenerierung         | [06-code-screen.py](./examples/06-code-screen.py) |
-| Tutorial-Autor    | Technische Tutorials schreiben     | [07-write-tutorial.py](./examples/07-write-tutorial.py) |
-| PRD-Autor         | Produktspezifikationsdokument     | [08-prd-writer.py](./examples/08-prd-writer.py) |
-| Story Generator   | Flow-basierte Geschichtenerstellung | [story_generator_agent.py](./examples/flow/story_generator/story_generator_agent.py) |
-| SQL-Abfrage       | Datenbankabfrage generieren        | [09-sql-query.py](./examples/09-sql-query.py) |
-| Finanzagent       | Finanzanalyse und Aufgaben        | [10-finance-agent.py](./examples/10-finance-agent.py) |
-| Textuelle Oberfläche| Agent mit textueller UI            | [11-textual-agent-interface.py](./examples/11-textual-agent-interface.py) |
-| Composio-Test     | Composio-Integrationsdemo         | [12-composio-test.py](./examples/12-composio-test.py) |
-| Synchroner Agent  | Synchrone Agenten-Demo           | [13-synchronous-agent.py](./examples/13-synchronous-agent.py) |
-| Asynchroner Agent | Asynchrone Agenten-Demo            | [14-async-agent.py](./examples/14-async-agent.py) |
-
-### Bonus: Mathegenie
-```bash
-quantalogic task "Löse 2x + 5 = 15"
-```
-> Ausgabe: "Lass es uns lösen! 2x + 5 = 15 → 2x = 10 → x = 5. Fertig!"
+Jedes Beispiel kommt mit detaillierter Dokumentation und lauffertigem Code.
 
 ---
 
@@ -727,3 +705,5 @@ source .env
 | `lm_studio/mistral-small-24b-instruct-2501` | `LM_STUDIO_API_KEY` | Lokale LLM-Aktion                            |
 
 ### Lokale Einrichtung (z. B. LM Studio)
+
+```
