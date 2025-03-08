@@ -7,7 +7,11 @@ with support for handling malformed XML and CDATA sections.
 import html
 import re
 from collections import defaultdict
-from typing import Self
+
+try:
+    from typing import Self  # Python 3.11+
+except ImportError:
+    from typing_extensions import Self  # Python 3.10 compatibility
 
 from loguru import logger
 from pydantic import BaseModel, Field, model_validator
