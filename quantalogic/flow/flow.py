@@ -12,7 +12,7 @@
 # ///
 
 import asyncio
-import inspect  # Added for accurate parameter detection
+import inspect
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -47,18 +47,17 @@ class WorkflowEvent:
     transition_from: Optional[str] = None
     transition_to: Optional[str] = None
     sub_workflow_name: Optional[str] = None
-    usage: Optional[Dict[str, Any]] = None  # Added to store token usage and cost
+    usage: Optional[Dict[str, Any]] = None
 
 
 WorkflowObserver = Callable[[WorkflowEvent], None]
 
 
-# Define a class for sub-workflow nodes with updated inputs handling
 class SubWorkflowNode:
     def __init__(self, sub_workflow: "Workflow", inputs: Dict[str, Any], output: str):
         """Initialize a sub-workflow node with flexible inputs mapping."""
         self.sub_workflow = sub_workflow
-        self.inputs = inputs  # Maps sub_key to main_key, callable, or value
+        self.inputs = inputs
         self.output = output
 
     async def __call__(self, engine: "WorkflowEngine"):
@@ -70,7 +69,7 @@ class SubWorkflowNode:
             elif isinstance(mapping, str):
                 sub_context[sub_key] = engine.context.get(mapping)
             else:
-                sub_context[sub_key] = mapping  # Direct value
+                sub_context[sub_key] = mapping
         sub_engine = self.sub_workflow.build(parent_engine=engine)
         result = await sub_engine.run(sub_context)
         return result.get(self.output)
@@ -82,7 +81,7 @@ class WorkflowEngine:
         self.workflow = workflow
         self.context: Dict[str, Any] = {}
         self.observers: List[WorkflowObserver] = []
-        self.parent_engine = parent_engine  # Link to parent engine for sub-workflow observer propagation
+        self.parent_engine = parent_engine
 
     def add_observer(self, observer: WorkflowObserver) -> None:
         """Register an event observer callback."""
@@ -90,7 +89,7 @@ class WorkflowEngine:
             self.observers.append(observer)
             logger.debug(f"Added observer: {observer}")
         if self.parent_engine:
-            self.parent_engine.add_observer(observer)  # Propagate to parent for global visibility
+            self.parent_engine.add_observer(observer)
 
     def remove_observer(self, observer: WorkflowObserver) -> None:
         """Remove an event observer callback."""
@@ -140,18 +139,15 @@ class WorkflowEngine:
                 )
                 break
 
-            # Prepare inputs with mappings
             input_mappings = self.workflow.node_input_mappings.get(current_node, {})
             inputs = {}
-            # Add all mapped inputs
             for key, mapping in input_mappings.items():
                 if callable(mapping):
                     inputs[key] = mapping(self.context)
                 elif isinstance(mapping, str):
                     inputs[key] = self.context.get(mapping)
                 else:
-                    inputs[key] = mapping  # Direct value
-            # For parameters in node_inputs that are not mapped, get from context
+                    inputs[key] = mapping
             for param in self.workflow.node_inputs[current_node]:
                 if param not in inputs:
                     inputs[param] = self.context.get(param)
@@ -159,7 +155,6 @@ class WorkflowEngine:
             result = None
             exception = None
 
-            # Handle sub-workflow nodes
             if isinstance(node_func, SubWorkflowNode):
                 await self._notify_observers(
                     WorkflowEvent(
@@ -172,15 +167,15 @@ class WorkflowEngine:
 
             try:
                 if isinstance(node_func, SubWorkflowNode):
-                    result = await node_func(self)  # Sub-workflow handles its own inputs
-                    usage = None  # Sub-workflow usage is handled by its own nodes
+                    result = await node_func(self)
+                    usage = None
                 else:
                     result = await node_func(**inputs)
-                    usage = getattr(node_func, "usage", None)  # Extract usage if set by LLM nodes
+                    usage = getattr(node_func, "usage", None)
                 output_key = self.workflow.node_outputs[current_node]
                 if output_key:
                     self.context[output_key] = result
-                elif isinstance(result, dict):  # Update context if node returns a dict and output is None
+                elif isinstance(result, dict):
                     self.context.update(result)
                     logger.debug(f"Updated context with {result} from node {current_node}")
                 await self._notify_observers(
@@ -189,7 +184,7 @@ class WorkflowEngine:
                         node_name=current_node,
                         context=self.context,
                         result=result,
-                        usage=usage,  # Include usage data in the event
+                        usage=usage,
                     )
                 )
             except Exception as e:
@@ -248,11 +243,11 @@ class Workflow:
         self.node_inputs: Dict[str, List[str]] = {}
         self.node_outputs: Dict[str, Optional[str]] = {}
         self.transitions: Dict[str, List[Tuple[str, Optional[Callable]]]] = {}
-        self.node_input_mappings: Dict[str, Dict[str, Any]] = {}  # Store input mappings for nodes
+        self.node_input_mappings: Dict[str, Dict[str, Any]] = {}
         self.current_node = None
         self._observers: List[WorkflowObserver] = []
-        self._register_node(start_node)  # Register the start node without setting current_node
-        self.current_node = start_node  # Set current_node explicitly after registration
+        self._register_node(start_node)
+        self.current_node = start_node
 
     def _register_node(self, name: str):
         """Register a node without modifying the current node."""
@@ -291,7 +286,7 @@ class Workflow:
     def then(self, next_node: str, condition: Optional[Callable] = None):
         """Add a transition to the next node with an optional condition."""
         if next_node not in self.nodes:
-            self._register_node(next_node)  # Register without changing current_node
+            self._register_node(next_node)
         if self.current_node:
             self.transitions.setdefault(self.current_node, []).append((next_node, condition))
             logger.debug(f"Added transition from {self.current_node} to {next_node} with condition {condition}")
@@ -300,8 +295,14 @@ class Workflow:
         self.current_node = next_node
         return self
 
-    def branch(self, branches: List[Tuple[str, Optional[Callable]]]) -> "Workflow":
-        """Add multiple conditional branches from the current node."""
+    def branch(self, branches: List[Tuple[str, Optional[Callable]]], default: Optional[str] = None) -> "Workflow":
+        """
+        Add multiple conditional branches from the current node with an optional default transition.
+
+        :param branches: List of tuples (next_node, condition), where condition is a callable that takes the context and returns a boolean.
+        :param default: Optional node to transition to if none of the branch conditions are met.
+        :return: Self for method chaining.
+        """
         if not self.current_node:
             logger.warning("No current node set for branching")
             return self
@@ -310,13 +311,17 @@ class Workflow:
                 self._register_node(next_node)
             self.transitions.setdefault(self.current_node, []).append((next_node, condition))
             logger.debug(f"Added branch from {self.current_node} to {next_node} with condition {condition}")
+        if default:
+            if default not in self.nodes:
+                self._register_node(default)
+            self.transitions.setdefault(self.current_node, []).append((default, None))
+            logger.debug(f"Added default transition from {self.current_node} to {default}")
         return self
 
     def converge(self, convergence_node: str) -> "Workflow":
         """Set a convergence point for all previous branches."""
         if convergence_node not in self.nodes:
             self._register_node(convergence_node)
-        # Find all leaf nodes (nodes with no outgoing transitions) and point them to convergence_node
         for node in self.nodes:
             if (node not in self.transitions or not self.transitions[node]) and node != convergence_node:
                 self.transitions.setdefault(node, []).append((convergence_node, None))
@@ -329,7 +334,7 @@ class Workflow:
         if self.current_node:
             for node in nodes:
                 self.transitions.setdefault(self.current_node, []).append((node, None))
-        self.current_node = None  # Reset after parallel to force explicit next node
+        self.current_node = None
         return self
 
     def add_observer(self, observer: WorkflowObserver) -> "Workflow":
@@ -337,13 +342,13 @@ class Workflow:
         if observer not in self._observers:
             self._observers.append(observer)
             logger.debug(f"Added observer to workflow: {observer}")
-        return self  # Support chaining
+        return self
 
     def add_sub_workflow(self, name: str, sub_workflow: "Workflow", inputs: Dict[str, Any], output: str):
         """Add a sub-workflow as a node with flexible inputs mapping."""
         sub_node = SubWorkflowNode(sub_workflow, inputs, output)
         self.nodes[name] = sub_node
-        self.node_inputs[name] = []  # Inputs handled internally by SubWorkflowNode
+        self.node_inputs[name] = []
         self.node_outputs[name] = output
         self.current_node = name
         logger.debug(f"Added sub-workflow {name} with inputs {inputs} and output {output}")
@@ -358,7 +363,7 @@ class Workflow:
 
 
 class Nodes:
-    NODE_REGISTRY: Dict[str, Tuple[Callable, List[str], Optional[str]]] = {}  # Registry to hold node functions and metadata
+    NODE_REGISTRY: Dict[str, Tuple[Callable, List[str], Optional[str]]] = {}
 
     @classmethod
     def define(cls, output: Optional[str] = None):
@@ -375,8 +380,6 @@ class Nodes:
                 except Exception as e:
                     logger.error(f"Error in node {func.__name__}: {e}")
                     raise
-
-            # Get parameter names from function signature
             sig = inspect.signature(func)
             inputs = [param.name for param in sig.parameters.values()]
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
@@ -401,8 +404,6 @@ class Nodes:
                 except Exception as e:
                     logger.error(f"Validation error in {func.__name__}: {e}")
                     raise
-
-            # Get parameter names from function signature
             sig = inspect.signature(func)
             inputs = [param.name for param in sig.parameters.values()]
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
@@ -416,7 +417,6 @@ class Nodes:
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(**kwargs):
                 try:
-                    # Apply transformer to the first input value
                     input_key = list(kwargs.keys())[0] if kwargs else None
                     if input_key:
                         transformed_input = transformer(kwargs[input_key])
@@ -430,8 +430,6 @@ class Nodes:
                 except Exception as e:
                     logger.error(f"Error in transform node {func.__name__}: {e}")
                     raise
-
-            # Get parameter names from function signature
             sig = inspect.signature(func)
             inputs = [param.name for param in sig.parameters.values()]
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
@@ -484,7 +482,6 @@ class Nodes:
         """Decorator for creating LLM nodes with plain text output, supporting dynamic parameters via input mappings."""
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(model: str, **func_kwargs):
-                # Extract parameters from func_kwargs if provided, else use defaults
                 system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
                 prompt_template_to_use = func_kwargs.pop("prompt_template", prompt_template)
                 prompt_file_to_use = func_kwargs.pop("prompt_file", prompt_file)
@@ -494,7 +491,6 @@ class Nodes:
                 presence_penalty_to_use = func_kwargs.pop("presence_penalty", presence_penalty)
                 frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
 
-                # Use only signature parameters for template rendering
                 sig = inspect.signature(func)
                 template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
                 prompt = cls._render_template(prompt_template_to_use, prompt_file_to_use, template_vars)
@@ -503,7 +499,6 @@ class Nodes:
                     {"role": "user", "content": prompt},
                 ]
                 
-                # Log the model and a preview of the prompt
                 truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
                 logger.info(f"LLM node {func.__name__} using model: {model}")
                 logger.debug(f"System prompt: {system_prompt_to_use[:100]}...")
@@ -533,8 +528,6 @@ class Nodes:
                 except Exception as e:
                     logger.error(f"Error in LLM node {func.__name__}: {e}")
                     raise
-
-            # Get parameter names from function signature and add 'model'
             sig = inspect.signature(func)
             inputs = ['model'] + [param.name for param in sig.parameters.values()]
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
@@ -566,7 +559,6 @@ class Nodes:
 
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(model: str, **func_kwargs):
-                # Extract parameters from func_kwargs if provided, else use defaults
                 system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
                 prompt_template_to_use = func_kwargs.pop("prompt_template", prompt_template)
                 prompt_file_to_use = func_kwargs.pop("prompt_file", prompt_file)
@@ -576,7 +568,6 @@ class Nodes:
                 presence_penalty_to_use = func_kwargs.pop("presence_penalty", presence_penalty)
                 frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
 
-                # Use only signature parameters for template rendering
                 sig = inspect.signature(func)
                 template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
                 prompt = cls._render_template(prompt_template_to_use, prompt_file_to_use, template_vars)
@@ -585,7 +576,6 @@ class Nodes:
                     {"role": "user", "content": prompt},
                 ]
                 
-                # Log the model and a preview of the prompt
                 truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
                 logger.info(f"Structured LLM node {func.__name__} using model: {model}")
                 logger.debug(f"System prompt: {system_prompt_to_use[:100]}...")
@@ -619,8 +609,6 @@ class Nodes:
                 except Exception as e:
                     logger.error(f"Error in structured LLM node {func.__name__}: {e}")
                     raise
-
-            # Get parameter names from function signature and add 'model'
             sig = inspect.signature(func)
             inputs = ['model'] + [param.name for param in sig.parameters.values()]
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
@@ -638,17 +626,14 @@ class Nodes:
         """Decorator for creating nodes that apply a Jinja2 template to inputs, supporting dynamic parameters."""
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(**func_kwargs):
-                # Extract template parameters from func_kwargs if provided, else use defaults
                 template_to_use = func_kwargs.pop("template", template)
                 template_file_to_use = func_kwargs.pop("template_file", template_file)
 
-                # Use only signature parameters (excluding rendered_content) for template rendering
                 sig = inspect.signature(func)
                 expected_params = [p.name for p in sig.parameters.values() if p.name != 'rendered_content']
                 template_vars = {k: v for k, v in func_kwargs.items() if k in expected_params}
                 rendered_content = cls._render_template(template_to_use, template_file_to_use, template_vars)
 
-                # Filter func_kwargs for the function call
                 filtered_kwargs = {k: v for k, v in func_kwargs.items() if k in expected_params}
 
                 try:
@@ -661,8 +646,6 @@ class Nodes:
                 except Exception as e:
                     logger.error(f"Error in template node {func.__name__}: {e}")
                     raise
-
-            # Get parameter names from function signature and add 'rendered_content' if not present
             sig = inspect.signature(func)
             inputs = [param.name for param in sig.parameters.values()]
             if 'rendered_content' not in inputs:
@@ -673,15 +656,12 @@ class Nodes:
         return decorator
 
 
-# Example workflow with observer integration, updated nodes, input mappings, and dynamic parameters
 async def example_workflow():
-    # Define Pydantic model for structured output
     class OrderDetails(BaseModel):
         order_id: str
         items_in_stock: List[str]
         items_out_of_stock: List[str]
 
-    # Define an example observer for progress
     async def progress_monitor(event: WorkflowEvent):
         print(f"[{event.event_type.value}] {event.node_name or 'Workflow'}")
         if event.result is not None:
@@ -689,7 +669,6 @@ async def example_workflow():
         if event.exception is not None:
             print(f"Exception: {event.exception}")
 
-    # Define an observer for token usage
     class TokenUsageObserver:
         def __init__(self):
             self.total_prompt_tokens = 0
@@ -712,7 +691,6 @@ async def example_workflow():
                 for node, usage in self.node_usages.items():
                     print(f"Node {node}: {usage}")
 
-    # Define nodes
     @Nodes.validate_node(output="validation_result")
     async def validate_order(order: Dict[str, Any]) -> str:
         return "Order validated" if order.get("items") else "Invalid order"
@@ -757,13 +735,10 @@ async def example_workflow():
     async def format_order_message(rendered_content: str, items: List[str]) -> str:
         return rendered_content
 
-    # Sub-workflow for payment and shipping
     payment_shipping_sub_wf = Workflow("process_payment").sequence("process_payment", "arrange_shipping")
 
-    # Instantiate token usage observer
     token_observer = TokenUsageObserver()
 
-    # Main workflow with dynamic parameter overrides
     workflow = (
         Workflow("validate_order")
         .add_observer(progress_monitor)
@@ -772,13 +747,13 @@ async def example_workflow():
         .node("transform_items")
         .node("format_order_message", inputs_mapping={
             "items": "items",
-            "template": "Custom order: {{ items | join(', ') }}"  # Dynamic override
+            "template": "Custom order: {{ items | join(', ') }}"
         })
         .node("check_inventory", inputs_mapping={
             "model": lambda ctx: "gemini/gemini-2.0-flash",
             "items": "transformed_items",
-            "temperature": 0.5,  # Dynamic override
-            "max_tokens": 1000   # Dynamic override
+            "temperature": 0.5,
+            "max_tokens": 1000
         })
         .add_sub_workflow(
             "payment_shipping",
@@ -794,7 +769,6 @@ async def example_workflow():
         .sequence("update_order_status", "send_confirmation_email")
     )
 
-    # Execute workflow
     initial_context = {"customer_order": {"items": ["item1", "item2"]}, "items": ["item1", "item2"]}
     engine = workflow.build()
     result = await engine.run(initial_context)
