@@ -22,6 +22,7 @@ from quantalogic.utils import get_environment
 from quantalogic.utils.ask_user_validation import console_ask_for_user_validation
 from quantalogic.xml_parser import ToleranceXMLParser
 from quantalogic.xml_tool_parser import ToolParser
+import uuid
 
 # Maximum ratio occupancy of the occupied memory
 MAX_OCCUPANCY = 90.0
@@ -75,7 +76,7 @@ class Agent(BaseModel):
     config: AgentConfig
     task_to_solve: str
     task_to_solve_summary: str = ""
-    ask_for_user_validation: Callable[[str], bool] = console_ask_for_user_validation
+    ask_for_user_validation: Callable[[str, str], bool] = console_ask_for_user_validation
     last_tool_call: dict[str, Any] = {}  # Stores the last tool call information
     total_tokens: int = 0  # Total tokens in the conversation
     current_iteration: int = 0
@@ -93,7 +94,7 @@ class Agent(BaseModel):
         memory: AgentMemory = AgentMemory(),
         variable_store: VariableMemory = VariableMemory(),
         tools: list[Tool] = [TaskCompleteTool()],
-        ask_for_user_validation: Callable[[str], bool] = console_ask_for_user_validation,
+        ask_for_user_validation: Callable[[str, str], bool] = console_ask_for_user_validation,
         task_to_solve: str = "",
         specific_expertise: str = "General AI assistant with coding and problem-solving capabilities",
         get_environment: Callable[[], str] = get_environment,
@@ -399,6 +400,18 @@ class Agent(BaseModel):
             Tuple of (executed_tool_name, response)
         """
         if tool.need_validation:
+            logger.info(f"Tool '{tool_name}' requires validation.")
+            validation_id = str(uuid.uuid4())
+            logger.info(f"Validation ID: {validation_id}")
+            
+            self._emit_event(
+                "tool_execute_validation_start",
+                {
+                    "validation_id": validation_id,
+                    "tool_name": tool_name, 
+                    "arguments": arguments_with_values
+                },
+            )
             question_validation = (
                 "Do you permit the execution of this tool?\n"
                 f"Tool: {tool_name}\nArguments:\n"
@@ -406,7 +419,18 @@ class Agent(BaseModel):
                 + "\n".join([f"    <{key}>{value}</{key}>" for key, value in arguments_with_values.items()])
                 + "\n</arguments>\nYes or No"
             )
-            permission_granted = self.ask_for_user_validation(question_validation)
+            permission_granted = await self.ask_for_user_validation(validation_id, question_validation)
+
+            self._emit_event(
+                "tool_execute_validation_end",
+                {
+                    "validation_id": validation_id,
+                    "tool_name": tool_name,
+                    "arguments": arguments_with_values,
+                    "granted": permission_granted
+                },
+            )
+
             if not permission_granted:
                 return "", f"Error: execution of tool '{tool_name}' was denied by the user."
 
