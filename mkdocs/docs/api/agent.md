@@ -16,7 +16,7 @@ def __init__(
     model_name: str = "",
     memory: AgentMemory = AgentMemory(),
     tools: list[Tool] = [TaskCompleteTool()],
-    ask_for_user_validation: Callable[[str], bool] = console_ask_for_user_validation,
+    ask_for_user_validation: Callable[[str, str], Awaitable[bool]] = console_ask_for_user_validation,
     task_to_solve: str = "",
     specific_expertise: str = "General AI assistant with coding and problem-solving capabilities",
     get_environment: Callable[[], str] = get_environment,
@@ -30,7 +30,7 @@ def __init__(
 | `model_name` | str | Name of the LLM to use | `""` |
 | `memory` | AgentMemory | Memory management instance | `AgentMemory()` |
 | `tools` | list[Tool] | List of tools available to the agent | `[TaskCompleteTool()]` |
-| `ask_for_user_validation` | Callable | Function for user validation | `console_ask_for_user_validation` |
+| `ask_for_user_validation` | Callable[[str, str], Awaitable[bool]] | Async function for user validation | `console_ask_for_user_validation` |
 | `task_to_solve` | str | Initial task for the agent | `""` |
 | `specific_expertise` | str | Agent's specialized knowledge area | `"General AI assistant..."` |
 | `get_environment` | Callable | Function to get environment details | `get_environment` |

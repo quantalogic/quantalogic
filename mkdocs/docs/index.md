@@ -241,7 +241,7 @@ agent = Agent(
     model_name="deepseek/deepseek-chat",  # Required: specify the LLM
     tools=[GreetingTool()],  # Add your custom tools
     specific_expertise="An AI assistant that greets people",  # Optional: specify expertise
-    ask_for_user_validation=lambda x: True,  # Optional: custom validation function
+    ask_for_user_validation=lambda *args, **kwargs: asyncio.create_task(asyncio.to_thread(lambda: True)),  # Optional: async validation function
 )
 
 # Let the agent use the tool
