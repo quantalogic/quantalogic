@@ -11,7 +11,8 @@
 #     "instructor>=0.5.2",
 #     "typer>=0.9.0",
 #     "rich>=13.0.0",
-#     "pyperclip>=1.8.2"
+#     "pyperclip>=1.8.2",
+#     "tenacity>=8.0.0"  # Added for retry logic in flow.py
 # ]
 # ///
 
@@ -36,7 +37,7 @@ app = typer.Typer(help="Convert a markdown file to a viral LinkedIn post")
 console = Console()
 
 # Default models
-DEFAULT_ANALYSIS_MODEL = "gemini/gemini-2.0-flash" 
+DEFAULT_ANALYSIS_MODEL = "gemini/gemini-2.0-flash"
 DEFAULT_WRITING_MODEL = "openrouter/deepseek/deepseek-r1"  # Good for creative writing
 DEFAULT_CLEANING_MODEL = "gemini/gemini-2.0-flash"  # Default cleaning model
 DEFAULT_FORMATTING_MODEL = "gemini/gemini-2.0-flash"  # Default formatting model
@@ -103,8 +104,19 @@ Here's the content:
 {{markdown_content}}
 """
 )
-async def analyze_content(markdown_content: str) -> ContentAnalysis:
+async def analyze_content(markdown_content: str, model: str, mock: bool = False) -> ContentAnalysis:
     """Analyze markdown content to determine its type and structure."""
+    logger.debug(f"analyze_content called with model: {model}, mock: {mock}")
+    if mock:
+        logger.info("Mocking content analysis due to quota exhaustion or testing")
+        return ContentAnalysis(
+            content_type="Software/Tool introduction",
+            primary_topic="Sample Topic",
+            target_audience=["Developers", "Tech Enthusiasts"],
+            key_points=["Point 1", "Point 2", "Point 3"],
+            title="Sample Title"
+        )
+    # LLM call handled by decorator, model explicitly passed
     pass
 
 # Node: Determine Viral Strategy
@@ -131,8 +143,9 @@ Provide a viral strategy that includes:
 Your strategy should be tailored to the specific content and audience, optimized for LinkedIn's algorithm and professional audience.
 """
 )
-async def determine_viral_strategy(content_analysis: ContentAnalysis) -> ViralStrategy:
+async def determine_viral_strategy(content_analysis: ContentAnalysis, model: str) -> ViralStrategy:
     """Determine the best strategy to make this content viral on LinkedIn."""
+    logger.debug(f"determine_viral_strategy called with model: {model}")
     pass
 
 # Node: Generate LinkedIn Post
@@ -197,12 +210,14 @@ async def generate_linkedin_post(
     content_analysis: ContentAnalysis, 
     viral_strategy: ViralStrategy, 
     markdown_content: str,
+    model: str,
     intent: Optional[str] = None
 ) -> str:
     """Generate a LinkedIn post designed for maximum virality."""
+    logger.debug(f"generate_linkedin_post called with model: {model}")
     pass
 
-# Node: Clean Linkedin Post
+# Node: Clean LinkedIn Post
 @Nodes.llm_node(
     system_prompt="You are an editor who specializes in optimizing social media posts. Your task is to refine a LinkedIn post to maximize readability and engagement.",
     output="cleaned_post",
@@ -226,8 +241,9 @@ Guidelines for your optimization:
 Return only the cleaned, optimized LinkedIn post with no additional explanation.
 """
 )
-async def clean_linkedin_post(linkedin_post: str) -> str:
+async def clean_linkedin_post(linkedin_post: str, model: str) -> str:
     """Clean and optimize the LinkedIn post for maximum impact."""
+    logger.debug(f"clean_linkedin_post called with model: {model}")
     pass
 
 # Node: Format LinkedIn Post for Platform
@@ -251,8 +267,9 @@ Formatting requirements:
 Return only the formatted LinkedIn post with no additional explanation.
 """
 )
-async def format_linkedin_post(cleaned_post: str) -> str:
+async def format_linkedin_post(cleaned_post: str, model: str) -> str:
     """Format the LinkedIn post to remove markdown and use proper LinkedIn formatting."""
+    logger.debug(f"format_linkedin_post called with model: {model}")
     pass
 
 # Node: Save LinkedIn Post
@@ -303,7 +320,7 @@ def create_linkedin_content_workflow() -> Workflow:
     
     # Add input mappings for model parameters
     workflow.node_input_mappings = {
-        "analyze_content": {"model": "analysis_model"},
+        "analyze_content": {"model": "analysis_model", "mock": "mock"},
         "determine_viral_strategy": {"model": "analysis_model"},
         "generate_linkedin_post": {"model": "writing_model", "intent": "intent"},
         "clean_linkedin_post": {"model": "cleaning_model"},
@@ -350,7 +367,8 @@ async def run_workflow(
     cleaning_model: str,
     formatting_model: str,
     copy_to_clipboard_flag: bool = True,
-    intent: Optional[str] = None
+    intent: Optional[str] = None,
+    mock_analysis: bool = False
 ) -> dict:
     """Execute the workflow with the given file path and models."""
     file_path = os.path.expanduser(file_path)
@@ -367,8 +385,11 @@ async def run_workflow(
         "cleaning_model": cleaning_model,
         "formatting_model": formatting_model,
         "do_copy": copy_to_clipboard_flag,
-        "intent": intent
+        "intent": intent,
+        "mock": mock_analysis
     }
+
+    logger.debug(f"Initial context: {initial_context}")  # Debug to verify defaults
 
     try:
         workflow = create_linkedin_content_workflow()
@@ -415,9 +436,13 @@ def create_post(
     formatting_model: Annotated[str, typer.Option(help="LLM model for formatting LinkedIn post")] = DEFAULT_FORMATTING_MODEL,
     copy_to_clipboard_flag: Annotated[bool, typer.Option("--copy/--no-copy", help="Copy the final post to clipboard")] = True,
     intent: Annotated[Optional[str], typer.Option("--intent", "-i", help="Intent or specific focus for the LinkedIn post")] = None,
+    mock_analysis: Annotated[bool, typer.Option("--mock-analysis/--no-mock", help="Mock the analysis step for testing")] = False,
 ):
     """Generate a viral LinkedIn post from a markdown file containing a tutorial or software introduction."""
     try:
+        # Debug model values
+        logger.debug(f"CLI Models - Analysis: {analysis_model}, Writing: {writing_model}, Cleaning: {cleaning_model}, Formatting: {formatting_model}")
+        
         # If intent not provided, prompt the user for multi-line input
         if intent is None:
             intent = get_multiline_input("What is your intent or specific focus for this LinkedIn post?")
@@ -436,7 +461,8 @@ def create_post(
                 cleaning_model,
                 formatting_model,
                 copy_to_clipboard_flag,
-                intent
+                intent,
+                mock_analysis
             ))
         
         formatted_post = result["formatted_post"]

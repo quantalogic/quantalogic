@@ -614,7 +614,10 @@ class Nodes:
                 top_p_to_use = func_kwargs.pop("top_p", top_p)
                 presence_penalty_to_use = func_kwargs.pop("presence_penalty", presence_penalty)
                 frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
-                model_to_use = model(func_kwargs) if callable(model) else model if model_param is None else model_param
+                
+                # Prioritize model from func_kwargs (workflow mapping), then model_param, then default
+                model_to_use = func_kwargs.get("model", model_param if model_param is not None else model(func_kwargs))
+                logger.debug(f"Selected model for {func.__name__}: {model_to_use}")
 
                 sig = inspect.signature(func)
                 template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
@@ -720,7 +723,10 @@ class Nodes:
                 top_p_to_use = func_kwargs.pop("top_p", top_p)
                 presence_penalty_to_use = func_kwargs.pop("presence_penalty", presence_penalty)
                 frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
-                model_to_use = model(func_kwargs) if callable(model) else model if model_param is None else model_param
+                
+                # Prioritize model from func_kwargs (workflow mapping), then model_param, then default
+                model_to_use = func_kwargs.get("model", model_param if model_param is not None else model(func_kwargs))
+                logger.debug(f"Selected model for {func.__name__}: {model_to_use}")
 
                 sig = inspect.signature(func)
                 template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
@@ -825,6 +831,7 @@ TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templa
 # Helper function to get template paths
 def get_template_path(template_name):
     return os.path.join(TEMPLATES_DIR, template_name)
+
 
 async def example_workflow():
     class OrderDetails(BaseModel):
