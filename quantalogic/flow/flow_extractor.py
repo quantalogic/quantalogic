@@ -137,6 +137,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         if key in [
                             "model",
                             "system_prompt",
+                            "system_prompt_file",  # Added to support file-based system prompts
                             "prompt_template",
                             "prompt_file",
                             "temperature",
@@ -170,6 +171,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         if key in [
                             "model",
                             "system_prompt",
+                            "system_prompt_file",  # Added to support file-based system prompts
                             "prompt_template",
                             "prompt_file",
                             "temperature",
@@ -281,6 +283,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         if key in [
                             "model",
                             "system_prompt",
+                            "system_prompt_file",  # Added to support file-based system prompts
                             "prompt_template",
                             "prompt_file",
                             "temperature",
@@ -314,6 +317,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         if key in [
                             "model",
                             "system_prompt",
+                            "system_prompt_file",  # Added to support file-based system prompts
                             "prompt_template",
                             "prompt_file",
                             "temperature",

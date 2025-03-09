@@ -139,7 +139,9 @@ def generate_executable_script(
                     decorator = ""
                     if node_def.llm_config:
                         params = [f"model={repr(node_def.llm_config.model)}"]
-                        if node_def.llm_config.system_prompt:
+                        if node_def.llm_config.system_prompt_file:
+                            params.append(f"system_prompt_file={repr(node_def.llm_config.system_prompt_file)}")
+                        elif node_def.llm_config.system_prompt:
                             params.append(f"system_prompt={repr(node_def.llm_config.system_prompt)}")
                         if node_def.llm_config.prompt_template:
                             params.append(f"prompt_template={repr(node_def.llm_config.prompt_template)}")

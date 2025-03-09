@@ -17,17 +17,6 @@ The **Quantalogic Flow YAML DSL** is a human-readable, declarative language for 
 
 This DSL integrates with `Workflow`, `WorkflowEngine`, and `Nodes` classes, making it versatile for everything from simple scripts to complex AI-driven workflows. We’ll use an updated **Story Generator Workflow** as a running example, derived from `examples/flow/simple_story_generator/story_generator_agent.py`, now enhanced with branching, convergence, input mapping, and template nodes. Let’s dive in! 🎉
 
-```mermaid
-graph TD
-    A[YAML Workflow File] -->|Defines| B[functions ⚙️]
-    A -->|Configures| C[nodes 🧩]
-    A -->|Orchestrates| D[workflow 🌐]
-    style A fill:#f9f9ff,stroke:#333,stroke-width:2px,stroke-dasharray:5
-    style B fill:#e6f3ff,stroke:#0066cc
-    style C fill:#e6ffe6,stroke:#009933
-    style D fill:#fff0e6,stroke:#cc3300
-```
-
 ---
 
 ## 2. Workflow Structure 🗺️
@@ -53,6 +42,20 @@ dependencies:
   # Python module dependencies (optional)
 observers:
   # Event watchers 👀 (optional)
+```
+
+### 3. LLM Configuration
+
+In the `llm_config` section of a node definition, you can specify a file-based system prompt using the `system_prompt_file` key. This allows you to load the system prompt from an external Jinja2 template file, which takes precedence over the `system_prompt` key.
+
+Example:
+
+```yaml
+llm_config:
+  model: "gpt-3.5-turbo"
+  system_prompt: "You are a creative writer."
+  system_prompt_file: "path/to/system_prompt_template.jinja"
+  prompt_template: "Write a story about {topic}."
 ```
 
 ### Story Generator Example
@@ -191,6 +194,7 @@ nodes:
     llm_config:
       model: "gemini/gemini-2.0-flash"
       system_prompt: "You are a creative writer skilled at generating stories."
+      system_prompt_file: "path/to/system_prompt_template.jinja"
       prompt_template: "Create a story outline for a {genre} story with {num_chapters} chapters."
       temperature: 0.7
       max_tokens: 1000
@@ -386,6 +390,7 @@ Nodes define tasks, now enhanced with **input mappings** and **template nodes**,
 - `llm_config` (object, optional):
   - `model` (string, default: `"gpt-3.5-turbo"`)
   - `system_prompt` (string, optional)
+  - `system_prompt_file` (string, optional): Path to a Jinja2 template file.
   - `prompt_template` (string, default: `"{{ input }}"`)
   - `prompt_file` (string, optional): Path to a Jinja2 template file.
   - `temperature` (float, default: `0.7`)
@@ -430,6 +435,7 @@ nodes:
     llm_config:
       model: "gemini/gemini-2.0-flash"
       system_prompt: "You are a creative writer skilled at generating stories."
+      system_prompt_file: "path/to/system_prompt_template.jinja"
       prompt_template: "Create a story outline for a {genre} story with {num_chapters} chapters."
       temperature: 0.7
       max_tokens: 1000
@@ -506,7 +512,10 @@ nodes:
     llm_config:
       model: "gemini/gemini-2.0-flash"
       system_prompt: "You are a creative writer skilled in {genre} stories."
+      system_prompt_file: "path/to/system_prompt_template.jinja"
       prompt_template: "Create a story outline for a {genre} story with {num_chapters} chapters."
+      temperature: 0.7
+      max_tokens: 1000
     inputs_mapping:
       genre: "story_genre"  # Map from context
       num_chapters: "lambda ctx: ctx['chapter_count'] + 1"  # Dynamic value
@@ -537,7 +546,7 @@ Here's an example combining both LLM and template nodes with input mapping:
 nodes:
   generate_character:
     llm_config:
-      model: "gemini/gemini-2.0-flash"
+      model: "grok/xai"
       system_prompt: "You are a character designer."
       prompt_template: "Create a character for a {genre} story."
     inputs_mapping:
