@@ -48,16 +48,12 @@ Create engaging stories with just a few lines of code.
 - Template-based version: For structured creativity 🎨
 - `templates/`: Your story ingredients 🥗
 
-[Start Storytelling ➡️](./simple_story_generator/README.md)
-
 ## 📚 4. Story Generator
 **🌟 Purpose**: Take storytelling to the next level!  
 A more advanced version for complex narrative generation.
 
 **💫 What's Inside**:
 - [story_generator_agent.py](./story_generator/story_generator_agent.py): Your narrative architect 🏗️
-
-[Explore Advanced Storytelling ➡️](./story_generator/README.md)
 
 ### 5. 🤔 Questions and Answers
 **🤔 Purpose**: Dive into the world of questions and answers!  
