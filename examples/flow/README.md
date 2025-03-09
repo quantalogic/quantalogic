@@ -61,6 +61,18 @@ This script extracts facts from a markdown file and generates an educational que
 
 [Explore Questions and Answers ➡️](questions_and_answers/README.md)
 
+### 6. 📚 Tutorial Generator
+**🧠 Purpose**: Transform raw content into polished tutorials!  
+This powerful workflow converts markdown files into structured, engaging tutorials with minimal effort. Perfect for educators, technical writers, and content creators who want to create professional learning materials quickly.
+
+**✨ What's Inside**:
+- [create_tutorial.py](./create_tutorial/create_tutorial.py): Your tutorial factory 🏭
+- Jinja2 templates: For consistent, high-quality output 📝
+- LLM-powered content structuring and refinement 🤖
+- Event monitoring for real-time progress tracking 📊
+
+[Discover Tutorial Generator ➡️](./create_tutorial/README.md)
+
 ---
 
 Each project comes with its own detailed README.md where you'll find:
