@@ -13,6 +13,7 @@
 
 import asyncio
 import inspect
+import os
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -468,8 +469,9 @@ class Nodes:
     @classmethod
     def llm_node(
         cls,
-        system_prompt: str,
-        output: str,
+        system_prompt: str = "",
+        system_prompt_file: Optional[str] = None,
+        output: str = "",
         prompt_template: str = "",
         prompt_file: Optional[str] = None,
         temperature: float = 0.7,
@@ -482,7 +484,15 @@ class Nodes:
         """Decorator for creating LLM nodes with plain text output, supporting dynamic parameters via input mappings."""
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(model: str, **func_kwargs):
+                # Handle system prompt from file or inline
                 system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
+                system_prompt_file_to_use = func_kwargs.pop("system_prompt_file", system_prompt_file)
+                
+                if system_prompt_file_to_use:
+                    system_content = cls._load_prompt_from_file(system_prompt_file_to_use, func_kwargs)
+                else:
+                    system_content = system_prompt_to_use
+                
                 prompt_template_to_use = func_kwargs.pop("prompt_template", prompt_template)
                 prompt_file_to_use = func_kwargs.pop("prompt_file", prompt_file)
                 temperature_to_use = func_kwargs.pop("temperature", temperature)
@@ -495,13 +505,13 @@ class Nodes:
                 template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
                 prompt = cls._render_template(prompt_template_to_use, prompt_file_to_use, template_vars)
                 messages = [
-                    {"role": "system", "content": system_prompt_to_use},
+                    {"role": "system", "content": system_content},
                     {"role": "user", "content": prompt},
                 ]
                 
                 truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
                 logger.info(f"LLM node {func.__name__} using model: {model}")
-                logger.debug(f"System prompt: {system_prompt_to_use[:100]}...")
+                logger.debug(f"System prompt: {system_content[:100]}...")
                 logger.debug(f"User prompt preview: {truncated_prompt}")
                 
                 try:
@@ -538,9 +548,10 @@ class Nodes:
     @classmethod
     def structured_llm_node(
         cls,
-        system_prompt: str,
-        output: str,
-        response_model: Type[BaseModel],
+        system_prompt: str = "",
+        system_prompt_file: Optional[str] = None,
+        output: str = "",
+        response_model: Type[BaseModel] = None,
         prompt_template: str = "",
         prompt_file: Optional[str] = None,
         temperature: float = 0.7,
@@ -559,7 +570,15 @@ class Nodes:
 
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(model: str, **func_kwargs):
+                # Handle system prompt from file or inline
                 system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
+                system_prompt_file_to_use = func_kwargs.pop("system_prompt_file", system_prompt_file)
+                
+                if system_prompt_file_to_use:
+                    system_content = cls._load_prompt_from_file(system_prompt_file_to_use, func_kwargs)
+                else:
+                    system_content = system_prompt_to_use
+                
                 prompt_template_to_use = func_kwargs.pop("prompt_template", prompt_template)
                 prompt_file_to_use = func_kwargs.pop("prompt_file", prompt_file)
                 temperature_to_use = func_kwargs.pop("temperature", temperature)
@@ -572,13 +591,13 @@ class Nodes:
                 template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
                 prompt = cls._render_template(prompt_template_to_use, prompt_file_to_use, template_vars)
                 messages = [
-                    {"role": "system", "content": system_prompt_to_use},
+                    {"role": "system", "content": system_content},
                     {"role": "user", "content": prompt},
                 ]
                 
                 truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
                 logger.info(f"Structured LLM node {func.__name__} using model: {model}")
-                logger.debug(f"System prompt: {system_prompt_to_use[:100]}...")
+                logger.debug(f"System prompt: {system_content[:100]}...")
                 logger.debug(f"User prompt preview: {truncated_prompt}")
                 logger.debug(f"Expected response model: {response_model.__name__}")
                 
@@ -656,6 +675,13 @@ class Nodes:
         return decorator
 
 
+# Add a templates directory path at the module level
+TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+
+# Helper function to get template paths
+def get_template_path(template_name):
+    return os.path.join(TEMPLATES_DIR, template_name)
+
 async def example_workflow():
     class OrderDetails(BaseModel):
         order_id: str
@@ -696,10 +722,10 @@ async def example_workflow():
         return "Order validated" if order.get("items") else "Invalid order"
 
     @Nodes.structured_llm_node(
-        system_prompt="You are an inventory checker. Respond with a JSON object containing 'order_id', 'items_in_stock', and 'items_out_of_stock'.",
+        system_prompt_file=get_template_path("system_check_inventory.j2"),
         output="inventory_status",
         response_model=OrderDetails,
-        prompt_template="Check if the following items are in stock: {{ items }}. Return the result in JSON format with 'order_id' set to '123'.",
+        prompt_file=get_template_path("prompt_check_inventory.j2"),
     )
     async def check_inventory(items: List[str]) -> OrderDetails:
         return OrderDetails(order_id="123", items_in_stock=["item1"], items_out_of_stock=[])

@@ -15,6 +15,7 @@
 # ///
 
 import os
+from pathlib import Path
 from typing import Dict, List
 
 import anyio
@@ -47,6 +48,13 @@ class TutorialStructure(BaseModel):
     title: str
     chapters: List[ChapterStructure]
 
+# Get the templates directory path
+TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+
+# Helper function to get template paths
+def get_template_path(template_name):
+    return os.path.join(TEMPLATES_DIR, template_name)
+
 # Custom Observer for Workflow Events
 async def tutorial_progress_observer(event: WorkflowEvent):
     if event.event_type == WorkflowEventType.WORKFLOW_STARTED:
@@ -72,16 +80,16 @@ async def tutorial_progress_observer(event: WorkflowEvent):
 @Nodes.define(output=None)
 async def read_markdown(path: str) -> dict:
     path = os.path.expanduser(path)
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, encoding='utf-8') as f:
         content = f.read()
     logger.info(f"Read markdown file: {path}")
     return {"markdown_content": content, "original_path": path}
 
 @Nodes.structured_llm_node(
-    system_prompt="You are an expert in creating educational tutorials. Based on the markdown content provided, design a detailed tutorial structure with EXACTLY {{num_chapters}} chapters. Each chapter must include a title, summary, and lists of 'Why', 'What', 'How' ideas, examples, and Mermaid diagram ideas. Ensure the structure reflects the content of the markdown file.",
+    system_prompt_file=get_template_path("system_generate_structure.j2"),
     output="structure",
     response_model=TutorialStructure,
-    prompt_template="Markdown Content:\n{{markdown_content}}\n\nGenerate a tutorial structure with {{num_chapters}} chapters in JSON format.",
+    prompt_file=get_template_path("prompt_generate_structure.j2"),
     temperature=0.5,
 )
 async def generate_structure(model: str, markdown_content: str, num_chapters: int) -> TutorialStructure:
@@ -103,9 +111,9 @@ async def initialize_chapters() -> dict:
     return {"completed_chapters": [], "completed_chapters_count": 0}
 
 @Nodes.llm_node(
-    system_prompt="You are a skilled writer crafting educational tutorials. Using the provided chapter structure and full markdown content, write a detailed chapter (about {{words_per_chapter}} words) with 'Why', 'What', and 'How' sections, plus examples and Mermaid diagrams. Base the content on the markdown file and the chapter structure.",
+    system_prompt_file=get_template_path("system_generate_draft.j2"),
     output="draft_chapter",
-    prompt_template="Chapter Structure:\n{{chapter_structure}}\n\nFull Markdown Content:\n{{markdown_content}}\n\nWrite a detailed chapter based on the structure and content.",
+    prompt_file=get_template_path("prompt_generate_draft.j2"),
     temperature=0.7,
 )
 async def generate_draft(model: str, chapter_structure: Dict, markdown_content: str, words_per_chapter: int) -> str:
@@ -113,9 +121,9 @@ async def generate_draft(model: str, chapter_structure: Dict, markdown_content: 
     pass
 
 @Nodes.llm_node(
-    system_prompt="You are an editor reviewing educational content. Critique the draft chapter for clarity, coherence, engagement, and adherence to the 'Why', 'What', 'How' structure. Provide specific, actionable feedback in under 300 words.",
+    system_prompt_file=get_template_path("system_critique_draft.j2"),
     output="critique",
-    prompt_template="Draft Chapter:\n{{draft_chapter}}\n\nCritique the draft and suggest improvements.",
+    prompt_file=get_template_path("prompt_critique_draft.j2"),
     max_tokens=300,
 )
 async def critique_draft(model: str, draft_chapter: str) -> str:
@@ -123,9 +131,9 @@ async def critique_draft(model: str, draft_chapter: str) -> str:
     pass
 
 @Nodes.llm_node(
-    system_prompt="You are a writer refining educational content. Revise the draft chapter based on the critique, improving clarity, coherence, and engagement while keeping the 'Why', 'What', 'How' structure intact.",
+    system_prompt_file=get_template_path("system_improve_draft.j2"),
     output="improved_draft",
-    prompt_template="Draft Chapter:\n{{draft_chapter}}\n\nCritique:\n{{critique}}\n\nRevise the draft based on the critique. Don't add any additional content, comments.",
+    prompt_file=get_template_path("prompt_improve_draft.j2"),
     temperature=0.7,
 )
 async def improve_draft(model: str, draft_chapter: str, critique: str, words_per_chapter: int) -> str:
@@ -133,9 +141,9 @@ async def improve_draft(model: str, draft_chapter: str, critique: str, words_per
     pass
 
 @Nodes.llm_node(
-    system_prompt="You are an editor enhancing tutorial content. Revise the chapter by adding emojis, storytelling, and improved markdown formatting (e.g., headers, lists). Include clear Mermaid diagrams where specified in the structure. Make it engaging and reader-friendly.",
+    system_prompt_file=get_template_path("system_revise_formatting.j2"),
     output="revised_chapter",
-    prompt_template="Improved Draft:\n{{improved_draft}}\n\nEnhance the chapter with emojis, storytelling, and formatting. Don't add any additional content, comments.",
+    prompt_file=get_template_path("prompt_revise_formatting.j2"),
     temperature=0.8,
 )
 async def revise_formatting(model: str, improved_draft: str, words_per_chapter: int) -> str:
@@ -148,11 +156,36 @@ async def update_chapters(completed_chapters: List[str], revised_chapter: str, c
     new_count = completed_chapters_count + 1
     return new_count
 
+def clean_chapter_content(content: str) -> str:
+    """Remove code block delimiters and first heading from chapter content."""
+    lines = content.split('\n')
+    
+    # Remove opening code block if present
+    if lines and (lines[0].strip().startswith('```markdown') or lines[0].strip() == '```'):
+        lines = lines[1:]
+        
+    # Remove closing code block if present
+    if lines and lines[-1].strip() == '```':
+        lines = lines[:-1]
+    
+    # Find and remove first heading if present
+    for i, line in enumerate(lines):
+        if line.strip() and line.strip().startswith("## "):
+            # Found a heading line, remove it
+            lines.pop(i)
+            break
+            
+    return '\n'.join(lines)
+
 @Nodes.define(output="final_book")
 async def compile_book(structure: TutorialStructure, completed_chapters: List[str]) -> str:
-    book = f"# {structure.title} 🎓\n\nWelcome to this tutorial! Let’s explore with clear explanations and visuals. 🚀\n\n"
+    book = f"# {structure.title}\n\n"
+    
     for i, (chapter_structure, content) in enumerate(zip(structure.chapters, completed_chapters), 1):
-        book += f"## Chapter {i}: {chapter_structure.title} ✨\n\n{content}\n\n---\n\n"
+        # Clean the chapter content using the dedicated function
+        cleaned_content = clean_chapter_content(content)
+        book += f"## Chapter {i}: {chapter_structure.title}\n\n{cleaned_content}\n\n---\n\n"
+    
     return book
 
 @Nodes.define(output=None)
@@ -169,12 +202,14 @@ async def save_and_display(final_book: str, original_path: str) -> None:
     output_path = os.path.join(dir_path, f"{name}_tutorial{ext}")
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(final_book)
-    logger.info(f"Saved tutorial to {output_path} 💾")
     print("\n" + "="*50)
     print("📘 Final Tutorial Content 📘")
     print("="*50)
     print(final_book)
     print("="*50)
+    logger.info(f"Saved tutorial to {output_path} 💾")
+    print("Saved to:", output_path)
+
 
 # Define the Workflow with explicit transitions
 workflow = (
@@ -215,6 +250,10 @@ workflow = (
     .node("compile_book")  # Explicitly set current node to compile_book to ensure proper transition
     .then("optional_copy_to_clipboard")  # Transition from compile_book to optional_copy_to_clipboard
     .then("save_and_display")  # Transition from optional_copy_to_clipboard to save_and_display
+    .node("save_and_display", inputs_mapping={
+        "final_book": "final_book",
+        "original_path": "original_path"
+    })
 )
 
 # CLI with Typer
