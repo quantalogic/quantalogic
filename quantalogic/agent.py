@@ -2,7 +2,8 @@
 
 import asyncio
 import os
-from collections.abc import Callable
+import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,6 @@ from quantalogic.utils import get_environment
 from quantalogic.utils.ask_user_validation import console_ask_for_user_validation
 from quantalogic.xml_parser import ToleranceXMLParser
 from quantalogic.xml_tool_parser import ToolParser
-import uuid
 
 # Maximum ratio occupancy of the occupied memory
 MAX_OCCUPANCY = 90.0
@@ -76,7 +76,7 @@ class Agent(BaseModel):
     config: AgentConfig
     task_to_solve: str
     task_to_solve_summary: str = ""
-    ask_for_user_validation: Callable[[str, str], bool] = console_ask_for_user_validation
+    ask_for_user_validation: Callable[[str, str], Awaitable[bool]] = console_ask_for_user_validation
     last_tool_call: dict[str, Any] = {}  # Stores the last tool call information
     total_tokens: int = 0  # Total tokens in the conversation
     current_iteration: int = 0

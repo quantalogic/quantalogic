@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """FastAPI server for the QuantaLogic agent."""
 
+# Standard library imports
 import asyncio
 import functools
 import json
@@ -14,6 +15,7 @@ from queue import Empty, Queue
 from threading import Lock
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
+# Third-party imports
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,6 +26,7 @@ from loguru import logger
 from pydantic import BaseModel
 from rich.console import Console
 
+# Local/relative imports
 from quantalogic.agent_config import (
     MODEL_NAME,
     create_agent,
@@ -282,9 +285,19 @@ class AgentState:
             logger.error(f"Failed to initialize agent: {e}", exc_info=True)
             raise
 
-    async def sse_ask_for_user_validation(self, question: str = "Do you want to continue?") -> bool:
-        """SSE-based user validation method."""
-        validation_id = str(uuid.uuid4())
+    async def sse_ask_for_user_validation(self, validation_id: str = "", question: str = "Do you want to continue?") -> bool:
+        """SSE-based user validation method.
+        
+        Args:
+            validation_id: The ID of the validation request. If empty, generates a new one.
+            question: The validation question.
+            
+        Returns:
+            bool: User's confirmation.
+        """
+        # Use provided validation_id or generate a new one if empty
+        if not validation_id:
+            validation_id = str(uuid.uuid4())
         response_queue = asyncio.Queue()
 
         # Store validation request and response queue
