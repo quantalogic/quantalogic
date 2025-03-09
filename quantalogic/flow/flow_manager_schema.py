@@ -53,6 +53,10 @@ class LLMConfig(BaseModel):
         default="gpt-3.5-turbo", description="The LLM model to use (e.g., 'gpt-3.5-turbo', 'gemini/gemini-2.0-flash')."
     )
     system_prompt: Optional[str] = Field(None, description="System prompt defining the LLM's role or context.")
+    system_prompt_file: Optional[str] = Field(
+        None,
+        description="Path to an external Jinja2 template file for the system prompt. Takes precedence over system_prompt."
+    )
     prompt_template: str = Field(
         default="{{ input }}", description="Jinja2 template for the user prompt. Ignored if prompt_file is set."
     )

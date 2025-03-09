@@ -350,6 +350,7 @@ class WorkflowManager:
                     decorated_func = Nodes.structured_llm_node(
                         model=llm_config.model,
                         system_prompt=llm_config.system_prompt or "",
+                        system_prompt_file=llm_config.system_prompt_file,
                         prompt_template=llm_config.prompt_template,
                         prompt_file=llm_config.prompt_file,
                         response_model=response_model,
@@ -365,6 +366,7 @@ class WorkflowManager:
                     decorated_func = Nodes.llm_node(
                         model=llm_config.model,
                         system_prompt=llm_config.system_prompt or "",
+                        system_prompt_file=llm_config.system_prompt_file,
                         prompt_template=llm_config.prompt_template,
                         prompt_file=llm_config.prompt_file,
                         output=node_def.output or f"{node_name}_result",
