@@ -1,0 +1,110 @@
+functions:
+  greet:
+    type: embedded
+    code: 'def greet(user_name): return f''Hello, {user_name}!'''
+    module: null
+    function: null
+  check_condition:
+    type: embedded
+    code: 'def check_condition(user_name): return len(user_name) > 3'
+    module: null
+    function: null
+  farewell:
+    type: embedded
+    code: 'def farewell(user_name): return f''Goodbye, {user_name}!'''
+    module: null
+    function: null
+  monitor:
+    type: embedded
+    code: |-
+      async def monitor(event):
+                  print(f'[EVENT] {event.event_type.value} @ {event.node_name or "workflow"}')
+                  if event.result:
+                      print(f'Result: {event.result}')
+                  if event.exception:
+                      print(f'Error: {event.exception}')
+    module: null
+    function: null
+nodes:
+  start:
+    function: greet
+    sub_workflow: null
+    llm_config: null
+    template_config: null
+    inputs_mapping:
+      user_name: name_input
+    output: start_result
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+  format_greeting:
+    function: null
+    sub_workflow: null
+    llm_config: null
+    template_config:
+      template: 'User: {{ user_name }} greeted on {{ date }}'
+      template_file: null
+    inputs_mapping:
+      user_name: name_input
+      date: 'lambda ctx: ''2025-03-06'''
+    output: format_greeting_result
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+  branch_true:
+    function: check_condition
+    sub_workflow: null
+    llm_config: null
+    template_config: null
+    inputs_mapping:
+      user_name: name_input
+    output: branch_true_result
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+  branch_false:
+    function: check_condition
+    sub_workflow: null
+    llm_config: null
+    template_config: null
+    inputs_mapping:
+      user_name: name_input
+    output: branch_false_result
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+  end:
+    function: farewell
+    sub_workflow: null
+    llm_config: null
+    template_config: null
+    inputs_mapping:
+      user_name: name_input
+    output: end_result
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+workflow:
+  start: start
+  transitions:
+  - from_node: start
+    to_node: format_greeting
+    condition: null
+  - from_node: format_greeting
+    to_node:
+    - to_node: branch_true
+      condition: ctx.get('user_name') == 'Alice'
+    - to_node: branch_false
+      condition: ctx.get('user_name') != 'Alice'
+    condition: null
+  convergence_nodes:
+  - end
+observers:
+- monitor
+dependencies:
+- requests>=2.28.0

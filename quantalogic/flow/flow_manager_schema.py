@@ -30,7 +30,17 @@ class FunctionDefinition(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def check_function_source(cls, data: Any) -> Any:
-        """Ensure the function definition is valid based on its type."""
+        """Ensure the function definition is valid based on its type.
+
+        Args:
+            data: Raw data to validate.
+
+        Returns:
+            Validated data.
+
+        Raises:
+            ValueError: If the function source configuration is invalid.
+        """
         type_ = data.get("type")
         if type_ == "embedded":
             if not data.get("code"):
@@ -50,9 +60,17 @@ class FunctionDefinition(BaseModel):
 class LLMConfig(BaseModel):
     """Configuration for LLM-based nodes."""
     model: str = Field(
-        default="gpt-3.5-turbo", description="The LLM model to use (e.g., 'gpt-3.5-turbo', 'gemini/gemini-2.0-flash')."
+        default="gpt-3.5-turbo",
+        description=(
+            "The LLM model to use. Can be a static model name (e.g., 'gpt-3.5-turbo', 'gemini/gemini-2.0-flash') "
+            "or a lambda expression (e.g., 'lambda ctx: ctx.get(\"model_name\")') for dynamic selection."
+        ),
     )
     system_prompt: Optional[str] = Field(None, description="System prompt defining the LLM's role or context.")
+    system_prompt_file: Optional[str] = Field(
+        None,
+        description="Path to an external Jinja2 template file for the system prompt. Takes precedence over system_prompt."
+    )
     prompt_template: str = Field(
         default="{{ input }}", description="Jinja2 template for the user prompt. Ignored if prompt_file is set."
     )
@@ -80,7 +98,17 @@ class LLMConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def check_prompt_source(cls, data: Any) -> Any:
-        """Ensure prompt_file and prompt_template are used appropriately."""
+        """Ensure prompt_file and prompt_template are used appropriately.
+
+        Args:
+            data: Raw data to validate.
+
+        Returns:
+            Validated data.
+
+        Raises:
+            ValueError: If prompt configuration is invalid.
+        """
         prompt_file = data.get("prompt_file")
         if prompt_file and not isinstance(prompt_file, str):
             raise ValueError("prompt_file must be a string path to a Jinja2 template file")
@@ -99,7 +127,17 @@ class TemplateConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def check_template_source(cls, data: Any) -> Any:
-        """Ensure template_file and template are used appropriately."""
+        """Ensure template_file and template are used appropriately.
+
+        Args:
+            data: Raw data to validate.
+
+        Returns:
+            Validated data.
+
+        Raises:
+            ValueError: If template configuration is invalid.
+        """
         template_file = data.get("template_file")
         template = data.get("template")
         if not template and not template_file:
@@ -137,7 +175,17 @@ class NodeDefinition(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def check_function_or_sub_workflow_or_llm_or_template(cls, data: Any) -> Any:
-        """Ensure a node has exactly one of 'function', 'sub_workflow', 'llm_config', or 'template_config'."""
+        """Ensure a node has exactly one of 'function', 'sub_workflow', 'llm_config', or 'template_config'.
+
+        Args:
+            data: Raw data to validate.
+
+        Returns:
+            Validated data.
+
+        Raises:
+            ValueError: If node type configuration is invalid.
+        """
         func = data.get("function")
         sub_wf = data.get("sub_workflow")
         llm = data.get("llm_config")

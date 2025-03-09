@@ -3,8 +3,8 @@ import os
 
 from loguru import logger
 
-from quantalogic.flow.flow_generator import generate_executable_script  # Import from flow_generator
-from quantalogic.flow.flow_manager import WorkflowManager  # For YAML saving
+from quantalogic.flow.flow_generator import generate_executable_script
+from quantalogic.flow.flow_manager import WorkflowManager
 from quantalogic.flow.flow_manager_schema import (
     BranchCondition,
     FunctionDefinition,
@@ -137,6 +137,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         if key in [
                             "model",
                             "system_prompt",
+                            "system_prompt_file",
                             "prompt_template",
                             "prompt_file",
                             "temperature",
@@ -170,6 +171,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         if key in [
                             "model",
                             "system_prompt",
+                            "system_prompt_file",
                             "prompt_template",
                             "prompt_file",
                             "temperature",
@@ -281,6 +283,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         if key in [
                             "model",
                             "system_prompt",
+                            "system_prompt_file",
                             "prompt_template",
                             "prompt_file",
                             "temperature",
@@ -314,6 +317,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         if key in [
                             "model",
                             "system_prompt",
+                            "system_prompt_file",
                             "prompt_template",
                             "prompt_file",
                             "temperature",
@@ -597,19 +601,6 @@ def extract_workflow_from_file(file_path):
                 parallel=False,
             )
 
-    # Optional: Deduplicate transitions (uncomment if desired)
-    # seen = set()
-    # unique_transitions = []
-    # for t in extractor.transitions:
-    #     key = (t.from_node, str(t.to_node), t.condition)
-    #     if key not in seen:
-    #         seen.add(key)
-    #         unique_transitions.append(t)
-    # workflow_structure = WorkflowStructure(
-    #     start=extractor.start_node,
-    #     transitions=unique_transitions,
-    #     convergence_nodes=extractor.convergence_nodes,
-    # )
     workflow_structure = WorkflowStructure(
         start=extractor.start_node,
         transitions=extractor.transitions,

@@ -87,7 +87,7 @@ def generate_mermaid_diagram(
         "function": "fill:#90CAF9,stroke:#42A5F5,stroke-width:2px",           # Pastel Blue
         "structured_llm": "fill:#A5D6A7,stroke:#66BB6A,stroke-width:2px",    # Pastel Green
         "llm": "fill:#CE93D8,stroke:#AB47BC,stroke-width:2px",               # Pastel Purple
-        "template": "fill:#FCE4EC,stroke:#F06292,stroke-width:2px",          # Pastel Pink (new for template)
+        "template": "fill:#FCE4EC,stroke:#F06292,stroke-width:2px",          # Pastel Pink
         "sub_workflow": "fill:#FFCCBC,stroke:#FF7043,stroke-width:2px",      # Pastel Orange
         "unknown": "fill:#CFD8DC,stroke:#B0BEC5,stroke-width:2px"            # Pastel Grey
     }
@@ -148,7 +148,7 @@ def generate_mermaid_diagram(
     if title:
         mermaid_code += f"    %% Diagram: {title}\n"
 
-    # Optional legend for UX, updated to include template nodes
+    # Optional legend for UX
     if include_legend:
         mermaid_code += "    %% Legend:\n"
         if diagram_type == "flowchart":
