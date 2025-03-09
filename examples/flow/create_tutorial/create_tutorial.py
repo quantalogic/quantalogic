@@ -226,34 +226,40 @@ workflow = (
         "model": "model",
         "max_tokens": lambda ctx: int(ctx["words_per_chapter"] * 1.5 * 1.2)
     })
-    .then("critique_draft")
+    .branch([
+        # Skip refinement path - go directly to update_chapters with draft_chapter
+        ("update_chapters", lambda ctx: ctx.get("skip_refinement", False)),
+        # Full refinement path - go through critique, improve, revise
+        ("critique_draft", lambda ctx: not ctx.get("skip_refinement", False))
+    ])
+    
+    # Define the critique path separately
+    .node("critique_draft")
     .then("improve_draft")
-    .node("improve_draft", inputs_mapping={
-        "model": "model",
-        "draft_chapter": "draft_chapter",
-        "critique": "critique",
-        "words_per_chapter": "words_per_chapter",
-        "max_tokens": lambda ctx: int(ctx["words_per_chapter"] * 1.5 * 1.2)
-    })
     .then("revise_formatting")
-    .node("revise_formatting", inputs_mapping={
-        "model": "model",
-        "improved_draft": "improved_draft",
-        "words_per_chapter": "words_per_chapter",
-        "max_tokens": lambda ctx: int(ctx["words_per_chapter"] * 1.5 * 1.2)
-    })
     .then("update_chapters")
+    
+    # Define update_chapters node with different input mappings depending on path
+    .node("update_chapters", inputs_mapping={
+        "completed_chapters": "completed_chapters",
+        "revised_chapter": lambda ctx: (
+            ctx.get("revised_chapter") if "revised_chapter" in ctx 
+            else ctx.get("draft_chapter")
+        ),
+        "completed_chapters_count": "completed_chapters_count"
+    })
     .branch([
         ("generate_draft", lambda ctx: ctx.get("completed_chapters_count", 0) < len(ctx["structure"].chapters)),
         ("compile_book", lambda ctx: ctx.get("completed_chapters_count", 0) >= len(ctx["structure"].chapters))
     ])
-    .node("compile_book")  # Explicitly set current node to compile_book to ensure proper transition
-    .then("optional_copy_to_clipboard")  # Transition from compile_book to optional_copy_to_clipboard
-    .then("save_and_display")  # Transition from optional_copy_to_clipboard to save_and_display
-    .node("save_and_display", inputs_mapping={
-        "final_book": "final_book",
-        "original_path": "original_path"
-    })
+    
+    # Define the path for continuing with another chapter
+    .node("generate_draft")
+    
+    # Define the path for finishing the tutorial
+    .node("compile_book")
+    .then("optional_copy_to_clipboard")
+    .then("save_and_display")
 )
 
 # CLI with Typer
@@ -266,6 +272,7 @@ def generate_tutorial(
     num_chapters: int = typer.Option(5, help="Number of chapters"),
     words_per_chapter: int = typer.Option(2000, help="Words per chapter"),
     copy_to_clipboard: bool = typer.Option(True, help="Copy result to clipboard"),
+    skip_refinement: bool = typer.Option(True, help="Skip critique and improvement steps"),
 ):
     initial_context = {
         "path": path,
@@ -273,6 +280,7 @@ def generate_tutorial(
         "num_chapters": num_chapters,
         "words_per_chapter": words_per_chapter,
         "copy_to_clipboard": copy_to_clipboard,
+        "skip_refinement": skip_refinement,
     }
     logger.info(f"Starting tutorial generation for {path}")
     engine = workflow.build()
