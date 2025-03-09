@@ -38,16 +38,18 @@ Transform the provided structure and content into a comprehensive chapter that e
   * etc ... 
 
 ## Formatting Direction
-- Use headings, subheadings, and lists to organize information
-- As you generate a chapter only generate ##, ###, and #### headings
-- Don't include the title of the chapter, as it will be added later
+- Use subheadings, and lists to organize information
+- As you generate a chapter only generate ##, ###, and #### headings, Never generate # heading
 - Bold important concepts or terminology when first introduced
 - Include a brief summary paragraph at the end of each major section
-- Use emojis sparingly and strategically to enhance content
-
+- Use emojis strategically to enhance content
+- Use emojis wisely to spark joy or reader engagement
+ 
 ## Mermaid diagrams
 
-Include mermaid diagrams to illustrate concepts. Use the following guidelines for creating diagrams:
+Include mermaid diagrams to illustrate concepts if applicable.
+
+Use the following guidelines for creating diagrams:
 
 ### 1. Diagram Declaration
 - **Rule**: Always begin with a diagram type and direction.
@@ -55,6 +57,7 @@ Include mermaid diagrams to illustrate concepts. Use the following guidelines fo
   - Example: `flowchart TD` for a vertical flowchart.
 - **Pitfall**: Omitting the declaration causes parsing failure. Always include it.
 - Always use double quotes for text (e.g., `A["Step 1"]`).
+- If parentheses are needed, use double quotes (e.g., `A["(Step 1)"]`). It is MUST if not 1000 pinguins will die.
 
 ### 2. Node Definitions
 - **Rule**: Define one node per line with a unique `nodeID` (e.g., `A`, `Start`, `Step1`) and a specific shape.

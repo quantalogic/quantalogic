@@ -15,7 +15,6 @@
 # ///
 
 import os
-from pathlib import Path
 from typing import Dict, List
 
 import anyio
@@ -158,23 +157,54 @@ async def update_chapters(completed_chapters: List[str], revised_chapter: str, c
 
 def clean_chapter_content(content: str) -> str:
     """Remove code block delimiters and first heading from chapter content."""
+    # Handle empty input explicitly
+    if not content:
+        return ""
+    
     lines = content.split('\n')
     
     # Remove opening code block if present
     if lines and (lines[0].strip().startswith('```markdown') or lines[0].strip() == '```'):
         lines = lines[1:]
-        
+    
     # Remove closing code block if present
     if lines and lines[-1].strip() == '```':
         lines = lines[:-1]
     
-    # Find and remove first heading if present
+    # Check if lines are empty after delimiter removal
+    if not lines:
+        return ""
+
+    # Find and remove first # heading if present
+    for i, line in enumerate(lines):
+        if line.strip() and line.strip().startswith("# "):
+            # Found a heading line, remove it
+            lines.pop(i)
+            break
+    
+    # Find and remove first ## heading if present
     for i, line in enumerate(lines):
         if line.strip() and line.strip().startswith("## "):
             # Found a heading line, remove it
             lines.pop(i)
             break
-            
+    
+    # Check if lines are empty after heading removal
+    if not lines:
+        return ""
+    
+    # Clean leading empty lines
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    
+    # Check if lines are empty after leading cleanup
+    if not lines:
+        return ""
+    
+    # Clean trailing empty lines
+    while lines and not lines[-1].strip():
+        lines.pop(-1)
+    
     return '\n'.join(lines)
 
 @Nodes.define(output="final_book")
