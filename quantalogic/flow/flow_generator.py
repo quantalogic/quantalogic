@@ -3,8 +3,8 @@ import os
 import re
 from typing import Dict, Optional
 
-from quantalogic.flow.flow import Nodes  # Import Nodes to access NODE_REGISTRY
-from quantalogic.flow.flow_manager_schema import BranchCondition, WorkflowDefinition  # Added BranchCondition import
+from quantalogic.flow.flow import Nodes
+from quantalogic.flow.flow_manager_schema import BranchCondition, WorkflowDefinition
 
 
 def generate_executable_script(
@@ -37,21 +37,19 @@ def generate_executable_script(
         start_node = workflow_def.workflow.start
         if start_node and start_node in workflow_def.nodes:
             node_def = workflow_def.nodes[start_node]
-            if node_def.function:
-                if node_def.function in workflow_def.functions:
-                    func_def = workflow_def.functions[node_def.function]
-                    if func_def.type == "embedded" and func_def.code:
-                        try:
-                            tree = ast.parse(func_def.code)
-                            for node in ast.walk(tree):
-                                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                                    inputs = [param.arg for param in node.args.args]
-                                    # Assign default values: empty string for strings, 0 for numbers, etc.
-                                    for input_name in inputs:
-                                        initial_context[input_name] = ""  # Default to empty string for simplicity
-                                    break
-                        except SyntaxError:
-                            pass
+            if node_def.function and node_def.function in workflow_def.functions:
+                func_def = workflow_def.functions[node_def.function]
+                if func_def.type == "embedded" and func_def.code:
+                    try:
+                        tree = ast.parse(func_def.code)
+                        for node in ast.walk(tree):
+                            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                                inputs = [param.arg for param in node.args.args]
+                                for input_name in inputs:
+                                    initial_context[input_name] = ""  # Default to empty string
+                                break
+                    except SyntaxError:
+                        pass
             elif node_def.llm_config:
                 prompt = node_def.llm_config.prompt_template or ""
                 input_vars = set(re.findall(r"{{\s*([^}]+?)\s*}}", prompt))
@@ -88,10 +86,9 @@ def generate_executable_script(
                                         break
                             except SyntaxError:
                                 pass
-            # Apply inputs_mapping if present
             if node_def.inputs_mapping:
                 for key, value in node_def.inputs_mapping.items():
-                    if not value.startswith("lambda ctx:"):  # Only static mappings contribute to context
+                    if not value.startswith("lambda ctx:"):  # Static mappings only
                         initial_context[value] = ""
 
     with open(output_file, "w") as f:
@@ -126,19 +123,17 @@ def generate_executable_script(
             if node_def.function and node_def.function in workflow_def.functions:
                 func_def = workflow_def.functions[node_def.function]
                 if func_def.type == "embedded" and func_def.code:
-                    # Strip original decorator and apply new one
                     code_lines = func_def.code.split('\n')
-                    func_body = ""
-                    for line in code_lines:
-                        if line.strip().startswith('@Nodes.'):
-                            continue  # Skip original decorator
-                        func_body += line + "\n"
-                    func_body = func_body.rstrip("\n")
-
-                    # Generate new decorator based on node type
+                    func_body = "".join(
+                        line + "\n" for line in code_lines if not line.strip().startswith('@Nodes.')
+                    ).rstrip("\n")
                     decorator = ""
                     if node_def.llm_config:
-                        params = [f"model={repr(node_def.llm_config.model)}"]
+                        params = []
+                        if node_def.llm_config.model.startswith("lambda ctx:"):
+                            params.append(f"model={node_def.llm_config.model}")
+                        else:
+                            params.append(f"model={repr(node_def.llm_config.model)}")
                         if node_def.llm_config.system_prompt_file:
                             params.append(f"system_prompt_file={repr(node_def.llm_config.system_prompt_file)}")
                         elif node_def.llm_config.system_prompt:
@@ -162,10 +157,9 @@ def generate_executable_script(
                         decorator = f"@Nodes.template_node({', '.join(params)})\n"
                     else:
                         decorator = f"@Nodes.define(output={repr(node_def.output or f'{node_name}_result')})\n"
-                    # Write function with new decorator
                     f.write(f"{decorator}{func_body}\n\n")
 
-        # Define workflow using function names
+        # Define workflow using chaining syntax
         f.write("# Define the workflow with branch and converge support\n")
         f.write("workflow = (\n")
         start_node = workflow_def.workflow.start

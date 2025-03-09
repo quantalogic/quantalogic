@@ -326,7 +326,6 @@ class WorkflowManager:
                 if node_def.function not in functions:
                     raise ValueError(f"Function '{node_def.function}' for node '{node_name}' not found")
                 func = functions[node_def.function]
-                # Register with the node name, not the function name
                 Nodes.NODE_REGISTRY[node_name] = (
                     Nodes.define(output=node_def.output)(func),
                     ["user_name"],  # Explicitly define inputs based on function signature
@@ -345,10 +344,23 @@ class WorkflowManager:
                 async def dummy_func(**kwargs):
                     pass
 
+                # Handle callable model if specified in inputs_mapping, else use default
+                def model_callable(ctx):
+                    return llm_config.model  # Default to string from schema
+                if node_def.inputs_mapping and "model" in node_def.inputs_mapping:
+                    model_value = node_def.inputs_mapping["model"]
+                    if isinstance(model_value, str) and model_value.startswith("lambda ctx:"):
+                        try:
+                            model_callable = eval(model_value)
+                        except Exception as e:
+                            logger.warning(f"Failed to evaluate model lambda for {node_name}: {e}")
+                            def model_callable(ctx):
+                                return model_value
+
                 if llm_config.response_model:
                     response_model = self._resolve_model(llm_config.response_model)
                     decorated_func = Nodes.structured_llm_node(
-                        model=llm_config.model,
+                        model=model_callable,
                         system_prompt=llm_config.system_prompt or "",
                         system_prompt_file=llm_config.system_prompt_file,
                         prompt_template=llm_config.prompt_template,
@@ -364,7 +376,7 @@ class WorkflowManager:
                     )(dummy_func)
                 else:
                     decorated_func = Nodes.llm_node(
-                        model=llm_config.model,
+                        model=model_callable,
                         system_prompt=llm_config.system_prompt or "",
                         system_prompt_file=llm_config.system_prompt_file,
                         prompt_template=llm_config.prompt_template,

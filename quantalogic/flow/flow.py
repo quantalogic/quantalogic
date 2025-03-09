@@ -238,7 +238,11 @@ class WorkflowEngine:
 
 class Workflow:
     def __init__(self, start_node: str):
-        """Initialize a workflow with a starting node."""
+        """Initialize a workflow with a starting node.
+
+        Args:
+            start_node: The name of the initial node in the workflow.
+        """
         self.start_node = start_node
         self.nodes: Dict[str, Callable] = {}
         self.node_inputs: Dict[str, List[str]] = {}
@@ -260,7 +264,15 @@ class Workflow:
         self.node_outputs[name] = output
 
     def node(self, name: str, inputs_mapping: Optional[Dict[str, Any]] = None):
-        """Add a node to the workflow chain with an optional inputs mapping."""
+        """Add a node to the workflow chain with an optional inputs mapping.
+
+        Args:
+            name: The name of the node to add.
+            inputs_mapping: Optional dictionary mapping node inputs to context keys or callables.
+
+        Returns:
+            Self for method chaining.
+        """
         self._register_node(name)
         if inputs_mapping:
             self.node_input_mappings[name] = inputs_mapping
@@ -269,7 +281,14 @@ class Workflow:
         return self
 
     def sequence(self, *nodes: str):
-        """Add a sequence of nodes to execute in order."""
+        """Add a sequence of nodes to execute in order.
+
+        Args:
+            *nodes: Variable number of node names to execute sequentially.
+
+        Returns:
+            Self for method chaining.
+        """
         if not nodes:
             return self
         for node in nodes:
@@ -285,7 +304,15 @@ class Workflow:
         return self
 
     def then(self, next_node: str, condition: Optional[Callable] = None):
-        """Add a transition to the next node with an optional condition."""
+        """Add a transition to the next node with an optional condition.
+
+        Args:
+            next_node: Name of the node to transition to.
+            condition: Optional callable taking context and returning a boolean.
+
+        Returns:
+            Self for method chaining.
+        """
         if next_node not in self.nodes:
             self._register_node(next_node)
         if self.current_node:
@@ -296,31 +323,47 @@ class Workflow:
         self.current_node = next_node
         return self
 
-    def branch(self, branches: List[Tuple[str, Optional[Callable]]], default: Optional[str] = None) -> "Workflow":
-        """
-        Add multiple conditional branches from the current node with an optional default transition.
+    def branch(
+        self,
+        branches: List[Tuple[str, Optional[Callable]]],
+        default: Optional[str] = None,
+        next_node: Optional[str] = None,
+    ) -> "Workflow":
+        """Add multiple conditional branches from the current node with an optional default and next node.
 
-        :param branches: List of tuples (next_node, condition), where condition is a callable that takes the context and returns a boolean.
-        :param default: Optional node to transition to if none of the branch conditions are met.
-        :return: Self for method chaining.
+        Args:
+            branches: List of tuples (next_node, condition), where condition takes context and returns a boolean.
+            default: Optional node to transition to if no branch conditions are met.
+            next_node: Optional node to set as current_node after branching (e.g., for convergence).
+
+        Returns:
+            Self for method chaining.
         """
         if not self.current_node:
             logger.warning("No current node set for branching")
             return self
-        for next_node, condition in branches:
-            if next_node not in self.nodes:
-                self._register_node(next_node)
-            self.transitions.setdefault(self.current_node, []).append((next_node, condition))
-            logger.debug(f"Added branch from {self.current_node} to {next_node} with condition {condition}")
+        for next_node_name, condition in branches:
+            if next_node_name not in self.nodes:
+                self._register_node(next_node_name)
+            self.transitions.setdefault(self.current_node, []).append((next_node_name, condition))
+            logger.debug(f"Added branch from {self.current_node} to {next_node_name} with condition {condition}")
         if default:
             if default not in self.nodes:
                 self._register_node(default)
             self.transitions.setdefault(self.current_node, []).append((default, None))
             logger.debug(f"Added default transition from {self.current_node} to {default}")
+        self.current_node = next_node  # Explicitly set next_node if provided
         return self
 
     def converge(self, convergence_node: str) -> "Workflow":
-        """Set a convergence point for all previous branches."""
+        """Set a convergence point for all previous branches.
+
+        Args:
+            convergence_node: Name of the node where branches converge.
+
+        Returns:
+            Self for method chaining.
+        """
         if convergence_node not in self.nodes:
             self._register_node(convergence_node)
         for node in self.nodes:
@@ -331,7 +374,14 @@ class Workflow:
         return self
 
     def parallel(self, *nodes: str):
-        """Add parallel nodes to execute concurrently."""
+        """Add parallel nodes to execute concurrently.
+
+        Args:
+            *nodes: Variable number of node names to execute in parallel.
+
+        Returns:
+            Self for method chaining.
+        """
         if self.current_node:
             for node in nodes:
                 self.transitions.setdefault(self.current_node, []).append((node, None))
@@ -339,14 +389,31 @@ class Workflow:
         return self
 
     def add_observer(self, observer: WorkflowObserver) -> "Workflow":
-        """Add an event observer callback to the workflow."""
+        """Add an event observer callback to the workflow.
+
+        Args:
+            observer: Callable to handle workflow events.
+
+        Returns:
+            Self for method chaining.
+        """
         if observer not in self._observers:
             self._observers.append(observer)
             logger.debug(f"Added observer to workflow: {observer}")
         return self
 
     def add_sub_workflow(self, name: str, sub_workflow: "Workflow", inputs: Dict[str, Any], output: str):
-        """Add a sub-workflow as a node with flexible inputs mapping."""
+        """Add a sub-workflow as a node with flexible inputs mapping.
+
+        Args:
+            name: Name of the sub-workflow node.
+            sub_workflow: The Workflow instance to embed.
+            inputs: Dictionary mapping sub-workflow inputs to context keys or callables.
+            output: Context key for the sub-workflow's result.
+
+        Returns:
+            Self for method chaining.
+        """
         sub_node = SubWorkflowNode(sub_workflow, inputs, output)
         self.nodes[name] = sub_node
         self.node_inputs[name] = []
@@ -356,7 +423,14 @@ class Workflow:
         return self
 
     def build(self, parent_engine: Optional["WorkflowEngine"] = None) -> WorkflowEngine:
-        """Build and return a WorkflowEngine instance with registered observers."""
+        """Build and return a WorkflowEngine instance with registered observers.
+
+        Args:
+            parent_engine: Optional parent WorkflowEngine for sub-workflows.
+
+        Returns:
+            Configured WorkflowEngine instance.
+        """
         engine = WorkflowEngine(self, parent_engine=parent_engine)
         for observer in self._observers:
             engine.add_observer(observer)
@@ -368,7 +442,14 @@ class Nodes:
 
     @classmethod
     def define(cls, output: Optional[str] = None):
-        """Decorator for defining simple workflow nodes."""
+        """Decorator for defining simple workflow nodes.
+
+        Args:
+            output: Optional context key for the node's result.
+
+        Returns:
+            Decorator function wrapping the node logic.
+        """
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(**kwargs):
                 try:
@@ -390,7 +471,14 @@ class Nodes:
 
     @classmethod
     def validate_node(cls, output: str):
-        """Decorator for nodes that validate inputs."""
+        """Decorator for nodes that validate inputs and return a string.
+
+        Args:
+            output: Context key for the validation result.
+
+        Returns:
+            Decorator function wrapping the validation logic.
+        """
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(**kwargs):
                 try:
@@ -414,7 +502,15 @@ class Nodes:
 
     @classmethod
     def transform_node(cls, output: str, transformer: Callable[[Any], Any]):
-        """Decorator for nodes that transform their inputs."""
+        """Decorator for nodes that transform their inputs.
+
+        Args:
+            output: Context key for the transformed result.
+            transformer: Callable to transform the input.
+
+        Returns:
+            Decorator function wrapping the transformation logic.
+        """
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(**kwargs):
                 try:
@@ -479,12 +575,30 @@ class Nodes:
         top_p: float = 1.0,
         presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
+        model: Callable[[Dict[str, Any]], str] = lambda ctx: "gpt-3.5-turbo",
         **kwargs,
     ):
-        """Decorator for creating LLM nodes with plain text output, supporting dynamic parameters via input mappings."""
+        """Decorator for creating LLM nodes with plain text output, supporting dynamic parameters.
+
+        Args:
+            system_prompt: Inline system prompt defining LLM behavior.
+            system_prompt_file: Path to a system prompt template file (overrides system_prompt).
+            output: Context key for the LLM's result.
+            prompt_template: Inline Jinja2 template for the user prompt.
+            prompt_file: Path to a user prompt template file (overrides prompt_template).
+            temperature: Randomness control (0.0 to 1.0).
+            max_tokens: Maximum response length.
+            top_p: Nucleus sampling parameter (0.0 to 1.0).
+            presence_penalty: Penalty for repetition (-2.0 to 2.0).
+            frequency_penalty: Penalty for frequent words (-2.0 to 2.0).
+            model: Callable or string to determine the LLM model dynamically from context.
+            **kwargs: Additional parameters for the LLM call.
+
+        Returns:
+            Decorator function wrapping the LLM logic.
+        """
         def decorator(func: Callable) -> Callable:
-            async def wrapped_func(model: str, **func_kwargs):
-                # Handle system prompt from file or inline
+            async def wrapped_func(model_param: str = None, **func_kwargs):
                 system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
                 system_prompt_file_to_use = func_kwargs.pop("system_prompt_file", system_prompt_file)
                 
@@ -500,6 +614,7 @@ class Nodes:
                 top_p_to_use = func_kwargs.pop("top_p", top_p)
                 presence_penalty_to_use = func_kwargs.pop("presence_penalty", presence_penalty)
                 frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
+                model_to_use = model(func_kwargs) if callable(model) else model if model_param is None else model_param
 
                 sig = inspect.signature(func)
                 template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
@@ -510,13 +625,13 @@ class Nodes:
                 ]
                 
                 truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
-                logger.info(f"LLM node {func.__name__} using model: {model}")
+                logger.info(f"LLM node {func.__name__} using model: {model_to_use}")
                 logger.debug(f"System prompt: {system_content[:100]}...")
                 logger.debug(f"User prompt preview: {truncated_prompt}")
                 
                 try:
                     response = await acompletion(
-                        model=model,
+                        model=model_to_use,
                         messages=messages,
                         temperature=temperature_to_use,
                         max_tokens=max_tokens_to_use,
@@ -559,9 +674,29 @@ class Nodes:
         top_p: float = 1.0,
         presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
+        model: Callable[[Dict[str, Any]], str] = lambda ctx: "gpt-3.5-turbo",
         **kwargs,
     ):
-        """Decorator for creating LLM nodes with structured output, supporting dynamic parameters via input mappings."""
+        """Decorator for creating LLM nodes with structured output, supporting dynamic parameters.
+
+        Args:
+            system_prompt: Inline system prompt defining LLM behavior.
+            system_prompt_file: Path to a system prompt template file (overrides system_prompt).
+            output: Context key for the LLM's structured result.
+            response_model: Pydantic model class for structured output.
+            prompt_template: Inline Jinja2 template for the user prompt.
+            prompt_file: Path to a user prompt template file (overrides prompt_template).
+            temperature: Randomness control (0.0 to 1.0).
+            max_tokens: Maximum response length.
+            top_p: Nucleus sampling parameter (0.0 to 1.0).
+            presence_penalty: Penalty for repetition (-2.0 to 2.0).
+            frequency_penalty: Penalty for frequent words (-2.0 to 2.0).
+            model: Callable or string to determine the LLM model dynamically from context.
+            **kwargs: Additional parameters for the LLM call.
+
+        Returns:
+            Decorator function wrapping the structured LLM logic.
+        """
         try:
             client = instructor.from_litellm(acompletion)
         except ImportError:
@@ -569,8 +704,7 @@ class Nodes:
             raise ImportError("Instructor is required for structured_llm_node")
 
         def decorator(func: Callable) -> Callable:
-            async def wrapped_func(model: str, **func_kwargs):
-                # Handle system prompt from file or inline
+            async def wrapped_func(model_param: str = None, **func_kwargs):
                 system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
                 system_prompt_file_to_use = func_kwargs.pop("system_prompt_file", system_prompt_file)
                 
@@ -586,6 +720,7 @@ class Nodes:
                 top_p_to_use = func_kwargs.pop("top_p", top_p)
                 presence_penalty_to_use = func_kwargs.pop("presence_penalty", presence_penalty)
                 frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
+                model_to_use = model(func_kwargs) if callable(model) else model if model_param is None else model_param
 
                 sig = inspect.signature(func)
                 template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
@@ -596,14 +731,14 @@ class Nodes:
                 ]
                 
                 truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
-                logger.info(f"Structured LLM node {func.__name__} using model: {model}")
+                logger.info(f"Structured LLM node {func.__name__} using model: {model_to_use}")
                 logger.debug(f"System prompt: {system_content[:100]}...")
                 logger.debug(f"User prompt preview: {truncated_prompt}")
                 logger.debug(f"Expected response model: {response_model.__name__}")
                 
                 try:
                     structured_response, raw_response = await client.chat.completions.create_with_completion(
-                        model=model,
+                        model=model_to_use,
                         messages=messages,
                         response_model=response_model,
                         temperature=temperature_to_use,
@@ -642,7 +777,16 @@ class Nodes:
         template: str = "",
         template_file: Optional[str] = None,
     ):
-        """Decorator for creating nodes that apply a Jinja2 template to inputs, supporting dynamic parameters."""
+        """Decorator for creating nodes that apply a Jinja2 template to inputs.
+
+        Args:
+            output: Context key for the rendered result.
+            template: Inline Jinja2 template string.
+            template_file: Path to a template file (overrides template).
+
+        Returns:
+            Decorator function wrapping the template logic.
+        """
         def decorator(func: Callable) -> Callable:
             async def wrapped_func(**func_kwargs):
                 template_to_use = func_kwargs.pop("template", template)
@@ -787,10 +931,13 @@ async def example_workflow():
             inputs={"order": lambda ctx: {"items": ctx["items"]}},
             output="shipping_confirmation"
         )
-        .branch([
-            ("payment_shipping", lambda ctx: len(ctx.get("inventory_status").items_out_of_stock) == 0 if ctx.get("inventory_status") else False),
-            ("notify_customer_out_of_stock", lambda ctx: len(ctx.get("inventory_status").items_out_of_stock) > 0 if ctx.get("inventory_status") else True)
-        ])
+        .branch(
+            [
+                ("payment_shipping", lambda ctx: len(ctx.get("inventory_status").items_out_of_stock) == 0 if ctx.get("inventory_status") else False),
+                ("notify_customer_out_of_stock", lambda ctx: len(ctx.get("inventory_status").items_out_of_stock) > 0 if ctx.get("inventory_status") else True)
+            ],
+            next_node="update_order_status"
+        )
         .converge("update_order_status")
         .sequence("update_order_status", "send_confirmation_email")
     )
