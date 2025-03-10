@@ -3,7 +3,46 @@
 #### Agent Persona
 {{ persona }}
 
-#### Operational Tools
+You must reply to the user directly, without any additional information except if we must call a tool to execute a task before replying to the user.
+
+#### Tool Usage Guidelines
+
+When using tools, you MUST use the EXACT tool name as shown in the Tools list below. Each tool has specific required parameters.
+
+Tools must be called using the following XML format, with NO additional text:
+
+```xml
+<action>
+<tool_name>  <!-- Use the EXACT tool name from the list below -->
+  <parameter_name>parameter_value</parameter_name>  <!-- Include all required parameters -->
+  <another_parameter>value</another_parameter>  <!-- Optional parameters if needed -->
+</tool_name>
+</action>
+```
+
+#### Examples of Correct Tool Usage
+
+**Example 1 - Search Tool:**
+```xml
+<action>
+<duckduckgo_tool>
+  <query>search query text</query>
+  <max_results>5</max_results>  <!-- Always include max_results for search -->
+</duckduckgo_tool>
+</action>
+```
+
+**Example 2 - Task Completion Tool:**
+```xml
+<action>
+<task_complete>
+  <answer>Your final answer to the task</answer>
+</task_complete>
+</action>
+```
+
+#### Operational Tools Available
+
 {% if tools_prompt != "No tools available." %}
 **Tools Available**:
 {{ tools_prompt | indent(2) }}
@@ -11,14 +50,3 @@
 **Tools Available**: None
 {% endif %}
 
-#### Tool Execution Protocol
-{% if tools_prompt != "No tools available." %}
-When you decide to use a tool, you MUST include the tool call in your response using the following XML structure:
-```xml
-<action>
-<tool_name>
-  <parameter_name>value</parameter_name>
-</tool_name>
-</action>
-```
-{% endif %}

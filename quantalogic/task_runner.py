@@ -2,7 +2,7 @@
 
 import sys
 from threading import Lock
-from typing import Optional
+from typing import Any, Optional, Set
 
 from loguru import logger
 from rich.console import Console
@@ -17,9 +17,11 @@ from quantalogic.task_file_reader import get_task_from_file
 from quantalogic.version_check import check_new_version, get_version
 from quantalogic.welcome_message import display_welcome_message
 
-# Spinner control
+# Spinner and console output control
 spinner_lock = Lock()
+console_lock = Lock()
 current_spinner = None
+processed_chunks: Set[str] = set()
 
 
 def configure_logger(log_level: str) -> None:
@@ -170,14 +172,56 @@ def task_runner(
             console.print("Assistant: ", end="")  # Prompt for streaming output
 
         def handle_chat_response(*args, **kwargs):
+            global processed_chunks
             stop_spinner(console)
-            console.print("")  # Newline after response
+            console.print("")
+            # Clear the processed chunks set when a chat response is complete
+            with console_lock:
+                processed_chunks.clear()  # Newline after response
 
-        def handle_stream_chunk(event: str, data: dict) -> None:
+        def handle_stream_chunk(event: str, data: Any) -> None:
+            global processed_chunks
+            
             if current_spinner:
                 stop_spinner(console)
-            if data and "data" in data:
-                console.print(data["data"], end="", markup=False)
+            
+            # Skip if data is None
+            if data is None:
+                return
+                
+            # Generate a unique identifier for this chunk
+            chunk_id = None
+            content_to_print = ""
+            
+            # Handle different data formats and extract content
+            if isinstance(data, str):
+                content_to_print = data
+                chunk_id = hash(data)
+            elif isinstance(data, dict) and "data" in data:
+                content_to_print = data["data"]
+                chunk_id = hash(str(data))
+            elif isinstance(data, dict):
+                logger.debug(f"Stream chunk data without 'data' key: {data}")
+                content_to_print = str(data)
+                chunk_id = hash(str(data))
+            else:
+                try:
+                    content_to_print = str(data)
+                    chunk_id = hash(str(data))
+                except Exception as e:
+                    logger.error(f"Error processing stream chunk: {e}")
+                    return
+            
+            # Use a lock to ensure synchronized console output
+            with console_lock:
+                # Check if we've already processed this exact chunk
+                if chunk_id and chunk_id not in processed_chunks:
+                    console.print(content_to_print, end="", markup=False)
+                    # Remember this chunk to avoid duplications
+                    processed_chunks.add(chunk_id)
+                    # Avoid memory leaks by limiting the set size
+                    if len(processed_chunks) > 1000:
+                        processed_chunks = set(list(processed_chunks)[-500:])
 
         agent.event_emitter.on("chat_start", handle_chat_start)
         agent.event_emitter.on("chat_response", handle_chat_response)
@@ -274,11 +318,29 @@ def task_runner(
             def handle_task_think_end(*args, **kwargs):
                 stop_spinner(console)
 
-            def handle_stream_chunk(event: str, data: dict) -> None:
+            def handle_stream_chunk(event: str, data: any) -> None:
                 if current_spinner:
                     stop_spinner(console)
-                if data and "data" in data:
+                
+                # Handle different data formats
+                if data is None:
+                    return
+                elif isinstance(data, str):
+                    # Direct string data
+                    console.print(data, end="", markup=False)
+                elif isinstance(data, dict) and "data" in data:
+                    # Dictionary with 'data' key
                     console.print(data["data"], end="", markup=False)
+                elif isinstance(data, dict):
+                    # Dictionary without 'data' key, use the str representation
+                    logger.debug(f"Stream chunk data without 'data' key: {data}")
+                    console.print(str(data), end="", markup=False)
+                else:
+                    # Fallback for any other type
+                    try:
+                        console.print(str(data), end="", markup=False)
+                    except Exception as e:
+                        logger.error(f"Error printing stream chunk: {e}")
 
             agent.event_emitter.on(
                 event=events,

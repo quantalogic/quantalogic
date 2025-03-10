@@ -489,26 +489,19 @@ class Agent(BaseModel):
         try:
             # Detect if we're in chat mode by checking if task_to_solve is empty
             is_chat_mode = not self.task_to_solve.strip()
+            
+            # Use specialized chat mode observation method if in chat mode
+            if is_chat_mode:
+                return await self._async_observe_response_chat(content, iteration)
 
             # Parse content for tool usage
             parsed_content = self._parse_tool_usage(content)
-            if not parsed_content and "<action>" in content and is_chat_mode:
-                # Malformed tool call in chat mode; return feedback
-                error_prompt = (
-                    "⚠️ Error: Invalid tool call format detected. "
-                    "Please use the exact XML structure:\n"
-                    "```xml\n<action>\n<tool_name>\n  <parameter_name>value</parameter_name>\n</tool_name>\n</action>\n```"
-                )
-                return ObserveResponseResult(next_prompt=error_prompt, executed_tool=None, answer=None)
-            elif not parsed_content:
+            if not parsed_content:
                 logger.debug("No tool usage detected in response")
                 return ObserveResponseResult(next_prompt=content, executed_tool=None, answer=None)
 
-            # Prioritize tools based on tool_mode if set
+            # Process tools for regular ReAct mode
             tool_names = list(parsed_content.keys())
-            if self.tool_mode == "search" and "duckduckgo_tool" in self.tools.tool_names() and "duckduckgo_tool" in tool_names:
-                tool_names = ["duckduckgo_tool"] + [t for t in tool_names if t != "duckduckgo_tool"]
-
             for tool_name in tool_names:
                 if tool_name not in parsed_content:
                     continue
@@ -516,11 +509,6 @@ class Agent(BaseModel):
                 tool = self.tools.get(tool_name)
                 if not tool:
                     return self._handle_tool_not_found(tool_name)
-
-                # Skip task_complete in chat mode unless explicitly finishing a task
-                if is_chat_mode and tool_name == "task_complete":
-                    logger.debug("Skipping task_complete tool in chat mode")
-                    continue
 
                 arguments_with_values = self._parse_tool_arguments(tool, tool_input)
                 is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
@@ -635,6 +623,10 @@ class Agent(BaseModel):
                 response = await tool.async_execute(**converted_args)
             else:
                 response = tool.execute(**converted_args)
+                
+            # Post-process tool response if needed
+            response = self._post_process_tool_response(tool_name, response)
+                    
             executed_tool = tool.name
         except Exception as e:
             response = f"Error executing tool: {tool_name}: {str(e)}\n"
@@ -1018,6 +1010,186 @@ class Agent(BaseModel):
             executed_tool=None,
             answer=None,
         )
+        
+    async def _async_observe_response_chat(self, content: str, iteration: int = 1) -> ObserveResponseResult:
+        """Specialized observation method for chat mode with tool handling.
+
+        This method processes responses in chat mode, identifying and executing tool calls
+        while providing appropriate default parameters when needed.
+
+        Args:
+            content: The response content to analyze
+            iteration: Current iteration number
+
+        Returns:
+            ObserveResponseResult with next steps information
+        """
+        try:
+            # Check for tool call patterns in the content
+            if "<action>" not in content:
+                logger.debug("No tool usage detected in chat response")
+                return ObserveResponseResult(next_prompt=content, executed_tool=None, answer=None)
+                
+            # Parse content for tool usage
+            parsed_content = self._parse_tool_usage(content)
+            if not parsed_content:
+                # Malformed tool call in chat mode; return feedback
+                error_prompt = (
+                    "⚠️ Error: Invalid tool call format detected. "
+                    "Please use the exact XML structure:\n"
+                    "```xml\n<action>\n<tool_name>\n  <parameter_name>value</parameter_name>\n</tool_name>\n</action>\n```"
+                )
+                return ObserveResponseResult(next_prompt=error_prompt, executed_tool=None, answer=None)
+
+            # Process tools with prioritization based on tool_mode
+            tool_names = list(parsed_content.keys())
+            # Prioritize specific tools if tool_mode is set and the tool is available
+            if self.tool_mode and self.tool_mode in self.tools.tool_names() and self.tool_mode in tool_names:
+                tool_names = [self.tool_mode] + [t for t in tool_names if t != self.tool_mode]
+
+            for tool_name in tool_names:
+                if tool_name not in parsed_content:
+                    continue
+                    
+                tool_input = parsed_content[tool_name]
+                tool = self.tools.get(tool_name)
+                if not tool:
+                    return self._handle_tool_not_found(tool_name)
+
+                # Skip task_complete in chat mode unless explicitly finishing a task
+                if tool_name == "task_complete":
+                    logger.debug("Skipping task_complete tool in chat mode")
+                    continue
+
+                # Parse tool arguments from the input
+                arguments_with_values = self._parse_tool_arguments(tool, tool_input)
+                
+                # Apply default parameters based on tool schema if missing
+                self._apply_default_parameters(tool, arguments_with_values)
+                
+                # Check for repeated calls
+                is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
+                if is_repeated_call:
+                    executed_tool, response = self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                else:
+                    executed_tool, response = await self._async_execute_tool(tool_name, tool, arguments_with_values)
+                
+                if not executed_tool:
+                    # Tool execution failed
+                    return self._handle_tool_execution_failure(response)
+                
+                # Store result in variable memory for potential future reference
+                variable_name = f"result_{executed_tool}_{iteration}"
+                self.variable_store[variable_name] = response
+                
+                # Truncate response if too long for display
+                response_display = response
+                if len(response) > MAX_RESPONSE_LENGTH:
+                    response_display = response[:MAX_RESPONSE_LENGTH]
+                    response_display += f"... (truncated, full content available in ${variable_name})"
+                
+                # Format result in a user-friendly way
+                return ObserveResponseResult(
+                    next_prompt=response_display,
+                    executed_tool=executed_tool,
+                    answer=None
+                )
+                
+            # If we get here, no tool was successfully executed
+            return ObserveResponseResult(
+                next_prompt="I tried to use a tool, but encountered an issue. Please try again with a different request.",
+                executed_tool=None,
+                answer=None
+            )
+                
+        except Exception as e:
+            return self._handle_error(e)
+            
+    def _apply_default_parameters(self, tool: Tool, arguments_with_values: dict) -> None:
+        """Apply default parameters to tool arguments based on tool schema.
+        
+        This method examines the tool's schema and fills in any missing required parameters
+        with sensible defaults based on the tool type.
+        
+        Args:
+            tool: The tool instance
+            arguments_with_values: Dictionary of current arguments
+        """
+        try:
+            # Add defaults for common search tools
+            if tool.name == "duckduckgo_tool" and "max_results" not in arguments_with_values:
+                logger.debug(f"Adding default max_results=5 for {tool.name}")
+                arguments_with_values["max_results"] = "5"
+                
+            # Check tool schema for required parameters
+            if hasattr(tool, "schema") and hasattr(tool.schema, "parameters"):
+                for param_name, param_info in tool.schema.parameters.items():
+                    # If required parameter is missing, try to add a default
+                    if param_info.get("required", False) and param_name not in arguments_with_values:
+                        if "default" in param_info:
+                            logger.debug(f"Adding default value for {param_name} in {tool.name}")
+                            arguments_with_values[param_name] = param_info["default"]
+        except Exception as e:
+            logger.debug(f"Error applying default parameters: {str(e)}")
+            # Continue without defaults rather than failing the whole operation
+            
+    def _post_process_tool_response(self, tool_name: str, response: Any) -> str:
+        """Process tool response for better presentation to the user.
+        
+        This generic method handles common tool response formats:
+        - Parses JSON strings into structured data
+        - Formats search results into readable text
+        - Handles different response types appropriately
+        
+        Args:
+            tool_name: Name of the tool that produced the response
+            response: Raw tool response
+            
+        Returns:
+            Processed response as a string
+        """
+        # Immediately return if response is not a string
+        if not isinstance(response, str):
+            return response
+            
+        # Try to parse as JSON if it looks like JSON
+        if response.strip().startswith(("{" , "[")) and response.strip().endswith(("}", "]")):
+            try:
+                # Use lazy import for json to maintain dependency structure
+                import json
+                parsed = json.loads(response)
+                
+                # Handle list-type responses (common for search tools)
+                if isinstance(parsed, list) and parsed:
+                    # Detect if this is a search result by checking for common fields
+                    search_result_fields = ['title', 'href', 'url', 'body', 'content', 'snippet']
+                    if isinstance(parsed[0], dict) and any(field in parsed[0] for field in search_result_fields):
+                        # Format as search results
+                        formatted_results = []
+                        for idx, result in enumerate(parsed, 1):
+                            if not isinstance(result, dict):
+                                continue
+                                
+                            # Extract common fields with fallbacks
+                            title = result.get('title', 'No title')
+                            url = result.get('href', result.get('url', 'No link'))
+                            description = result.get('body', result.get('content', 
+                                             result.get('snippet', result.get('description', 'No description'))))
+                                
+                            formatted_results.append(f"{idx}. {title}\n   URL: {url}\n   {description}\n")
+                            
+                        if formatted_results:
+                            return "\n".join(formatted_results)
+                
+                # If not handled as a special case, just pretty-print
+                return json.dumps(parsed, indent=2, ensure_ascii=False)
+                
+            except json.JSONDecodeError:
+                # Not valid JSON after all
+                pass
+                
+        # Return original response if no special handling applies
+        return response
 
     def _format_observation_response(
         self, response: str, last_executed_tool: str, variable_name: str, iteration: int
@@ -1083,8 +1255,66 @@ class Agent(BaseModel):
         Returns:
             Formatted tools prompt
         """
+        # Check if we're in chat mode
+        is_chat_mode = not self.task_to_solve.strip()
+        
+        if is_chat_mode:
+            return self._get_tools_names_prompt_for_chat()
+        
+        # Default task mode behavior
         tool_names = ', '.join(self.tools.tool_names())
         return self._render_template('tools_prompt.j2', tool_names=tool_names)
+        
+    def _get_tools_names_prompt_for_chat(self) -> str:
+        """Construct a detailed prompt for chat mode that includes tool parameters.
+        
+        Returns:
+            Formatted tools prompt with parameter details
+        """
+        tool_descriptions = []
+        
+        try:
+            for tool_name in self.tools.tool_names():
+                try:
+                    tool = self.tools.get(tool_name)
+                    params = []
+                    
+                    # Get parameter details if available
+                    try:
+                        if hasattr(tool, "schema") and hasattr(tool.schema, "parameters"):
+                            schema_params = getattr(tool.schema, "parameters", {})
+                            if isinstance(schema_params, dict):
+                                for param_name, param_info in schema_params.items():
+                                    if not isinstance(param_info, dict):
+                                        continue
+                                        
+                                    required = "(required)" if param_info.get("required", False) else "(optional)"
+                                    default = f" default: {param_info['default']}" if "default" in param_info else ""
+                                    param_desc = f"{param_name} {required}{default}"
+                                    params.append(param_desc)
+                    except Exception as e:
+                        logger.debug(f"Error parsing schema for {tool_name}: {str(e)}")
+                    
+                    # Special case for duckduckgo_tool
+                    if tool_name == "duckduckgo_tool" and not any(p.startswith("max_results ") for p in params):
+                        params.append("max_results (required) default: 5")
+                    
+                    # Special case for other search tools that might need max_results
+                    if "search" in tool_name.lower() and not any(p.startswith("max_results ") for p in params):
+                        params.append("max_results (optional) default: 5")
+                        
+                    param_str = ", ".join(params) if params else "No parameters required"
+                    tool_descriptions.append(f"{tool_name}: {param_str}")
+                except Exception as e:
+                    logger.debug(f"Error processing tool {tool_name}: {str(e)}")
+                    # Still include the tool in the list, but with minimal info
+                    tool_descriptions.append(f"{tool_name}: Error retrieving parameters")
+        except Exception as e:
+            logger.debug(f"Error generating tool descriptions: {str(e)}")
+            return "Error retrieving tool information"
+            
+        formatted_tools = "\n".join(tool_descriptions)
+        return formatted_tools
 
     def _get_variable_prompt(self) -> str:
         """Construct a prompt that explains how to use variables.
