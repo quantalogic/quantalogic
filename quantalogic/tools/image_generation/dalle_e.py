@@ -5,7 +5,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import requests
+import aiohttp
+import aiofiles
 from loguru import logger
 from pydantic import ConfigDict, Field
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -110,27 +111,25 @@ class LLMImageGenerationTool(Tool):
     def _validate_params(self, size: str, quality: str, style: str) -> None:
         """Validate DALL-E parameters."""
         if size not in DALLE_CONFIG["sizes"]:
-            raise ValueError(
-                f"Invalid size. Must be one of: {DALLE_CONFIG['sizes']}"
-            )
+            raise ValueError(f"Invalid size. Must be one of: {DALLE_CONFIG['sizes']}")
         if quality not in DALLE_CONFIG["qualities"]:
-            raise ValueError(
-                f"Invalid quality. Must be one of: {DALLE_CONFIG['qualities']}"
-            )
+            raise ValueError(f"Invalid quality. Must be one of: {DALLE_CONFIG['qualities']}")
         if style not in DALLE_CONFIG["styles"]:
-            raise ValueError(
-                f"Invalid style. Must be one of: {DALLE_CONFIG['styles']}"
-            )
+            raise ValueError(f"Invalid style. Must be one of: {DALLE_CONFIG['styles']}")
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-    def _save_image(self, image_url: str, filename: str) -> Path:
+    async def _save_image(self, image_url: str, filename: str) -> Path:
         """Download and save image locally with retry logic."""
         try:
-            response = requests.get(image_url, timeout=30)
-            response.raise_for_status()
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url, timeout=30) as response:
+                    response.raise_for_status()
+                    image_data = await response.read()
 
             file_path = self.output_dir / filename
-            file_path.write_bytes(response.content)
+            async with aiofiles.open(file_path, mode='wb') as f:
+                await f.write(image_data)
+
             logger.info(f"Image saved successfully at: {file_path}")
             return file_path
 
@@ -138,18 +137,18 @@ class LLMImageGenerationTool(Tool):
             logger.error(f"Error saving image: {e}")
             raise
 
-    def _save_metadata(self, metadata: Dict[str, Any]) -> None:
+    async def _save_metadata(self, metadata: Dict[str, Any]) -> None:
         """Save image metadata to JSON file."""
         try:
             metadata_path = self.output_dir / f"{metadata['filename']}.json"
-            with open(metadata_path, "w") as f:
-                json.dump(metadata, f, indent=2)
+            async with aiofiles.open(metadata_path, mode='w') as f:
+                await f.write(json.dumps(metadata, indent=2))
             logger.info(f"Metadata saved successfully at: {metadata_path}")
         except Exception as e:
             logger.error(f"Error saving metadata: {e}")
             raise
 
-    async def execute(
+    async def async_execute(
         self,
         prompt: str,
         size: str = "1024x1024",
@@ -197,7 +196,7 @@ class LLMImageGenerationTool(Tool):
             # Save image locally
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"dalle_{timestamp}.png"
-            local_path = self._save_image(image_url, filename)
+            local_path = await self._save_image(image_url, filename)
 
             # Save metadata
             metadata = {
@@ -210,7 +209,7 @@ class LLMImageGenerationTool(Tool):
                 "image_url": str(image_url),
                 "local_path": str(local_path),
             }
-            self._save_metadata(metadata)
+            await self._save_metadata(metadata)
 
             logger.info(f"Image generated and saved at: {local_path}")
             return str(metadata)
@@ -227,7 +226,7 @@ if __name__ == "__main__":
     async def main():
         tool = LLMImageGenerationTool()
         prompt = "A serene Japanese garden with a red maple tree"
-        image_path = await tool.execute(prompt=prompt)
+        image_path = await tool.async_execute(prompt=prompt)
         print(f"Image saved at: {image_path}")
 
     asyncio.run(main())
