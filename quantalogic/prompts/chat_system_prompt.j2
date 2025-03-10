@@ -13,7 +13,7 @@
 
 #### Tool Execution Protocol
 {% if tools_prompt != "No tools available." %}
-To execute a tool, embed the following XML structure in your response:
+When you decide to use a tool, you MUST include the tool call in your response using the following XML structure:
 ```xml
 <action>
 <tool_name>
@@ -21,7 +21,4 @@ To execute a tool, embed the following XML structure in your response:
 </tool_name>
 </action>
 ```
-{% else %}
-No tools are available for use.
 {% endif %}
-

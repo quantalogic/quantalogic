@@ -339,6 +339,12 @@ def list_models(search: Optional[str] = None):
     default=None,
     help="Specify a tool or toolset to use in chat mode (e.g., 'search', 'code', or a specific tool name).",
 )
+@click.option(
+    "--auto-tool-call",
+    is_flag=True,
+    default=True,
+    help="Enable automatic tool execution and interpretation in chat mode (default: True).",
+)
 def chat(
     persona: str,
     model_name: str,
@@ -347,6 +353,7 @@ def chat(
     vision_model_name: str | None,
     no_stream: bool,
     tool_mode: Optional[str],
+    auto_tool_call: bool,
 ) -> None:
     """Start a conversational chat with the QuantaLogic agent."""
     console = Console()
@@ -361,8 +368,9 @@ def chat(
         max_tokens_working_memory=None,
         no_stream=no_stream,
         thinking_model_name="default",
-        chat_system_prompt=persona,  # Pass the persona to config
-        tool_mode=tool_mode,  # Pass the tool mode to config
+        chat_system_prompt=persona,
+        tool_mode=tool_mode,
+        auto_tool_call=auto_tool_call,
     )
     try:
         task_runner(console, None, config, None)

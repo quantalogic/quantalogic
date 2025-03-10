@@ -15,4 +15,5 @@ class QLConfig(BaseModel):
     no_stream: bool
     thinking_model_name: str
     chat_system_prompt: Optional[str] = None
-    tool_mode: Optional[str] = None  # Added field
+    tool_mode: Optional[str] = None  # Added field for tool mode
+    auto_tool_call: bool = True  # Default to True for automatic tool execution

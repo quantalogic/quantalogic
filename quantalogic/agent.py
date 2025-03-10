@@ -71,8 +71,8 @@ class Agent(BaseModel):
 
     specific_expertise: str
     model: GenerativeModel
-    memory: AgentMemory = AgentMemory()  # A list User / Assistant Messages
-    variable_store: VariableMemory = VariableMemory()  # A dictionary of variables
+    memory: AgentMemory = AgentMemory()  # List of User/Assistant Messages
+    variable_store: VariableMemory = VariableMemory()  # Dictionary of variables
     tools: ToolManager = ToolManager()
     event_emitter: EventEmitter = EventEmitter()
     config: AgentConfig
@@ -105,8 +105,8 @@ class Agent(BaseModel):
         compact_every_n_iterations: int | None = None,
         max_tokens_working_memory: int | None = None,
         event_emitter: EventEmitter | None = None,
-        chat_system_prompt: str | None = None,  # New parameter for chat mode
-        tool_mode: Optional[str] = None,  # New parameter for tool mode
+        chat_system_prompt: str | None = None,
+        tool_mode: Optional[str] = None,
     ):
         """Initialize the agent with model, memory, tools, and configurations.
 
@@ -128,11 +128,9 @@ class Agent(BaseModel):
         try:
             logger.debug("Initializing agent...")
 
-            # Create or use provided event emitter
             if event_emitter is None:
                 event_emitter = EventEmitter()
 
-            # Add TaskCompleteTool to the tools list if not already present
             if not any(isinstance(t, TaskCompleteTool) for t in tools):
                 tools.append(TaskCompleteTool())
 
@@ -153,13 +151,11 @@ class Agent(BaseModel):
                 system_prompt=system_prompt_text,
             )
 
-            # Default chat persona if none provided
             chat_system_prompt = chat_system_prompt or (
                 "You are a friendly, helpful AI assistant. Engage in natural conversation, "
                 "answer questions, and use tools when explicitly requested or when they enhance your response."
             )
 
-            # Initialize using Pydantic's model_validate
             super().__init__(
                 specific_expertise=specific_expertise,
                 model=GenerativeModel(model=model_name, event_emitter=event_emitter),
@@ -180,8 +176,8 @@ class Agent(BaseModel):
                 system_prompt="",
                 compact_every_n_iterations=compact_every_n_iterations or 30,
                 max_tokens_working_memory=max_tokens_working_memory,
-                chat_system_prompt=chat_system_prompt,  # Stored as base persona
-                tool_mode=tool_mode,  # New attribute for tool mode
+                chat_system_prompt=chat_system_prompt,
+                tool_mode=tool_mode,
             )
 
             self._model_name = model_name
@@ -323,7 +319,13 @@ class Agent(BaseModel):
         self._emit_event("task_solve_end")
         return answer
 
-    def chat(self, message: str, streaming: bool = False, clear_memory: bool = False) -> str:
+    def chat(
+        self,
+        message: str,
+        streaming: bool = False,
+        clear_memory: bool = False,
+        auto_tool_call: bool = True,
+    ) -> str:
         """Engage in a conversational chat with the user (synchronous version).
 
         Ideal for synchronous applications. For asynchronous contexts, use `async_chat`.
@@ -332,20 +334,27 @@ class Agent(BaseModel):
             message: The user's input message
             streaming: Whether to stream the response
             clear_memory: Whether to clear memory before starting
+            auto_tool_call: Whether to automatically execute detected tool calls and interpret results
 
         Returns:
             The assistant's response
         """
-        logger.debug(f"Chatting synchronously with message: {message}")
+        logger.debug(f"Chatting synchronously with message: {message}, auto_tool_call: {auto_tool_call}")
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        return loop.run_until_complete(self.async_chat(message, streaming, clear_memory))
+        return loop.run_until_complete(self.async_chat(message, streaming, clear_memory, auto_tool_call))
 
-    async def async_chat(self, message: str, streaming: bool = False, clear_memory: bool = False) -> str:
+    async def async_chat(
+        self,
+        message: str,
+        streaming: bool = False,
+        clear_memory: bool = False,
+        auto_tool_call: bool = True,
+    ) -> str:
         """Engage in a conversational chat with the user (asynchronous version).
 
         Ideal for asynchronous applications. For synchronous contexts, use `chat`.
@@ -354,18 +363,19 @@ class Agent(BaseModel):
             message: The user's input message
             streaming: Whether to stream the response
             clear_memory: Whether to clear memory before starting
+            auto_tool_call: Whether to automatically execute detected tool calls and interpret results
 
         Returns:
             The assistant's response
         """
-        logger.debug(f"Chatting asynchronously with message: {message}")
+        logger.debug(f"Chatting asynchronously with message: {message}, auto_tool_call: {auto_tool_call}")
         if clear_memory:
             self.clear_memory()
 
         # Prepare chat system prompt with tool information
         tools_prompt = self._get_tools_names_prompt()
         if self.tool_mode:
-            tools_prompt += f"\nPrioritized tool mode: {self.tool_mode}. Use relevant tools when applicable."
+            tools_prompt += f"\nPrioritized tool mode: {self.tool_mode}. Prefer tools related to {self.tool_mode} when applicable."
 
         full_chat_prompt = self._render_template(
             'chat_system_prompt.j2',
@@ -382,12 +392,13 @@ class Agent(BaseModel):
         self.memory.add(Message(role="user", content=message))
         self._update_total_tokens(self.memory.memory, "")
 
-        # Iterative tool usage like task mode
+        # Iterative tool usage with auto-execution
         current_prompt = message
-        done = False
         response_content = ""
+        max_tool_iterations = 5  # Prevent infinite tool loops
+        tool_iteration = 0
 
-        while not done:
+        while tool_iteration < max_tool_iterations:
             try:
                 if streaming:
                     content = ""
@@ -417,23 +428,33 @@ class Agent(BaseModel):
 
                 # Observe response for tool calls
                 observation = await self._async_observe_response(content)
-                if observation.executed_tool:
+                if observation.executed_tool and auto_tool_call:
+                    # Tool was executed; process result
                     current_prompt = observation.next_prompt
                     response_content = observation.next_prompt
-                    # Continue loop if a tool was executed (except task_complete)
-                    if observation.executed_tool == "task_complete":
-                        done = True
+                    tool_iteration += 1
+                    # Continue loop to interpret tool result
+                    self.memory.add(Message(role="assistant", content=content))  # Original tool call
+                    self.memory.add(Message(role="user", content=observation.next_prompt))  # Tool result
+                elif not observation.executed_tool and "<action>" in content and auto_tool_call:
+                    # Detected malformed tool call attempt; provide feedback
+                    response_content = (
+                        f"{content}\n\n⚠️ Error: Invalid tool call format detected. "
+                        "Please use the exact XML structure as specified in the system prompt:\n"
+                        "```xml\n<action>\n<tool_name>\n  <parameter_name>value</parameter_name>\n</tool_name>\n</action>\n```"
+                    )
+                    break
                 else:
+                    # No tool executed or auto_tool_call is False
                     response_content = content
-                    done = True
-
-                self._update_session_memory(message, response_content)
+                    break  # Exit loop as we have a final response
 
             except Exception as e:
                 logger.error(f"Error during async chat: {str(e)}")
                 response_content = f"Error: {str(e)}"
-                done = True
+                break
 
+        self._update_session_memory(message, response_content)
         self._emit_event("chat_response", {"response": response_content})
         return response_content
 
@@ -469,18 +490,34 @@ class Agent(BaseModel):
             # Detect if we're in chat mode by checking if task_to_solve is empty
             is_chat_mode = not self.task_to_solve.strip()
 
-            # Parse content for tool usage regardless of mode
+            # Parse content for tool usage
             parsed_content = self._parse_tool_usage(content)
-            if not parsed_content:
+            if not parsed_content and "<action>" in content and is_chat_mode:
+                # Malformed tool call in chat mode; return feedback
+                error_prompt = (
+                    "⚠️ Error: Invalid tool call format detected. "
+                    "Please use the exact XML structure:\n"
+                    "```xml\n<action>\n<tool_name>\n  <parameter_name>value</parameter_name>\n</tool_name>\n</action>\n```"
+                )
+                return ObserveResponseResult(next_prompt=error_prompt, executed_tool=None, answer=None)
+            elif not parsed_content:
                 logger.debug("No tool usage detected in response")
                 return ObserveResponseResult(next_prompt=content, executed_tool=None, answer=None)
 
-            for tool_name, tool_input in parsed_content.items():
+            # Prioritize tools based on tool_mode if set
+            tool_names = list(parsed_content.keys())
+            if self.tool_mode == "search" and "duckduckgo_tool" in self.tools.tool_names() and "duckduckgo_tool" in tool_names:
+                tool_names = ["duckduckgo_tool"] + [t for t in tool_names if t != "duckduckgo_tool"]
+
+            for tool_name in tool_names:
+                if tool_name not in parsed_content:
+                    continue
+                tool_input = parsed_content[tool_name]
                 tool = self.tools.get(tool_name)
                 if not tool:
                     return self._handle_tool_not_found(tool_name)
 
-                # Skip task_complete tool in chat mode unless explicitly allowed
+                # Skip task_complete in chat mode unless explicitly finishing a task
                 if is_chat_mode and tool_name == "task_complete":
                     logger.debug("Skipping task_complete tool in chat mode")
                     continue
@@ -507,7 +544,7 @@ class Agent(BaseModel):
                     answer=response if is_task_complete_answer else None,
                 )
 
-            # If no tools were executed (e.g., all skipped in chat mode), return original content
+            # If no tools were executed, return original content
             return ObserveResponseResult(next_prompt=content, executed_tool=None, answer=None)
 
         except Exception as e:
@@ -850,20 +887,29 @@ class Agent(BaseModel):
         tool_names = self.tools.tool_names()
 
         if action:
-            return xml_parser.extract_elements(text=action["action"], element_names=tool_names)
+            tool_data = xml_parser.extract_elements(text=action["action"], element_names=tool_names)
+            # Handle nested parameters within action tags
+            for tool_name in tool_data:
+                if "<parameter_name>" in tool_data[tool_name]:
+                    params = xml_parser.extract_elements(text=tool_data[tool_name], element_names=["parameter_name", "parameter_value"])
+                    if "parameter_name" in params and "parameter_value" in params:
+                        tool_data[tool_name] = {params["parameter_name"]: params["parameter_value"]}
+            return tool_data
         else:
             return xml_parser.extract_elements(text=content, element_names=tool_names)
 
-    def _parse_tool_arguments(self, tool: Tool, tool_input: str) -> dict:
+    def _parse_tool_arguments(self, tool: Tool, tool_input: str | dict) -> dict:
         """Parse the tool arguments from the tool input.
 
         Args:
             tool: Tool instance
-            tool_input: Raw tool input text
+            tool_input: Raw tool input text or pre-parsed dict
 
         Returns:
             Dictionary of parsed arguments
         """
+        if isinstance(tool_input, dict):
+            return tool_input  # Already parsed from XML
         tool_parser = ToolParser(tool=tool)
         return tool_parser.parse(tool_input)
 
