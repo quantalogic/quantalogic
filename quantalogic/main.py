@@ -169,7 +169,7 @@ def cli(
             max_tokens_working_memory=max_tokens_working_memory,
             no_stream=False,  # Default value for backward compatibility
             thinking_model_name=thinking_model,
-            chat_system_prompt=None  # Default to None for non-chat modes
+            chat_system_prompt=None,  # Default to None for non-chat modes
         )
         ctx.invoke(
             task,
@@ -333,6 +333,12 @@ def list_models(search: Optional[str] = None):
     is_flag=True,
     help="Disable streaming output (default: streaming enabled).",
 )
+@click.option(
+    "--tool-mode",
+    type=str,
+    default=None,
+    help="Specify a tool or toolset to use in chat mode (e.g., 'search', 'code', or a specific tool name).",
+)
 def chat(
     persona: str,
     model_name: str,
@@ -340,6 +346,7 @@ def chat(
     verbose: bool,
     vision_model_name: str | None,
     no_stream: bool,
+    tool_mode: Optional[str],
 ) -> None:
     """Start a conversational chat with the QuantaLogic agent."""
     console = Console()
@@ -354,7 +361,8 @@ def chat(
         max_tokens_working_memory=None,
         no_stream=no_stream,
         thinking_model_name="default",
-        chat_system_prompt=persona  # Pass the persona to config
+        chat_system_prompt=persona,  # Pass the persona to config
+        tool_mode=tool_mode,  # Pass the tool mode to config
     )
     try:
         task_runner(console, None, config, None)

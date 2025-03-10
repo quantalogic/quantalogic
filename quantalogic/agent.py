@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
@@ -90,6 +90,7 @@ class Agent(BaseModel):
     max_tokens_working_memory: int | None = None
     _model_name: str = PrivateAttr(default="")
     chat_system_prompt: str  # Base persona prompt for chat mode
+    tool_mode: Optional[str] = None  # Tool or toolset to prioritize in chat mode
 
     def __init__(
         self,
@@ -105,6 +106,7 @@ class Agent(BaseModel):
         max_tokens_working_memory: int | None = None,
         event_emitter: EventEmitter | None = None,
         chat_system_prompt: str | None = None,  # New parameter for chat mode
+        tool_mode: Optional[str] = None,  # New parameter for tool mode
     ):
         """Initialize the agent with model, memory, tools, and configurations.
 
@@ -121,6 +123,7 @@ class Agent(BaseModel):
             max_tokens_working_memory: Maximum token count for working memory
             event_emitter: EventEmitter instance for event handling
             chat_system_prompt: Optional base system prompt for chat mode persona
+            tool_mode: Optional tool or toolset to prioritize in chat mode
         """
         try:
             logger.debug("Initializing agent...")
@@ -178,12 +181,14 @@ class Agent(BaseModel):
                 compact_every_n_iterations=compact_every_n_iterations or 30,
                 max_tokens_working_memory=max_tokens_working_memory,
                 chat_system_prompt=chat_system_prompt,  # Stored as base persona
+                tool_mode=tool_mode,  # New attribute for tool mode
             )
 
             self._model_name = model_name
 
             logger.debug(f"Memory will be compacted every {self.compact_every_n_iterations} iterations")
             logger.debug(f"Max tokens for working memory set to: {self.max_tokens_working_memory}")
+            logger.debug(f"Tool mode set to: {self.tool_mode}")
             logger.debug("Agent initialized successfully.")
         except Exception as e:
             logger.error(f"Failed to initialize agent: {str(e)}")
@@ -357,81 +362,80 @@ class Agent(BaseModel):
         if clear_memory:
             self.clear_memory()
 
-        # Temporarily remove TaskCompleteTool from tools in chat mode to avoid task-solving behavior
-        task_complete_tool = None
-        for name, tool in self.tools.tools.items():
-            if isinstance(tool, TaskCompleteTool):
-                task_complete_tool = (name, tool)
-                self.tools.tools.pop(name)
-                logger.debug("Temporarily removed TaskCompleteTool for chat mode")
-                break
+        # Prepare chat system prompt with tool information
+        tools_prompt = self._get_tools_names_prompt()
+        if self.tool_mode:
+            tools_prompt += f"\nPrioritized tool mode: {self.tool_mode}. Use relevant tools when applicable."
 
-        try:
-            # Prepare the full chat system prompt with tools and instructions
-            tools_prompt = self._get_tools_names_prompt() if self.tools.tool_names() else "No tools available."
-            full_chat_prompt = self._render_template(
-                'chat_system_prompt.j2',
-                persona=self.chat_system_prompt,
-                tools_prompt=tools_prompt
-            )
+        full_chat_prompt = self._render_template(
+            'chat_system_prompt.j2',
+            persona=self.chat_system_prompt,
+            tools_prompt=tools_prompt
+        )
 
-            # Ensure the full chat system prompt is set
-            if not self.memory.memory or self.memory.memory[0].role != "system":
-                self.memory.add(Message(role="system", content=full_chat_prompt))
+        if not self.memory.memory or self.memory.memory[0].role != "system":
+            self.memory.add(Message(role="system", content=full_chat_prompt))
 
-            self._emit_event("chat_start", {"message": message})
+        self._emit_event("chat_start", {"message": message})
 
-            # Add user message to memory
-            self.memory.add(Message(role="user", content=message))
-            self._update_total_tokens(self.memory.memory, "")
+        # Add user message to memory
+        self.memory.add(Message(role="user", content=message))
+        self._update_total_tokens(self.memory.memory, "")
 
-            # Generate response
-            if streaming:
-                content = ""
-                async_stream = await self.model.async_generate_with_history(
-                    messages_history=self.memory.memory,
-                    prompt="",
-                    streaming=True,
-                )
-                async for chunk in async_stream:
-                    content += chunk
-                    self._emit_event("stream_chunk", {"data": chunk})
-                response = ResponseStats(
-                    response=content,
-                    usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
-                    model=self.model.model,
-                    finish_reason="stop",
-                )
-            else:
-                response = await self.model.async_generate_with_history(
-                    messages_history=self.memory.memory,
-                    prompt="",
-                    streaming=False,
-                )
-                content = response.response
+        # Iterative tool usage like task mode
+        current_prompt = message
+        done = False
+        response_content = ""
 
-            self.total_tokens = response.usage.total_tokens if not streaming else self.total_tokens
+        while not done:
+            try:
+                if streaming:
+                    content = ""
+                    async_stream = await self.model.async_generate_with_history(
+                        messages_history=self.memory.memory,
+                        prompt=current_prompt,
+                        streaming=True,
+                    )
+                    async for chunk in async_stream:
+                        content += chunk
+                        self._emit_event("stream_chunk", {"data": chunk})
+                    response = ResponseStats(
+                        response=content,
+                        usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+                        model=self.model.model,
+                        finish_reason="stop",
+                    )
+                else:
+                    response = await self.model.async_generate_with_history(
+                        messages_history=self.memory.memory,
+                        prompt=current_prompt,
+                        streaming=False,
+                    )
+                    content = response.response
 
-            # Parse response for tool calls in chat mode
-            observation = await self._async_observe_response(content)
-            if observation.executed_tool:
-                # Tool was executed; use the tool's response
-                tool_response = observation.next_prompt
-                self._update_session_memory(message, tool_response)
-                self._emit_event("chat_response", {"response": tool_response})
-                return tool_response
-            else:
-                # No tool called; return raw content
-                self._update_session_memory(message, content)
-                self._emit_event("chat_response", {"response": content})
-                return content
+                self.total_tokens = response.usage.total_tokens if not streaming else self.total_tokens
 
-        finally:
-            # Restore TaskCompleteTool if it was removed
-            if task_complete_tool:
-                name, tool = task_complete_tool
-                self.tools.tools[name] = tool
-                logger.debug("Restored TaskCompleteTool after chat mode")
+                # Observe response for tool calls
+                observation = await self._async_observe_response(content)
+                if observation.executed_tool:
+                    current_prompt = observation.next_prompt
+                    response_content = observation.next_prompt
+                    # Continue loop if a tool was executed (except task_complete)
+                    if observation.executed_tool == "task_complete":
+                        done = True
+                else:
+                    response_content = content
+                    done = True
+
+                self._update_session_memory(message, response_content)
+
+            except Exception as e:
+                logger.error(f"Error during async chat: {str(e)}")
+                response_content = f"Error: {str(e)}"
+                done = True
+
+        self._emit_event("chat_response", {"response": response_content})
+        return response_content
 
     def _observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
         """Analyze the assistant's response and determine next steps (synchronous wrapper).
@@ -476,7 +480,7 @@ class Agent(BaseModel):
                 if not tool:
                     return self._handle_tool_not_found(tool_name)
 
-                # Skip task_complete tool in chat mode to maintain conversational flow
+                # Skip task_complete tool in chat mode unless explicitly allowed
                 if is_chat_mode and tool_name == "task_complete":
                     logger.debug("Skipping task_complete tool in chat mode")
                     continue

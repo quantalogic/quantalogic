@@ -4,6 +4,12 @@ from loguru import logger
 
 from quantalogic.agent import Agent
 from quantalogic.agent_config import (
+    DuckDuckGoSearchTool,
+    NodeJsTool,
+    PythonTool,
+    SearchDefinitionNames,
+    TaskCompleteTool,
+    WikipediaSearchTool,
     create_basic_agent,
     create_full_agent,
     create_interpreter_agent,
@@ -58,6 +64,7 @@ def create_agent_for_mode(
     specific_expertise: str = "",
     memory: AgentMemory | None = None,
     chat_system_prompt: Optional[str] = None,
+    tool_mode: Optional[str] = None,
 ) -> Agent:
     """Create an agent based on the specified mode.
 
@@ -74,6 +81,7 @@ def create_agent_for_mode(
         specific_expertise: Optional specific expertise for the agent
         memory: Optional AgentMemory instance to use in the agent
         chat_system_prompt: Optional persona for chat mode
+        tool_mode: Optional tool or toolset to prioritize in chat mode
         
     Returns:
         Agent: The created agent instance
@@ -86,13 +94,30 @@ def create_agent_for_mode(
     logger.debug(f"Using no_stream: {no_stream}")
     logger.debug(f"Using compact_every_n_iteration: {compact_every_n_iteration}")
     logger.debug(f"Using max_tokens_working_memory: {max_tokens_working_memory}")
+    logger.debug(f"Using tool_mode: {tool_mode}")
+
+    # Default tools if none provided
+    if tools is None:
+        tools = [TaskCompleteTool()]
 
     if mode == "chat":
         logger.debug(f"Creating chat agent with persona: {chat_system_prompt}")
+        # Customize tools based on tool_mode
+        if tool_mode:
+            if tool_mode == "search":
+                tools.extend([DuckDuckGoSearchTool(), WikipediaSearchTool()])
+            elif tool_mode == "code":
+                tools.extend([PythonTool(), NodeJsTool(), SearchDefinitionNames()])
+            elif tool_mode in [t.name for t in tools]:  # Specific tool name
+                tools = [t for t in tools if t.name == tool_mode or isinstance(t, TaskCompleteTool)]
+            else:
+                logger.warning(f"Unknown tool mode '{tool_mode}', using default tools")
         agent = Agent(
             model_name=model_name,
             memory=memory if memory else AgentMemory(),
+            tools=tools,
             chat_system_prompt=chat_system_prompt,
+            tool_mode=tool_mode,
         )
         return agent
     elif mode == "code":

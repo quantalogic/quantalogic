@@ -153,12 +153,15 @@ def task_runner(
         compact_every_n_iteration=config.compact_every_n_iteration,
         max_tokens_working_memory=config.max_tokens_working_memory,
         chat_system_prompt=config.chat_system_prompt,
+        tool_mode=config.tool_mode,  # Pass tool_mode to agent creation
     )
 
     AgentRegistry.register_agent("main_agent", agent)
 
     if config.mode == "chat":
         console.print(f"[green]Entering chat mode with persona: {config.chat_system_prompt}[/green]")
+        if config.tool_mode:
+            console.print(f"[green]Tool mode: {config.tool_mode}[/green]")
         console.print("[yellow]Type '/exit' to quit or '/clear' to reset memory.[/yellow]")
 
         # Event handlers for chat mode

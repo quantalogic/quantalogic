@@ -1,18 +1,18 @@
-from dataclasses import dataclass
 from typing import Optional
 
+from pydantic import BaseModel
 
-@dataclass
-class QLConfig:
-    """Central configuration for QuantaLogic agent parameters."""
+
+class QLConfig(BaseModel):
     model_name: str
     verbose: bool
     mode: str
     log: str
-    vision_model_name: Optional[str]
+    vision_model_name: Optional[str] = None
     max_iterations: int
-    compact_every_n_iteration: Optional[int]
-    max_tokens_working_memory: Optional[int]
+    compact_every_n_iteration: Optional[int] = None
+    max_tokens_working_memory: Optional[int] = None
     no_stream: bool
     thinking_model_name: str
-    chat_system_prompt: Optional[str] = None  # New field for chat persona
+    chat_system_prompt: Optional[str] = None
+    tool_mode: Optional[str] = None  # Added field
