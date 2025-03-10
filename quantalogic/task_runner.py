@@ -22,6 +22,7 @@ spinner_lock = Lock()
 console_lock = Lock()
 current_spinner = None
 processed_chunks: Set[str] = set()
+response_buffer: list[str] = []  # Moved to module scope for event handler access
 
 
 def configure_logger(log_level: str) -> None:
@@ -155,77 +156,19 @@ def task_runner(
         compact_every_n_iteration=config.compact_every_n_iteration,
         max_tokens_working_memory=config.max_tokens_working_memory,
         chat_system_prompt=config.chat_system_prompt,
-        tool_mode=config.tool_mode,  # Pass tool_mode to agent creation
+        tool_mode=config.tool_mode,
     )
 
     AgentRegistry.register_agent("main_agent", agent)
 
+    # CHAT MODE
     if config.mode == "chat":
         console.print(f"[green]Entering chat mode with persona: {config.chat_system_prompt}[/green]")
         if config.tool_mode:
             console.print(f"[green]Tool mode: {config.tool_mode}[/green]")
         console.print("[yellow]Type '/exit' to quit or '/clear' to reset memory.[/yellow]")
 
-        # Event handlers for chat mode
-        def handle_chat_start(*args, **kwargs):
-            start_spinner(console)
-            console.print("Assistant: ", end="")  # Prompt for streaming output
-
-        def handle_chat_response(*args, **kwargs):
-            global processed_chunks
-            stop_spinner(console)
-            console.print("")
-            # Clear the processed chunks set when a chat response is complete
-            with console_lock:
-                processed_chunks.clear()  # Newline after response
-
-        def handle_stream_chunk(event: str, data: Any) -> None:
-            global processed_chunks
-            
-            if current_spinner:
-                stop_spinner(console)
-            
-            # Skip if data is None
-            if data is None:
-                return
-                
-            # Generate a unique identifier for this chunk
-            chunk_id = None
-            content_to_print = ""
-            
-            # Handle different data formats and extract content
-            if isinstance(data, str):
-                content_to_print = data
-                chunk_id = hash(data)
-            elif isinstance(data, dict) and "data" in data:
-                content_to_print = data["data"]
-                chunk_id = hash(str(data))
-            elif isinstance(data, dict):
-                logger.debug(f"Stream chunk data without 'data' key: {data}")
-                content_to_print = str(data)
-                chunk_id = hash(str(data))
-            else:
-                try:
-                    content_to_print = str(data)
-                    chunk_id = hash(str(data))
-                except Exception as e:
-                    logger.error(f"Error processing stream chunk: {e}")
-                    return
-            
-            # Use a lock to ensure synchronized console output
-            with console_lock:
-                # Check if we've already processed this exact chunk
-                if chunk_id and chunk_id not in processed_chunks:
-                    console.print(content_to_print, end="", markup=False)
-                    # Remember this chunk to avoid duplications
-                    processed_chunks.add(chunk_id)
-                    # Avoid memory leaks by limiting the set size
-                    if len(processed_chunks) > 1000:
-                        processed_chunks = set(list(processed_chunks)[-500:])
-
-        agent.event_emitter.on("chat_start", handle_chat_start)
-        agent.event_emitter.on("chat_response", handle_chat_response)
-        agent.event_emitter.on("stream_chunk", handle_stream_chunk)
+        # No event handlers for chat mode - bypass streaming entirely
 
         while True:
             user_input = console.input("You: ")
@@ -237,19 +180,114 @@ def task_runner(
                 console.print("[green]Chat memory cleared.[/green]")
                 continue
             try:
-                response = agent.chat(user_input, streaming=not config.no_stream)
-                if not config.no_stream:
-                    # Streaming handled via events
-                    pass
-                else:
-                    console.print(f"Assistant: {response}")
+                # Start spinner manually
+                start_spinner(console)
+                console.print("Assistant: ", end="")
+                
+                # Always use non-streaming mode for chat
+                response = agent.chat(user_input, streaming=False)
+                
+                # Stop spinner and print response
+                stop_spinner(console)
+                console.print(response)
             except Exception as e:
                 stop_spinner(console)
                 console.print(f"[red]Error: {str(e)}[/red]")
                 logger.error(f"Chat error: {e}", exc_info=True)
+
+    # FILE MODE
     elif file:
         task_content = get_task_from_file(file)
         # Execute single task from file
+        logger.debug(f"Solving task with agent: {task_content}")
+        if config.max_iterations < 1:
+            raise ValueError("max_iterations must be greater than 0")
+        
+        # Event handlers for streaming
+        def handle_stream_chunk(event: str, data: any) -> None:
+            if current_spinner:
+                stop_spinner(console)
+            
+            # Handle different data formats
+            if data is None:
+                return
+            elif isinstance(data, str):
+                console.print(data, end="", markup=False)
+            elif isinstance(data, dict) and "data" in data:
+                console.print(data["data"], end="", markup=False)
+            elif isinstance(data, dict):
+                logger.debug(f"Stream chunk data without 'data' key: {data}")
+                console.print(str(data), end="", markup=False)
+            else:
+                try:
+                    console.print(str(data), end="", markup=False)
+                except Exception as e:
+                    logger.error(f"Error printing stream chunk: {e}")
+                    
+        # Register streaming handler only for non-chat modes
+        agent.event_emitter.on("stream_chunk", handle_stream_chunk)
+        
+        # Common spinner handlers
+        def handle_task_think_start(*args, **kwargs):
+            start_spinner(console)
+
+        def handle_task_think_end(*args, **kwargs):
+            stop_spinner(console)
+            
+        agent.event_emitter.on("task_think_start", handle_task_think_start)
+        agent.event_emitter.on("task_think_end", handle_task_think_end)
+        
+        result = agent.solve_task(
+            task=task_content, max_iterations=config.max_iterations, streaming=not config.no_stream
+        )
+        logger.debug(f"Task solved with result: {result} using {config.max_iterations} iterations")
+
+        console.print(
+            Panel.fit(
+                f"[bold]Task Result:[/bold]\n{result}", title="[bold]Execution Output[/bold]", border_style="green"
+            )
+        )
+
+    # TASK MODE (single command-line task)
+    elif task:
+        check_new_version()
+        task_content = task
+        
+        # Event handlers for streaming
+        def handle_stream_chunk(event: str, data: any) -> None:
+            if current_spinner:
+                stop_spinner(console)
+            
+            # Handle different data formats
+            if data is None:
+                return
+            elif isinstance(data, str):
+                console.print(data, end="", markup=False)
+            elif isinstance(data, dict) and "data" in data:
+                console.print(data["data"], end="", markup=False)
+            elif isinstance(data, dict):
+                logger.debug(f"Stream chunk data without 'data' key: {data}")
+                console.print(str(data), end="", markup=False)
+            else:
+                try:
+                    console.print(str(data), end="", markup=False)
+                except Exception as e:
+                    logger.error(f"Error printing stream chunk: {e}")
+                    
+        # Register streaming handler only for non-chat modes
+        agent.event_emitter.on("stream_chunk", handle_stream_chunk)
+        
+        # Common spinner handlers
+        def handle_task_think_start(*args, **kwargs):
+            start_spinner(console)
+
+        def handle_task_think_end(*args, **kwargs):
+            stop_spinner(console)
+            
+        agent.event_emitter.on("task_think_start", handle_task_think_start)
+        agent.event_emitter.on("task_think_end", handle_task_think_end)
+        
+        # Execute single task from command line
         logger.debug(f"Solving task with agent: {task_content}")
         if config.max_iterations < 1:
             raise ValueError("max_iterations must be greater than 0")
@@ -263,105 +301,85 @@ def task_runner(
                 f"[bold]Task Result:[/bold]\n{result}", title="[bold]Execution Output[/bold]", border_style="green"
             )
         )
+
+    # INTERACTIVE MODE
     else:
-        if task:
-            check_new_version()
-            task_content = task
-            # Execute single task from command line
-            logger.debug(f"Solving task with agent: {task_content}")
-            if config.max_iterations < 1:
-                raise ValueError("max_iterations must be greater than 0")
-            result = agent.solve_task(
-                task=task_content, max_iterations=config.max_iterations, streaming=not config.no_stream
-            )
-            logger.debug(f"Task solved with result: {result} using {config.max_iterations} iterations")
+        # Interactive mode
+        display_welcome_message(
+            console=console,
+            model_name=config.model_name,
+            version=get_version(),
+            vision_model_name=config.vision_model_name,
+            max_iterations=config.max_iterations,
+            compact_every_n_iteration=config.compact_every_n_iteration,
+            max_tokens_working_memory=config.max_tokens_working_memory,
+            mode=config.mode,
+        )
+        check_new_version()
+        logger.debug(
+            f"Created agent for mode: {config.mode} with model: {config.model_name}, vision model: {config.vision_model_name}, no_stream: {config.no_stream}"
+        )
 
-            console.print(
-                Panel.fit(
-                    f"[bold]Task Result:[/bold]\n{result}", title="[bold]Execution Output[/bold]", border_style="green"
-                )
-            )
-        else:
-            # Interactive mode
-            display_welcome_message(
-                console=console,
-                model_name=config.model_name,
-                version=get_version(),
-                vision_model_name=config.vision_model_name,
-                max_iterations=config.max_iterations,
-                compact_every_n_iteration=config.compact_every_n_iteration,
-                max_tokens_working_memory=config.max_tokens_working_memory,
-                mode=config.mode,
-            )
-            check_new_version()
-            logger.debug(
-                f"Created agent for mode: {config.mode} with model: {config.model_name}, vision model: {config.vision_model_name}, no_stream: {config.no_stream}"
-            )
+        events = [
+            "task_start",
+            "task_think_start",
+            "task_think_end",
+            "task_complete",
+            "tool_execution_start",
+            "tool_execution_end",
+            "error_max_iterations_reached",
+            "memory_full",
+            "memory_compacted",
+            "memory_summary",
+        ]
 
-            events = [
-                "task_start",
-                "task_think_start",
-                "task_think_end",
-                "task_complete",
-                "tool_execution_start",
-                "tool_execution_end",
-                "error_max_iterations_reached",
-                "memory_full",
-                "memory_compacted",
-                "memory_summary",
-            ]
+        # Add spinner control to event handlers
+        def handle_task_think_start(*args, **kwargs):
+            start_spinner(console)
 
-            # Add spinner control to event handlers
-            def handle_task_think_start(*args, **kwargs):
-                start_spinner(console)
+        def handle_task_think_end(*args, **kwargs):
+            stop_spinner(console)
 
-            def handle_task_think_end(*args, **kwargs):
+        def handle_stream_chunk(event: str, data: any) -> None:
+            if current_spinner:
                 stop_spinner(console)
-
-            def handle_stream_chunk(event: str, data: any) -> None:
-                if current_spinner:
-                    stop_spinner(console)
-                
-                # Handle different data formats
-                if data is None:
-                    return
-                elif isinstance(data, str):
-                    # Direct string data
-                    console.print(data, end="", markup=False)
-                elif isinstance(data, dict) and "data" in data:
-                    # Dictionary with 'data' key
-                    console.print(data["data"], end="", markup=False)
-                elif isinstance(data, dict):
-                    # Dictionary without 'data' key, use the str representation
-                    logger.debug(f"Stream chunk data without 'data' key: {data}")
+            
+            # Handle different data formats
+            if data is None:
+                return
+            elif isinstance(data, str):
+                console.print(data, end="", markup=False)
+            elif isinstance(data, dict) and "data" in data:
+                console.print(data["data"], end="", markup=False)
+            elif isinstance(data, dict):
+                logger.debug(f"Stream chunk data without 'data' key: {data}")
+                console.print(str(data), end="", markup=False)
+            else:
+                try:
                     console.print(str(data), end="", markup=False)
-                else:
-                    # Fallback for any other type
-                    try:
-                        console.print(str(data), end="", markup=False)
-                    except Exception as e:
-                        logger.error(f"Error printing stream chunk: {e}")
+                except Exception as e:
+                    logger.error(f"Error printing stream chunk: {e}")
 
-            agent.event_emitter.on(
-                event=events,
-                listener=console_print_events,
-            )
+        agent.event_emitter.on(
+            event=events,
+            listener=console_print_events,
+        )
 
-            agent.event_emitter.on(
-                event="task_think_start",
-                listener=handle_task_think_start,
-            )
+        agent.event_emitter.on(
+            event="task_think_start",
+            listener=handle_task_think_start,
+        )
 
-            agent.event_emitter.on(
-                event="task_think_end",
-                listener=handle_task_think_end,
-            )
+        agent.event_emitter.on(
+            event="task_think_end",
+            listener=handle_task_think_end,
+        )
 
-            agent.event_emitter.on(
-                event="stream_chunk",
-                listener=handle_stream_chunk,
-            )
+        agent.event_emitter.on(
+            event="stream_chunk",
+            listener=handle_stream_chunk,
+        )
 
-            logger.debug("Registered event handlers for agent events with events: {events}")
+        logger.debug("Registered event handlers for agent events with events: {events}")
 
-            interactive_task_runner(agent, console, config.max_iterations, config.no_stream)
+        interactive_task_runner(agent, console, config.max_iterations, config.no_stream)

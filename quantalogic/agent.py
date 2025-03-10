@@ -1015,7 +1015,7 @@ class Agent(BaseModel):
         """Specialized observation method for chat mode with tool handling.
 
         This method processes responses in chat mode, identifying and executing tool calls
-        while providing appropriate default parameters when needed.
+        while providing appropriate default parameters when needed. Prevents task_complete usage.
 
         Args:
             content: The response content to analyze
@@ -1041,6 +1041,15 @@ class Agent(BaseModel):
                 )
                 return ObserveResponseResult(next_prompt=error_prompt, executed_tool=None, answer=None)
 
+            # Check for task_complete attempt and block it with feedback
+            if "task_complete" in parsed_content:
+                feedback = (
+                    "⚠️ Note: The 'task_complete' tool is not available in chat mode. "
+                    "This is a conversational mode; tasks are not completed here. "
+                    "Please use other tools or continue the conversation."
+                )
+                return ObserveResponseResult(next_prompt=feedback, executed_tool=None, answer=None)
+
             # Process tools with prioritization based on tool_mode
             tool_names = list(parsed_content.keys())
             # Prioritize specific tools if tool_mode is set and the tool is available
@@ -1055,11 +1064,6 @@ class Agent(BaseModel):
                 tool = self.tools.get(tool_name)
                 if not tool:
                     return self._handle_tool_not_found(tool_name)
-
-                # Skip task_complete in chat mode unless explicitly finishing a task
-                if tool_name == "task_complete":
-                    logger.debug("Skipping task_complete tool in chat mode")
-                    continue
 
                 # Parse tool arguments from the input
                 arguments_with_values = self._parse_tool_arguments(tool, tool_input)
@@ -1266,7 +1270,7 @@ class Agent(BaseModel):
         return self._render_template('tools_prompt.j2', tool_names=tool_names)
         
     def _get_tools_names_prompt_for_chat(self) -> str:
-        """Construct a detailed prompt for chat mode that includes tool parameters.
+        """Construct a detailed prompt for chat mode that includes tool parameters, excluding task_complete.
         
         Returns:
             Formatted tools prompt with parameter details
@@ -1275,6 +1279,9 @@ class Agent(BaseModel):
         
         try:
             for tool_name in self.tools.tool_names():
+                if tool_name == "task_complete":
+                    continue  # Explicitly exclude task_complete in chat mode
+                
                 try:
                     tool = self.tools.get(tool_name)
                     params = []
@@ -1313,7 +1320,7 @@ class Agent(BaseModel):
             logger.debug(f"Error generating tool descriptions: {str(e)}")
             return "Error retrieving tool information"
             
-        formatted_tools = "\n".join(tool_descriptions)
+        formatted_tools = "\n".join(tool_descriptions) if tool_descriptions else "No tools available."
         return formatted_tools
 
     def _get_variable_prompt(self) -> str:
