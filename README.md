@@ -45,8 +45,7 @@ At [QuantaLogic](https://www.quantalogic.app), we spotted a black hole: amazing 
 - [Quick Start](#quick-start)
 - [ReAct Framework: Dynamic Agents](#react-framework-dynamic-agents)
 - [Flow Module: Structured Workflows](#flow-module-structured-workflows)
-  - 📘 **[Workflow YAML DSL Specification](./quantalogic/flow/flow_yaml.md)**: Comprehensive guide to defining powerful, structured workflows using our Domain-Specific Language
-  - 📚 **[Flow YAML Documentation](./quantalogic/flow/flow_yaml)**: Dive into the official documentation for a deeper understanding of Flow YAML and its applications
+  - 📘 **[Workflow YAML DSL Specification](./quantalogic/flow/flow_yaml.md)**: Comprehensive guide to defining powerful, structured workflows using our Domain-Specific Languag
 - [ReAct vs. Flow: Pick Your Power](#react-vs-flow-pick-your-power)
 - [Using the CLI](#using-the-cli)
 - [Examples That Spark Joy](#examples-that-spark-joy)
