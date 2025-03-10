@@ -402,14 +402,16 @@ class Agent(BaseModel):
             try:
                 if streaming:
                     content = ""
+                    # When streaming is enabled, the GenerativeModel._async_stream_response method
+                    # already emits the stream_chunk events, so we don't need to emit them again here
                     async_stream = await self.model.async_generate_with_history(
                         messages_history=self.memory.memory,
                         prompt=current_prompt,
                         streaming=True,
                     )
+                    # Just collect the chunks without re-emitting events
                     async for chunk in async_stream:
                         content += chunk
-                        self._emit_event("stream_chunk", {"data": chunk})
                     response = ResponseStats(
                         response=content,
                         usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
@@ -429,15 +431,27 @@ class Agent(BaseModel):
                 # Observe response for tool calls
                 observation = await self._async_observe_response(content)
                 if observation.executed_tool and auto_tool_call:
-                    # Tool was executed; process result
+                    # Tool was executed; process result and continue
                     current_prompt = observation.next_prompt
-                    response_content = observation.next_prompt
+                    
+                    # In chat mode, format the response with clear tool call visualization
+                    if not self.task_to_solve.strip():  # We're in chat mode
+                        # Format the response to clearly show the tool call and result
+                        # Use a format that task_runner.py can parse and display nicely
+                        
+                        # For a cleaner look, insert a special delimiter that task_runner.py can recognize
+                        # to separate tool call from result
+                        response_content = f"{content}\n\n__TOOL_RESULT_SEPARATOR__{observation.executed_tool}__\n{observation.next_prompt}"
+                    else:
+                        # In task mode, keep the original behavior
+                        response_content = observation.next_prompt
+                    
                     tool_iteration += 1
-                    # Continue loop to interpret tool result
                     self.memory.add(Message(role="assistant", content=content))  # Original tool call
                     self.memory.add(Message(role="user", content=observation.next_prompt))  # Tool result
+                    logger.debug(f"Tool executed: {observation.executed_tool}, iteration: {tool_iteration}")
                 elif not observation.executed_tool and "<action>" in content and auto_tool_call:
-                    # Detected malformed tool call attempt; provide feedback
+                    # Detected malformed tool call attempt; provide feedback and exit loop
                     response_content = (
                         f"{content}\n\n⚠️ Error: Invalid tool call format detected. "
                         "Please use the exact XML structure as specified in the system prompt:\n"
@@ -445,9 +459,9 @@ class Agent(BaseModel):
                     )
                     break
                 else:
-                    # No tool executed or auto_tool_call is False
+                    # No tool executed or auto_tool_call is False; final response
                     response_content = content
-                    break  # Exit loop as we have a final response
+                    break
 
             except Exception as e:
                 logger.error(f"Error during async chat: {str(e)}")
