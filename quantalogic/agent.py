@@ -357,62 +357,81 @@ class Agent(BaseModel):
         if clear_memory:
             self.clear_memory()
 
-        # Prepare the full chat system prompt with tools and instructions
-        tools_prompt = self._get_tools_names_prompt() if self.tools.tool_names() else "No tools available."
-        full_chat_prompt = self._render_template(
-            'chat_system_prompt.j2',
-            persona=self.chat_system_prompt,
-            tools_prompt=tools_prompt
-        )
+        # Temporarily remove TaskCompleteTool from tools in chat mode to avoid task-solving behavior
+        task_complete_tool = None
+        for name, tool in self.tools.tools.items():
+            if isinstance(tool, TaskCompleteTool):
+                task_complete_tool = (name, tool)
+                self.tools.tools.pop(name)
+                logger.debug("Temporarily removed TaskCompleteTool for chat mode")
+                break
 
-        # Ensure the full chat system prompt is set
-        if not self.memory.memory or self.memory.memory[0].role != "system":
-            self.memory.add(Message(role="system", content=full_chat_prompt))
-
-        self._emit_event("chat_start", {"message": message})
-
-        # Add user message to memory
-        self.memory.add(Message(role="user", content=message))
-        self._update_total_tokens(self.memory.memory, "")
-
-        # Generate response
-        if streaming:
-            content = ""
-            async_stream = await self.model.async_generate_with_history(
-                messages_history=self.memory.memory,
-                prompt="",
-                streaming=True,
-            )
-            async for chunk in async_stream:
-                content += chunk
-            response = ResponseStats(
-                response=content,
-                usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
-                model=self.model.model,
-                finish_reason="stop",
-            )
-        else:
-            response = await self.model.async_generate_with_history(
-                messages_history=self.memory.memory,
-                prompt="",
-                streaming=False,
+        try:
+            # Prepare the full chat system prompt with tools and instructions
+            tools_prompt = self._get_tools_names_prompt() if self.tools.tool_names() else "No tools available."
+            full_chat_prompt = self._render_template(
+                'chat_system_prompt.j2',
+                persona=self.chat_system_prompt,
+                tools_prompt=tools_prompt
             )
 
-        content = response.response
-        self.total_tokens = response.usage.total_tokens if not streaming else self.total_tokens
+            # Ensure the full chat system prompt is set
+            if not self.memory.memory or self.memory.memory[0].role != "system":
+                self.memory.add(Message(role="system", content=full_chat_prompt))
 
-        # Check for tool usage
-        observation = await self._async_observe_response(content)
-        if observation.executed_tool:
-            # Tool was used; store and return the tool result
-            self._update_session_memory(message, observation.next_prompt)
-            self._emit_event("chat_response", {"response": observation.next_prompt})
-            return observation.next_prompt
-        else:
-            # No tool used; store and return the raw response
-            self._update_session_memory(message, content)
-            self._emit_event("chat_response", {"response": content})
-            return content
+            self._emit_event("chat_start", {"message": message})
+
+            # Add user message to memory
+            self.memory.add(Message(role="user", content=message))
+            self._update_total_tokens(self.memory.memory, "")
+
+            # Generate response
+            if streaming:
+                content = ""
+                async_stream = await self.model.async_generate_with_history(
+                    messages_history=self.memory.memory,
+                    prompt="",
+                    streaming=True,
+                )
+                async for chunk in async_stream:
+                    content += chunk
+                    self._emit_event("stream_chunk", {"data": chunk})
+                response = ResponseStats(
+                    response=content,
+                    usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+                    model=self.model.model,
+                    finish_reason="stop",
+                )
+            else:
+                response = await self.model.async_generate_with_history(
+                    messages_history=self.memory.memory,
+                    prompt="",
+                    streaming=False,
+                )
+                content = response.response
+
+            self.total_tokens = response.usage.total_tokens if not streaming else self.total_tokens
+
+            # Parse response for tool calls in chat mode
+            observation = await self._async_observe_response(content)
+            if observation.executed_tool:
+                # Tool was executed; use the tool's response
+                tool_response = observation.next_prompt
+                self._update_session_memory(message, tool_response)
+                self._emit_event("chat_response", {"response": tool_response})
+                return tool_response
+            else:
+                # No tool called; return raw content
+                self._update_session_memory(message, content)
+                self._emit_event("chat_response", {"response": content})
+                return content
+
+        finally:
+            # Restore TaskCompleteTool if it was removed
+            if task_complete_tool:
+                name, tool = task_complete_tool
+                self.tools.tools[name] = tool
+                logger.debug("Restored TaskCompleteTool after chat mode")
 
     def _observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
         """Analyze the assistant's response and determine next steps (synchronous wrapper).
@@ -443,14 +462,24 @@ class Agent(BaseModel):
             ObserveResponseResult with next steps information
         """
         try:
+            # Detect if we're in chat mode by checking if task_to_solve is empty
+            is_chat_mode = not self.task_to_solve.strip()
+
+            # Parse content for tool usage regardless of mode
             parsed_content = self._parse_tool_usage(content)
             if not parsed_content:
+                logger.debug("No tool usage detected in response")
                 return ObserveResponseResult(next_prompt=content, executed_tool=None, answer=None)
 
             for tool_name, tool_input in parsed_content.items():
                 tool = self.tools.get(tool_name)
                 if not tool:
                     return self._handle_tool_not_found(tool_name)
+
+                # Skip task_complete tool in chat mode to maintain conversational flow
+                if is_chat_mode and tool_name == "task_complete":
+                    logger.debug("Skipping task_complete tool in chat mode")
+                    continue
 
                 arguments_with_values = self._parse_tool_arguments(tool, tool_input)
                 is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
@@ -466,11 +495,17 @@ class Agent(BaseModel):
                 variable_name = self.variable_store.add(response)
                 new_prompt = self._format_observation_response(response, executed_tool, variable_name, iteration)
 
+                # In chat mode, don't set answer; in task mode, set answer only for task_complete
+                is_task_complete_answer = executed_tool == "task_complete" and not is_chat_mode
                 return ObserveResponseResult(
                     next_prompt=new_prompt,
                     executed_tool=executed_tool,
-                    answer=response if executed_tool == "task_complete" else None,
+                    answer=response if is_task_complete_answer else None,
                 )
+
+            # If no tools were executed (e.g., all skipped in chat mode), return original content
+            return ObserveResponseResult(next_prompt=content, executed_tool=None, answer=None)
+
         except Exception as e:
             return self._handle_error(e)
 

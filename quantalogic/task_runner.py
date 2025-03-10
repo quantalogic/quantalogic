@@ -170,11 +170,11 @@ def task_runner(
             stop_spinner(console)
             console.print("")  # Newline after response
 
-        def handle_stream_chunk(event: str, data: str) -> None:
+        def handle_stream_chunk(event: str, data: dict) -> None:
             if current_spinner:
                 stop_spinner(console)
-            if data is not None:
-                console.print(data, end="", markup=False)
+            if data and "data" in data:
+                console.print(data["data"], end="", markup=False)
 
         agent.event_emitter.on("chat_start", handle_chat_start)
         agent.event_emitter.on("chat_response", handle_chat_response)
@@ -271,11 +271,11 @@ def task_runner(
             def handle_task_think_end(*args, **kwargs):
                 stop_spinner(console)
 
-            def handle_stream_chunk(event: str, data: str) -> None:
+            def handle_stream_chunk(event: str, data: dict) -> None:
                 if current_spinner:
                     stop_spinner(console)
-                if data is not None:
-                    console.print(data, end="", markup=False)
+                if data and "data" in data:
+                    console.print(data["data"], end="", markup=False)
 
             agent.event_emitter.on(
                 event=events,
