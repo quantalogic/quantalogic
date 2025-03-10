@@ -1,4 +1,4 @@
-"""Enhanced QuantaLogic agent implementing the ReAct framework."""
+"""Enhanced QuantaLogic agent implementing the ReAct framework with optional chat mode."""
 
 import asyncio
 import os
@@ -58,11 +58,13 @@ class ObserveResponseResult(BaseModel):
 
 
 class Agent(BaseModel):
-    """Enhanced QuantaLogic agent implementing ReAct framework.
+    """Enhanced QuantaLogic agent supporting both ReAct goal-solving and conversational chat modes.
 
-    Supports both synchronous and asynchronous operations for task solving.
-    Use `solve_task` for synchronous contexts (e.g., CLI tools) and `async_solve_task`
-    for asynchronous contexts (e.g., web servers).
+    Use `solve_task`/`async_solve_task` for goal-oriented ReAct mode (backward compatible).
+    Use `chat`/`async_chat` for conversational mode with a customizable persona.
+
+    Supports both synchronous and asynchronous operations. Use synchronous methods for CLI tools
+    and asynchronous methods for web servers or async contexts.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True, extra="forbid")
@@ -87,6 +89,7 @@ class Agent(BaseModel):
     compact_every_n_iterations: int | None = None
     max_tokens_working_memory: int | None = None
     _model_name: str = PrivateAttr(default="")
+    chat_system_prompt: str  # Base persona prompt for chat mode
 
     def __init__(
         self,
@@ -101,21 +104,23 @@ class Agent(BaseModel):
         compact_every_n_iterations: int | None = None,
         max_tokens_working_memory: int | None = None,
         event_emitter: EventEmitter | None = None,
+        chat_system_prompt: str | None = None,  # New parameter for chat mode
     ):
         """Initialize the agent with model, memory, tools, and configurations.
-        
+
         Args:
             model_name: Name of the model to use
             memory: AgentMemory instance for storing conversation history
             variable_store: VariableMemory instance for storing variables
-            tools: List of Tool instances 
+            tools: List of Tool instances
             ask_for_user_validation: Function to ask for user validation
-            task_to_solve: Initial task to solve
+            task_to_solve: Initial task to solve (for ReAct mode)
             specific_expertise: Description of the agent's expertise
             get_environment: Function to get environment details
             compact_every_n_iterations: How often to compact memory
             max_tokens_working_memory: Maximum token count for working memory
             event_emitter: EventEmitter instance for event handling
+            chat_system_prompt: Optional base system prompt for chat mode persona
         """
         try:
             logger.debug("Initializing agent...")
@@ -145,6 +150,12 @@ class Agent(BaseModel):
                 system_prompt=system_prompt_text,
             )
 
+            # Default chat persona if none provided
+            chat_system_prompt = chat_system_prompt or (
+                "You are a friendly, helpful AI assistant. Engage in natural conversation, "
+                "answer questions, and use tools when explicitly requested or when they enhance your response."
+            )
+
             # Initialize using Pydantic's model_validate
             super().__init__(
                 specific_expertise=specific_expertise,
@@ -166,6 +177,7 @@ class Agent(BaseModel):
                 system_prompt="",
                 compact_every_n_iterations=compact_every_n_iterations or 30,
                 max_tokens_working_memory=max_tokens_working_memory,
+                chat_system_prompt=chat_system_prompt,  # Stored as base persona
             )
 
             self._model_name = model_name
@@ -186,7 +198,6 @@ class Agent(BaseModel):
     def model_name(self, value: str) -> None:
         """Set the model name and update the model instance."""
         self._model_name = value
-        # Update the model instance with the new name
         self.model = GenerativeModel(model=value, event_emitter=self.event_emitter)
 
     def clear_memory(self) -> None:
@@ -213,7 +224,6 @@ class Agent(BaseModel):
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
-            # Create a new event loop if one doesn't exist
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
@@ -278,7 +288,6 @@ class Agent(BaseModel):
                         messages_history=self.memory.memory,
                         prompt=current_prompt,
                         streaming=False,
-                        # Removed stop_words parameter to allow complete responses
                     )
 
                 content = result.response
@@ -292,7 +301,7 @@ class Agent(BaseModel):
 
                 if result.executed_tool == "task_complete":
                     self._emit_event("task_complete", {"response": result.answer})
-                    answer = result.answer or ""  # Ensure answer is never None
+                    answer = result.answer or ""
                     done = True
 
                 self._update_session_memory(current_prompt, content)
@@ -309,13 +318,109 @@ class Agent(BaseModel):
         self._emit_event("task_solve_end")
         return answer
 
+    def chat(self, message: str, streaming: bool = False, clear_memory: bool = False) -> str:
+        """Engage in a conversational chat with the user (synchronous version).
+
+        Ideal for synchronous applications. For asynchronous contexts, use `async_chat`.
+
+        Args:
+            message: The user's input message
+            streaming: Whether to stream the response
+            clear_memory: Whether to clear memory before starting
+
+        Returns:
+            The assistant's response
+        """
+        logger.debug(f"Chatting synchronously with message: {message}")
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        return loop.run_until_complete(self.async_chat(message, streaming, clear_memory))
+
+    async def async_chat(self, message: str, streaming: bool = False, clear_memory: bool = False) -> str:
+        """Engage in a conversational chat with the user (asynchronous version).
+
+        Ideal for asynchronous applications. For synchronous contexts, use `chat`.
+
+        Args:
+            message: The user's input message
+            streaming: Whether to stream the response
+            clear_memory: Whether to clear memory before starting
+
+        Returns:
+            The assistant's response
+        """
+        logger.debug(f"Chatting asynchronously with message: {message}")
+        if clear_memory:
+            self.clear_memory()
+
+        # Prepare the full chat system prompt with tools and instructions
+        tools_prompt = self._get_tools_names_prompt() if self.tools.tool_names() else "No tools available."
+        full_chat_prompt = self._render_template(
+            'chat_system_prompt.j2',
+            persona=self.chat_system_prompt,
+            tools_prompt=tools_prompt
+        )
+
+        # Ensure the full chat system prompt is set
+        if not self.memory.memory or self.memory.memory[0].role != "system":
+            self.memory.add(Message(role="system", content=full_chat_prompt))
+
+        self._emit_event("chat_start", {"message": message})
+
+        # Add user message to memory
+        self.memory.add(Message(role="user", content=message))
+        self._update_total_tokens(self.memory.memory, "")
+
+        # Generate response
+        if streaming:
+            content = ""
+            async_stream = await self.model.async_generate_with_history(
+                messages_history=self.memory.memory,
+                prompt="",
+                streaming=True,
+            )
+            async for chunk in async_stream:
+                content += chunk
+            response = ResponseStats(
+                response=content,
+                usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+                model=self.model.model,
+                finish_reason="stop",
+            )
+        else:
+            response = await self.model.async_generate_with_history(
+                messages_history=self.memory.memory,
+                prompt="",
+                streaming=False,
+            )
+
+        content = response.response
+        self.total_tokens = response.usage.total_tokens if not streaming else self.total_tokens
+
+        # Check for tool usage
+        observation = await self._async_observe_response(content)
+        if observation.executed_tool:
+            # Tool was used; store and return the tool result
+            self._update_session_memory(message, observation.next_prompt)
+            self._emit_event("chat_response", {"response": observation.next_prompt})
+            return observation.next_prompt
+        else:
+            # No tool used; store and return the raw response
+            self._update_session_memory(message, content)
+            self._emit_event("chat_response", {"response": content})
+            return content
+
     def _observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
         """Analyze the assistant's response and determine next steps (synchronous wrapper).
-        
+
         Args:
             content: The response content to analyze
             iteration: Current iteration number
-            
+
         Returns:
             ObserveResponseResult with next steps information
         """
@@ -329,18 +434,18 @@ class Agent(BaseModel):
 
     async def _async_observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
         """Analyze the assistant's response and determine next steps (asynchronous).
-        
+
         Args:
             content: The response content to analyze
             iteration: Current iteration number
-            
+
         Returns:
             ObserveResponseResult with next steps information
         """
         try:
             parsed_content = self._parse_tool_usage(content)
             if not parsed_content:
-                return self._handle_no_tool_usage()
+                return ObserveResponseResult(next_prompt=content, executed_tool=None, answer=None)
 
             for tool_name, tool_input in parsed_content.items():
                 tool = self.tools.get(tool_name)
@@ -371,12 +476,12 @@ class Agent(BaseModel):
 
     def _execute_tool(self, tool_name: str, tool: Tool, arguments_with_values: dict) -> tuple[str, Any]:
         """Execute a tool with validation if required (synchronous wrapper).
-        
+
         Args:
             tool_name: Name of the tool to execute
             tool: Tool instance
             arguments_with_values: Tool arguments
-            
+
         Returns:
             Tuple of (executed_tool_name, response)
         """
@@ -390,12 +495,12 @@ class Agent(BaseModel):
 
     async def _async_execute_tool(self, tool_name: str, tool: Tool, arguments_with_values: dict) -> tuple[str, Any]:
         """Execute a tool with validation if required (asynchronous).
-        
+
         Args:
             tool_name: Name of the tool to execute
             tool: Tool instance
             arguments_with_values: Tool arguments
-            
+
         Returns:
             Tuple of (executed_tool_name, response)
         """
@@ -403,12 +508,12 @@ class Agent(BaseModel):
             logger.info(f"Tool '{tool_name}' requires validation.")
             validation_id = str(uuid.uuid4())
             logger.info(f"Validation ID: {validation_id}")
-            
+
             self._emit_event(
                 "tool_execute_validation_start",
                 {
                     "validation_id": validation_id,
-                    "tool_name": tool_name, 
+                    "tool_name": tool_name,
                     "arguments": arguments_with_values
                 },
             )
@@ -453,7 +558,6 @@ class Agent(BaseModel):
             if hasattr(tool, "async_execute") and callable(tool.async_execute):
                 response = await tool.async_execute(**converted_args)
             else:
-                # Fall back to synchronous execution if async is not available
                 response = tool.execute(**converted_args)
             executed_tool = tool.name
         except Exception as e:
@@ -467,41 +571,33 @@ class Agent(BaseModel):
 
     async def _async_interpolate_variables(self, text: str, depth: int = 0) -> str:
         """Interpolate variables using $var$ syntax in the given text with recursion protection.
-        
+
         Args:
             text: Text containing variable references
             depth: Current recursion depth
-            
+
         Returns:
             Text with variables interpolated
         """
         if not isinstance(text, str):
             return str(text)
-            
+
         if depth > MAX_INTERPOLATION_DEPTH:
             logger.warning(f"Max interpolation depth ({MAX_INTERPOLATION_DEPTH}) reached, stopping recursion")
             return text
-            
+
         try:
             import re
-            
-            # Process each variable in the store
+
             for var in self.variable_store.keys():
-                # Properly escape the variable name for regex using re.escape
-                # but handle $ characters separately since they're part of our syntax
                 escaped_var = re.escape(var).replace('\\$', '$')
                 pattern = f"\\${escaped_var}\\$"
-                
-                # Get variable value as string
                 replacement = str(self.variable_store[var])
-                
-                # Replace all occurrences
                 text = re.sub(pattern, lambda m: replacement, text)
-                
-            # Check if there are still variables to interpolate (for nested variables)
+
             if '$' in text and depth < MAX_INTERPOLATION_DEPTH:
                 return await self._async_interpolate_variables(text, depth + 1)
-                
+
             return text
         except Exception as e:
             logger.error(f"Error in _async_interpolate_variables: {str(e)}")
@@ -509,10 +605,10 @@ class Agent(BaseModel):
 
     def _interpolate_variables(self, text: str) -> str:
         """Interpolate variables using $var$ syntax in the given text (synchronous wrapper).
-        
+
         Args:
             text: Text containing variable references
-            
+
         Returns:
             Text with variables interpolated
         """
@@ -526,7 +622,7 @@ class Agent(BaseModel):
 
     def _compact_memory_if_needed(self, current_prompt: str = "") -> None:
         """Compacts the memory if it exceeds the maximum occupancy (synchronous wrapper).
-        
+
         Args:
             current_prompt: Current prompt to calculate token usage
         """
@@ -540,7 +636,7 @@ class Agent(BaseModel):
 
     async def _async_compact_memory_if_needed(self, current_prompt: str = "") -> None:
         """Compacts the memory if it exceeds the maximum occupancy or token limit.
-        
+
         Args:
             current_prompt: Current prompt to calculate token usage
         """
@@ -553,7 +649,7 @@ class Agent(BaseModel):
             and self.current_iteration % self.compact_every_n_iterations == 0
         )
         should_compact_by_token_limit = (
-            self.max_tokens_working_memory is not None 
+            self.max_tokens_working_memory is not None
             and self.total_tokens > self.max_tokens_working_memory
         )
 
@@ -582,11 +678,10 @@ class Agent(BaseModel):
 
     async def _async_compact_memory_with_summary(self) -> str:
         """Generate a summary and compact memory asynchronously.
-        
+
         Returns:
             Generated summary text
         """
-        # Format conversation history for the template
         memory_copy = self.memory.memory.copy()
 
         if len(memory_copy) < 3:
@@ -595,20 +690,18 @@ class Agent(BaseModel):
 
         user_message = memory_copy.pop()
         assistant_message = memory_copy.pop()
-        
-        # Create summarization prompt using template
-        prompt_summary = self._render_template('memory_compaction_prompt.j2', 
+
+        prompt_summary = self._render_template('memory_compaction_prompt.j2',
                                              conversation_history="\n\n".join(
-                                                 f"[{msg.role.upper()}]: {msg.content}" 
+                                                 f"[{msg.role.upper()}]: {msg.content}"
                                                  for msg in memory_copy
                                              ))
-        
+
         summary = await self.model.async_generate_with_history(messages_history=memory_copy, prompt=prompt_summary)
-        
-        # Remove last system message if present
+
         if memory_copy and memory_copy[-1].role == "system":
             memory_copy.pop()
-            
+
         memory_copy.append(Message(role="user", content=summary.response))
         memory_copy.append(assistant_message)
         memory_copy.append(user_message)
@@ -617,10 +710,10 @@ class Agent(BaseModel):
 
     def _generate_task_summary(self, content: str) -> str:
         """Generate a concise task-focused summary (synchronous wrapper).
-        
+
         Args:
             content: The content to summarize
-            
+
         Returns:
             Generated task summary
         """
@@ -644,7 +737,7 @@ class Agent(BaseModel):
         try:
             if len(content) < 1024 * 4:
                 return content
-                
+
             prompt = self._render_template('task_summary_prompt.j2', content=content)
             result = await self.model.async_generate(prompt=prompt)
             logger.debug(f"Generated summary: {result.response}")
@@ -655,7 +748,7 @@ class Agent(BaseModel):
 
     def _reset_session(self, task_to_solve: str = "", max_iterations: int = 30, clear_memory: bool = True) -> None:
         """Reset the agent's session.
-        
+
         Args:
             task_to_solve: New task to solve
             max_iterations: Maximum number of iterations
@@ -675,7 +768,7 @@ class Agent(BaseModel):
 
     def _update_total_tokens(self, message_history: list[Message], prompt: str) -> None:
         """Update the total tokens count based on message history and prompt.
-        
+
         Args:
             message_history: List of messages
             prompt: Current prompt
@@ -684,7 +777,7 @@ class Agent(BaseModel):
 
     def _emit_event(self, event_type: str, data: dict[str, Any] | None = None) -> None:
         """Emit an event with system context and optional additional data.
-        
+
         Args:
             event_type: Type of event
             data: Additional event data
@@ -702,10 +795,10 @@ class Agent(BaseModel):
 
     def _parse_tool_usage(self, content: str) -> dict:
         """Extract tool usage from the response content.
-        
+
         Args:
             content: Response content
-            
+
         Returns:
             Dictionary mapping tool names to inputs
         """
@@ -724,11 +817,11 @@ class Agent(BaseModel):
 
     def _parse_tool_arguments(self, tool: Tool, tool_input: str) -> dict:
         """Parse the tool arguments from the tool input.
-        
+
         Args:
             tool: Tool instance
             tool_input: Raw tool input text
-            
+
         Returns:
             Dictionary of parsed arguments
         """
@@ -737,11 +830,11 @@ class Agent(BaseModel):
 
     def _is_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> bool:
         """Check if the tool call is repeated.
-        
+
         Args:
             tool_name: Name of the tool
             arguments_with_values: Tool arguments
-            
+
         Returns:
             True if call is repeated, False otherwise
         """
@@ -767,7 +860,7 @@ class Agent(BaseModel):
 
     def _handle_no_tool_usage(self) -> ObserveResponseResult:
         """Handle the case where no tool usage is found in the response.
-        
+
         Returns:
             ObserveResponseResult with error message
         """
@@ -777,10 +870,10 @@ class Agent(BaseModel):
 
     def _handle_tool_not_found(self, tool_name: str) -> ObserveResponseResult:
         """Handle the case where the tool is not found.
-        
+
         Args:
             tool_name: Name of the tool
-            
+
         Returns:
             ObserveResponseResult with error message
         """
@@ -793,11 +886,11 @@ class Agent(BaseModel):
 
     def _handle_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> tuple[str, str]:
         """Handle the case where a tool call is repeated.
-        
+
         Args:
             tool_name: Name of the tool
             arguments_with_values: Tool arguments
-            
+
         Returns:
             Tuple of (executed_tool_name, error_message)
         """
@@ -812,10 +905,10 @@ class Agent(BaseModel):
 
     def _handle_tool_execution_failure(self, response: str) -> ObserveResponseResult:
         """Handle the case where tool execution fails.
-        
+
         Args:
             response: Error response
-            
+
         Returns:
             ObserveResponseResult with error message
         """
@@ -827,10 +920,10 @@ class Agent(BaseModel):
 
     def _handle_error(self, error: Exception) -> ObserveResponseResult:
         """Handle any exceptions that occur during response observation.
-        
+
         Args:
             error: Exception that occurred
-            
+
         Returns:
             ObserveResponseResult with error message
         """
@@ -845,13 +938,13 @@ class Agent(BaseModel):
         self, response: str, last_executed_tool: str, variable_name: str, iteration: int
     ) -> str:
         """Format the observation response with the given response, variable name, and iteration.
-        
+
         Args:
             response: Tool execution response
             last_executed_tool: Name of last executed tool
             variable_name: Name of variable storing response
             iteration: Current iteration number
-            
+
         Returns:
             Formatted observation response
         """
@@ -864,7 +957,7 @@ class Agent(BaseModel):
 
         tools_prompt = self._get_tools_names_prompt()
         variables_prompt = self._get_variable_prompt()
-        
+
         formatted_response = self._render_template(
             'observation_response_format.j2',
             iteration=iteration,
@@ -890,7 +983,7 @@ class Agent(BaseModel):
         """
         tools_prompt = self._get_tools_names_prompt()
         variables_prompt = self._get_variable_prompt()
-        
+
         prompt_task = self._render_template(
             'task_prompt.j2',
             task=task,
@@ -901,7 +994,7 @@ class Agent(BaseModel):
 
     def _get_tools_names_prompt(self) -> str:
         """Construct a detailed prompt that lists the available tools for task execution.
-        
+
         Returns:
             Formatted tools prompt
         """
@@ -910,7 +1003,7 @@ class Agent(BaseModel):
 
     def _get_variable_prompt(self) -> str:
         """Construct a prompt that explains how to use variables.
-        
+
         Returns:
             Formatted variables prompt
         """
@@ -919,7 +1012,7 @@ class Agent(BaseModel):
 
     def _calculate_context_occupancy(self) -> float:
         """Calculate the number of tokens in percentages for prompt and completion.
-        
+
         Returns:
             Percentage of context window occupied
         """
@@ -947,7 +1040,7 @@ class Agent(BaseModel):
 
     def update_model(self, new_model_name: str) -> None:
         """Update the model name and recreate the model instance.
-        
+
         Args:
             new_model_name: New model name to use
         """
@@ -956,98 +1049,86 @@ class Agent(BaseModel):
 
     def add_tool(self, tool: Tool) -> None:
         """Add a new tool to the agent's tool manager.
-        
+
         Args:
             tool: The tool instance to add
-            
+
         Raises:
             ValueError: If a tool with the same name already exists
         """
         if tool.name in self.tools.tool_names():
             raise ValueError(f"Tool with name '{tool.name}' already exists")
-            
+
         self.tools.add(tool)
-        # Update tools markdown in config
         self.config = AgentConfig(
             environment_details=self.config.environment_details,
             tools_markdown=self.tools.to_markdown(),
             system_prompt=self.config.system_prompt,
         )
         logger.debug(f"Added tool: {tool.name}")
-        
+
     def remove_tool(self, tool_name: str) -> None:
         """Remove a tool from the agent's tool manager.
-        
+
         Args:
             tool_name: Name of the tool to remove
-            
+
         Raises:
             ValueError: If tool doesn't exist or is TaskCompleteTool
         """
         if tool_name not in self.tools.tool_names():
             raise ValueError(f"Tool '{tool_name}' does not exist")
-            
+
         tool = self.tools.get(tool_name)
         if isinstance(tool, TaskCompleteTool):
             raise ValueError("Cannot remove TaskCompleteTool as it is required")
-            
+
         self.tools.remove(tool_name)
-        # Update tools markdown in config
         self.config = AgentConfig(
             environment_details=self.config.environment_details,
             tools_markdown=self.tools.to_markdown(),
             system_prompt=self.config.system_prompt,
         )
         logger.debug(f"Removed tool: {tool_name}")
-        
+
     def set_tools(self, tools: list[Tool]) -> None:
         """Set/replace all tools for the agent.
-        
+
         Args:
             tools: List of tool instances to set
-            
+
         Note:
             TaskCompleteTool will be automatically added if not present
         """
-        # Ensure TaskCompleteTool is present
         if not any(isinstance(t, TaskCompleteTool) for t in tools):
             tools.append(TaskCompleteTool())
-            
-        # Create new tool manager and add tools
+
         tool_manager = ToolManager()
         tool_manager.add_list(tools)
         self.tools = tool_manager
-        
-        # Update config with new tools markdown
+
         self.config = AgentConfig(
             environment_details=self.config.environment_details,
             tools_markdown=self.tools.to_markdown(),
             system_prompt=self.config.system_prompt,
         )
         logger.debug(f"Set {len(tools)} tools")
-        
+
     def _render_template(self, template_name: str, **kwargs) -> str:
         """Render a Jinja2 template with the provided variables.
-        
+
         Args:
             template_name: Name of the template file (without directory path)
             **kwargs: Variables to pass to the template
-            
+
         Returns:
             str: The rendered template
         """
         try:
-            # Get the directory where this file is located
             current_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-            
-            # Set up Jinja2 environment
             template_dir = current_dir / 'prompts'
             env = Environment(loader=FileSystemLoader(template_dir))
-            
-            # Load the template
             template = env.get_template(template_name)
-            
-            # Render the template with the provided variables
             return template.render(**kwargs)
         except Exception as e:
             logger.error(f"Error rendering template {template_name}: {str(e)}")

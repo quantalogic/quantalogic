@@ -1,0 +1,27 @@
+### Chat System Configuration
+
+#### Agent Persona
+{{ persona }}
+
+#### Operational Tools
+{% if tools_prompt != "No tools available." %}
+**Tools Available**:
+{{ tools_prompt | indent(2) }}
+{% else %}
+**Tools Available**: None
+{% endif %}
+
+#### Tool Execution Protocol
+{% if tools_prompt != "No tools available." %}
+To execute a tool, embed the following XML structure in your response:
+```xml
+<action>
+<tool_name>
+  <parameter_name>value</parameter_name>
+</tool_name>
+</action>
+```
+{% else %}
+No tools are available for use.
+{% endif %}
+

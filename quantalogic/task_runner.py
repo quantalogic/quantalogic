@@ -73,14 +73,7 @@ def interactive_task_runner(
     max_iterations: int,
     no_stream: bool,
 ) -> None:
-    """Run tasks interactively, asking the user if they want to continue after each task.
-
-    Args:
-        agent: The agent instance to use for solving tasks
-        console: Rich console instance for output
-        max_iterations: Maximum number of iterations per task
-        no_stream: Disable streaming output
-    """
+    """Run tasks interactively, asking the user if they want to continue after each task."""
     while True:
         logger.debug("Waiting for user input...")
         task_content = get_multiline_input(console).strip()
@@ -148,14 +141,7 @@ def task_runner(
     config: QLConfig,
     task: Optional[str],
 ) -> None:
-    """Execute a task with the QuantaLogic AI Assistant.
-
-    Args:
-        console: Rich console instance for output
-        file: Optional path to task file
-        config: QuantaLogic configuration object
-        task: Optional task string
-    """
+    """Execute a task or chat with the QuantaLogic AI Assistant."""
     switch_verbose(config.verbose, config.log)
 
     # Create the agent instance with the specified configuration
@@ -166,11 +152,55 @@ def task_runner(
         thinking_model_name=config.thinking_model_name,
         compact_every_n_iteration=config.compact_every_n_iteration,
         max_tokens_working_memory=config.max_tokens_working_memory,
+        chat_system_prompt=config.chat_system_prompt,
     )
 
     AgentRegistry.register_agent("main_agent", agent)
 
-    if file:
+    if config.mode == "chat":
+        console.print(f"[green]Entering chat mode with persona: {config.chat_system_prompt}[/green]")
+        console.print("[yellow]Type '/exit' to quit or '/clear' to reset memory.[/yellow]")
+
+        # Event handlers for chat mode
+        def handle_chat_start(*args, **kwargs):
+            start_spinner(console)
+            console.print("Assistant: ", end="")  # Prompt for streaming output
+
+        def handle_chat_response(*args, **kwargs):
+            stop_spinner(console)
+            console.print("")  # Newline after response
+
+        def handle_stream_chunk(event: str, data: str) -> None:
+            if current_spinner:
+                stop_spinner(console)
+            if data is not None:
+                console.print(data, end="", markup=False)
+
+        agent.event_emitter.on("chat_start", handle_chat_start)
+        agent.event_emitter.on("chat_response", handle_chat_response)
+        agent.event_emitter.on("stream_chunk", handle_stream_chunk)
+
+        while True:
+            user_input = console.input("You: ")
+            if user_input.lower() == "/exit":
+                console.print("[yellow]Exiting chat mode.[/yellow]")
+                break
+            elif user_input.lower() == "/clear":
+                agent.clear_memory()
+                console.print("[green]Chat memory cleared.[/green]")
+                continue
+            try:
+                response = agent.chat(user_input, streaming=not config.no_stream)
+                if not config.no_stream:
+                    # Streaming handled via events
+                    pass
+                else:
+                    console.print(f"Assistant: {response}")
+            except Exception as e:
+                stop_spinner(console)
+                console.print(f"[red]Error: {str(e)}[/red]")
+                logger.error(f"Chat error: {e}", exc_info=True)
+    elif file:
         task_content = get_task_from_file(file)
         # Execute single task from file
         logger.debug(f"Solving task with agent: {task_content}")
@@ -234,12 +264,6 @@ def task_runner(
                 "memory_summary",
             ]
 
-            # def ask_continue(event: str, data: any) -> None:
-            #    ## Ask for ctrl+return
-            #    if event == "task_think_end":
-            #        ## Wait return on the keyboard
-            #        input("Press [Enter] to continue...")
-
             # Add spinner control to event handlers
             def handle_task_think_start(*args, **kwargs):
                 start_spinner(console)
@@ -252,11 +276,6 @@ def task_runner(
                     stop_spinner(console)
                 if data is not None:
                     console.print(data, end="", markup=False)
-
-            # agent.event_emitter.on(
-            #    event="task_think_end",
-            #    listener=ask_continue,
-            # )
 
             agent.event_emitter.on(
                 event=events,
