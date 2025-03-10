@@ -106,10 +106,8 @@ class PrepareDownloadTool(Tool):
         )
         
         # Create the HTML link with embedded styles
-        html = f'''<a href="{url}" 
-            style="{style}" 
-            onmouseover="this.style.backgroundColor='#0066cc'; this.style.color='white';" 
-            onmouseout="this.style.backgroundColor='transparent'; this.style.color='#0066cc';" 
+        html = f'''Using this download functionnal download link : <a href="{url}" 
+            style="{style}"  
             download="{filename}">{text}</a>'''
             
         return html

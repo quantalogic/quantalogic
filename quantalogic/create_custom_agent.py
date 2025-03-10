@@ -136,6 +136,7 @@ TOOL_IMPORTS = {
     "input_question": lambda: _import_tool("quantalogic.tools.utilities", "InputQuestionTool"),
     "markitdown": lambda: _import_tool("quantalogic.tools.utilities", "MarkitdownTool"),
     "read_html": lambda: _import_tool("quantalogic.tools.utilities", "ReadHTMLTool"),
+    "oriented_llm_tool": lambda: _import_tool("quantalogic.tools.utilities", "OrientedLLMTool"),
     "presentation_llm": lambda: _import_tool("quantalogic.tools.presentation_tools", "PresentationLLMTool"),
     "sequence": lambda: _import_tool("quantalogic.tools.utilities", "SequenceTool"),
     "csv_processor": lambda: _import_tool("quantalogic.tools.utilities", "CSVProcessorTool"),
@@ -188,8 +189,9 @@ def create_custom_agent(
     tool_configs = {
         # LLM Tools with shared parameters
         "llm": lambda params: create_tool_instance(TOOL_IMPORTS["llm"](), **get_llm_params(params)),
+        "oriented_llm_tool": lambda params: create_tool_instance(TOOL_IMPORTS["oriented_llm_tool"](), **get_llm_params(params)),
         "llm_vision": lambda params: create_tool_instance(TOOL_IMPORTS["llm_vision"](),
-            model_name=params.get("vision_model_name") or vision_model_name,
+            model_name=params.get("vision_model_name") or "gpt-4-vision",
             on_token=console_print_token if not no_stream else None,
             event_emitter=event_emitter
         ) if vision_model_name else None,
@@ -356,26 +358,6 @@ def create_custom_agent(
                     logger.error(f"Failed to create tool {tool_type}: {str(e)}", exc_info=True)
             else:
                 logger.warning(f"Unknown tool type: {tool_type} - Skipping")
-
-    # Add download tool if any write tool is present
-    if has_write_tool:
-        try:
-            # Get the tool class first
-            download_tool_class = TOOL_IMPORTS["download_file_tool"]()
-            if download_tool_class:
-                # Create an instance with the name 'download'
-                download_tool = create_tool_instance(download_tool_class, name="download")
-                if download_tool:
-                    agent_tools.append(download_tool)
-                    logger.info("Added download tool automatically due to write tool presence")
-                else:
-                    logger.warning("Failed to instantiate download tool")
-            else:
-                logger.warning("Download tool class not found")
-        except ImportError as e:
-            logger.warning(f"Failed to load download tool: Required library missing - {str(e)}")
-        except Exception as e:
-            logger.error(f"Failed to add download tool: {str(e)}")
 
 
     # Create and return the agent

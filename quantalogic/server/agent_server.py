@@ -548,7 +548,7 @@ async def event_stream(request: Request, task_id: Optional[str] = None) -> Strea
                 except Empty:
                     # Send keepalive to maintain connection
                     yield ": keepalive\n\n"
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0)
 
                 if server_state.is_shutting_down:
                     yield 'event: shutdown\ndata: {"message": "Server shutting down"}\n\n'

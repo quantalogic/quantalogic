@@ -23,7 +23,7 @@ class CloneRepoTool(Tool):
         "Clones a Git repository (public or private) to a specified location. "
         "Automatically handles authentication for private repositories using the provided token."
     )
-    need_validation: bool = False
+    need_validation: bool = True
     auth_token: str = Field(default=None, description="GitHub authentication token for private repositories")
 
     def __init__(self, auth_token: str = None, **data):
