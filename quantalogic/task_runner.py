@@ -133,149 +133,17 @@ def run_chat_mode(agent, console: Console, config: QLConfig) -> None:
             # Get the response from the kwargs
             response_text = kwargs["response"]
             
-            # Check for our special delimiter format that separates tool calls from their results
-            separator = "__TOOL_RESULT_SEPARATOR__"
-            if separator in response_text:
-                # Split the response into tool call and result
-                parts = response_text.split(separator)
-                tool_call = parts[0].strip()
-                
-                # Extract the tool name and result from the second part
-                result_parts = parts[1].split("__", 1)
-                tool_name = result_parts[0] if len(result_parts) > 0 else "Unknown Tool"
-                tool_result = result_parts[1].strip() if len(result_parts) > 1 else ""
-                
-                # Process the tool call part
-                if "<action>" in tool_call and "</action>" in tool_call:
-                    # Extract the parts before, during, and after the action tag
-                    action_start = tool_call.find("<action>")
-                    action_end = tool_call.find("</action>") + len("</action>")
-                    
-                    before_action = tool_call[:action_start].strip()
-                    action_content = tool_call[action_start:action_end]
-                    after_action = tool_call[action_end:].strip()
-                    
-                    # Print any text before the tool call
-                    if before_action:
-                        console.print(before_action)
-                    
-                    # Extract tool name from the XML for better display
-                    xml_tool_name = "Unknown Tool"
-                    try:
-                        # Find the first tag after <action>
-                        start_tag = action_content.find("<", action_content.find("<action>") + 8)
-                        end_tag = action_content.find(">", start_tag)
-                        if start_tag > 0 and end_tag > 0:
-                            xml_tool_name = action_content[start_tag+1:end_tag].strip()
-                    except Exception:
-                        pass
-                    
-                    # Format and print the tool call in a more readable way
-                    console.print(f"[bold blue]🔧 Using Tool:[/bold blue] [bold cyan]{xml_tool_name}[/bold cyan]")
-                    
-                    # Format the XML content for better readability
-                    formatted_content = action_content
-                    try:
-                        # Simple indentation for nested XML tags
-                        lines = action_content.split('\n')
-                        formatted_lines = []
-                        for line in lines:
-                            line = line.strip()
-                            if line.startswith("</"):
-                                # Closing tag - reduce indentation
-                                indent = "  " * (formatted_lines[-1].count("  ") - 1) if formatted_lines else ""
-                                formatted_lines.append(f"{indent}{line}")
-                            elif line.startswith("<") and not line.startswith("<action>"):
-                                # Opening tag - increase indentation
-                                indent = "  " * (formatted_lines[-1].count("  ") + 1) if formatted_lines else "  "
-                                formatted_lines.append(f"{indent}{line}")
-                            else:
-                                formatted_lines.append(line)
-                        formatted_content = "\n".join(formatted_lines)
-                    except Exception:
-                        # If formatting fails, use original content
-                        pass
-                    
-                    # Display the formatted tool call in a panel
-                    console.print(Panel(formatted_content, style="cyan", border_style="blue", expand=False))
-                    
-                    # Print any text after the tool call
-                    if after_action:
-                        console.print(after_action)
-                
-                # Print the tool result
-                if tool_result:
-                    console.print(f"[bold green]📊 Result from[/bold green] [bold cyan]{tool_name}[/bold cyan][bold green]:[/bold green]")
-                    console.print(Panel(tool_result, style="green", border_style="green", expand=False))
-                
-                return
-            
-            # Handle legacy format (for backward compatibility)
-            elif "<action>" in response_text and "</action>" in response_text:
-                # Extract the tool call part and the rest of the response
-                action_start = response_text.find("<action>")
-                action_end = response_text.find("</action>") + len("</action>")
-                
-                # Get the parts before, during, and after the tool call
-                before_action = response_text[:action_start].strip()
-                action_content = response_text[action_start:action_end]
-                after_action = response_text[action_end:].strip()
-                
-                # Print the part before the tool call
-                if before_action:
-                    console.print(before_action)
-                
-                # Extract tool name for better display
-                tool_name = "Unknown Tool"
-                try:
-                    # Find the first tag after <action>
-                    start_tag = action_content.find("<", action_content.find("<action>") + 8)
-                    end_tag = action_content.find(">", start_tag)
-                    if start_tag > 0 and end_tag > 0:
-                        tool_name = action_content[start_tag+1:end_tag].strip()
-                except Exception:
-                    pass
-                
-                # Format and print the tool call in a more readable way
-                console.print(f"[bold blue]🔧 Using Tool:[/bold blue] [bold cyan]{tool_name}[/bold cyan]")
-                
-                # Format the XML content for better readability
-                formatted_content = action_content
-                try:
-                    # Simple indentation for nested XML tags
-                    lines = action_content.split('\n')
-                    formatted_lines = []
-                    for line in lines:
-                        line = line.strip()
-                        if line.startswith("</"):
-                            # Closing tag - reduce indentation
-                            indent = "  " * (formatted_lines[-1].count("  ") - 1) if formatted_lines else ""
-                            formatted_lines.append(f"{indent}{line}")
-                        elif line.startswith("<") and not line.startswith("<action>"):
-                            # Opening tag - increase indentation
-                            indent = "  " * (formatted_lines[-1].count("  ") + 1) if formatted_lines else "  "
-                            formatted_lines.append(f"{indent}{line}")
-                        else:
-                            formatted_lines.append(line)
-                    formatted_content = "\n".join(formatted_lines)
-                except Exception:
-                    # If formatting fails, use original content
-                    pass
-                
-                # Use a panel with a different style for the tool call
-                console.print(Panel(formatted_content, style="cyan", border_style="blue", expand=False))
-                
-                # Print the part after the tool call
-                if after_action:
-                    console.print(after_action)
-                
-                return
-            
-            # Regular response without tool calls
+            # Simply print the response text without special tool call handling
             console.print(response_text)
+
+    def handle_chat_end(*args, **kwargs):
+        # This function is intentionally empty as we're handling the prompt in the main loop
+        pass
 
     # Register chat-specific handlers
     agent.event_emitter.on("chat_start", handle_chat_start)
+    agent.event_emitter.on("chat_end", handle_chat_end)
+     
     agent.event_emitter.on("chat_response", handle_chat_response)
     
     # First clear any existing handlers to prevent duplicates
@@ -284,24 +152,34 @@ def run_chat_mode(agent, console: Console, config: QLConfig) -> None:
     # Register ONLY ONE stream handler for chat mode (fix for token duplication)
     agent.event_emitter.on("stream_chunk", create_stream_handler(console))
 
-    while True:
-        user_input = console.input("You: ")
-        if user_input.lower() == "/exit":
-            console.print("[yellow]Exiting chat mode.[/yellow]")
-            break
-        elif user_input.lower() == "/clear":
-            agent.clear_memory()
-            console.print("[green]Chat memory cleared.[/green]")
-            continue
-        
-        try:
-            response = agent.chat(user_input, streaming=not config.no_stream)
-            if not config.no_stream:
-                agent.event_emitter.once("chat_response", lambda *args, **kwargs: console.print(""))
-        except Exception as e:
-            stop_spinner(console)
-            console.print(f"[red]Error: {str(e)}[/red]")
-            logger.error(f"Chat error: {e}", exc_info=True)
+    try:
+        while True:
+            # Add a newline before the prompt for better readability, except on the first iteration
+            if agent.memory.memory and len(agent.memory.memory) > 1:  # Check if we have any conversation history
+                console.print("")
+            
+            user_input = console.input("You: ")
+            if user_input.lower() == "/exit":
+                console.print("[yellow]Exiting chat mode.[/yellow]")
+                # Emit the chat_end event before exiting
+                agent.event_emitter.emit("chat_end")
+                break
+            elif user_input.lower() == "/clear":
+                agent.clear_memory()
+                console.print("[green]Chat memory cleared.[/green]")
+                continue
+            
+            try:
+                response = agent.chat(user_input, streaming=not config.no_stream)
+                # No need to add an extra event handler for non-streaming mode
+            except Exception as e:
+                stop_spinner(console)
+                console.print(f"[red]Error: {str(e)}[/red]")
+                logger.error(f"Chat error: {e}", exc_info=True)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Chat interrupted. Exiting chat mode.[/yellow]")
+        # Emit the chat_end event when interrupted with Ctrl+C
+        agent.event_emitter.emit("chat_end")
 
 
 def run_file_mode(agent, console: Console, file: str, config: QLConfig) -> None:
@@ -526,6 +404,8 @@ def task_runner(
     # Dispatch to the appropriate mode runner
     if config.mode == "chat":
         run_chat_mode(agent, console, config)
+        # Print the final prompt with backslash when exiting chat mode
+        print("You:\\")
     elif file:
         run_file_mode(agent, console, file, config)
     elif task:
