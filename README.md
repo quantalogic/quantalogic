@@ -1,10 +1,7 @@
-# QuantaLogic 
-
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
+https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)](https://quantalogic.github.io/quantalogic/)
 
-Hey there, welcome to **QuantaLogic**—your cosmic toolkit for crafting AI agents and workflows that shine!  Whether you’re coding up a storm, automating a business process, or dreaming up something wild, QuantaLogic is here to make it happen. We’re talking **large language models (LLMs)** fused with a stellar toolset, featuring two powerhouse approaches: the **ReAct framework** for dynamic problem-solving and the dazzling new **Flow module** for structured brilliance.
+Hey there, welcome to **QuantaLogic**—your cosmic toolkit for crafting AI agents and workflows that shine! Whether you’re coding up a storm, automating a business process, chatting with a clever assistant, or dreaming up something wild, QuantaLogic is here to make it happen. We’re talking **large language models (LLMs)** fused with a stellar toolset, featuring three powerhouse approaches: the **ReAct framework** for dynamic problem-solving, the dazzling new **Flow module** for structured brilliance, and a shiny **Chat mode** for conversational magic with tool-calling capabilities.
 
 Picture this: a CLI that’s as easy as a snap, a Python API that’s pure magic, and a framework that scales from quick hacks to galactic enterprises. Ready to launch? Let’s blast off! 
 
@@ -19,7 +16,7 @@ Picture this: a CLI that’s as easy as a snap, a Python API that’s pure magic
 
 ## Why QuantaLogic? 
 
-At [QuantaLogic](https://www.quantalogic.app), we spotted a black hole: amazing AI models from OpenAI, Anthropic, and DeepSeek weren’t fully lighting up real-world tasks. Our mission? Ignite that spark! We’re here to make generative AI a breeze for developers, businesses, and dreamers alike—turning ideas into action, one brilliant solution at a time.
+At [QuantaLogic](https://www.quantalogic.app), we spotted a black hole: amazing AI models from OpenAI, Anthropic, and DeepSeek weren’t fully lighting up real-world tasks. Our mission? Ignite that spark! We’re here to make generative AI a breeze for developers, businesses, and dreamers alike—turning ideas into action, one brilliant solution at a time, whether through task-solving, structured workflows, or natural conversation.
 
 > "AI should be your co-pilot, not a puzzle. QuantaLogic makes it happen—fast, fun, and fearless!"
 
@@ -29,6 +26,7 @@ At [QuantaLogic](https://www.quantalogic.app), we spotted a black hole: amazing 
 
 - **ReAct Framework**: Reasoning + action = unstoppable agents! 
 - **Flow Module**: Structured workflows that flow like a river. 
+- **Chat Mode**: Conversational brilliance with tool-calling powers.
 - **LLM Galaxy**: Tap into OpenAI, DeepSeek, and more via LiteLLM. 
 - **Secure Tools**: Docker-powered safety for code and files. 
 - **Live Monitoring**: Watch it unfold with a web interface and SSE. 
@@ -45,8 +43,10 @@ At [QuantaLogic](https://www.quantalogic.app), we spotted a black hole: amazing 
 - [Quick Start](#quick-start)
 - [ReAct Framework: Dynamic Agents](#react-framework-dynamic-agents)
 - [Flow Module: Structured Workflows](#flow-module-structured-workflows)
-  - 📘 **[Workflow YAML DSL Specification](./quantalogic/flow/flow_yaml.md)**: Comprehensive guide to defining powerful, structured workflows using our Domain-Specific Languag
-- [ReAct vs. Flow: Pick Your Power](#react-vs-flow-pick-your-power)
+  - 📘 **[Workflow YAML DSL Specification](./quantalogic/flow/flow_yaml.md)**: Comprehensive guide to defining powerful, structured workflows using our Domain-Specific Language
+  - 📚 **[Flow YAML Documentation](./quantalogic/flow/flow_yaml)**: Dive into the official documentation for a deeper understanding of Flow YAML and its applications
+- [Chat Mode: Conversational Power](#chat-mode-conversational-power)
+- [ReAct vs. Flow vs. Chat: Pick Your Power](#react-vs-flow-vs-chat-pick-your-power)
 - [Using the CLI](#using-the-cli)
 - [Examples That Spark Joy](#examples-that-spark-joy)
 - [Core Components](#core-components)
@@ -98,6 +98,12 @@ quantalogic task "Write a Python function for Fibonacci numbers"
 ```
 > Boom! ReAct whips up a solution in seconds.
 
+### CLI: Chat Mode
+```bash
+quantalogic chat --persona "You are a witty space explorer" "Tell me about Mars with a search"
+```
+> Chat mode engages, uses tools if needed, and delivers a conversational response!
+
 ### Python: ReAct Agent
 ```python
 from quantalogic import Agent
@@ -108,8 +114,17 @@ print(result)
 # Output: "def fib(n): return [0, 1] if n <= 2 else fib(n-1) + [fib(n-1)[-1] + fib(n-1)[-2]]"
 ```
 
-### Synchronous Agent Example 
+### Python: Chat Mode
+```python
+from quantalogic import Agent
 
+agent = Agent(model_name="gpt-4o", chat_system_prompt="You are a friendly guide")
+response = agent.chat("What's the weather like in Tokyo?")
+print(response)
+# Engages in conversation, potentially calling a weather tool if configured
+```
+
+### Synchronous Agent Example 
 ```python
 from quantalogic import Agent
 
@@ -126,7 +141,6 @@ print(result)
 ```
 
 ### Async Agent Example 🌊
-
 ```python
 import asyncio
 from quantalogic import Agent
@@ -350,9 +364,6 @@ print(result["chapter"])
 ```
 
 ### Example: Story Generator Agent
-
-Here's a more complex example showing a complete story generation workflow using the Flow module:
-
 ```python
 from typing import List
 import anyio
@@ -449,22 +460,72 @@ Think content pipelines, automation flows, or any multi-step task that needs ord
 
 ---
 
-## ReAct vs. Flow: Pick Your Power 
+## Chat Mode: Conversational Power 
 
-Both are stellar, but here’s the scoop:
+The **Chat mode** is your conversational companion—engaging, flexible, and tool-savvy. Built on the same robust ReAct foundation, it lets you chat naturally with an AI persona while seamlessly integrating tool calls when needed. Perfect for interactive dialogues or quick queries with a dash of utility.
 
-| Feature             | ReAct Framework | Flow Module                 |
-|---------------------|--------------------------------|--------------------------------|
-| **Vibe**           | Free-spirited, adaptive        | Organized, predictable         |
-| **Flow**           | Loops ‘til it’s solved         | Follows a roadmap              |
-| **Sweet Spot**     | Creative chaos (coding, Q&A)   | Steady workflows (pipelines)   |
-| **State**          | Memory keeps it loose          | Nodes lock it down             |
-| **Tools**          | Grabbed as needed              | Baked into nodes               |
-| **Watch It**       | Events like `task_complete`    | Observers like `NODE_STARTED`  |
+### How It Works
+1. **You Chat**: "What’s the weather like today?"
+2. **It Responds**: Engages conversationally, deciding if a tool (like a weather lookup) is needed.
+3. **Tool Magic**: If required, it calls tools using the same XML-based system as ReAct, then weaves the results into the conversation.
+4. **Keeps Going**: Maintains context for a smooth, flowing chat.
+
+### Example: CLI Chat with Tool Call
+```bash
+quantalogic chat --persona "You are a helpful travel guide" "Find me flights to Paris"
+```
+> The agent chats back: "Looking up flights to Paris… Here are some options from a search tool: [flight details]. Anything else I can help with?"
+
+### Example: Python Chat with Tool Call
+```python
+from quantalogic import Agent
+from quantalogic.tools import DuckDuckGoSearchTool
+
+agent = Agent(
+    model_name="gpt-4o",
+    chat_system_prompt="You are a curious explorer",
+    tools=[DuckDuckGoSearchTool()]
+)
+response = agent.chat("Tell me about the tallest mountain")
+print(response)
+# Might output: "I’ll look that up! The tallest mountain is Mount Everest, standing at 8,848 meters, according to a quick search."
+```
+
+### Tool Integration
+Chat mode uses the same tool-calling mechanism as ReAct:
+```xml
+<action>
+<duckduckgo_tool>
+  <query>tallest mountain</query>
+  <max_results>5</max_results>
+</duckduckgo_tool>
+</action>
+```
+- Tools are auto-executed (configurable with `--auto-tool-call`) and results are formatted naturally.
+- Prioritize specific tools with `--tool-mode` (e.g., `search` or `code`).
+
+### Why It’s Awesome
+Ideal for casual chats, quick info lookups, or interactive assistance with tool-powered precision—without the rigid task-solving structure of ReAct.
+
+---
+
+## ReAct vs. Flow vs. Chat: Pick Your Power 
+
+All three modes are stellar, but here’s the scoop:
+
+| Feature             | ReAct Framework          | Flow Module              | Chat Mode                |
+|---------------------|--------------------------|--------------------------|--------------------------|
+| **Vibe**           | Free-spirited, adaptive  | Organized, predictable   | Conversational, flexible |
+| **Flow**           | Loops ‘til it’s solved   | Follows a roadmap        | Flows with the chat      |
+| **Sweet Spot**     | Creative chaos (coding, Q&A) | Steady workflows (pipelines) | Casual chats, quick queries |
+| **State**          | Memory keeps it loose    | Nodes lock it down       | Context keeps it flowing |
+| **Tools**          | Grabbed as needed        | Baked into nodes         | Called when relevant     |
+| **Watch It**       | Events like `task_complete` | Observers like `NODE_STARTED` | Events like `chat_response` |
 
 ### When to Choose
 - **ReAct**: Code on-the-fly, explore answers, debug like a pro.
 - **Flow**: Build a pipeline, automate a process, keep it tight.
+- **Chat**: Converse naturally, get quick answers, use tools on demand.
 
 ---
 
@@ -492,6 +553,10 @@ Use a `.env` file or export these variables in your shell for seamless integrati
   ```bash
   quantalogic task "Summarize this file" --file notes.txt
   ```
+- **`chat`**: Start a conversation.
+  ```bash
+  quantalogic chat --persona "You are a tech guru" "What’s new in AI?"
+  ```
 - **`list-models`**: List supported LiteLLM models with optional fuzzy search.
   ```bash
   quantalogic list-models --search "gpt"
@@ -506,14 +571,17 @@ Use a `.env` file or export these variables in your shell for seamless integrati
   - `deepseek/deepseek-reasoner`
   - `openrouter/deepseek/deepseek-r1`
   - `openrouter/openai/gpt-4o`
-- **`--mode [code|basic|interpreter|full|code-basic|search|search-full]`**: Agent mode
+- **`--mode [code|basic|interpreter|full|code-basic|search|search-full|chat]`**: Agent mode
 - **`--vision-model-name TEXT`**: Specify the vision model to use (litellm format)
 - **`--log [info|debug|warning]`**: Set logging level
 - **`--verbose`**: Enable verbose output
-- **`--max-iterations INTEGER`**: Maximum number of iterations (default: 30)
+- **`--max-iterations INTEGER`**: Maximum number of iterations (default: 30, task mode only)
 - **`--max-tokens-working-memory INTEGER`**: Set the maximum tokens allowed in working memory
 - **`--compact-every-n-iteration INTEGER`**: Set the frequency of memory compaction
 - **`--thinking-model TEXT`**: The thinking model to use
+- **`--persona TEXT`**: Set the chat persona (chat mode only)
+- **`--tool-mode TEXT`**: Prioritize a tool or toolset (chat mode only)
+- **`--auto-tool-call`**: Enable/disable auto tool execution (chat mode only, default: True)
 - **`--version`**: Show version information
 
 > **Tip**: Run `quantalogic --help` for the complete command reference!
@@ -558,6 +626,12 @@ quantalogic task "Solve 2x + 5 = 15"
 ```
 > Output: "Let’s solve it! 2x + 5 = 15 → 2x = 10 → x = 5. Done!"
 
+### Bonus: Chat Query
+```bash
+quantalogic chat "Search for the latest AI breakthroughs"
+```
+> Output: "I’ll dig into that! Here’s what I found with a search: [latest AI news]. Pretty cool, right?"
+
 ---
 
 ## Core Components 
@@ -570,6 +644,11 @@ quantalogic task "Solve 2x + 5 = 15"
 ### Flow Workflows
 - **Nodes**: Your task blocks.
 - **Engine**: The maestro of execution.
+
+### Chat Mode
+- **Persona**: Customizable conversational style.
+- **Tools**: Integrated seamlessly via ReAct’s system.
+- **Context**: Keeps the conversation flowing.
 
 ### Tools Arsenal
 - **Code**: `PythonTool`, `NodeJsTool`.
@@ -629,9 +708,6 @@ result = weather_tool.execute(city="New York")  # Execute as a tool
 ```
 
 #### Using Custom Tools with ReAct Agent
-
-Here's how to integrate custom tools with a ReAct Agent:
-
 ```python
 from quantalogic import Agent
 from quantalogic.tools import create_tool, PythonTool
@@ -670,7 +746,26 @@ result = agent.solve_task(
 print(result)
 ```
 
-In this example, the agent can seamlessly use both the standard `PythonTool` and your custom stock price lookup tool to complete the task.
+#### Using Custom Tools in Chat Mode
+```python
+from quantalogic import Agent
+from quantalogic.tools import create_tool
+
+# Reuse the stock price tool
+stock_tool = create_tool(get_stock_price)
+
+# Create a chat agent
+agent = Agent(
+    model_name="gpt-4o",
+    chat_system_prompt="You are a financial advisor",
+    tools=[stock_tool]
+)
+
+# Chat with tool usage
+response = agent.chat("What’s the price of Microsoft stock?")
+print(response)
+# Might output: "Let me check that for you! MSFT is currently trading at $425.27."
+```
 
 Key features of `create_tool()`:
 - 🔧 Automatically converts functions to Tools
@@ -745,4 +840,4 @@ export LM_STUDIO_API_KEY="lm-your-key"
 
 ## Final Boost 
 
-QuantaLogic is your ticket to AI awesomeness. Install it, play with it, and let’s build something unforgettable together! 
+QuantaLogic is your ticket to AI awesomeness. Install it, play with it—whether solving tasks, crafting workflows, or chatting up a storm—and let’s build something unforgettable together! 

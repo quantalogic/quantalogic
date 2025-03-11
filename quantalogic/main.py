@@ -16,7 +16,6 @@ from quantalogic.version import get_version
 # Load environment variables from .env file
 load_dotenv()
 
-
 # Configure logger
 logger.remove()
 
@@ -45,7 +44,7 @@ except ImportError as e:
     termios = None
     tty = None
 
-AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic", "search", "search-full"]
+AGENT_MODES = ["code", "basic", "interpreter", "full", "code-basic", "search", "search-full", "chat"]  # Added "chat"
 
 
 def setup_terminal():
@@ -104,7 +103,7 @@ def restore_terminal(old_settings):
     help="Set logging level (info/debug/warning).",
 )
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
-@click.option("--mode", type=click.Choice(AGENT_MODES), default="basic", help="Agent mode (code/search/full).")
+@click.option("--mode", type=click.Choice(AGENT_MODES), default="basic", help="Agent mode (code/search/full/chat).")
 @click.option(
     "--vision-model-name",
     default=None,
@@ -170,6 +169,7 @@ def cli(
             max_tokens_working_memory=max_tokens_working_memory,
             no_stream=False,  # Default value for backward compatibility
             thinking_model_name=thinking_model,
+            chat_system_prompt=None,  # Default to None for non-chat modes
         )
         ctx.invoke(
             task,
@@ -193,7 +193,7 @@ def cli(
     help='Specify the model to use (litellm format, e.g. "openrouter/deepseek/deepseek-chat").',
 )
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
-@click.option("--mode", type=click.Choice(AGENT_MODES), default="basic", help="Agent mode (code/search/full).")
+@click.option("--mode", type=click.Choice(AGENT_MODES), default="basic", help="Agent mode (code/search/full/chat).")
 @click.option(
     "--log",
     type=click.Choice(["info", "debug", "warning"]),
@@ -263,6 +263,7 @@ def task(
             max_tokens_working_memory=max_tokens_working_memory,
             no_stream=no_stream,
             thinking_model_name=thinking_model,
+            chat_system_prompt=None  # Default to None for task command
         )
 
         task_runner(
@@ -302,6 +303,81 @@ def list_models(search: Optional[str] = None):
 
     for model in sorted(models):
         console.print(f"- {model}")
+
+
+@cli.command()
+@click.option(
+    "--persona",
+    default="You are a friendly, helpful AI assistant.",
+    help="Specify the persona for chat mode (e.g., 'You are a witty pirate AI')."
+)
+@click.option(
+    "--model-name",
+    default=MODEL_NAME,
+    help='Specify the model to use (litellm format, e.g. "openai/gpt-4o-mini").',
+)
+@click.option(
+    "--log",
+    type=click.Choice(["info", "debug", "warning"]),
+    default="info",
+    help="Set logging level (info/debug/warning).",
+)
+@click.option("--verbose", is_flag=True, help="Enable verbose output.")
+@click.option(
+    "--vision-model-name",
+    default=None,
+    help='Specify the vision model to use (litellm format, e.g. "openrouter/openai/gpt-4o-mini").',
+)
+@click.option(
+    "--no-stream",
+    is_flag=True,
+    help="Disable streaming output (default: streaming enabled).",
+)
+@click.option(
+    "--tool-mode",
+    type=str,
+    default=None,
+    help="Specify a tool or toolset to use in chat mode (e.g., 'search', 'code', or a specific tool name).",
+)
+@click.option(
+    "--auto-tool-call",
+    is_flag=True,
+    default=True,
+    help="Enable automatic tool execution and interpretation in chat mode (default: True).",
+)
+def chat(
+    persona: str,
+    model_name: str,
+    log: str,
+    verbose: bool,
+    vision_model_name: str | None,
+    no_stream: bool,
+    tool_mode: Optional[str],
+    auto_tool_call: bool,
+) -> None:
+    """Start a conversational chat with the QuantaLogic agent."""
+    console = Console()
+    config = QLConfig(
+        model_name=model_name,
+        verbose=verbose,
+        mode="chat",
+        log=log,
+        vision_model_name=vision_model_name,
+        max_iterations=1,  # Chat mode doesn't need iterations
+        compact_every_n_iteration=None,
+        max_tokens_working_memory=None,
+        no_stream=no_stream,
+        thinking_model_name="default",
+        chat_system_prompt=persona,
+        tool_mode=tool_mode,
+        auto_tool_call=auto_tool_call,
+    )
+    try:
+        task_runner(console, None, config, None)
+    except Exception as e:
+        console.print(f"[red]Error in chat mode: {str(e)}[/red]")
+        logger.error(f"Error in chat execution: {e}", exc_info=True)
+        sys.exit(1)
 
 
 def main():
