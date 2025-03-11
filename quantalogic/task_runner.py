@@ -52,12 +52,17 @@ def switch_verbose(verbose_mode: bool, log_level: str = "info") -> None:
     logger.debug(f"litellm verbose mode set to: {verbose_mode}")
 
 
-def start_spinner(console: Console) -> None:
-    """Start the thinking spinner."""
+def start_spinner(console: Console, message: str = "[yellow]Thinking...[/yellow]") -> None:
+    """Start the spinner with a custom message.
+    
+    Args:
+        console: The Rich console instance
+        message: Custom message to display with the spinner (default: "Thinking...")
+    """
     global current_spinner
     with spinner_lock:
         if current_spinner is None:
-            current_spinner = console.status("[yellow]Thinking...", spinner="dots")
+            current_spinner = console.status(message, spinner="dots")
             current_spinner.start()
 
 
@@ -124,11 +129,13 @@ def run_chat_mode(agent, console: Console, config: QLConfig) -> None:
 
     # Event handlers specific to chat mode
     def handle_chat_start(*args, **kwargs):
-        start_spinner(console)
+        start_spinner(console) # Uses default "Thinking..." message
         console.print("Assistant: ", end="")
 
     def handle_chat_response(*args, **kwargs):
+        # Always stop any active spinner (whether from tool execution or thinking)
         stop_spinner(console)
+        
         if "response" in kwargs:
             # Get the response from the kwargs
             response_text = kwargs["response"]
@@ -139,12 +146,28 @@ def run_chat_mode(agent, console: Console, config: QLConfig) -> None:
     def handle_chat_end(*args, **kwargs):
         # This function is intentionally empty as we're handling the prompt in the main loop
         pass
+        
+    def handle_tool_execution_start(*args, **kwargs):
+        # Print a newline before tool execution starts
+        console.print("\n")
+        # Start a spinner to indicate tool execution is in progress
+        tool_name = kwargs.get("tool_name", "tool")
+        start_spinner(console, f"[yellow]Executing {tool_name}...[/yellow]")
+        
+    def handle_tool_execution_end(*args, **kwargs):
+        # Stop the tool execution spinner
+        stop_spinner(console)
+        # Start a thinking spinner to indicate the agent is processing the tool results
+        start_spinner(console, "[yellow]Processing tool results...[/yellow]")
 
     # Register chat-specific handlers
     agent.event_emitter.on("chat_start", handle_chat_start)
     agent.event_emitter.on("chat_end", handle_chat_end)
-     
     agent.event_emitter.on("chat_response", handle_chat_response)
+    
+    # Register tool execution handlers for newlines
+    agent.event_emitter.on("tool_execution_start", handle_tool_execution_start)
+    agent.event_emitter.on("tool_execution_end", handle_tool_execution_end)
     
     # First clear any existing handlers to prevent duplicates
     agent.event_emitter.clear("stream_chunk")
@@ -171,7 +194,10 @@ def run_chat_mode(agent, console: Console, config: QLConfig) -> None:
             
             try:
                 response = agent.chat(user_input, streaming=not config.no_stream)
-                # No need to add an extra event handler for non-streaming mode
+                # For non-streaming mode, we need to manually emit the chat_response event
+                # since it won't be triggered by the streaming handler
+                if config.no_stream and response:
+                    agent.event_emitter.emit("chat_response", response=response)
             except Exception as e:
                 stop_spinner(console)
                 console.print(f"[red]Error: {str(e)}[/red]")

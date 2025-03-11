@@ -329,9 +329,9 @@ class EventEmitter:
         """
         with self._lock:
             return {
-                "wildcard_listeners": [(l.__name__, p, m) for l, p, m in self._wildcard_listeners],
+                "wildcard_listeners": [(listener.__name__, p, m) for listener, p, m in self._wildcard_listeners],
                 "event_listeners": {
-                    evt: [(l.__name__, p, m) for l, p, m in listeners] for evt, listeners in self._listeners.items()
+                    evt: [(listener.__name__, p, m) for listener, p, m in listeners] for evt, listeners in self._listeners.items()
                 },
             }
 
