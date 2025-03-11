@@ -51,6 +51,8 @@ boto3 = "^1.37.7"
 docx = "^0.2.4"
 aiohttp = "^3.11.13"
 aiofiles = "^24.1.0"
+asciinema = "^2.4.0"
+browser-use = "^0.1.40"
 
 [tool.poetry.group.git-tools]
 optional = false
