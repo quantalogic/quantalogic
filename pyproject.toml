@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic"
-version = "0.59.0"
+version = "0.59.1"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
@@ -148,7 +148,7 @@ pandas = "^2.2.3"
 ta = "^0.11.0"
 nbformat = "^5.10.4"
 bibtexparser = "^1.4.3"
-python-levenshtein = "^0.26.1"
+python-Levenshtein = "^0.26.1"
 
 # Development dependencies
 [tool.poetry.group.dev]
