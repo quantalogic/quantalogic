@@ -640,13 +640,14 @@ class Agent(BaseModel):
                 response = tool.execute(**converted_args)
                 
             # Post-process tool response if needed
-            response = self._post_process_tool_response(tool_name, response)
+            if (tool.need_post_process):
+                response = self._post_process_tool_response(tool_name, response) 
                     
             executed_tool = tool.name
         except Exception as e:
             response = f"Error executing tool: {tool_name}: {str(e)}\n"
             executed_tool = ""
-
+ 
         self._emit_event(
             "tool_execution_end", {"tool_name": tool_name, "arguments": arguments_with_values, "response": response}
         )

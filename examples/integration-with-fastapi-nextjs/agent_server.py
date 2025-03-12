@@ -367,6 +367,13 @@ async def submit_task(request: TaskSubmission) -> Dict[str, str]:
     asyncio.create_task(agent_state.execute_task(task_id))
     return {"task_id": task_id}
 
+@app.post("/api/agent/chat")
+async def submit_chat(request: TaskSubmission) -> Dict[str, str]:
+    """Submit a new chat and return its ID."""
+    chat_id = await agent_state.submit_task(request)
+    # Start chat execution in background
+    asyncio.create_task(agent_state.execute_chat(chat_id))
+    return {"task_id": chat_id}
 
 @app.get("/api/agent/tasks/{task_id}")
 async def get_task_status(task_id: str) -> TaskStatus:
