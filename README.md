@@ -1,4 +1,4 @@
-https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
+
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)](https://quantalogic.github.io/quantalogic/)
 
 Hey there, welcome to **QuantaLogic**—your cosmic toolkit for crafting AI agents and workflows that shine! Whether you’re coding up a storm, automating a business process, chatting with a clever assistant, or dreaming up something wild, QuantaLogic is here to make it happen. We’re talking **large language models (LLMs)** fused with a stellar toolset, featuring three powerhouse approaches: the **ReAct framework** for dynamic problem-solving, the dazzling new **Flow module** for structured brilliance, and a shiny **Chat mode** for conversational magic with tool-calling capabilities.
