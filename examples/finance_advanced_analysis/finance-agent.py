@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run
+#!/usr/bin/env uv run
 
 # /// script
 # requires-python = ">=3.12"
@@ -9,30 +9,26 @@
 #     "plotly",
 #     "quantalogic",
 #     "loguru",
+#     "typer",
 # ]
 # ///
 
 import html
-import json
-from datetime import datetime
-from io import StringIO
-from typing import Optional, Dict, List
-from pathlib import Path
 import os
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
 
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
+import typer
 from loguru import logger
 
-from quantalogic import Agent
-from quantalogic.tools import DuckDuckGoSearchTool, SerpApiSearchTool, Tool, ToolArgument, LLMTool
-
 from examples.finance_advanced_analysis.technical_analysis import TechnicalAnalysisTool
-from examples.finance_advanced_analysis.yahoo_finance import YFinanceTool
 from examples.finance_advanced_analysis.visualize import VisualizationTool
+from examples.finance_advanced_analysis.yahoo_finance import YFinanceTool
+from quantalogic import Agent
+from quantalogic.tools import DuckDuckGoSearchTool, LLMTool, SerpApiSearchTool, Tool, ToolArgument
 
 # Configure logger
 logger.add("finance_agent.log", rotation="500 MB")
@@ -140,8 +136,10 @@ def save_analysis(query: str, result: str) -> None:
         # Update analysis history in session state
         if "analysis_history" not in st.session_state:
             st.session_state.analysis_history = []
+        formatted_time = datetime.strptime(timestamp, "%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
         st.session_state.analysis_history.append({
             "timestamp": timestamp,
+            "formatted_time": formatted_time,
             "query": query,
             "result": result,
             "filename": filename
@@ -160,7 +158,7 @@ def load_analysis_history() -> List[Dict]:
             
         history = []
         for file in sorted(analyses_dir.glob("analysis_*.md"), reverse=True):
-            with open(file, "r") as f:
+            with open(file) as f:
                 content = f.read()
                 query_section = content.split("# Results")[0].replace("# Analysis Query\n", "").strip()
                 result_section = content.split("# Results")[1].strip()
@@ -180,7 +178,7 @@ def load_analysis_history() -> List[Dict]:
         logger.error(f"Error loading analysis history: {str(e)}")
         return []
 
-def create_sidebar() -> None:
+def create_sidebar(model_name: str) -> None:
     """Create and populate the sidebar with controls and examples"""
     with st.sidebar:
         st.header("📊 Analysis Controls")
@@ -214,7 +212,7 @@ def create_sidebar() -> None:
         for query in example_queries:
             if st.button(query, key=f"example_{query}", use_container_width=True):
                 st.session_state.example_query = query
-                st.experimental_rerun()
+                st.rerun()
 
         st.markdown("---")
         st.markdown("### 🎯 Pro Tips")
@@ -224,6 +222,10 @@ def create_sidebar() -> None:
         - Ask for technical indicators
         - Request market sentiment
         """)
+        
+        # Display model information
+        st.markdown("---")
+        st.info(f"🤖 Using model: {model_name}")
 
 def handle_stream_chunk(event: str, data: Optional[str] = None) -> None:
     """Handle streaming token chunks with proper formatting and display"""
@@ -258,7 +260,9 @@ def track_events(event: str, data: Optional[Dict] = None) -> None:
                 del st.session_state.response
 
 def initialize_agent(model_name: str) -> Agent:
-    """Initialize the AI agent with necessary tools"""
+    """Initialize the AI agent with necessary tools using the specified model"""
+    logger.info(f"Initializing agent with model: {model_name}")
+    
     agent = Agent(
         model_name=model_name,
         tools=[
@@ -284,12 +288,13 @@ def initialize_agent(model_name: str) -> Agent:
     agent.event_emitter.on(["stream_chunk"], handle_stream_chunk)
     return agent
 
-def main() -> None:
-    """Main application entry point"""
+def run_app(model_name: str) -> None:
+    """Run the Streamlit application with the specified model"""
     try:
-        # model_name = "deepseek/deepseek-chat"
-        model_name = "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
-        #model_name = "openrouter/deepseek/deepseek-chat"
+        logger.info(f"Starting application with model: {model_name}")
+        
+        # Store model name in session state for consistency
+        st.session_state.model_name = model_name
         
         setup_page_config()
         apply_custom_styles()
@@ -302,10 +307,10 @@ def main() -> None:
             st.title("🚀 QUANTALOGIC : Finance Suite Pro")
             st.markdown("*Your AI-Powered Financial Analysis Platform*")
 
-        create_sidebar()
+        create_sidebar(model_name)
 
-        # Initialize agent
-        if "agent" not in st.session_state:
+        # Initialize agent with specified model
+        if "agent" not in st.session_state or st.session_state.agent.model_name != model_name:
             st.session_state.agent = initialize_agent(model_name)
 
         # Main chat interface
@@ -317,7 +322,7 @@ def main() -> None:
             del st.session_state.example_query
 
         if query:
-            logger.info(f"Processing query: {query}")
+            logger.info(f"Processing query: {query} with model: {model_name}")
             
             # Clear previous state
             for key in ["response", "chunk_container"]:
@@ -329,6 +334,9 @@ def main() -> None:
                     with st.container():
                         st.markdown("#### 🎯 Query")
                         st.info(query)
+                        
+                        logger.info(f"Solving task with model: {model_name}")
+                        st.sidebar.info(f"🔍 Analyzing with model: {model_name}")
                         
                         result = st.session_state.agent.solve_task(f"User query: {query}\n")
                         logger.info("Analysis completed successfully")
@@ -347,24 +355,36 @@ def main() -> None:
                             st.markdown("Detailed technical analysis and additional insights will appear here when available.")
 
                 except Exception as e:
-                    logger.error(f"Error during analysis: {str(e)}")
+                    logger.error(f"Error during analysis with model {model_name}: {str(e)}")
                     st.error("🚨 Analysis Error")
                     with st.expander("Error Details"):
                         st.exception(e)
 
-            del st.session_state.agent
-
     except Exception as e:
-        logger.error(f"Application error: {str(e)}")
+        logger.error(f"Application error with model {model_name}: {str(e)}")
         st.error("🚨 Application Error")
         st.exception(e)
 
-if __name__ == "__main__":
-    import sys
+def main(model_name: str = typer.Option(
+        "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0", 
+        "--model", 
+        "-m", 
+        help="Model name to use for the AI agent. Examples: 'deepseek/deepseek-chat', 'bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0'"
+    )) -> None:
+    """Finance Suite Pro - AI-Powered Financial Analysis Platform
+    
+    Run this application with a specific AI model.
+    """
     import streamlit.web.cli as stcli
-
+    
+    # Store model name in environment for consistency
+    os.environ["FINANCE_AGENT_MODEL"] = model_name
+    
     if st.runtime.exists():
-        main()
+        run_app(model_name)
     else:
-        sys.argv = ["streamlit", "run", __file__]
-        sys.exit(stcli.main())
+        sys.argv = ["streamlit", "run", __file__, "--", "--model", model_name]
+        stcli.main()
+
+if __name__ == "__main__":
+    typer.run(main)

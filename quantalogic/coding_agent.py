@@ -15,7 +15,7 @@ from quantalogic.tools import (
     ReadHTMLTool,
     ReplaceInFileTool,
     RipgrepTool,
-    SearchDefinitionNames,
+    SearchDefinitionNamesTool,
     TaskCompleteTool,
     WriteFileTool,
 )
@@ -71,7 +71,7 @@ def create_coding_agent(
         # Code navigation and search tools
         ListDirectoryTool(),  # Lists directory contents
         RipgrepTool(),  # Searches code with regex
-        SearchDefinitionNames(),  # Finds code definitions
+        SearchDefinitionNamesTool(),  # Finds code definitions
         # Specialized language model tools
         ReadFileTool(),
         ExecuteBashCommandTool(),
