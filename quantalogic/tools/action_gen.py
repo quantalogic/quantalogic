@@ -1,12 +1,12 @@
 import asyncio
-from functools import partial
-from typing import Callable, Dict, List
+from typing import List
 
 import litellm
 import typer
 from loguru import logger
 
 from quantalogic.tools.tool import Tool, ToolArgument
+from quantalogic.utils.python_interpreter import interpret_code
 
 # Configure loguru to log to a file with rotation
 logger.add("action_gen.log", rotation="10 MB", level="DEBUG")
@@ -168,7 +168,7 @@ async def generate_core(task: str, model: str, max_tokens: int):
     typer.echo(typer.style("Generated Python Program:", fg=typer.colors.GREEN, bold=True))
     typer.echo(program)
     
-    # Attempt to execute the program asynchronously
+    # Attempt to execute the program using the safe interpreter
     typer.echo("\n" + typer.style("Executing the program:", fg=typer.colors.GREEN, bold=True))
     try:
         # Create instances of tools
@@ -176,32 +176,69 @@ async def generate_core(task: str, model: str, max_tokens: int):
         multiply_tool_instance = MultiplyTool()
         concat_tool_instance = ConcatTool()
 
-        # Map function names to callables that invoke the tool instances
-        namespace: Dict[str, Callable] = {
-            "asyncio": asyncio,
-            "add_tool": partial(add_tool_instance.async_execute),
-            "multiply_tool": partial(multiply_tool_instance.async_execute),
-            "concat_tool": partial(concat_tool_instance.async_execute),
-        }
-
-        logger.debug("Compiling and executing generated code")
         # Ensure the program is a clean string without extra quotes or whitespace
         program = clean_backticks(program)
-        compiled = compile(program, "<string>", "exec")
-        exec(compiled, namespace)
         
-        # Debug the namespace contents
-        logger.debug(f"Namespace keys after exec: {list(namespace.keys())}")
-        if "main" in namespace:
-            logger.debug(f"Type of main: {type(namespace['main'])}")
-            logger.debug(f"Is coroutine function: {asyncio.iscoroutinefunction(namespace['main'])}")
+        # Prepare the program by adding necessary wrappers to make it compatible
+        # with the safe interpreter and our tool functions
+        wrapper_program = f"""
+import asyncio
+
+# Create tool function adapters
+async def add_tool(a, b):
+    return await _add_tool_instance.async_execute(a=a, b=b)
+
+async def multiply_tool(x, y):
+    return await _multiply_tool_instance.async_execute(x=x, y=y)
+
+async def concat_tool(s1, s2):
+    return await _concat_tool_instance.async_execute(s1=s1, s2=s2)
+
+# The generated program begins here
+{program}
+
+# Create a helper to run main
+async def _run_main():
+    result = await main()
+    if result is not None:
+        print(result)
         
-        if "main" in namespace and asyncio.iscoroutinefunction(namespace["main"]):
-            logger.debug("Running async main function")
-            await namespace["main"]()
-        else:
-            logger.warning("No async main() function found in generated code")
-            typer.echo(typer.style("Warning: No async main() function found", fg=typer.colors.YELLOW))
+# Store the result for the interpreter
+result = asyncio.run(_run_main())
+"""
+        
+        logger.debug("Executing generated code with safe interpreter")
+        
+        # Use the safe interpreter with a controlled set of allowed modules
+        allowed_modules = ["asyncio"]
+        
+        # We'll create a simple context manager to set and restore global variables
+        class ToolContext:
+            def __init__(self, tools):
+                self.tools = tools
+                self.old_globals = {}
+                
+            def __enter__(self):
+                # No need to modify globals with the safe interpreter approach
+                return self
+                
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                # No need to restore globals with the safe interpreter approach
+                pass
+        
+        # Execute in the context of our tools
+        with ToolContext(tools):
+            # Pass tool instances to the interpreter via globals
+            # The interpreter will find these via builtins
+            globals_dict = {
+                "_add_tool_instance": add_tool_instance,
+                "_multiply_tool_instance": multiply_tool_instance,
+                "_concat_tool_instance": concat_tool_instance,
+            }
+            
+            # Run the program with the safe interpreter
+            interpret_code(wrapper_program, allowed_modules=allowed_modules)
+            
     except SyntaxError as e:
         logger.error(f"Syntax error in generated code: {e}")
         typer.echo(typer.style(f"Syntax error: {e}", fg=typer.colors.RED))
