@@ -68,6 +68,5 @@ __all__ = [
     'UnifiedDiffTool',
     'WikipediaSearchTool',
     'WriteFileTool',
-    'GenerateDatabaseReportTool'
-    "create_tool"
+    'create_tool'
 ]
