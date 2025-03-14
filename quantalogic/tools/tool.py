@@ -38,7 +38,6 @@ class ToolArgument(BaseModel):
     )
     example: str | None = Field(default=None, description="An example value to illustrate the argument's usage.")
 
-
 class ToolDefinition(BaseModel):
     """Base class for defining tool configurations without execution logic.
 
@@ -46,6 +45,7 @@ class ToolDefinition(BaseModel):
         name: Unique name of the tool.
         description: Brief description of the tool's functionality.
         arguments: List of arguments the tool accepts.
+        return_type: The return type of the tool's execution method. Defaults to "str".
         need_validation: Flag to indicate if tool requires validation.
     """
 
@@ -54,6 +54,7 @@ class ToolDefinition(BaseModel):
     name: str = Field(..., description="The unique name of the tool.")
     description: str = Field(..., description="A brief description of what the tool does.")
     arguments: list[ToolArgument] = Field(default_factory=list, description="A list of arguments the tool accepts.")
+    return_type: str = Field(default="str", description="The return type of the tool's execution method.")
     need_validation: bool = Field(
         default=False,
         description="When True, requires user confirmation before execution. Useful for tools that perform potentially destructive operations.",
@@ -81,6 +82,7 @@ class ToolDefinition(BaseModel):
             "name",
             "description",
             "arguments",
+            "return_type",
             "need_validation",
             "need_variables",
             "need_caller_context_memory",
@@ -119,10 +121,6 @@ class ToolDefinition(BaseModel):
             parameters = ""
             for arg in self.arguments:
                 # Skip if parameter name matches an object property with non-None value
-                # This enables automatic property injection during execution:
-                # When an object has a property matching an argument name,
-                # the agent will inject the property value at runtime,
-                # reducing manual input and improving flexibility
                 if properties_injectable.get(arg.name) is not None:
                     continue
 
@@ -180,6 +178,58 @@ class ToolDefinition(BaseModel):
         # For ToolDefinition, it returns an empty dict since it has no execution context yet
         return {}
 
+    def to_docstring(self) -> str:
+        """Convert the tool definition into a Google-style docstring with function signature.
+
+        Returns:
+            A string formatted as a valid Python docstring representing the tool's configuration,
+            including the function signature and return type.
+        """
+        # Construct the function signature
+        signature_parts = []
+        for arg in self.arguments:
+            # Base argument: name and type
+            arg_str = f"{arg.name}: {arg.arg_type}"
+            # Add default value if present
+            if arg.default is not None:
+                arg_str += f" = {arg.default}"
+            signature_parts.append(arg_str)
+        signature = f"def {self.name}({', '.join(signature_parts)}) -> {self.return_type}:"
+
+        # Start with the signature and description
+        docstring = f'"""\n{signature}\n\n{self.description}\n\n'
+        
+        # Add Arguments section if there are any
+        if self.arguments:
+            docstring += "Args:\n"
+            for arg in self.arguments:
+                # Base argument line: name and type
+                arg_line = f"    {arg.name} ({arg.arg_type})"
+                
+                # Add optional/required status and default/example if present
+                details = []
+                if not arg.required:
+                    details.append("optional")
+                if arg.default is not None:
+                    details.append(f"defaults to {arg.default}")
+                if arg.example is not None:
+                    details.append(f"e.g., {arg.example}")
+                if details:
+                    arg_line += f" [{', '.join(details)}]"
+                
+                # Add description if present
+                if arg.description:
+                    arg_line += f": {arg.description}"
+                
+                docstring += f"{arg_line}\n"
+        
+        # Add Returns section
+        docstring += f"Returns:\n    {self.return_type}: The result of the tool execution.\n"
+        
+        # Close the docstring
+        docstring += '"""'
+        
+        return docstring
 
 class Tool(ToolDefinition):
     """Extended class for tools with execution capabilities.
@@ -257,7 +307,6 @@ class Tool(ToolDefinition):
         properties = self.get_properties(exclude=["arguments"])
         return {name: value for name, value in properties.items() if value is not None and name in argument_names}
 
-
 def create_tool(func: F) -> Tool:
     """Create a Tool instance from a Python function using AST analysis.
 
@@ -330,10 +379,14 @@ def create_tool(func: F) -> Tool:
             example=default if default else None
         ))
 
+    # Determine return type from type hints
+    return_type = type_hints.get("return", str)
+    return_type_str = type_map.get(return_type, "string")
+
     # Define Tool subclass
     class GeneratedTool(Tool):
         def __init__(self, *args: Any, **kwargs: Any):
-            super().__init__(*args, name=name, description=description, arguments=arguments, **kwargs)
+            super().__init__(*args, name=name, description=description, arguments=arguments, return_type=return_type_str, **kwargs)
             self._func = func
 
         if is_async:
@@ -347,28 +400,48 @@ def create_tool(func: F) -> Tool:
 
     return GeneratedTool()
 
-
 if __name__ == "__main__":
-    tool = Tool(name="my_tool", description="A simple tool", arguments=[ToolArgument(name="arg1", arg_type="string")])
+    # Basic tool with argument
+    tool = Tool(
+        name="my_tool",
+        description="A simple tool",
+        arguments=[ToolArgument(name="arg1", arg_type="string")]
+    )
+    print("Basic Tool Markdown:")
     print(tool.to_markdown())
+    print("Basic Tool Docstring:")
+    print(tool.to_docstring())
+    print()
 
+    # Tool with injectable field (undefined)
     class MyTool(Tool):
         field1: str | None = Field(default=None, description="Field 1 description")
 
     tool_with_fields = MyTool(
-        name="my_tool1", description="A simple tool", arguments=[ToolArgument(name="field1", arg_type="string")]
+        name="my_tool1",
+        description="A simple tool with a field",
+        arguments=[ToolArgument(name="field1", arg_type="string")]
     )
+    print("Tool with Undefined Field Markdown:")
     print(tool_with_fields.to_markdown())
-    print(tool_with_fields.get_injectable_properties_in_execution())
+    print("Injectable Properties (should be empty):", tool_with_fields.get_injectable_properties_in_execution())
+    print("Tool with Undefined Field Docstring:")
+    print(tool_with_fields.to_docstring())
+    print()
 
+    # Tool with defined injectable field
     tool_with_fields_defined = MyTool(
         name="my_tool2",
-        description="A simple tool2",
+        description="A simple tool with a defined field",
         field1="field1_value",
-        arguments=[ToolArgument(name="field1", arg_type="string")],
+        arguments=[ToolArgument(name="field1", arg_type="string")]
     )
+    print("Tool with Defined Field Markdown:")
     print(tool_with_fields_defined.to_markdown())
-    print(tool_with_fields_defined.get_injectable_properties_in_execution())
+    print("Injectable Properties (should include field1):", tool_with_fields_defined.get_injectable_properties_in_execution())
+    print("Tool with Defined Field Docstring:")
+    print(tool_with_fields_defined.to_docstring())
+    print()
 
     # Test create_tool with synchronous function
     def add(a: int, b: int = 0) -> int:
@@ -380,6 +453,14 @@ if __name__ == "__main__":
         """
         return a + b
 
+    sync_tool = create_tool(add)
+    print("Synchronous Tool Markdown:")
+    print(sync_tool.to_markdown())
+    print("Synchronous Tool Docstring:")
+    print(sync_tool.to_docstring())
+    print("Execution result:", sync_tool.execute(a=5, b=3))
+    print()
+
     # Test create_tool with asynchronous function
     async def greet(name: str) -> str:
         """Greet a person.
@@ -390,13 +471,26 @@ if __name__ == "__main__":
         await asyncio.sleep(0.1)  # Simulate async work
         return f"Hello, {name}"
 
-    # Create and test tools
-    sync_tool = create_tool(add)
-    print("\nSynchronous Tool:")
-    print(sync_tool.to_markdown())
-    print("Execution result:", sync_tool.execute(a=5, b=3))
-
     async_tool = create_tool(greet)
-    print("\nAsynchronous Tool:")
+    print("Asynchronous Tool Markdown:")
     print(async_tool.to_markdown())
+    print("Asynchronous Tool Docstring:")
+    print(async_tool.to_docstring())
     print("Execution result:", asyncio.run(async_tool.async_execute(name="Alice")))
+    print()
+
+    # Comprehensive tool for to_docstring demonstration with custom return type
+    docstring_tool = Tool(
+        name="sample_tool",
+        description="A sample tool for testing docstring generation.",
+        arguments=[
+            ToolArgument(name="x", arg_type="int", description="The first number", required=True),
+            ToolArgument(name="y", arg_type="float", description="The second number", default="0.0", example="1.5"),
+            ToolArgument(name="verbose", arg_type="boolean", description="Print extra info", default="False")
+        ],
+        return_type="int"  # Custom return type
+    )
+    print("Comprehensive Tool Markdown:")
+    print(docstring_tool.to_markdown())
+    print("Comprehensive Tool Docstring with Custom Return Type:")
+    print(docstring_tool.to_docstring())
