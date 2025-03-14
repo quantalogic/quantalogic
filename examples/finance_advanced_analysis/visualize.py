@@ -1,19 +1,13 @@
-import html
-import json
-from datetime import datetime
 from io import StringIO
-from typing import Optional, Dict, Any
+from typing import Dict, Optional
 
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import streamlit as st
-import yfinance as yf
 import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+from plotly.subplots import make_subplots
 
-from quantalogic import Agent
-from quantalogic.tools import DuckDuckGoSearchTool, LLMTool, SerpApiSearchTool, Tool, ToolArgument 
+from quantalogic.tools import Tool, ToolArgument
 
 
 class VisualizationTool(Tool):
