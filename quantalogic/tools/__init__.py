@@ -23,13 +23,14 @@ from .read_html_tool import ReadHTMLTool
 from .replace_in_file_tool import ReplaceInFileTool
 from .ripgrep_tool import RipgrepTool
 from .safe_python_interpreter_tool import SafePythonInterpreterTool
-from .search_definition_names import SearchDefinitionNames
+from .search_definition_names_tool import SearchDefinitionNamesTool
 from .sequence_tool import SequenceTool
 from .serpapi_search_tool import SerpApiSearchTool
 from .sql_query_tool import SQLQueryTool
 from .task_complete_tool import TaskCompleteTool
 from .tool import Tool, ToolArgument, create_tool
 from .unified_diff_tool import UnifiedDiffTool
+from .utils.generate_database_report import GenerateDatabaseReportTool
 from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
 
@@ -41,6 +42,7 @@ __all__ = [
     'EditWholeContentTool',
     'ElixirTool',
     'ExecuteBashCommandTool',
+    'GenerateDatabaseReportTool',
     'GrepAppTool',
     'InputQuestionTool',
     'JinjaTool',
@@ -56,7 +58,7 @@ __all__ = [
     'ReplaceInFileTool',
     'RipgrepTool',
     'SafePythonInterpreterTool',
-    'SearchDefinitionNames',
+    'SearchDefinitionNamesTool',
     'SequenceTool',
     'SerpApiSearchTool',
     'SQLQueryTool',
@@ -66,5 +68,6 @@ __all__ = [
     'UnifiedDiffTool',
     'WikipediaSearchTool',
     'WriteFileTool',
+    'GenerateDatabaseReportTool'
     "create_tool"
 ]

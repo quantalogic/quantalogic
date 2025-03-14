@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class SearchDefinitionNames(Tool):
+class SearchDefinitionNamesTool(Tool):
     """Tool for searching definition names in a directory using Tree-sitter.
 
     Supports searching for:
@@ -448,7 +448,7 @@ class SearchDefinitionNames(Tool):
 
 
 if __name__ == "__main__":
-    tool = SearchDefinitionNames()
+    tool = SearchDefinitionNamesTool()
     print(tool.to_markdown())
 
     # Example usage with different output formats
