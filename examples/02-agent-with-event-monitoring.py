@@ -16,14 +16,13 @@ from quantalogic.tools import (
     LLMTool,
 )
 
-# MODEL_NAME = "deepseek/deepseek-chat"
-MODEL_NAME = "ovh/DeepSeek-R1-Distill-Llama-70B"
+MODEL_NAME = "gemini/gemini-2.0-flash"
 
 # Verify API key is set - required for authentication with DeepSeek's API
 # This early check prevents runtime failures and ensures proper initialization
 # We validate credentials before any API calls to maintain system reliability
-if not os.environ.get("DEEPSEEK_API_KEY"):
-    raise ValueError("DEEPSEEK_API_KEY environment variable is not set")
+if not os.environ.get("GEMINI_API_KEY"):
+    raise ValueError("GEMINI_API_KEY environment variable is not set")
 
 
 # Initialize agent with DeepSeek model and LLM tool
