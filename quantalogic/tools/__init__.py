@@ -31,7 +31,7 @@ from .sql_query_tool import SQLQueryTool
 from .task_complete_tool import TaskCompleteTool
 from .tool import Tool, ToolArgument, create_tool
 from .unified_diff_tool import UnifiedDiffTool
-from .utils.generate_database_report import GenerateDatabaseReportTool
+from .utils.generate_database_report import generate_database_report
 from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
 
@@ -43,7 +43,7 @@ __all__ = [
     'EditWholeContentTool',
     'ElixirTool',
     'ExecuteBashCommandTool',
-    'GenerateDatabaseReportTool',
+    'generate_database_report',
     'GrepAppTool',
     'InputQuestionTool',
     'JinjaTool',
