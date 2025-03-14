@@ -1,6 +1,6 @@
 import asyncio
-from typing import List, Callable, Dict
 from functools import partial
+from typing import Callable, Dict, List
 
 import litellm
 import typer
@@ -91,22 +91,23 @@ You have access to the following pre-defined async tool functions, as defined wi
 {tool_docstrings}
 
 Instructions:
-1. Generate a Python program as a single string.
+1. Generate a Python program as a single string enclosed in triple backticks.
 2. Include only the import for asyncio (import asyncio).
 3. Define an async function named main() that solves the task.
 4. Use the pre-defined tool functions (e.g., add_tool, multiply_tool, concat_tool) directly by calling them with await and the appropriate arguments as specified in their descriptions.
 5. Do not redefine the tool functions within the program; assume they are already available in the namespace.
-6. Return the program as a string enclosed in triple quotes (\"\"\"program\"\"\")).
+6. Return the program as a string enclosed in triple backticks.
 7. Do not include asyncio.run(main()) or any code outside the main() function definition.
 8. Do not include explanatory text outside the program string.
 
 Example task: "Add 5 and 7 and print the result"
 Example output:
-\"\"\"import asyncio
+```python
+import asyncio
 async def main():
     result = await add_tool(a=5, b=7)
     print(result)
-\"\"\"
+```
 """
     
     logger.debug(f"Prompt sent to litellm:\n{prompt}")
@@ -129,13 +130,16 @@ async def main():
         logger.error(f"Failed to generate code: {str(e)}")
         raise typer.BadParameter(f"Failed to generate code with model '{model}': {str(e)}")
 
-    # Clean up the output
-    if generated_code.startswith('"""') and generated_code.endswith('"""'):
-        generated_code = generated_code[3:-3]
-    elif generated_code.startswith("```python") and generated_code.endswith("```"):
+    # Robustly clean up the output to ensure only raw Python code remains
+    generated_code = generated_code.strip()
+    if generated_code.startswith('```python') and generated_code.endswith('```'):
         generated_code = generated_code[9:-3].strip()
     
     return generated_code
+
+# Function to clean unnecessary backticks before execution
+def clean_backticks(code: str) -> str:
+    return code.replace('```python', '').replace('```', '').strip()
 
 # Async core logic for generate
 async def generate_core(task: str, model: str, max_tokens: int):
@@ -181,8 +185,17 @@ async def generate_core(task: str, model: str, max_tokens: int):
         }
 
         logger.debug("Compiling and executing generated code")
+        # Ensure the program is a clean string without extra quotes or whitespace
+        program = clean_backticks(program)
         compiled = compile(program, "<string>", "exec")
         exec(compiled, namespace)
+        
+        # Debug the namespace contents
+        logger.debug(f"Namespace keys after exec: {list(namespace.keys())}")
+        if "main" in namespace:
+            logger.debug(f"Type of main: {type(namespace['main'])}")
+            logger.debug(f"Is coroutine function: {asyncio.iscoroutinefunction(namespace['main'])}")
+        
         if "main" in namespace and asyncio.iscoroutinefunction(namespace["main"]):
             logger.debug("Running async main function")
             await namespace["main"]()
