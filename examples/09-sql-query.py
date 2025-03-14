@@ -21,8 +21,8 @@ from rich.syntax import Syntax
 from quantalogic import Agent
 from quantalogic.console_print_events import console_print_events
 from quantalogic.console_print_token import console_print_token
-from quantalogic.tools import GenerateDatabaseReportTool, InputQuestionTool, SQLQueryTool
-from quantalogic.tools.utils import create_sample_database
+from quantalogic.tools import InputQuestionTool, SQLQueryTool
+from quantalogic.tools.utils import create_sample_database, generate_database_report
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(
@@ -84,8 +84,8 @@ db_conn = os.environ.get("DB_CONNECTION_STRING") or Prompt.ask(
 
 def get_database_report():
     """Generate a database report using the GenerateDatabaseReportTool."""
-    tool = GenerateDatabaseReportTool(connection_string=db_conn)
-    return tool.execute()
+    create_database_report = generate_database_report(connection_string=db_conn)
+    return create_database_report
 
 
 # Initialize agent with SQL capabilities
