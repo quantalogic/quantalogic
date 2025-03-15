@@ -20,6 +20,22 @@ class ContinueException(Exception):
     pass
 
 
+class WrappedException(Exception):
+    def __init__(self, message: str, original_exception: Exception, lineno: int, col: int, context_line: str):
+        super().__init__(message)
+        self.original_exception: Exception = original_exception
+        self.lineno: int = lineno
+        self.col: int = col
+        self.context_line: str = context_line
+
+
+def has_await(node: ast.AST) -> bool:
+    for child in ast.walk(node):
+        if isinstance(child, ast.Await):
+            return True
+    return False
+
+
 class ASTInterpreter:
     def __init__(
         self, allowed_modules: List[str], env_stack: Optional[List[Dict[str, Any]]] = None, source: Optional[str] = None
@@ -169,7 +185,9 @@ class ASTInterpreter:
             context_line = ""
             if self.source_lines and 1 <= lineno <= len(self.source_lines):
                 context_line = self.source_lines[lineno - 1]
-            raise Exception(f"Error line {lineno}, col {col}:\n{context_line}\nDescription: {str(e)}") from e
+            raise WrappedException(
+                f"Error line {lineno}, col {col}:\n{context_line}\nDescription: {str(e)}", e, lineno, col, context_line
+            ) from e
 
     async def generic_visit(self, node: ast.AST, wrap_exceptions: bool = True) -> Any:
         lineno = getattr(node, "lineno", None)
@@ -531,6 +549,24 @@ class ASTInterpreter:
             else:
                 kwargs[kw.arg] = await self.visit(kw.value, wrap_exceptions=wrap_exceptions)
 
+        # Handle calls on super objects
+        if isinstance(node.func, ast.Attribute):
+            value = await self.visit(node.func.value, wrap_exceptions=wrap_exceptions)
+            if isinstance(value, super):
+                method_name = node.func.attr
+                method = getattr(value, method_name)
+                if isinstance(method, Function):
+                    bound_method = method.__get__(value._obj, type(value._obj))
+                    result = await bound_method(*evaluated_args, **kwargs)
+                    if asyncio.iscoroutine(result) and not is_await_context:
+                        result = await result
+                    return result
+                return method(*evaluated_args, **kwargs)
+
+        # Handle list with async iterables
+        if func is list and len(evaluated_args) == 1 and hasattr(evaluated_args[0], '__aiter__'):
+            return [val async for val in evaluated_args[0]]
+
         # Handle built-in functions like range, list, etc.
         if func in (range, list, dict, set, tuple, frozenset):
             return func(*evaluated_args, **kwargs)
@@ -548,9 +584,6 @@ class ASTInterpreter:
             return instance
 
         # Original logic for other function calls
-        if func is list and len(evaluated_args) == 1 and hasattr(evaluated_args[0], '__aiter__'):
-            return [val async for val in evaluated_args[0]]
-
         if isinstance(func, (staticmethod, classmethod, property)):
             if isinstance(func, property):
                 result = func.fget(*evaluated_args, **kwargs)
@@ -654,13 +687,12 @@ class ASTInterpreter:
         pass
 
     async def visit_Try(self, node: ast.Try, wrap_exceptions: bool = True) -> Any:
-        # Fix: Properly handle exceptions without re-wrapping when caught
         result: Any = None
         try:
             for stmt in node.body:
                 result = await self.visit(stmt, wrap_exceptions=False)
         except Exception as e:
-            original_e = e
+            original_e = e.original_exception if isinstance(e, WrappedException) else e
             for handler in node.handlers:
                 exc_type = await self._resolve_exception_type(handler.type)
                 if exc_type and isinstance(original_e, exc_type):
@@ -1118,21 +1150,38 @@ class Function:
                           for stmt in self.node.body)
 
         if is_generator:
-            async def generator():
-                for body_stmt in self.node.body:
-                    if isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, (ast.Yield, ast.YieldFrom)):
-                        value = await new_interp.visit(body_stmt.value, wrap_exceptions=True)
-                        if hasattr(value, '__aiter__'):
-                            async for v in value:
-                                yield v
-                        elif hasattr(value, '__iter__'):
-                            for v in value:
-                                yield v
-                        elif value is not None:
-                            yield value
-                    else:
-                        await new_interp.visit(body_stmt, wrap_exceptions=True)
-            return generator()
+            if not has_await(self.node):
+                def generator():
+                    for body_stmt in self.node.body:
+                        if isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, ast.Yield):
+                            value = new_interp.visit(body_stmt.value, wrap_exceptions=True)
+                            if hasattr(value, '__iter__'):
+                                yield from value
+                            elif value is not None:
+                                yield value
+                        elif isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, ast.YieldFrom):
+                            value = new_interp.visit(body_stmt.value, wrap_exceptions=True)
+                            if hasattr(value, '__iter__'):
+                                yield from value
+                        else:
+                            new_interp.visit(body_stmt, wrap_exceptions=True)
+                return generator()
+            else:
+                async def generator():
+                    for body_stmt in self.node.body:
+                        if isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, (ast.Yield, ast.YieldFrom)):
+                            value = await new_interp.visit(body_stmt.value, wrap_exceptions=True)
+                            if hasattr(value, '__aiter__'):
+                                async for v in value:
+                                    yield v
+                            elif hasattr(value, '__iter__'):
+                                for v in value:
+                                    yield v
+                            elif value is not None:
+                                yield value
+                        else:
+                            await new_interp.visit(body_stmt, wrap_exceptions=True)
+                return generator()
         else:
             try:
                 for stmt in self.node.body[:-1]:
