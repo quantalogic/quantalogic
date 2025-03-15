@@ -501,15 +501,22 @@ def test_class_inheritance():
 class Base:
     def __init__(self):
         self.x = 1
+
 class Derived(Base):
     def __init__(self):
         super().__init__()
+        self.y = 2
+
+    def method(self):
         self.x += 2
+        self.y += 1
+        return (self.x, self.y)
+
 obj = Derived()
-result = obj.x
+result = obj.method()
 """
     result = interpret_code(source, allowed_modules=[])
-    assert result == 3
+    assert result == (3, 3)
 
 
 def test_decorator():
