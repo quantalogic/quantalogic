@@ -3,6 +3,7 @@ import builtins
 import textwrap
 from typing import Any, Dict, List, Optional, Tuple
 import asyncio
+from functools import wraps
 
 
 class ReturnException(Exception):
@@ -133,11 +134,11 @@ class ASTInterpreter:
                 for j, elt2 in enumerate(after):
                     self.assign(elt2, value[len(before) + starred_count + j])
         elif isinstance(target, ast.Attribute):
-            obj = self.visit(target.value)
+            obj = self.loop.run_until_complete(self.visit(target.value))
             setattr(obj, target.attr, value)
         elif isinstance(target, ast.Subscript):
-            obj = self.visit(target.value)
-            key = self.visit(target.slice)
+            obj = self.loop.run_until_complete(self.visit(target.value))
+            key = self.loop.run_until_complete(self.visit(target.slice))
             obj[key] = value
         else:
             raise Exception("Unsupported assignment target type: " + str(type(target)))
@@ -298,7 +299,12 @@ class ASTInterpreter:
     async def visit_Assign(self, node: ast.Assign) -> None:
         value: Any = await self.visit(node.value)
         for target in node.targets:
-            self.assign(target, value)
+            if isinstance(target, ast.Subscript):
+                obj = await self.visit(target.value)
+                key = await self.visit(target.slice)
+                obj[key] = value
+            else:
+                self.assign(target, value)
 
     async def visit_AugAssign(self, node: ast.AugAssign) -> Any:
         if isinstance(node.target, ast.Name):
@@ -447,10 +453,14 @@ class ASTInterpreter:
         kw_defaults = {k: v for k, v in kw_defaults.items() if v is not None}
 
         func = Function(node, closure, self, pos_kw_params, vararg_name, kwonly_params, kwarg_name, pos_defaults, kw_defaults)
+        decorated_func = func
         for decorator in reversed(node.decorator_list):
             dec = await self.visit(decorator)
-            func = await dec(func)
-        self.set_variable(node.name, func)
+            if dec in (staticmethod, classmethod):
+                decorated_func = dec(lambda *args, **kwargs: self.loop.run_until_complete(func(*args, **kwargs)))
+            else:
+                decorated_func = await dec(decorated_func)
+        self.set_variable(node.name, decorated_func)
 
     async def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         closure: List[Dict[str, Any]] = self.env_stack[:]
@@ -480,7 +490,7 @@ class ASTInterpreter:
                 evaluated_args.extend(arg_value)
             else:
                 evaluated_args.append(arg_value)
-        
+
         kwargs: Dict[str, Any] = {}
         for kw in node.keywords:
             if kw.arg is None:  # Handle **kwargs unpacking
@@ -585,40 +595,33 @@ class ASTInterpreter:
             exc_info = (type(e), e, e.__traceback__)
             handled = False
             for handler in node.handlers:
-                exc_type = None
-                if handler.type is None:
-                    exc_type = Exception
-                elif isinstance(handler.type, ast.Name):
-                    exc_type = self.get_variable(handler.type.id)
-                elif isinstance(handler.type, ast.Call):
-                    exc_type_name = handler.type.func.id if isinstance(handler.type.func, ast.Name) else None
-                    if exc_type_name:
-                        exc_type = getattr(builtins, exc_type_name, None)
-                if exc_info and exc_type and isinstance(e, exc_type):
+                exc_type = await self._resolve_exception_type(handler.type)
+                if exc_type and isinstance(e, exc_type):
                     if handler.name:
-                        self.set_variable(handler.name, exc_info[1])
+                        self.set_variable(handler.name, e)
                     for stmt in handler.body:
                         result = await self.visit(stmt)
                     handled = True
                     exc_info = None
                     break
             if exc_info and not handled:
-                raise exc_info[1]
+                raise
         else:
             for stmt in node.orelse:
                 result = await self.visit(stmt)
         finally:
             for stmt in node.finalbody:
-                try:
-                    await self.visit(stmt)
-                except ReturnException:
-                    raise
-                except Exception:
-                    if exc_info:
-                        raise exc_info[1]
-                    raise
-
+                await self.visit(stmt)
         return result
+
+    async def _resolve_exception_type(self, node: Optional[ast.AST]) -> Any:
+        if node is None:
+            return Exception
+        if isinstance(node, ast.Name):
+            return self.get_variable(node.id)
+        if isinstance(node, ast.Call):
+            return await self.visit(node)
+        return None
 
     async def visit_TryStar(self, node: ast.TryStar) -> Any:
         result: Any = None
@@ -702,39 +705,26 @@ class ASTInterpreter:
         return await self.visit(node.value)
 
     async def visit_GeneratorExp(self, node: ast.GeneratorExp) -> Any:
-        async def generator():
+        def generator():
             base_frame: Dict[str, Any] = self.env_stack[-1].copy()
             self.env_stack.append(base_frame)
 
-            async def rec(gen_idx: int):
+            def rec(gen_idx: int):
                 if gen_idx == len(node.generators):
-                    yield await self.visit(node.elt)
+                    yield self.loop.run_until_complete(self.visit(node.elt))
                 else:
                     comp = node.generators[gen_idx]
-                    iterable = await self.visit(comp.iter)
-                    if hasattr(iterable, '__aiter__'):
-                        async for item in iterable:
-                            new_frame: Dict[str, Any] = self.env_stack[-1].copy()
-                            self.env_stack.append(new_frame)
-                            self.assign(comp.target, item)
-                            conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
-                            if all(conditions):
-                                async for val in rec(gen_idx + 1):
-                                    yield val
-                            self.env_stack.pop()
-                    else:
-                        for item in iterable:
-                            new_frame: Dict[str, Any] = self.env_stack[-1].copy()
-                            self.env_stack.append(new_frame)
-                            self.assign(comp.target, item)
-                            conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
-                            if all(conditions):
-                                async for val in rec(gen_idx + 1):
-                                    yield val
-                            self.env_stack.pop()
+                    iterable = self.loop.run_until_complete(self.visit(comp.iter))
+                    for item in iterable:
+                        new_frame = self.env_stack[-1].copy()
+                        self.env_stack.append(new_frame)
+                        self.assign(comp.target, item)
+                        conditions = [self.loop.run_until_complete(self.visit(if_clause)) for if_clause in comp.ifs]
+                        if all(conditions):
+                            yield from rec(gen_idx + 1)
+                        self.env_stack.pop()
 
-            async for val in rec(0):
-                yield val
+            yield from rec(0)
             self.env_stack.pop()
 
         return generator()
@@ -742,13 +732,14 @@ class ASTInterpreter:
     async def visit_ClassDef(self, node: ast.ClassDef):
         base_frame = self.env_stack[-1].copy()
         self.env_stack.append(base_frame)
+        bases = [await self.visit(base) for base in node.bases]
         try:
             for stmt in node.body:
                 await self.visit(stmt)
             class_dict = {k: v for k, v in self.env_stack[-1].items() if k not in ["__builtins__"]}
         finally:
             self.env_stack.pop()
-        new_class = type(node.name, (), class_dict)
+        new_class = type(node.name, tuple(bases), class_dict)
         for decorator in reversed(node.decorator_list):
             dec = await self.visit(decorator)
             new_class = dec(new_class)
@@ -950,6 +941,17 @@ class ASTInterpreter:
             return False
         else:
             raise Exception(f"Unsupported match pattern: {pattern.__class__.__name__}")
+
+    async def visit_Delete(self, node: ast.Delete):
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                del self.env_stack[-1][target.id]
+            elif isinstance(target, ast.Subscript):
+                obj = await self.visit(target.value)
+                key = await self.visit(target.slice)
+                del obj[key]
+            else:
+                raise Exception(f"Unsupported del target: {type(target).__name__}")
 
 
 class Function:
@@ -1173,7 +1175,7 @@ def interpret_ast(ast_tree: Any, allowed_modules: list[str], source: str = "") -
 
 
 def interpret_code(source_code: str, allowed_modules: List[str]) -> Any:
-    dedented_source = textwrap.dedent(source_code)
+    dedented_source = textwrap.dedent(source_code).strip()
     tree: ast.AST = ast.parse(dedented_source)
     return interpret_ast(tree, allowed_modules, source=dedented_source)
 
