@@ -134,11 +134,11 @@ class ASTInterpreter:
                 for j, elt2 in enumerate(after):
                     self.assign(elt2, value[len(before) + starred_count + j])
         elif isinstance(target, ast.Attribute):
-            obj = self.loop.run_until_complete(self.visit(target.value))
+            obj = asyncio.run_coroutine_threadsafe(self.visit(target.value), self.loop).result()
             setattr(obj, target.attr, value)
         elif isinstance(target, ast.Subscript):
-            obj = self.loop.run_until_complete(self.visit(target.value))
-            key = self.loop.run_until_complete(self.visit(target.slice))
+            obj = asyncio.run_coroutine_threadsafe(self.visit(target.value), self.loop).result()
+            key = asyncio.run_coroutine_threadsafe(self.visit(target.slice), self.loop).result()
             obj[key] = value
         else:
             raise Exception("Unsupported assignment target type: " + str(type(target)))
@@ -258,6 +258,8 @@ class ASTInterpreter:
         if isinstance(op, ast.Add):
             return left + right
         elif isinstance(op, ast.Sub):
+            if isinstance(left, set) and isinstance(right, set):
+                return left - right
             return left - right
         elif isinstance(op, ast.Mult):
             return left * right
@@ -274,10 +276,14 @@ class ASTInterpreter:
         elif isinstance(op, ast.RShift):
             return left >> right
         elif isinstance(op, ast.BitOr):
+            if isinstance(left, set) and isinstance(right, set):
+                return left | right
             return left | right
         elif isinstance(op, ast.BitXor):
             return left ^ right
         elif isinstance(op, ast.BitAnd):
+            if isinstance(left, set) and isinstance(right, set):
+                return left & right
             return left & right
         else:
             raise Exception("Unsupported binary operator: " + str(op))
@@ -456,8 +462,8 @@ class ASTInterpreter:
         decorated_func = func
         for decorator in reversed(node.decorator_list):
             dec = await self.visit(decorator)
-            if dec in (staticmethod, classmethod):
-                decorated_func = dec(lambda *args, **kwargs: self.loop.run_until_complete(func(*args, **kwargs)))
+            if dec in (staticmethod, classmethod, property):
+                decorated_func = dec(func)
             else:
                 decorated_func = await dec(decorated_func)
         self.set_variable(node.name, decorated_func)
@@ -501,12 +507,23 @@ class ASTInterpreter:
             else:
                 kwargs[kw.arg] = await self.visit(kw.value)
 
-        if asyncio.iscoroutinefunction(func) or isinstance(func, AsyncFunction):
+        if isinstance(func, (staticmethod, classmethod, property)):
+            if isinstance(func, property):
+                result = func.fget(*evaluated_args, **kwargs)
+            else:
+                result = func(*evaluated_args, **kwargs)
+        elif asyncio.iscoroutinefunction(func) or isinstance(func, AsyncFunction):
             result = func(*evaluated_args, **kwargs)
             if not is_await_context:
                 result = await result
         elif isinstance(func, Function):
             result = await func(*evaluated_args, **kwargs)
+        elif func is super:
+            if len(evaluated_args) >= 2:
+                cls, obj = evaluated_args[0], evaluated_args[1]
+                result = super(cls, obj)
+            else:
+                raise TypeError("super() requires class and instance arguments")
         else:
             result = func(*evaluated_args, **kwargs)
             if asyncio.iscoroutine(result) and not is_await_context:
@@ -586,14 +603,10 @@ class ASTInterpreter:
 
     async def visit_Try(self, node: ast.Try) -> Any:
         result: Any = None
-        exc_info: Optional[tuple] = None
-
         try:
             for stmt in node.body:
                 result = await self.visit(stmt)
         except Exception as e:
-            exc_info = (type(e), e, e.__traceback__)
-            handled = False
             for handler in node.handlers:
                 exc_type = await self._resolve_exception_type(handler.type)
                 if exc_type and isinstance(e, exc_type):
@@ -601,11 +614,9 @@ class ASTInterpreter:
                         self.set_variable(handler.name, e)
                     for stmt in handler.body:
                         result = await self.visit(stmt)
-                    handled = True
-                    exc_info = None
                     break
-            if exc_info and not handled:
-                raise
+            else:
+                raise  # Re-raise if no handler matches
         else:
             for stmt in node.orelse:
                 result = await self.visit(stmt)
@@ -618,7 +629,10 @@ class ASTInterpreter:
         if node is None:
             return Exception
         if isinstance(node, ast.Name):
-            return self.get_variable(node.id)
+            exc_type = self.get_variable(node.id)
+            if exc_type in (Exception, ZeroDivisionError, ValueError, TypeError):
+                return exc_type
+            return exc_type
         if isinstance(node, ast.Call):
             return await self.visit(node)
         return None
@@ -705,26 +719,39 @@ class ASTInterpreter:
         return await self.visit(node.value)
 
     async def visit_GeneratorExp(self, node: ast.GeneratorExp) -> Any:
-        def generator():
+        async def generator():
             base_frame: Dict[str, Any] = self.env_stack[-1].copy()
             self.env_stack.append(base_frame)
 
-            def rec(gen_idx: int):
+            async def rec(gen_idx: int):
                 if gen_idx == len(node.generators):
-                    yield self.loop.run_until_complete(self.visit(node.elt))
+                    yield await self.visit(node.elt)
                 else:
                     comp = node.generators[gen_idx]
-                    iterable = self.loop.run_until_complete(self.visit(comp.iter))
-                    for item in iterable:
-                        new_frame = self.env_stack[-1].copy()
-                        self.env_stack.append(new_frame)
-                        self.assign(comp.target, item)
-                        conditions = [self.loop.run_until_complete(self.visit(if_clause)) for if_clause in comp.ifs]
-                        if all(conditions):
-                            yield from rec(gen_idx + 1)
-                        self.env_stack.pop()
+                    iterable = await self.visit(comp.iter)
+                    if hasattr(iterable, '__aiter__'):
+                        async for item in iterable:
+                            new_frame = self.env_stack[-1].copy()
+                            self.env_stack.append(new_frame)
+                            self.assign(comp.target, item)
+                            conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
+                            if all(conditions):
+                                async for val in rec(gen_idx + 1):
+                                    yield val
+                            self.env_stack.pop()
+                    else:
+                        for item in iterable:
+                            new_frame = self.env_stack[-1].copy()
+                            self.env_stack.append(new_frame)
+                            self.assign(comp.target, item)
+                            conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
+                            if all(conditions):
+                                async for val in rec(gen_idx + 1):
+                                    yield val
+                            self.env_stack.pop()
 
-            yield from rec(0)
+            async for val in rec(0):
+                yield val
             self.env_stack.pop()
 
         return generator()
@@ -1025,7 +1052,7 @@ class Function:
 
     def __get__(self, instance: Any, owner: Any):
         async def method(*args: Any, **kwargs: Any) -> Any:
-            return await self(instance, *args, **kwargs)
+            return await self(instance, *args, **kwargs) if instance else await self(*args, **kwargs)
         return method
 
 
@@ -1163,6 +1190,8 @@ def interpret_ast(ast_tree: Any, allowed_modules: list[str], source: str = "") -
         result = await interpreter.visit(ast_tree)
         if asyncio.iscoroutine(result):
             return await result
+        elif hasattr(result, '__aiter__'):
+            return [val async for val in result]  # Handle async generators
         return result
 
     loop = asyncio.new_event_loop()
