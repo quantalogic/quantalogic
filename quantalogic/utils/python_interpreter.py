@@ -30,10 +30,13 @@ class ASTInterpreter:
             self.env_stack[0].update(self.modules)
             safe_builtins: Dict[str, Any] = dict(vars(builtins))
             safe_builtins["__import__"] = self.safe_import
+            # Explicitly include exception types to ensure correct identity
             safe_builtins.update({
                 "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
                 "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
                 "type": type, "isinstance": isinstance, "issubclass": issubclass,
+                "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
+                "ValueError": ValueError, "TypeError": TypeError,
             })
             if "set" not in safe_builtins:
                 safe_builtins["set"] = set
@@ -48,6 +51,8 @@ class ASTInterpreter:
                     "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
                     "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
                     "type": type, "isinstance": isinstance, "issubclass": issubclass,
+                    "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
+                    "ValueError": ValueError, "TypeError": TypeError,
                 })
                 if "set" not in safe_builtins:
                     safe_builtins["set"] = set
@@ -427,17 +432,20 @@ class ASTInterpreter:
 
     async def visit_For(self, node: ast.For) -> None:
         iter_obj: Any = await self.visit(node.iter)
+        broke = False  # Track if loop was broken to handle else clause correctly
         for item in iter_obj:
             self.assign(node.target, item)
             try:
                 for stmt in node.body:
                     await self.visit(stmt)
             except BreakException:
+                broke = True
                 break
             except ContinueException:
                 continue
-        for stmt in node.orelse:
-            await self.visit(stmt)
+        if not broke:  # Only execute orelse if loop completed without break
+            for stmt in node.orelse:
+                await self.visit(stmt)
 
     async def visit_Break(self, node: ast.Break) -> None:
         raise BreakException()
@@ -506,6 +514,10 @@ class ASTInterpreter:
                 kwargs.update(unpacked_kwargs)
             else:
                 kwargs[kw.arg] = await self.visit(kw.value)
+
+        # Handle async generators when passed to list()
+        if func is list and len(evaluated_args) == 1 and hasattr(evaluated_args[0], '__aiter__'):
+            return [val async for val in evaluated_args[0]]
 
         if isinstance(func, (staticmethod, classmethod, property)):
             if isinstance(func, property):
