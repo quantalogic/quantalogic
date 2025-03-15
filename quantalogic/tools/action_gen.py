@@ -99,6 +99,8 @@ Instructions:
 6. Return the program as a string enclosed in triple quotes (\"\"\"program\"\"\")).
 7. Do not include asyncio.run(main()) or any code outside the main() function definition.
 8. Do not include explanatory text outside the program string.
+9. Express all string variables as multiline strings (\"\"\"\nstring\n\"\"\"), always start a string at the beginning of a line.
+10. Always print the result at the end of the program.
 
 Example task: "Add 5 and 7 and print the result"
 Example output:
