@@ -541,6 +541,9 @@ class ASTInterpreter:
             if not is_await_context:
                 result = await result
         elif isinstance(func, Function):
+            if func.node.name == "__init__":
+                await func(*evaluated_args, **kwargs)  # Special case for __init__: run but return None
+                return None
             result = await func(*evaluated_args, **kwargs)
         elif func is super:
             if len(evaluated_args) >= 2:
@@ -590,10 +593,15 @@ class ASTInterpreter:
         return tuple(elements)
 
     async def visit_Dict(self, node: ast.Dict, wrap_exceptions: bool = True) -> Dict[Any, Any]:
-        return {await self.visit(k, wrap_exceptions=wrap_exceptions): await self.visit(v, wrap_exceptions=wrap_exceptions) for k, v in zip(node.keys, node.values)}
+        return {
+            await self.visit(k, wrap_exceptions=wrap_exceptions): await self.visit(v, wrap_exceptions=wrap_exceptions)
+            for k, v in zip(node.keys, node.values)
+        }
 
     async def visit_Set(self, node: ast.Set, wrap_exceptions: bool = True) -> set:
-        return set(await self.visit(elt, wrap_exceptions=wrap_exceptions) for elt in node.elts)
+        # Fix: Use a list comprehension to collect elements synchronously
+        elements = [await self.visit(elt, wrap_exceptions=wrap_exceptions) for elt in node.elts]
+        return set(elements)
 
     async def visit_Attribute(self, node: ast.Attribute, wrap_exceptions: bool = True) -> Any:
         value: Any = await self.visit(node.value, wrap_exceptions=wrap_exceptions)
@@ -626,6 +634,7 @@ class ASTInterpreter:
         pass
 
     async def visit_Try(self, node: ast.Try, wrap_exceptions: bool = True) -> Any:
+        # Fix: Properly handle exceptions without re-wrapping when caught
         result: Any = None
         try:
             for stmt in node.body:
@@ -639,9 +648,9 @@ class ASTInterpreter:
                         self.set_variable(handler.name, original_e)
                     for stmt in handler.body:
                         result = await self.visit(stmt, wrap_exceptions=True)
-                    break
+                    break  # Exit after handling
             else:
-                raise
+                raise  # Re-raise if not handled
         else:
             for stmt in node.orelse:
                 result = await self.visit(stmt, wrap_exceptions=True)
@@ -899,13 +908,18 @@ class ASTInterpreter:
         return value
 
     async def visit_YieldFrom(self, node: ast.YieldFrom, wrap_exceptions: bool = True) -> Any:
+        # Fix: Properly handle YieldFrom as a generator without awaiting
         iterable = await self.visit(node.value, wrap_exceptions=wrap_exceptions)
         if hasattr(iterable, '__aiter__'):
-            async for value in iterable:
-                yield value
+            async def async_gen():
+                async for value in iterable:
+                    yield value
+            return async_gen()
         else:
-            for value in iterable:
-                yield value
+            def sync_gen():
+                for value in iterable:
+                    yield value
+            return sync_gen()
 
     async def visit_Match(self, node: ast.Match, wrap_exceptions: bool = True) -> Any:
         subject = await self.visit(node.subject, wrap_exceptions=wrap_exceptions)
@@ -1093,6 +1107,9 @@ class Function:
                         value = await new_interp.visit(body_stmt.value, wrap_exceptions=True)
                         if hasattr(value, '__aiter__'):
                             async for v in value:
+                                yield v
+                        elif hasattr(value, '__iter__'):
+                            for v in value:
                                 yield v
                         elif value is not None:
                             yield value
