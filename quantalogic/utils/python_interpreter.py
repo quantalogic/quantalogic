@@ -127,7 +127,7 @@ class ASTInterpreter:
         else:
             self.env_stack[-1][name] = value
 
-    async def assign(self, target: ast.AST, value: Any) -> None:  # Changed to async
+    async def assign(self, target: ast.AST, value: Any) -> None:
         if isinstance(target, ast.Name):
             self.set_variable(target.id, value)
         elif isinstance(target, (ast.Tuple, ast.List)):
@@ -141,7 +141,7 @@ class ASTInterpreter:
                 if len(target.elts) != len(value):
                     raise ValueError("Unpacking mismatch")
                 for t, v in zip(target.elts, value):
-                    await self.assign(t, v)  # Added await
+                    await self.assign(t, v)
             else:
                 total = len(value)
                 before = target.elts[:star_index]
@@ -149,17 +149,17 @@ class ASTInterpreter:
                 if len(before) + len(after) > total:
                     raise ValueError("Unpacking mismatch")
                 for i, elt2 in enumerate(before):
-                    await self.assign(elt2, value[i])  # Added await
+                    await self.assign(elt2, value[i])
                 starred_count = total - len(before) - len(after)
-                await self.assign(target.elts[star_index].value, value[len(before):len(before) + starred_count])  # Added await
+                await self.assign(target.elts[star_index].value, value[len(before):len(before) + starred_count])
                 for j, elt2 in enumerate(after):
-                    await self.assign(elt2, value[len(before) + starred_count + j])  # Added await
+                    await self.assign(elt2, value[len(before) + starred_count + j])
         elif isinstance(target, ast.Attribute):
-            obj = await self.visit(target.value, wrap_exceptions=True)  # Changed to await
+            obj = await self.visit(target.value, wrap_exceptions=True)
             setattr(obj, target.attr, value)
         elif isinstance(target, ast.Subscript):
-            obj = await self.visit(target.value, wrap_exceptions=True)  # Changed to await
-            key = await self.visit(target.slice, wrap_exceptions=True)  # Changed to await
+            obj = await self.visit(target.value, wrap_exceptions=True)
+            key = await self.visit(target.slice, wrap_exceptions=True)
             obj[key] = value
         else:
             raise Exception("Unsupported assignment target type: " + str(type(target)))
@@ -237,7 +237,7 @@ class ASTInterpreter:
                     async for item in iterable:
                         new_frame: Dict[str, Any] = self.env_stack[-1].copy()
                         self.env_stack.append(new_frame)
-                        await self.assign(comp.target, item)  # Added await
+                        await self.assign(comp.target, item)
                         conditions = [await self.visit(if_clause, wrap_exceptions=True) for if_clause in comp.ifs]
                         if all(conditions):
                             await rec(gen_idx + 1)
@@ -246,7 +246,7 @@ class ASTInterpreter:
                     for item in iterable:
                         new_frame: Dict[str, Any] = self.env_stack[-1].copy()
                         self.env_stack.append(new_frame)
-                        await self.assign(comp.target, item)  # Added await
+                        await self.assign(comp.target, item)
                         conditions = [await self.visit(if_clause, wrap_exceptions=True) for if_clause in comp.ifs]
                         if all(conditions):
                             await rec(gen_idx + 1)
@@ -335,7 +335,7 @@ class ASTInterpreter:
                 key = await self.visit(target.slice, wrap_exceptions=wrap_exceptions)
                 obj[key] = value
             else:
-                await self.assign(target, value)  # Added await
+                await self.assign(target, value)
 
     async def visit_AugAssign(self, node: ast.AugAssign, wrap_exceptions: bool = True) -> Any:
         if isinstance(node.target, ast.Name):
@@ -370,7 +370,7 @@ class ASTInterpreter:
             result = current_val >> right_val
         else:
             raise Exception("Unsupported augmented operator: " + str(op))
-        await self.assign(node.target, result)  # Added await
+        await self.assign(node.target, result)
         return result
 
     async def visit_Compare(self, node: ast.Compare, wrap_exceptions: bool = True) -> bool:
@@ -455,7 +455,7 @@ class ASTInterpreter:
         broke = False
         if hasattr(iter_obj, '__aiter__'):
             async for item in iter_obj:
-                await self.assign(node.target, item)  # Added await
+                await self.assign(node.target, item)
                 try:
                     for stmt in node.body:
                         await self.visit(stmt, wrap_exceptions=wrap_exceptions)
@@ -466,7 +466,7 @@ class ASTInterpreter:
                     continue
         else:
             for item in iter_obj:
-                await self.assign(node.target, item)  # Added await
+                await self.assign(node.target, item)
                 try:
                     for stmt in node.body:
                         await self.visit(stmt, wrap_exceptions=wrap_exceptions)
@@ -529,7 +529,7 @@ class ASTInterpreter:
 
     async def visit_Call(self, node: ast.Call, is_await_context: bool = False, wrap_exceptions: bool = True) -> Any:
         func = await self.visit(node.func, wrap_exceptions=wrap_exceptions)
-        
+
         # Evaluate arguments
         evaluated_args: List[Any] = []
         for arg in node.args:
@@ -583,6 +583,26 @@ class ASTInterpreter:
                         init_method(instance, *evaluated_args, **kwargs)
             return instance
 
+        # Handle super() with or without arguments
+        if func is super:
+            if len(evaluated_args) == 0:
+                for frame in reversed(self.env_stack):
+                    if '__current_method__' in frame:
+                        method = frame['__current_method__']
+                        if hasattr(method, 'defining_class') and 'self' in frame:
+                            cls = method.defining_class
+                            obj = frame['self']
+                            result = super(cls, obj)
+                            break
+                else:
+                    raise TypeError("super() without arguments requires a method context")
+            elif len(evaluated_args) >= 2:
+                cls, obj = evaluated_args[0], evaluated_args[1]
+                result = super(cls, obj)
+            else:
+                raise TypeError("super() requires class and instance arguments")
+            return result
+
         # Original logic for other function calls
         if isinstance(func, (staticmethod, classmethod, property)):
             if isinstance(func, property):
@@ -598,12 +618,6 @@ class ASTInterpreter:
                 await func(*evaluated_args, **kwargs)  # Special case for __init__: run but return None
                 return None
             result = await func(*evaluated_args, **kwargs)
-        elif func is super:
-            if len(evaluated_args) >= 2:
-                cls, obj = evaluated_args[0], evaluated_args[1]
-                result = super(cls, obj)
-            else:
-                raise TypeError("super() requires class and instance arguments")
         else:
             result = func(*evaluated_args, **kwargs)
             if asyncio.iscoroutine(result) and not is_await_context:
@@ -652,7 +666,6 @@ class ASTInterpreter:
         }
 
     async def visit_Set(self, node: ast.Set, wrap_exceptions: bool = True) -> set:
-        # Fix: Use a list comprehension to collect elements synchronously
         elements = [await self.visit(elt, wrap_exceptions=wrap_exceptions) for elt in node.elts]
         return set(elements)
 
@@ -805,7 +818,6 @@ class ASTInterpreter:
         return await self.visit(node.value, wrap_exceptions=wrap_exceptions)
 
     async def visit_GeneratorExp(self, node: ast.GeneratorExp, wrap_exceptions: bool = True) -> Any:
-        # Fix: Return a list instead of an async generator for compatibility with list()
         result = []
         base_frame: Dict[str, Any] = self.env_stack[-1].copy()
         self.env_stack.append(base_frame)
@@ -820,7 +832,7 @@ class ASTInterpreter:
                     async for item in iterable:
                         new_frame = self.env_stack[-1].copy()
                         self.env_stack.append(new_frame)
-                        await self.assign(comp.target, item)  # Added await
+                        await self.assign(comp.target, item)
                         conditions = [await self.visit(if_clause, wrap_exceptions=True) for if_clause in comp.ifs]
                         if all(conditions):
                             await rec(gen_idx + 1)
@@ -829,7 +841,7 @@ class ASTInterpreter:
                     for item in iterable:
                         new_frame = self.env_stack[-1].copy()
                         self.env_stack.append(new_frame)
-                        await self.assign(comp.target, item)  # Added await
+                        await self.assign(comp.target, item)
                         conditions = [await self.visit(if_clause, wrap_exceptions=True) for if_clause in comp.ifs]
                         if all(conditions):
                             await rec(gen_idx + 1)
@@ -847,9 +859,13 @@ class ASTInterpreter:
             for stmt in node.body:
                 await self.visit(stmt, wrap_exceptions=True)
             class_dict = {k: v for k, v in self.env_stack[-1].items() if k not in ["__builtins__"]}
+            # Set defining_class for methods
+            new_class = type(node.name, tuple(bases), class_dict)
+            for name, value in class_dict.items():
+                if isinstance(value, Function):
+                    value.defining_class = new_class
         finally:
             self.env_stack.pop()
-        new_class = type(node.name, tuple(bases), class_dict)
         for decorator in reversed(node.decorator_list):
             dec = await self.visit(decorator, wrap_exceptions=True)
             new_class = dec(new_class)
@@ -860,7 +876,7 @@ class ASTInterpreter:
             ctx = await self.visit(item.context_expr, wrap_exceptions=wrap_exceptions)
             val = ctx.__enter__()
             if item.optional_vars:
-                await self.assign(item.optional_vars, val)  # Added await
+                await self.assign(item.optional_vars, val)
             try:
                 for stmt in node.body:
                     await self.visit(stmt, wrap_exceptions=wrap_exceptions)
@@ -899,7 +915,7 @@ class ASTInterpreter:
                     async for item in iterable:
                         new_frame = self.env_stack[-1].copy()
                         self.env_stack.append(new_frame)
-                        await self.assign(comp.target, item)  # Added await
+                        await self.assign(comp.target, item)
                         conditions = [await self.visit(if_clause, wrap_exceptions=True) for if_clause in comp.ifs]
                         if all(conditions):
                             await rec(gen_idx + 1)
@@ -908,7 +924,7 @@ class ASTInterpreter:
                     for item in iterable:
                         new_frame = self.env_stack[-1].copy()
                         self.env_stack.append(new_frame)
-                        await self.assign(comp.target, item)  # Added await
+                        await self.assign(comp.target, item)
                         conditions = [await self.visit(if_clause, wrap_exceptions=True) for if_clause in comp.ifs]
                         if all(conditions):
                             await rec(gen_idx + 1)
@@ -933,7 +949,7 @@ class ASTInterpreter:
                     async for item in iterable:
                         new_frame = self.env_stack[-1].copy()
                         self.env_stack.append(new_frame)
-                        await self.assign(comp.target, item)  # Added await
+                        await self.assign(comp.target, item)
                         conditions = [await self.visit(if_clause, wrap_exceptions=True) for if_clause in comp.ifs]
                         if all(conditions):
                             await rec(gen_idx + 1)
@@ -942,7 +958,7 @@ class ASTInterpreter:
                     for item in iterable:
                         new_frame = self.env_stack[-1].copy()
                         self.env_stack.append(new_frame)
-                        await self.assign(comp.target, item)  # Added await
+                        await self.assign(comp.target, item)
                         conditions = [await self.visit(if_clause, wrap_exceptions=True) for if_clause in comp.ifs]
                         if all(conditions):
                             await rec(gen_idx + 1)
@@ -957,7 +973,6 @@ class ASTInterpreter:
         return value
 
     async def visit_YieldFrom(self, node: ast.YieldFrom, wrap_exceptions: bool = True) -> Any:
-        # Fix: Properly handle YieldFrom as a generator without awaiting
         iterable = await self.visit(node.value, wrap_exceptions=wrap_exceptions)
         if hasattr(iterable, '__aiter__'):
             async def async_gen():
@@ -1095,6 +1110,7 @@ class Function:
         self.kwarg_name = kwarg_name
         self.pos_defaults = pos_defaults
         self.kw_defaults = kw_defaults
+        self.defining_class = None  # Added for class inheritance support
 
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         new_env_stack: List[Dict[str, Any]] = self.closure[:]
@@ -1142,46 +1158,30 @@ class Function:
             raise TypeError(f"Function '{self.node.name}' missing required arguments: {', '.join(missing_args)}")
 
         new_env_stack.append(local_frame)
+        if self.pos_kw_params and self.pos_kw_params[0] == 'self' and args:
+            local_frame['__current_method__'] = self  # Added for super() support
         new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
 
         # Check if the function is a generator
-        is_generator = any(isinstance(stmt, (ast.Expr, ast.Yield, ast.YieldFrom)) and 
-                          isinstance(getattr(stmt, 'value', None), (ast.Yield, ast.YieldFrom)) 
-                          for stmt in self.node.body)
+        is_generator = any(isinstance(stmt, ast.Expr) and isinstance(stmt.value, (ast.Yield, ast.YieldFrom))
+                           for stmt in self.node.body)
 
         if is_generator:
-            if not has_await(self.node):
-                def generator():
-                    for body_stmt in self.node.body:
-                        if isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, ast.Yield):
-                            value = new_interp.visit(body_stmt.value, wrap_exceptions=True)
-                            if hasattr(value, '__iter__'):
-                                yield from value
-                            elif value is not None:
-                                yield value
-                        elif isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, ast.YieldFrom):
-                            value = new_interp.visit(body_stmt.value, wrap_exceptions=True)
-                            if hasattr(value, '__iter__'):
-                                yield from value
+            async def generator():
+                for body_stmt in self.node.body:
+                    if isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, (ast.Yield, ast.YieldFrom)):
+                        value = await new_interp.visit(body_stmt.value, wrap_exceptions=True)
+                        if hasattr(value, '__aiter__'):
+                            async for v in value:
+                                yield v
+                        elif hasattr(value, '__iter__'):
+                            for v in value:
+                                yield v
                         else:
-                            new_interp.visit(body_stmt, wrap_exceptions=True)
-                return generator()
-            else:
-                async def generator():
-                    for body_stmt in self.node.body:
-                        if isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, (ast.Yield, ast.YieldFrom)):
-                            value = await new_interp.visit(body_stmt.value, wrap_exceptions=True)
-                            if hasattr(value, '__aiter__'):
-                                async for v in value:
-                                    yield v
-                            elif hasattr(value, '__iter__'):
-                                for v in value:
-                                    yield v
-                            elif value is not None:
-                                yield value
-                        else:
-                            await new_interp.visit(body_stmt, wrap_exceptions=True)
-                return generator()
+                            yield value
+                    else:
+                        await new_interp.visit(body_stmt, wrap_exceptions=True)
+            return generator()
         else:
             try:
                 for stmt in self.node.body[:-1]:
