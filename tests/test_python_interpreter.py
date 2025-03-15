@@ -129,9 +129,6 @@ result
     assert result == "greater"
 
 
-# New tests covering various Python language features:
-
-
 def test_print_function():
     # print returns None
     source = "print('hello')"
@@ -474,3 +471,399 @@ def test_backslash_in_string():
     result = interpret_code(source, allowed_modules=[])
     # The literal 'line1\nline2' has an actual newline character.
     assert result == "line1\nline2"
+
+
+# New extensive tests added below:
+
+def test_set_operations():
+    source = """
+s1 = {1, 2, 3}
+s2 = {2, 3, 4}
+union = s1 | s2
+intersection = s1 & s2
+difference = s1 - s2
+result = (union, intersection, difference)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == ({1, 2, 3, 4}, {2, 3}, {1})
+
+
+def test_class_inheritance():
+    source = """
+class Base:
+    def __init__(self):
+        self.x = 1
+class Derived(Base):
+    def __init__(self):
+        super().__init__()
+        self.x += 2
+obj = Derived()
+result = obj.x
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 3
+
+
+def test_decorator():
+    source = """
+def deco(func):
+    def wrapper(*args):
+        return func(*args) + 1
+    return wrapper
+@deco
+def add(a, b):
+    return a + b
+result = add(2, 3)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 6
+
+
+def test_nested_generator():
+    source = """
+def nested_gen():
+    for i in range(2):
+        yield from (x * i for x in range(3))
+result = list(nested_gen())
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == [0, 1, 2, 0, 3, 6]
+
+
+def test_extended_slice():
+    source = "lst = [0, 1, 2, 3, 4, 5]\nresult = lst[::2]"
+    result = interpret_code(source, allowed_modules=[])
+    assert result == [0, 2, 4]
+
+
+def test_string_formatting_multiple():
+    source = "a = 5\nb = 'test'\nresult = f'{a} is {b}'"
+    result = interpret_code(source, allowed_modules=[])
+    assert result == "5 is test"
+
+
+def test_bitwise_shift():
+    source = "result = (4 << 2) >> 1"
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 8  # 4 << 2 = 16, 16 >> 1 = 8
+
+
+def test_complex_arithmetic():
+    source = "result = (2 + 3j) + (1 - 2j) * 2"
+    result = interpret_code(source, allowed_modules=[])
+    assert result == (4 - 1j)
+
+
+def test_try_except_finally():
+    source = """
+result = None
+try:
+    x = 1 / 0
+except ZeroDivisionError:
+    result = "error"
+finally:
+    result = result or "finally"
+result
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == "error"
+
+
+def test_multi_line_expression():
+    source = """
+result = (1 + 2 +
+          3 * 4 -
+          5)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 10
+
+
+def test_default_arguments():
+    source = """
+def func(x, y=10):
+    return x + y
+result = func(5)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 15
+
+
+def test_keyword_arguments():
+    source = """
+def func(a, b):
+    return a - b
+result = func(b=3, a=10)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 7
+
+
+def test_star_args():
+    source = """
+def sum_all(*args):
+    return sum(args)
+result = sum_all(1, 2, 3, 4)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 10
+
+
+def test_kwargs():
+    source = """
+def build_dict(**kwargs):
+    return kwargs
+result = build_dict(x=1, y=2)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == {"x": 1, "y": 2}
+
+
+def test_mixed_args():
+    source = """
+def mixed(a, b=2, *args, **kwargs):
+    return a + b + sum(args) + kwargs.get('x', 0)
+result = mixed(1, 3, 4, 5, x=6)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 19  # 1 + 3 + (4 + 5) + 6
+
+
+def test_list_methods():
+    source = """
+lst = [1, 2, 3]
+lst.append(4)
+lst.pop(0)
+result = lst
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == [2, 3, 4]
+
+
+def test_string_concatenation():
+    source = "result = 'a' + 'b' * 3"
+    result = interpret_code(source, allowed_modules=[])
+    assert result == "abbb"
+
+
+def test_none_comparison():
+    source = "a = None\nresult = a is None"
+    result = interpret_code(source, allowed_modules=[])
+    assert result is True
+
+
+def test_boolean_short_circuit():
+    source = """
+def risky():
+    raise ValueError
+result = False and risky()
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result is False  # risky() should not be called
+
+
+def test_nested_if():
+    source = """
+x = 10
+if x > 5:
+    if x < 15:
+        result = "in range"
+    else:
+        result = "too big"
+else:
+    result = "too small"
+result
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == "in range"
+
+
+def test_loop_with_else():
+    source = """
+result = 0
+for i in range(3):
+    result += i
+else:
+    result += 10
+result
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 13  # 0 + 1 + 2 + 10
+
+
+def test_break_in_loop_with_else():
+    source = """
+result = 0
+for i in range(5):
+    if i == 2:
+        break
+    result += i
+else:
+    result += 10
+result
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 1  # 0 + 1, breaks before else
+
+
+def test_property_decorator():
+    source = """
+class A:
+    def __init__(self):
+        self._x = 5
+    @property
+    def x(self):
+        return self._x
+a = A()
+result = a.x
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 5
+
+
+def test_static_method():
+    source = """
+class A:
+    @staticmethod
+    def add(x, y):
+        return x + y
+result = A.add(3, 4)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 7
+
+
+def test_class_method():
+    source = """
+class A:
+    @classmethod
+    def get(cls):
+        return 42
+result = A.get()
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 42
+
+
+def test_type_hint_ignored():
+    source = """
+def add(a: int, b: str) -> float:
+    return a + b  # Type hints ignored in execution
+result = add(3, 4)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 7
+
+
+def test_list_del():
+    source = """
+lst = [1, 2, 3, 4]
+del lst[1]
+result = lst
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == [1, 3, 4]
+
+
+def test_dict_del():
+    source = """
+d = {'a': 1, 'b': 2}
+del d['a']
+result = d
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == {'b': 2}
+
+
+def test_augmented_assignments_all():
+    source = """
+x = 10
+x += 5
+x -= 2
+x *= 3
+x //= 2
+x %= 5
+result = x
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 4  # (((10 + 5) - 2) * 3) // 2 % 5
+
+
+def test_empty_structures():
+    source = """
+a = []
+b = {}
+c = set()
+d = ()
+result = (len(a), len(b), len(c), len(d))
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == (0, 0, 0, 0)
+
+
+def test_multi_level_nesting():
+    source = """
+result = {'a': [1, {'b': (2, 3)}]}['a'][1]['b'][1]
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 3
+
+
+def test_identity_vs_equality():
+    source = """
+a = [1, 2]
+b = [1, 2]
+result = (a == b, a is b)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == (True, False)
+
+
+def test_exception_with_message():
+    source = """
+try:
+    raise ValueError("test error")
+except ValueError as e:
+    result = str(e)
+result
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == "test error"
+
+
+def test_generator_with_condition():
+    source = """
+gen = (x for x in range(5) if x % 2 == 0)
+result = list(gen)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == [0, 2, 4]
+
+
+def test_slice_with_negative_indices():
+    source = """
+lst = [0, 1, 2, 3, 4]
+result = lst[-3:-1]
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == [2, 3]
+
+
+def test_multiple_assignments():
+    source = """
+a = b = c = 5
+result = a + b + c
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == 15
+
+
+def test_swap_variables():
+    source = """
+a = 1
+b = 2
+a, b = b, a
+result = (a, b)
+"""
+    result = interpret_code(source, allowed_modules=[])
+    assert result == (2, 1)
