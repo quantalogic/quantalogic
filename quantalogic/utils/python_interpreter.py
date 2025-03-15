@@ -619,11 +619,12 @@ class ASTInterpreter:
             for stmt in node.body:
                 result = await self.visit(stmt)
         except Exception as e:
+            original_e = e.__cause__ if e.__cause__ else e
             for handler in node.handlers:
                 exc_type = await self._resolve_exception_type(handler.type)
-                if exc_type and isinstance(e, exc_type):
+                if exc_type and isinstance(original_e, exc_type):
                     if handler.name:
-                        self.set_variable(handler.name, e)
+                        self.set_variable(handler.name, original_e)
                     for stmt in handler.body:
                         result = await self.visit(stmt)
                     break
