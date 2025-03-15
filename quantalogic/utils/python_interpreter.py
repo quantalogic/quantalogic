@@ -556,11 +556,14 @@ class ASTInterpreter:
                 method_name = node.func.attr
                 method = getattr(value, method_name)
                 if isinstance(method, Function):
-                    bound_method = method.__get__(value._obj, type(value._obj))
+                    # Ensure the instance is correctly bound and state persists
+                    instance = value.__self__
+                    bound_method = method.__get__(instance, method.defining_class or type(instance))
                     result = await bound_method(*evaluated_args, **kwargs)
                     if asyncio.iscoroutine(result) and not is_await_context:
                         result = await result
                     return result
+                # For built-in methods, call directly
                 return method(*evaluated_args, **kwargs)
 
         # Handle list with async iterables
@@ -578,11 +581,13 @@ class ASTInterpreter:
                 init_method = getattr(func, '__init__', None)
                 if init_method:
                     if isinstance(init_method, Function):
+                        # Call custom __init__ with instance
                         await init_method(instance, *evaluated_args, **kwargs)
                     else:
-                        # Fix for test_exception_with_message: Explicitly initialize built-in exceptions
+                        # Handle built-in exceptions and standard classes
                         if issubclass(func, BaseException):
-                            instance.__init__(*evaluated_args, **kwargs)
+                            # Create exception instance with arguments
+                            instance = func(*evaluated_args, **kwargs)
                         else:
                             init_method(instance, *evaluated_args, **kwargs)
             return instance
@@ -1115,7 +1120,6 @@ class Function:
         self.pos_defaults = pos_defaults
         self.kw_defaults = kw_defaults
         self.defining_class = None  # Added for class inheritance support
-        # Fix for test_nested_generator: Recursively check for yield/yield from to detect generators
         self.is_generator = any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
 
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
@@ -1163,19 +1167,18 @@ class Function:
         if missing_args:
             raise TypeError(f"Function '{self.node.name}' missing required arguments: {', '.join(missing_args)}")
 
-        # Fix for test_class_inheritance: Bind 'self' before adding to env_stack for instance methods
+        # Bind 'self' explicitly and ensure state persists
         if self.pos_kw_params and self.pos_kw_params[0] == 'self' and args:
-            local_frame['self'] = args[0]  # Explicitly bind instance
-            local_frame['__current_method__'] = self  # For super() support
+            local_frame['self'] = args[0]
+            local_frame['__current_method__'] = self
 
         new_env_stack.append(local_frame)
         new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
 
         if self.is_generator:
-            # Fix for test_nested_generator: Ensure proper yielding from nested generators
             async def generator():
                 for body_stmt in self.node.body:
-                    if isinstance(body_stmt, ast.For):  # Handle for loops with yield from
+                    if isinstance(body_stmt, ast.For):
                         iter_obj = await new_interp.visit(body_stmt.iter, wrap_exceptions=True)
                         for item in iter_obj:
                             new_frame = new_interp.env_stack[-1].copy()
