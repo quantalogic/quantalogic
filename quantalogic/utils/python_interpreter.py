@@ -207,13 +207,24 @@ class ASTInterpreter:
             else:
                 comp = node.generators[gen_idx]
                 iterable = await self.visit(comp.iter)
-                for item in iterable:
-                    new_frame: Dict[str, Any] = self.env_stack[-1].copy()
-                    self.env_stack.append(new_frame)
-                    self.assign(comp.target, item)
-                    if all(await self.visit(if_clause) for if_clause in comp.ifs):
-                        await rec(gen_idx + 1)
-                    self.env_stack.pop()
+                if hasattr(iterable, '__aiter__'):
+                    async for item in iterable:
+                        new_frame: Dict[str, Any] = self.env_stack[-1].copy()
+                        self.env_stack.append(new_frame)
+                        self.assign(comp.target, item)
+                        conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
+                        if all(conditions):
+                            await rec(gen_idx + 1)
+                        self.env_stack.pop()
+                else:
+                    for item in iterable:
+                        new_frame: Dict[str, Any] = self.env_stack[-1].copy()
+                        self.env_stack.append(new_frame)
+                        self.assign(comp.target, item)
+                        conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
+                        if all(conditions):
+                            await rec(gen_idx + 1)
+                        self.env_stack.pop()
 
         await rec(0)
         self.env_stack.pop()
@@ -524,7 +535,8 @@ class ASTInterpreter:
         return [await self.visit(elt) for elt in node.elts]
 
     async def visit_Tuple(self, node: ast.Tuple) -> Tuple[Any, ...]:
-        return tuple(await self.visit(elt) for elt in node.elts)
+        elements = [await self.visit(elt) for elt in node.elts]
+        return tuple(elements)
 
     async def visit_Dict(self, node: ast.Dict) -> Dict[Any, Any]:
         return {await self.visit(k): await self.visit(v) for k, v in zip(node.keys, node.values)}
@@ -571,23 +583,26 @@ class ASTInterpreter:
                 result = await self.visit(stmt)
         except Exception as e:
             exc_info = (type(e), e, e.__traceback__)
+            handled = False
             for handler in node.handlers:
+                exc_type = None
                 if handler.type is None:
                     exc_type = Exception
-                elif isinstance(handler.type, ast.Constant) and isinstance(handler.type.value, type):
-                    exc_type = handler.type.value
                 elif isinstance(handler.type, ast.Name):
                     exc_type = self.get_variable(handler.type.id)
-                else:
-                    exc_type = await self.visit(handler.type)
-                if exc_info and issubclass(exc_info[0], exc_type):
+                elif isinstance(handler.type, ast.Call):
+                    exc_type_name = handler.type.func.id if isinstance(handler.type.func, ast.Name) else None
+                    if exc_type_name:
+                        exc_type = getattr(builtins, exc_type_name, None)
+                if exc_info and exc_type and isinstance(e, exc_type):
                     if handler.name:
                         self.set_variable(handler.name, exc_info[1])
                     for stmt in handler.body:
                         result = await self.visit(stmt)
+                    handled = True
                     exc_info = None
                     break
-            if exc_info:
+            if exc_info and not handled:
                 raise exc_info[1]
         else:
             for stmt in node.orelse:
@@ -697,19 +712,30 @@ class ASTInterpreter:
                 else:
                     comp = node.generators[gen_idx]
                     iterable = await self.visit(comp.iter)
-                    for item in iterable:
-                        new_frame: Dict[str, Any] = self.env_stack[-1].copy()
-                        self.env_stack.append(new_frame)
-                        self.assign(comp.target, item)
-                        if all(await self.visit(if_clause) for if_clause in comp.ifs):
-                            async for val in rec(gen_idx + 1):
-                                yield val
-                        self.env_stack.pop()
+                    if hasattr(iterable, '__aiter__'):
+                        async for item in iterable:
+                            new_frame: Dict[str, Any] = self.env_stack[-1].copy()
+                            self.env_stack.append(new_frame)
+                            self.assign(comp.target, item)
+                            conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
+                            if all(conditions):
+                                async for val in rec(gen_idx + 1):
+                                    yield val
+                            self.env_stack.pop()
+                    else:
+                        for item in iterable:
+                            new_frame: Dict[str, Any] = self.env_stack[-1].copy()
+                            self.env_stack.append(new_frame)
+                            self.assign(comp.target, item)
+                            conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
+                            if all(conditions):
+                                async for val in rec(gen_idx + 1):
+                                    yield val
+                            self.env_stack.pop()
 
-            gen = rec(0)
-            self.env_stack.pop()
-            async for val in gen:
+            async for val in rec(0):
                 yield val
+            self.env_stack.pop()
 
         return generator()
 
@@ -767,13 +793,25 @@ class ASTInterpreter:
                 result[key] = val
             else:
                 comp = node.generators[gen_idx]
-                for item in await self.visit(comp.iter):
-                    new_frame = self.env_stack[-1].copy()
-                    self.env_stack.append(new_frame)
-                    self.assign(comp.target, item)
-                    if all(await self.visit(if_clause) for if_clause in comp.ifs):
-                        await rec(gen_idx + 1)
-                    self.env_stack.pop()
+                iterable = await self.visit(comp.iter)
+                if hasattr(iterable, '__aiter__'):
+                    async for item in iterable:
+                        new_frame = self.env_stack[-1].copy()
+                        self.env_stack.append(new_frame)
+                        self.assign(comp.target, item)
+                        conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
+                        if all(conditions):
+                            await rec(gen_idx + 1)
+                        self.env_stack.pop()
+                else:
+                    for item in iterable:
+                        new_frame = self.env_stack[-1].copy()
+                        self.env_stack.append(new_frame)
+                        self.assign(comp.target, item)
+                        conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
+                        if all(conditions):
+                            await rec(gen_idx + 1)
+                        self.env_stack.pop()
 
         await rec(0)
         self.env_stack.pop()
@@ -789,13 +827,25 @@ class ASTInterpreter:
                 result.add(await self.visit(node.elt))
             else:
                 comp = node.generators[gen_idx]
-                for item in await self.visit(comp.iter):
-                    new_frame = self.env_stack[-1].copy()
-                    self.env_stack.append(new_frame)
-                    self.assign(comp.target, item)
-                    if all(await self.visit(if_clause) for if_clause in comp.ifs):
-                        await rec(gen_idx + 1)
-                    self.env_stack.pop()
+                iterable = await self.visit(comp.iter)
+                if hasattr(iterable, '__aiter__'):
+                    async for item in iterable:
+                        new_frame = self.env_stack[-1].copy()
+                        self.env_stack.append(new_frame)
+                        self.assign(comp.target, item)
+                        conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
+                        if all(conditions):
+                            await rec(gen_idx + 1)
+                        self.env_stack.pop()
+                else:
+                    for item in iterable:
+                        new_frame = self.env_stack[-1].copy()
+                        self.env_stack.append(new_frame)
+                        self.assign(comp.target, item)
+                        conditions = [await self.visit(if_clause) for if_clause in comp.ifs]
+                        if all(conditions):
+                            await rec(gen_idx + 1)
+                        self.env_stack.pop()
 
         await rec(0)
         self.env_stack.pop()
