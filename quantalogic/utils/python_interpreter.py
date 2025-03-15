@@ -1,19 +1,15 @@
 import ast
 import builtins
 import textwrap
-import asyncio
-import inspect
-import sys
 from typing import Any, Dict, List, Optional, Tuple
+import asyncio
 
 
-# Exception used to signal a "return" from a function call.
 class ReturnException(Exception):
     def __init__(self, value: Any) -> None:
         self.value: Any = value
 
 
-# Exceptions used for loop control.
 class BreakException(Exception):
     pass
 
@@ -22,64 +18,46 @@ class ContinueException(Exception):
     pass
 
 
-# The main interpreter class.
 class ASTInterpreter:
     def __init__(
         self, allowed_modules: List[str], env_stack: Optional[List[Dict[str, Any]]] = None, source: Optional[str] = None
     ) -> None:
-        """
-        Initialize the AST interpreter with restricted module access and environment stack.
-
-        Args:
-            allowed_modules: List of module names allowed to be imported.
-            env_stack: Optional pre-existing environment stack; if None, a new one is created.
-            source: Optional source code string for error reporting.
-        """
         self.allowed_modules: List[str] = allowed_modules
-        self.modules: Dict[str, Any] = {}
-        # Import only the allowed modules.
-        for mod in allowed_modules:
-            self.modules[mod] = __import__(mod)
+        self.modules: Dict[str, Any] = {mod: __import__(mod) for mod in allowed_modules}
         if env_stack is None:
-            # Create a global environment (first frame) with allowed modules.
             self.env_stack: List[Dict[str, Any]] = [{}]
             self.env_stack[0].update(self.modules)
-            # Use builtins from the builtins module.
             safe_builtins: Dict[str, Any] = dict(vars(builtins))
             safe_builtins["__import__"] = self.safe_import
+            safe_builtins.update({
+                "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
+                "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
+                "type": type, "isinstance": isinstance, "issubclass": issubclass,
+            })
             if "set" not in safe_builtins:
                 safe_builtins["set"] = set
             self.env_stack[0]["__builtins__"] = safe_builtins
-            # Make builtins names (like set) directly available.
             self.env_stack[0].update(safe_builtins)
-            if "set" not in self.env_stack[0]:
-                self.env_stack[0]["set"] = set
-            # Add asyncio
-            if "asyncio" in allowed_modules:
-                self.env_stack[0]["asyncio"] = asyncio
         else:
             self.env_stack = env_stack
-            # Ensure global frame has safe builtins.
             if "__builtins__" not in self.env_stack[0]:
                 safe_builtins: Dict[str, Any] = dict(vars(builtins))
                 safe_builtins["__import__"] = self.safe_import
+                safe_builtins.update({
+                    "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
+                    "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
+                    "type": type, "isinstance": isinstance, "issubclass": issubclass,
+                })
                 if "set" not in safe_builtins:
                     safe_builtins["set"] = set
                 self.env_stack[0]["__builtins__"] = safe_builtins
                 self.env_stack[0].update(safe_builtins)
-            if "set" not in self.env_stack[0]:
-                self.env_stack[0]["set"] = self.env_stack[0]["__builtins__"]["set"]
-            # Add asyncio if needed
-            if "asyncio" in allowed_modules and "asyncio" not in self.env_stack[0]:
-                self.env_stack[0]["asyncio"] = asyncio
 
-        # Store source code lines for error reporting if provided.
         if source is not None:
             self.source_lines: Optional[List[str]] = source.splitlines()
         else:
             self.source_lines = None
 
-        # Add standard Decimal features if allowed.
         if "decimal" in self.modules:
             dec = self.modules["decimal"]
             self.env_stack[0]["Decimal"] = dec.Decimal
@@ -88,7 +66,8 @@ class ASTInterpreter:
             self.env_stack[0]["localcontext"] = dec.localcontext
             self.env_stack[0]["Context"] = dec.Context
 
-    # This safe __import__ only allows modules explicitly provided.
+        self.loop = None
+
     def safe_import(
         self,
         name: str,
@@ -97,43 +76,39 @@ class ASTInterpreter:
         fromlist: Tuple[str, ...] = (),
         level: int = 0,
     ) -> Any:
-        """Restrict imports to only allowed modules."""
         if name not in self.allowed_modules:
-            error_msg = f"Import Error: Module '{name}' is not allowed. Only {self.allowed_modules} are permitted."
-            raise ImportError(error_msg)
+            raise ImportError(f"Import Error: Module '{name}' is not allowed. Only {self.allowed_modules} are permitted.")
         return self.modules[name]
 
-    # Helper: create a new interpreter instance using a given environment stack.
     def spawn_from_env(self, env_stack: List[Dict[str, Any]]) -> "ASTInterpreter":
-        """Spawn a new interpreter with the provided environment stack."""
-        return ASTInterpreter(
+        new_interp = ASTInterpreter(
             self.allowed_modules, env_stack, source="\n".join(self.source_lines) if self.source_lines else None
         )
+        new_interp.loop = self.loop
+        return new_interp
 
-    # Look up a variable in the chain of environment frames.
     def get_variable(self, name: str) -> Any:
-        """Retrieve a variable's value from the environment stack."""
         for frame in reversed(self.env_stack):
             if name in frame:
                 return frame[name]
-        raise NameError(f"Name {name} is not defined.")
+        raise NameError(f"Name '{name}' is not defined.")
 
-    # Always assign to the most local environment.
     def set_variable(self, name: str, value: Any) -> None:
-        """Set a variable in the most local environment frame."""
-        self.env_stack[-1][name] = value
+        if "__nonlocal_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__nonlocal_names__"]:
+            for frame in reversed(self.env_stack[:-1]):
+                if name in frame:
+                    frame[name] = value
+                    return
+            raise NameError(f"Nonlocal name '{name}' not found in outer scope")
+        elif "__global_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__global_names__"]:
+            self.env_stack[0][name] = value
+        else:
+            self.env_stack[-1][name] = value
 
-    # Used for assignment targets. This handles names and destructuring.
     def assign(self, target: ast.AST, value: Any) -> None:
-        """Assign a value to a target (name, tuple, attribute, or subscript)."""
         if isinstance(target, ast.Name):
-            # If current frame declares the name as global, update global frame.
-            if "__global_names__" in self.env_stack[-1] and target.id in self.env_stack[-1]["__global_names__"]:
-                self.env_stack[0][target.id] = value
-            else:
-                self.env_stack[-1][target.id] = value
+            self.set_variable(target.id, value)
         elif isinstance(target, (ast.Tuple, ast.List)):
-            # Support single-star unpacking.
             star_index = None
             for i, elt in enumerate(target.elts):
                 if isinstance(elt, ast.Starred):
@@ -148,13 +123,13 @@ class ASTInterpreter:
             else:
                 total = len(value)
                 before = target.elts[:star_index]
-                after = target.elts[star_index + 1 :]
+                after = target.elts[star_index + 1:]
                 if len(before) + len(after) > total:
                     raise ValueError("Unpacking mismatch")
                 for i, elt2 in enumerate(before):
                     self.assign(elt2, value[i])
                 starred_count = total - len(before) - len(after)
-                self.assign(target.elts[star_index].value, value[len(before) : len(before) + starred_count])
+                self.assign(target.elts[star_index].value, value[len(before):len(before) + starred_count])
                 for j, elt2 in enumerate(after):
                     self.assign(elt2, value[len(before) + starred_count + j])
         elif isinstance(target, ast.Attribute):
@@ -167,13 +142,15 @@ class ASTInterpreter:
         else:
             raise Exception("Unsupported assignment target type: " + str(type(target)))
 
-    # Main visitor dispatch.
-    def visit(self, node: ast.AST) -> Any:
-        """Dispatch to the appropriate visitor method for the AST node."""
+    async def visit(self, node: ast.AST, is_await_context: bool = False) -> Any:
         method_name: str = "visit_" + node.__class__.__name__
         method = getattr(self, method_name, self.generic_visit)
         try:
-            return method(node)
+            if method_name == "visit_Call":
+                result = await method(node, is_await_context)
+            else:
+                result = await method(node)
+            return result
         except (ReturnException, BreakException, ContinueException):
             raise
         except Exception as e:
@@ -186,9 +163,7 @@ class ASTInterpreter:
                 context_line = self.source_lines[lineno - 1]
             raise Exception(f"Error line {lineno}, col {col}:\n{context_line}\nDescription: {str(e)}") from e
 
-    # Fallback for unsupported nodes.
-    def generic_visit(self, node: ast.AST) -> Any:
-        """Handle unsupported AST nodes with an error."""
+    async def generic_visit(self, node: ast.AST) -> Any:
         lineno = getattr(node, "lineno", None)
         context_line = ""
         if self.source_lines and lineno is not None and 1 <= lineno <= len(self.source_lines):
@@ -197,12 +172,7 @@ class ASTInterpreter:
             f"Unsupported AST node type: {node.__class__.__name__} at line {lineno}.\nContext: {context_line}"
         )
 
-    # --- Visitor for Import nodes ---
-    def visit_Import(self, node: ast.Import) -> None:
-        """
-        Process an import statement.
-        Only allowed modules can be imported.
-        """
+    async def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             module_name: str = alias.name
             asname: str = alias.asname if alias.asname is not None else module_name
@@ -212,8 +182,7 @@ class ASTInterpreter:
                 )
             self.set_variable(asname, self.modules[module_name])
 
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        """Process 'from ... import ...' statements with restricted module access."""
+    async def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if not node.module:
             raise Exception("Import Error: Missing module name in 'from ... import ...' statement")
         if node.module not in self.allowed_modules:
@@ -227,54 +196,42 @@ class ASTInterpreter:
             attr = getattr(self.modules[node.module], alias.name)
             self.set_variable(asname, attr)
 
-    # --- Visitor for ListComprehension nodes ---
-    def visit_ListComp(self, node: ast.ListComp) -> List[Any]:
-        """
-        Process a list comprehension, e.g., [elt for ... in ... if ...].
-        The comprehension is executed in a new local frame that inherits the current environment.
-        """
+    async def visit_ListComp(self, node: ast.ListComp) -> List[Any]:
         result: List[Any] = []
-        # Copy the current top-level frame for the comprehension scope.
         base_frame: Dict[str, Any] = self.env_stack[-1].copy()
         self.env_stack.append(base_frame)
 
-        def rec(gen_idx: int) -> None:
+        async def rec(gen_idx: int) -> None:
             if gen_idx == len(node.generators):
-                result.append(self.visit(node.elt))
+                result.append(await self.visit(node.elt))
             else:
                 comp = node.generators[gen_idx]
-                iterable = self.visit(comp.iter)
+                iterable = await self.visit(comp.iter)
                 for item in iterable:
-                    # Push a new frame that inherits the current comprehension scope.
                     new_frame: Dict[str, Any] = self.env_stack[-1].copy()
                     self.env_stack.append(new_frame)
                     self.assign(comp.target, item)
-                    if all(self.visit(if_clause) for if_clause in comp.ifs):
-                        rec(gen_idx + 1)
+                    if all(await self.visit(if_clause) for if_clause in comp.ifs):
+                        await rec(gen_idx + 1)
                     self.env_stack.pop()
 
-        rec(0)
+        await rec(0)
         self.env_stack.pop()
         return result
 
-    # --- Other node visitors below ---
-    def visit_Module(self, node: ast.Module) -> Any:
-        """Execute module body and return 'result' or last value."""
-        last_value: Any = None
+    async def visit_Module(self, node: ast.Module) -> Any:
+        last_value = None
         for stmt in node.body:
-            last_value = self.visit(stmt)
+            last_value = await self.visit(stmt)
         return self.env_stack[0].get("result", last_value)
 
-    def visit_Expr(self, node: ast.Expr) -> Any:
-        """Evaluate an expression statement."""
-        return self.visit(node.value)
+    async def visit_Expr(self, node: ast.Expr) -> Any:
+        return await self.visit(node.value)
 
-    def visit_Constant(self, node: ast.Constant) -> Any:
-        """Return the value of a constant node."""
+    async def visit_Constant(self, node: ast.Constant) -> Any:
         return node.value
 
-    def visit_Name(self, node: ast.Name) -> Any:
-        """Handle variable name lookups or stores."""
+    async def visit_Name(self, node: ast.Name) -> Any:
         if isinstance(node.ctx, ast.Load):
             return self.get_variable(node.id)
         elif isinstance(node.ctx, ast.Store):
@@ -282,10 +239,9 @@ class ASTInterpreter:
         else:
             raise Exception("Unsupported context for Name")
 
-    def visit_BinOp(self, node: ast.BinOp) -> Any:
-        """Evaluate binary operations."""
-        left: Any = self.visit(node.left)
-        right: Any = self.visit(node.right)
+    async def visit_BinOp(self, node: ast.BinOp) -> Any:
+        left: Any = await self.visit(node.left)
+        right: Any = await self.visit(node.right)
         op = node.op
         if isinstance(op, ast.Add):
             return left + right
@@ -314,9 +270,8 @@ class ASTInterpreter:
         else:
             raise Exception("Unsupported binary operator: " + str(op))
 
-    def visit_UnaryOp(self, node: ast.UnaryOp) -> Any:
-        """Evaluate unary operations."""
-        operand: Any = self.visit(node.operand)
+    async def visit_UnaryOp(self, node: ast.UnaryOp) -> Any:
+        operand: Any = await self.visit(node.operand)
         op = node.op
         if isinstance(op, ast.UAdd):
             return +operand
@@ -329,20 +284,17 @@ class ASTInterpreter:
         else:
             raise Exception("Unsupported unary operator: " + str(op))
 
-    def visit_Assign(self, node: ast.Assign) -> None:
-        """Handle assignment statements."""
-        value: Any = self.visit(node.value)
+    async def visit_Assign(self, node: ast.Assign) -> None:
+        value: Any = await self.visit(node.value)
         for target in node.targets:
             self.assign(target, value)
 
-    def visit_AugAssign(self, node: ast.AugAssign) -> Any:
-        """Handle augmented assignments (e.g., +=)."""
-        # If target is a Name, get its current value from the environment.
+    async def visit_AugAssign(self, node: ast.AugAssign) -> Any:
         if isinstance(node.target, ast.Name):
             current_val: Any = self.get_variable(node.target.id)
         else:
-            current_val: Any = self.visit(node.target)
-        right_val: Any = self.visit(node.value)
+            current_val: Any = await self.visit(node.target)
+        right_val: Any = await self.visit(node.value)
         op = node.op
         if isinstance(op, ast.Add):
             result: Any = current_val + right_val
@@ -373,11 +325,10 @@ class ASTInterpreter:
         self.assign(node.target, result)
         return result
 
-    def visit_Compare(self, node: ast.Compare) -> bool:
-        """Evaluate comparison operations."""
-        left: Any = self.visit(node.left)
+    async def visit_Compare(self, node: ast.Compare) -> bool:
+        left: Any = await self.visit(node.left)
         for op, comparator in zip(node.ops, node.comparators):
-            right: Any = self.visit(comparator)
+            right: Any = await self.visit(comparator)
             if isinstance(op, ast.Eq):
                 if not (left == right):
                     return False
@@ -413,182 +364,214 @@ class ASTInterpreter:
             left = right
         return True
 
-    def visit_BoolOp(self, node: ast.BoolOp) -> bool:
-        """Evaluate boolean operations (and/or)."""
+    async def visit_BoolOp(self, node: ast.BoolOp) -> bool:
         if isinstance(node.op, ast.And):
             for value in node.values:
-                if not self.visit(value):
+                if not await self.visit(value):
                     return False
             return True
         elif isinstance(node.op, ast.Or):
             for value in node.values:
-                if self.visit(value):
+                if await self.visit(value):
                     return True
             return False
         else:
             raise Exception("Unsupported boolean operator: " + str(node.op))
 
-    def visit_If(self, node: ast.If) -> Any:
-        """Handle if statements."""
-        if self.visit(node.test):
+    async def visit_If(self, node: ast.If) -> Any:
+        if await self.visit(node.test):
             branch = node.body
         else:
             branch = node.orelse
         result = None
         if branch:
             for stmt in branch[:-1]:
-                # Execute all but the last statement
-                self.visit(stmt)
-            # Return value from the last statement
-            result = self.visit(branch[-1])
+                await self.visit(stmt)
+            result = await self.visit(branch[-1])
         return result
 
-    def visit_While(self, node: ast.While) -> None:
-        """Handle while loops."""
-        while self.visit(node.test):
+    async def visit_While(self, node: ast.While) -> None:
+        while await self.visit(node.test):
             try:
                 for stmt in node.body:
-                    self.visit(stmt)
+                    await self.visit(stmt)
             except BreakException:
                 break
             except ContinueException:
                 continue
         for stmt in node.orelse:
-            self.visit(stmt)
+            await self.visit(stmt)
 
-    def visit_For(self, node: ast.For) -> None:
-        """Handle for loops."""
-        iter_obj: Any = self.visit(node.iter)
+    async def visit_For(self, node: ast.For) -> None:
+        iter_obj: Any = await self.visit(node.iter)
         for item in iter_obj:
             self.assign(node.target, item)
             try:
                 for stmt in node.body:
-                    self.visit(stmt)
+                    await self.visit(stmt)
             except BreakException:
                 break
             except ContinueException:
                 continue
         for stmt in node.orelse:
-            self.visit(stmt)
+            await self.visit(stmt)
 
-    def visit_Break(self, node: ast.Break) -> None:
-        """Handle break statements."""
+    async def visit_Break(self, node: ast.Break) -> None:
         raise BreakException()
 
-    def visit_Continue(self, node: ast.Continue) -> None:
-        """Handle continue statements."""
+    async def visit_Continue(self, node: ast.Continue) -> None:
         raise ContinueException()
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Define a function and store it in the environment."""
-        # Capture the current env_stack for a closure without copying inner dicts.
+    async def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         closure: List[Dict[str, Any]] = self.env_stack[:]
-        func = Function(node, closure, self)
+        pos_kw_params = [arg.arg for arg in node.args.args]
+        vararg_name = node.args.vararg.arg if node.args.vararg else None
+        kwonly_params = [arg.arg for arg in node.args.kwonlyargs]
+        kwarg_name = node.args.kwarg.arg if node.args.kwarg else None
+        pos_defaults_values = [await self.visit(default) for default in node.args.defaults]
+        num_pos_defaults = len(pos_defaults_values)
+        pos_defaults = dict(zip(pos_kw_params[-num_pos_defaults:], pos_defaults_values)) if num_pos_defaults else {}
+        kw_defaults_values = [await self.visit(default) if default else None for default in node.args.kw_defaults]
+        kw_defaults = dict(zip(kwonly_params, kw_defaults_values))
+        kw_defaults = {k: v for k, v in kw_defaults.items() if v is not None}
+
+        func = Function(node, closure, self, pos_kw_params, vararg_name, kwonly_params, kwarg_name, pos_defaults, kw_defaults)
+        for decorator in reversed(node.decorator_list):
+            dec = await self.visit(decorator)
+            func = await dec(func)
         self.set_variable(node.name, func)
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        """
-        Define an async function as a standard function that returns a direct result.
-        This simplifies async execution by executing it synchronously.
-        """
-        # Convert to a regular function definition for simplicity
-        func_def = ast.FunctionDef(
-            name=node.name,
-            args=node.args,
-            body=node.body,
-            decorator_list=node.decorator_list,
-            returns=node.returns,
-            lineno=node.lineno,
-            col_offset=node.col_offset
-        )
+    async def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        closure: List[Dict[str, Any]] = self.env_stack[:]
+        pos_kw_params = [arg.arg for arg in node.args.args]
+        vararg_name = node.args.vararg.arg if node.args.vararg else None
+        kwonly_params = [arg.arg for arg in node.args.kwonlyargs]
+        kwarg_name = node.args.kwarg.arg if node.args.kwarg else None
+        pos_defaults_values = [await self.visit(default) for default in node.args.defaults]
+        num_pos_defaults = len(pos_defaults_values)
+        pos_defaults = dict(zip(pos_kw_params[-num_pos_defaults:], pos_defaults_values)) if num_pos_defaults else {}
+        kw_defaults_values = [await self.visit(default) if default else None for default in node.args.kw_defaults]
+        kw_defaults = dict(zip(kwonly_params, kw_defaults_values))
+        kw_defaults = {k: v for k, v in kw_defaults.items() if v is not None}
+
+        func = AsyncFunction(node, closure, self, pos_kw_params, vararg_name, kwonly_params, kwarg_name, pos_defaults, kw_defaults)
+        for decorator in reversed(node.decorator_list):
+            dec = await self.visit(decorator)
+            func = await dec(func)
+        self.set_variable(node.name, func)
+
+    async def visit_Call(self, node: ast.Call, is_await_context: bool = False) -> Any:
+        func = await self.visit(node.func)
+        evaluated_args: List[Any] = []
+        for arg in node.args:
+            arg_value = await self.visit(arg)
+            if isinstance(arg, ast.Starred):
+                evaluated_args.extend(arg_value)
+            else:
+                evaluated_args.append(arg_value)
         
-        # Process it as a regular function
-        self.visit_FunctionDef(func_def)
+        kwargs: Dict[str, Any] = {}
+        for kw in node.keywords:
+            if kw.arg is None:  # Handle **kwargs unpacking
+                unpacked_kwargs = await self.visit(kw.value)
+                if not isinstance(unpacked_kwargs, dict):
+                    raise TypeError(f"** argument must be a mapping, not {type(unpacked_kwargs).__name__}")
+                kwargs.update(unpacked_kwargs)
+            else:
+                kwargs[kw.arg] = await self.visit(kw.value)
 
-    def visit_Call(self, node: ast.Call) -> Any:
-        """Handle function calls."""
-        func = self.visit(node.func)
-        args: List[Any] = [self.visit(arg) for arg in node.args]
-        kwargs: Dict[str, Any] = {kw.arg: self.visit(kw.value) for kw in node.keywords}
-        return func(*args, **kwargs)
+        if asyncio.iscoroutinefunction(func) or isinstance(func, AsyncFunction):
+            result = func(*evaluated_args, **kwargs)
+            if not is_await_context:
+                result = await result
+        elif isinstance(func, Function):
+            result = await func(*evaluated_args, **kwargs)
+        else:
+            result = func(*evaluated_args, **kwargs)
+            if asyncio.iscoroutine(result) and not is_await_context:
+                result = await result
+        return result
 
-    def visit_Await(self, node: ast.Await) -> Any:
-        """
-        Handle await expressions by directly executing the value without awaiting.
-        """
-        # Simply return the value directly without awaiting
-        return self.visit(node.value)
+    async def visit_Await(self, node: ast.Await) -> Any:
+        coro = await self.visit(node.value, is_await_context=True)
+        if not asyncio.iscoroutine(coro):
+            raise TypeError(f"Cannot await non-coroutine object: {type(coro)}")
+        return await coro
 
-    def visit_Return(self, node: ast.Return) -> None:
-        """Handle return statements."""
-        value: Any = self.visit(node.value) if node.value is not None else None
+    async def visit_Return(self, node: ast.Return) -> None:
+        value: Any = await self.visit(node.value) if node.value is not None else None
         raise ReturnException(value)
 
-    def visit_Lambda(self, node: ast.Lambda) -> Any:
-        """Define a lambda function."""
+    async def visit_Lambda(self, node: ast.Lambda) -> Any:
         closure: List[Dict[str, Any]] = self.env_stack[:]
-        return LambdaFunction(node, closure, self)
+        pos_kw_params = [arg.arg for arg in node.args.args]
+        vararg_name = node.args.vararg.arg if node.args.vararg else None
+        kwonly_params = [arg.arg for arg in node.args.kwonlyargs]
+        kwarg_name = node.args.kwarg.arg if node.args.kwarg else None
+        pos_defaults_values = [await self.visit(default) for default in node.args.defaults]
+        num_pos_defaults = len(pos_defaults_values)
+        pos_defaults = dict(zip(pos_kw_params[-num_pos_defaults:], pos_defaults_values)) if num_pos_defaults else {}
+        kw_defaults_values = [await self.visit(default) if default else None for default in node.args.kw_defaults]
+        kw_defaults = dict(zip(kwonly_params, kw_defaults_values))
+        kw_defaults = {k: v for k, v in kw_defaults.items() if v is not None}
 
-    def visit_List(self, node: ast.List) -> List[Any]:
-        """Evaluate list literals."""
-        return [self.visit(elt) for elt in node.elts]
+        lambda_func = LambdaFunction(node, closure, self, pos_kw_params, vararg_name, kwonly_params, kwarg_name, pos_defaults, kw_defaults)
+        async def async_lambda(*args, **kwargs):
+            return await lambda_func(*args, **kwargs)
+        return async_lambda
 
-    def visit_Tuple(self, node: ast.Tuple) -> Tuple[Any, ...]:
-        """Evaluate tuple literals."""
-        return tuple(self.visit(elt) for elt in node.elts)
+    async def visit_List(self, node: ast.List) -> List[Any]:
+        return [await self.visit(elt) for elt in node.elts]
 
-    def visit_Dict(self, node: ast.Dict) -> Dict[Any, Any]:
-        """Evaluate dictionary literals."""
-        return {self.visit(k): self.visit(v) for k, v in zip(node.keys, node.values)}
+    async def visit_Tuple(self, node: ast.Tuple) -> Tuple[Any, ...]:
+        return tuple(await self.visit(elt) for elt in node.elts)
 
-    def visit_Set(self, node: ast.Set) -> set:
-        """Evaluate set literals."""
-        return set(self.visit(elt) for elt in node.elts)
+    async def visit_Dict(self, node: ast.Dict) -> Dict[Any, Any]:
+        return {await self.visit(k): await self.visit(v) for k, v in zip(node.keys, node.values)}
 
-    def visit_Attribute(self, node: ast.Attribute) -> Any:
-        """Handle attribute access."""
-        value: Any = self.visit(node.value)
+    async def visit_Set(self, node: ast.Set) -> set:
+        return set(await self.visit(elt) for elt in node.elts)
+
+    async def visit_Attribute(self, node: ast.Attribute) -> Any:
+        value: Any = await self.visit(node.value)
         return getattr(value, node.attr)
 
-    def visit_Subscript(self, node: ast.Subscript) -> Any:
-        """Handle subscript operations (e.g., list indexing)."""
-        value: Any = self.visit(node.value)
-        slice_val: Any = self.visit(node.slice)
+    async def visit_Subscript(self, node: ast.Subscript) -> Any:
+        value: Any = await self.visit(node.value)
+        slice_val: Any = await self.visit(node.slice)
         return value[slice_val]
 
-    def visit_Slice(self, node: ast.Slice) -> slice:
-        """Evaluate slice objects."""
-        lower: Any = self.visit(node.lower) if node.lower else None
-        upper: Any = self.visit(node.upper) if node.upper else None
-        step: Any = self.visit(node.step) if node.step else None
+    async def visit_Slice(self, node: ast.Slice) -> slice:
+        lower: Any = await self.visit(node.lower) if node.lower else None
+        upper: Any = await self.visit(node.upper) if node.upper else None
+        step: Any = await self.visit(node.step) if node.step else None
         return slice(lower, upper, step)
 
-    # For compatibility with older AST versions.
-    def visit_Index(self, node: ast.Index) -> Any:
-        """Handle index nodes for older AST compatibility."""
-        return self.visit(node.value)
+    async def visit_Index(self, node: ast.Index) -> Any:
+        return await self.visit(node.value)
 
-    # Visitor for Pass nodes.
-    def visit_Pass(self, node: ast.Pass) -> None:
-        """Handle pass statements (do nothing)."""
+    async def visit_Starred(self, node: ast.Starred) -> Any:
+        value = await self.visit(node.value)
+        if not isinstance(value, (list, tuple, set)):
+            raise TypeError(f"Cannot unpack non-iterable object of type {type(value).__name__}")
+        return value
+
+    async def visit_Pass(self, node: ast.Pass) -> None:
         return None
 
-    def visit_TypeIgnore(self, node: ast.TypeIgnore) -> None:
-        """Handle type ignore statements (do nothing)."""
+    async def visit_TypeIgnore(self, node: ast.TypeIgnore) -> None:
         pass
 
-    def visit_Try(self, node: ast.Try) -> Any:
-        """Handle try-except blocks."""
+    async def visit_Try(self, node: ast.Try) -> Any:
         result: Any = None
         exc_info: Optional[tuple] = None
 
         try:
             for stmt in node.body:
-                result = self.visit(stmt)
+                result = await self.visit(stmt)
         except Exception as e:
             exc_info = (type(e), e, e.__traceback__)
             for handler in node.handlers:
-                # Modified resolution for exception type.
                 if handler.type is None:
                     exc_type = Exception
                 elif isinstance(handler.type, ast.Constant) and isinstance(handler.type.value, type):
@@ -596,24 +579,23 @@ class ASTInterpreter:
                 elif isinstance(handler.type, ast.Name):
                     exc_type = self.get_variable(handler.type.id)
                 else:
-                    exc_type = self.visit(handler.type)
-                # Use issubclass on the exception type rather than isinstance on the exception instance.
+                    exc_type = await self.visit(handler.type)
                 if exc_info and issubclass(exc_info[0], exc_type):
                     if handler.name:
                         self.set_variable(handler.name, exc_info[1])
                     for stmt in handler.body:
-                        result = self.visit(stmt)
-                    exc_info = None  # Mark as handled
+                        result = await self.visit(stmt)
+                    exc_info = None
                     break
             if exc_info:
                 raise exc_info[1]
         else:
             for stmt in node.orelse:
-                result = self.visit(stmt)
+                result = await self.visit(stmt)
         finally:
             for stmt in node.finalbody:
                 try:
-                    self.visit(stmt)
+                    await self.visit(stmt)
                 except ReturnException:
                     raise
                 except Exception:
@@ -623,412 +605,524 @@ class ASTInterpreter:
 
         return result
 
-    def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
-        """Handle nonlocal statements (minimal support)."""
-        # Minimal support -- assume these names exist in an outer frame.
-        return None
+    async def visit_TryStar(self, node: ast.TryStar) -> Any:
+        result: Any = None
+        exc_info: Optional[tuple] = None
 
-    def visit_JoinedStr(self, node: ast.JoinedStr) -> str:
-        """Handle f-strings by concatenating all parts."""
-        return "".join(self.visit(value) for value in node.values)
+        try:
+            for stmt in node.body:
+                result = await self.visit(stmt)
+        except BaseException as e:
+            exc_info = (type(e), e, e.__traceback__)
+            handled = False
+            if isinstance(e, BaseExceptionGroup):
+                remaining_exceptions = []
+                for handler in node.handlers:
+                    if handler.type is None:
+                        exc_type = BaseException
+                    elif isinstance(handler.type, ast.Name):
+                        exc_type = self.get_variable(handler.type.id)
+                    else:
+                        exc_type = await self.visit(handler.type)
+                    matching_exceptions = [ex for ex in e.exceptions if isinstance(ex, exc_type)]
+                    if matching_exceptions:
+                        if handler.name:
+                            self.set_variable(handler.name, BaseExceptionGroup("", matching_exceptions))
+                        for stmt in handler.body:
+                            result = await self.visit(stmt)
+                        handled = True
+                    remaining_exceptions.extend([ex for ex in e.exceptions if not isinstance(ex, exc_type)])
+                if remaining_exceptions and not handled:
+                    raise BaseExceptionGroup("Uncaught exceptions", remaining_exceptions)
+                if handled:
+                    exc_info = None
+            else:
+                for handler in node.handlers:
+                    if handler.type is None:
+                        exc_type = BaseException
+                    elif isinstance(handler.type, ast.Name):
+                        exc_type = self.get_variable(handler.type.id)
+                    else:
+                        exc_type = await self.visit(handler.type)
+                    if exc_info and issubclass(exc_info[0], exc_type):
+                        if handler.name:
+                            self.set_variable(handler.name, exc_info[1])
+                        for stmt in handler.body:
+                            result = await self.visit(stmt)
+                        exc_info = None
+                        handled = True
+                        break
+            if exc_info and not handled:
+                raise exc_info[1]
+        else:
+            for stmt in node.orelse:
+                result = await self.visit(stmt)
+        finally:
+            for stmt in node.finalbody:
+                try:
+                    await self.visit(stmt)
+                except ReturnException:
+                    raise
+                except Exception:
+                    if exc_info:
+                        raise exc_info[1]
+                    raise
 
-    def visit_FormattedValue(self, node: ast.FormattedValue) -> str:
-        """Handle formatted values within f-strings."""
-        return str(self.visit(node.value))
+        return result
 
-    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> Any:
-        """Handle generator expressions."""
-        def generator():
+    async def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+        self.env_stack[-1].setdefault("__nonlocal_names__", set()).update(node.names)
+
+    async def visit_JoinedStr(self, node: ast.JoinedStr) -> str:
+        parts = []
+        for value in node.values:
+            val = await self.visit(value)
+            if isinstance(value, ast.FormattedValue):
+                parts.append(str(val))
+            else:
+                parts.append(val)
+        return "".join(parts)
+
+    async def visit_FormattedValue(self, node: ast.FormattedValue) -> Any:
+        return await self.visit(node.value)
+
+    async def visit_GeneratorExp(self, node: ast.GeneratorExp) -> Any:
+        async def generator():
             base_frame: Dict[str, Any] = self.env_stack[-1].copy()
             self.env_stack.append(base_frame)
 
-            def rec(gen_idx: int):
+            async def rec(gen_idx: int):
                 if gen_idx == len(node.generators):
-                    yield self.visit(node.elt)
+                    yield await self.visit(node.elt)
                 else:
                     comp = node.generators[gen_idx]
-                    iterable = self.visit(comp.iter)
+                    iterable = await self.visit(comp.iter)
                     for item in iterable:
                         new_frame: Dict[str, Any] = self.env_stack[-1].copy()
                         self.env_stack.append(new_frame)
                         self.assign(comp.target, item)
-                        if all(self.visit(if_clause) for if_clause in comp.ifs):
-                            yield from rec(gen_idx + 1)
+                        if all(await self.visit(if_clause) for if_clause in comp.ifs):
+                            async for val in rec(gen_idx + 1):
+                                yield val
                         self.env_stack.pop()
 
-            gen = list(rec(0))
+            gen = rec(0)
             self.env_stack.pop()
-            for val in gen:
+            async for val in gen:
                 yield val
 
         return generator()
 
-    def visit_ClassDef(self, node: ast.ClassDef):
-        """Handle class definitions."""
+    async def visit_ClassDef(self, node: ast.ClassDef):
         base_frame = self.env_stack[-1].copy()
         self.env_stack.append(base_frame)
         try:
             for stmt in node.body:
-                self.visit(stmt)
+                await self.visit(stmt)
             class_dict = {k: v for k, v in self.env_stack[-1].items() if k not in ["__builtins__"]}
         finally:
             self.env_stack.pop()
         new_class = type(node.name, (), class_dict)
+        for decorator in reversed(node.decorator_list):
+            dec = await self.visit(decorator)
+            new_class = dec(new_class)
         self.set_variable(node.name, new_class)
 
-    def visit_With(self, node: ast.With):
-        """Handle with statements."""
+    async def visit_With(self, node: ast.With):
         for item in node.items:
-            ctx = self.visit(item.context_expr)
+            ctx = await self.visit(item.context_expr)
             val = ctx.__enter__()
             if item.optional_vars:
                 self.assign(item.optional_vars, val)
             try:
                 for stmt in node.body:
-                    self.visit(stmt)
+                    await self.visit(stmt)
             except Exception as e:
                 if not ctx.__exit__(type(e), e, None):
                     raise
             else:
                 ctx.__exit__(None, None, None)
 
-    def visit_AsyncWith(self, node: ast.AsyncWith):
-        """
-        Handle async with statements by treating them as regular with statements.
-        """
-        # Convert to a regular with statement
-        with_node = ast.With(
-            items=node.items,
-            body=node.body,
-            lineno=node.lineno, 
-            col_offset=node.col_offset
-        )
-        return self.visit_With(with_node)
-
-    def visit_AsyncFor(self, node: ast.AsyncFor):
-        """
-        Handle async for loops by treating them as regular for loops.
-        """
-        # Convert to a regular for loop
-        for_node = ast.For(
-            target=node.target,
-            iter=node.iter,
-            body=node.body,
-            orelse=node.orelse,
-            lineno=node.lineno,
-            col_offset=node.col_offset
-        )
-        return self.visit_For(for_node)
-
-    def visit_Raise(self, node: ast.Raise):
-        """Handle raise statements."""
-        exc = self.visit(node.exc) if node.exc else None
+    async def visit_Raise(self, node: ast.Raise):
+        exc = await self.visit(node.exc) if node.exc else None
         if exc:
             raise exc
         raise Exception("Raise with no exception specified")
 
-    def visit_Global(self, node: ast.Global):
-        """Handle global statements."""
+    async def visit_Global(self, node: ast.Global):
         self.env_stack[-1].setdefault("__global_names__", set()).update(node.names)
 
-    def visit_IfExp(self, node: ast.IfExp):
-        """Handle ternary if expressions."""
-        return self.visit(node.body) if self.visit(node.test) else self.visit(node.orelse)
+    async def visit_IfExp(self, node: ast.IfExp):
+        return await self.visit(node.body) if await self.visit(node.test) else await self.visit(node.orelse)
 
-    def visit_DictComp(self, node: ast.DictComp):
-        """Handle dictionary comprehensions."""
+    async def visit_DictComp(self, node: ast.DictComp):
         result = {}
         base_frame = self.env_stack[-1].copy()
         self.env_stack.append(base_frame)
 
-        def rec(gen_idx: int):
+        async def rec(gen_idx: int):
             if gen_idx == len(node.generators):
-                key = self.visit(node.key)
-                val = self.visit(node.value)
+                key = await self.visit(node.key)
+                val = await self.visit(node.value)
                 result[key] = val
             else:
                 comp = node.generators[gen_idx]
-                for item in self.visit(comp.iter):
+                for item in await self.visit(comp.iter):
                     new_frame = self.env_stack[-1].copy()
                     self.env_stack.append(new_frame)
                     self.assign(comp.target, item)
-                    if all(self.visit(if_clause) for if_clause in comp.ifs):
-                        rec(gen_idx + 1)
+                    if all(await self.visit(if_clause) for if_clause in comp.ifs):
+                        await rec(gen_idx + 1)
                     self.env_stack.pop()
 
-        rec(0)
+        await rec(0)
         self.env_stack.pop()
         return result
 
-    def visit_SetComp(self, node: ast.SetComp):
-        """Handle set comprehensions."""
+    async def visit_SetComp(self, node: ast.SetComp):
         result = set()
         base_frame = self.env_stack[-1].copy()
         self.env_stack.append(base_frame)
 
-        def rec(gen_idx: int):
+        async def rec(gen_idx: int):
             if gen_idx == len(node.generators):
-                result.add(self.visit(node.elt))
+                result.add(await self.visit(node.elt))
             else:
                 comp = node.generators[gen_idx]
-                for item in self.visit(comp.iter):
+                for item in await self.visit(comp.iter):
                     new_frame = self.env_stack[-1].copy()
                     self.env_stack.append(new_frame)
                     self.assign(comp.target, item)
-                    if all(self.visit(if_clause) for if_clause in comp.ifs):
-                        rec(gen_idx + 1)
+                    if all(await self.visit(if_clause) for if_clause in comp.ifs):
+                        await rec(gen_idx + 1)
                     self.env_stack.pop()
 
-        rec(0)
+        await rec(0)
         self.env_stack.pop()
         return result
 
+    async def visit_Match(self, node: ast.Match) -> Any:
+        subject = await self.visit(node.subject)
+        result = None
+        base_frame = self.env_stack[-1].copy()
+        for case in node.cases:
+            self.env_stack.append(base_frame.copy())
+            try:
+                if await self._match_pattern(subject, case.pattern):
+                    if case.guard and not await self.visit(case.guard):
+                        continue
+                    for stmt in case.body[:-1]:
+                        await self.visit(stmt)
+                    result = await self.visit(case.body[-1])
+                    break
+            finally:
+                self.env_stack.pop()
+        return result
 
-# Class to represent a user-defined function.
+    async def _match_pattern(self, subject: Any, pattern: ast.AST) -> bool:
+        if isinstance(pattern, ast.MatchValue):
+            value = await self.visit(pattern.value)
+            return subject == value
+        elif isinstance(pattern, ast.MatchSingleton):
+            return subject is pattern.value
+        elif isinstance(pattern, ast.MatchSequence):
+            if not isinstance(subject, (list, tuple)):
+                return False
+            if len(pattern.patterns) != len(subject) and not any(isinstance(p, ast.MatchStar) for p in pattern.patterns):
+                return False
+            star_idx = None
+            for i, pat in enumerate(pattern.patterns):
+                if isinstance(pat, ast.MatchStar):
+                    if star_idx is not None:
+                        return False  # Multiple stars not allowed
+                    star_idx = i
+            if star_idx is None:
+                for sub, pat in zip(subject, pattern.patterns):
+                    if not await self._match_pattern(sub, pat):
+                        return False
+                return True
+            else:
+                before = pattern.patterns[:star_idx]
+                after = pattern.patterns[star_idx + 1:]
+                if len(before) + len(after) > len(subject):
+                    return False
+                for sub, pat in zip(subject[:len(before)], before):
+                    if not await self._match_pattern(sub, pat):
+                        return False
+                for sub, pat in zip(subject[len(subject) - len(after):], after):
+                    if not await self._match_pattern(sub, pat):
+                        return False
+                star_pat = pattern.patterns[star_idx]
+                star_count = len(subject) - len(before) - len(after)
+                star_sub = subject[len(before):len(before) + star_count]
+                if star_pat.name:
+                    self.set_variable(star_pat.name, star_sub)
+                return True
+        elif isinstance(pattern, ast.MatchMapping):
+            if not isinstance(subject, dict):
+                return False
+            keys = [await self.visit(k) for k in pattern.keys]
+            if len(keys) != len(subject) and pattern.rest is None:
+                return False
+            for k, p in zip(keys, pattern.patterns):
+                if k not in subject or not await self._match_pattern(subject[k], p):
+                    return False
+            if pattern.rest:
+                remaining = {k: v for k, v in subject.items() if k not in keys}
+                self.set_variable(pattern.rest, remaining)
+            return True
+        elif isinstance(pattern, ast.MatchClass):
+            cls = await self.visit(pattern.cls)
+            if not isinstance(subject, cls):
+                return False
+            attrs = [getattr(subject, attr) for attr in pattern.attribute_names]
+            if len(attrs) != len(pattern.patterns):
+                return False
+            for attr_val, pat in zip(attrs, pattern.patterns):
+                if not await self._match_pattern(attr_val, pat):
+                    return False
+            return True
+        elif isinstance(pattern, ast.MatchStar):
+            if pattern.name:
+                self.set_variable(pattern.name, subject)
+            return True
+        elif isinstance(pattern, ast.MatchAs):
+            if pattern.pattern:
+                if not await self._match_pattern(subject, pattern.pattern):
+                    return False
+            if pattern.name:
+                self.set_variable(pattern.name, subject)
+            return True
+        elif isinstance(pattern, ast.MatchOr):
+            for pat in pattern.patterns:
+                if await self._match_pattern(subject, pat):
+                    return True
+            return False
+        else:
+            raise Exception(f"Unsupported match pattern: {pattern.__class__.__name__}")
+
+
 class Function:
-    def __init__(self, node: ast.FunctionDef, closure: List[Dict[str, Any]], interpreter: ASTInterpreter) -> None:
-        """Initialize a user-defined function."""
+    def __init__(self, node: ast.FunctionDef, closure: List[Dict[str, Any]], interpreter: ASTInterpreter,
+                 pos_kw_params: List[str], vararg_name: Optional[str], kwonly_params: List[str],
+                 kwarg_name: Optional[str], pos_defaults: Dict[str, Any], kw_defaults: Dict[str, Any]) -> None:
         self.node: ast.FunctionDef = node
-        # Shallow copy to support recursion.
-        self.closure: List[Dict[str, Any]] = self.env_stack_reference(closure)
+        self.closure: List[Dict[str, Any]] = closure[:]
         self.interpreter: ASTInterpreter = interpreter
-        
-        # Set function attributes expected by Python
-        self.__name__ = node.name
-        self.__qualname__ = node.name
-        self.__module__ = "__main__"
-        self.__doc__ = ast.get_docstring(node) if ast.get_docstring(node) else None
-        self.__annotations__ = {}
+        self.pos_kw_params = pos_kw_params
+        self.vararg_name = vararg_name
+        self.kwonly_params = kwonly_params
+        self.kwarg_name = kwarg_name
+        self.pos_defaults = pos_defaults
+        self.kw_defaults = kw_defaults
 
-    # Helper to simply return the given environment stack (shallow copy of list refs).
-    def env_stack_reference(self, env_stack: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Return a shallow copy of the environment stack."""
-        return env_stack[:]  # shallow
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        """Execute the function with given arguments."""
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         new_env_stack: List[Dict[str, Any]] = self.closure[:]
         local_frame: Dict[str, Any] = {}
-        # Bind the function into its own local frame for recursion.
         local_frame[self.node.name] = self
-        
-        # Process arguments
-        arg_names = [arg.arg for arg in self.node.args.args]
-        
-        # First, check if we have too many positional arguments
-        if len(args) > len(arg_names):
-            raise TypeError(f"Too many positional arguments: got {len(args)}, expected {len(arg_names)}")
-        
-        # Check for invalid keyword arguments
-        for kwarg in kwargs:
-            if kwarg not in arg_names:
-                raise TypeError(f"Unexpected keyword argument '{kwarg}'")
-        
-        # Assign positional arguments
-        for i, arg_value in enumerate(args):
-            local_frame[arg_names[i]] = arg_value
-        
-        # Assign keyword arguments
-        for kwarg, kwvalue in kwargs.items():
-            if kwarg in local_frame:
-                raise TypeError(f"Multiple values for argument '{kwarg}'")
-            local_frame[kwarg] = kwvalue
-        
-        # Check for missing required arguments and apply defaults
-        defaults = self.node.args.defaults or []
-        if defaults:
-            default_start = len(arg_names) - len(defaults)
-            for i, arg_name in enumerate(arg_names):
-                if arg_name not in local_frame:
-                    if i >= default_start:
-                        default_idx = i - default_start
-                        default_val = self.interpreter.visit(defaults[default_idx])
-                        local_frame[arg_name] = default_val
-                    else:
-                        raise TypeError(f"Missing required argument '{arg_name}'")
-        else:
-            # Check for missing arguments when no defaults
-            for arg_name in arg_names:
-                if arg_name not in local_frame:
-                    raise TypeError(f"Missing required argument '{arg_name}'")
-                    
+
+        num_pos = len(self.pos_kw_params)
+        for i, arg in enumerate(args):
+            if i < num_pos:
+                local_frame[self.pos_kw_params[i]] = arg
+            elif self.vararg_name:
+                if self.vararg_name not in local_frame:
+                    local_frame[self.vararg_name] = []
+                local_frame[self.vararg_name].append(arg)
+            else:
+                raise TypeError(f"Function '{self.node.name}' takes {num_pos} positional arguments but {len(args)} were given")
+        if self.vararg_name and self.vararg_name not in local_frame:
+            local_frame[self.vararg_name] = tuple()
+
+        for kwarg_name, kwarg_value in kwargs.items():
+            if kwarg_name in self.pos_kw_params or kwarg_name in self.kwonly_params:
+                if kwarg_name in local_frame:
+                    raise TypeError(f"Function '{self.node.name}' got multiple values for argument '{kwarg_name}'")
+                local_frame[kwarg_name] = kwarg_value
+            elif self.kwarg_name:
+                if self.kwarg_name not in local_frame:
+                    local_frame[self.kwarg_name] = {}
+                local_frame[self.kwarg_name][kwarg_name] = kwarg_value
+            else:
+                raise TypeError(f"Function '{self.node.name}' got an unexpected keyword argument '{kwarg_name}'")
+
+        for param in self.pos_kw_params:
+            if param not in local_frame and param in self.pos_defaults:
+                local_frame[param] = self.pos_defaults[param]
+        for param in self.kwonly_params:
+            if param not in local_frame and param in self.kw_defaults:
+                local_frame[param] = self.kw_defaults[param]
+
+        if self.kwarg_name and self.kwarg_name in local_frame:
+            local_frame[self.kwarg_name] = dict(local_frame[self.kwarg_name])
+
+        missing_args = [param for param in self.pos_kw_params if param not in local_frame and param not in self.pos_defaults]
+        missing_args += [param for param in self.kwonly_params if param not in local_frame and param not in self.kw_defaults]
+        if missing_args:
+            raise TypeError(f"Function '{self.node.name}' missing required arguments: {', '.join(missing_args)}")
+
         new_env_stack.append(local_frame)
         new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
-        
         try:
             for stmt in self.node.body[:-1]:
-                new_interp.visit(stmt)
-            
-            # Handle the last statement
-            if self.node.body:
-                last_stmt = self.node.body[-1]
-                if isinstance(last_stmt, ast.Return):
-                    return new_interp.visit(last_stmt)
-                else:
-                    return new_interp.visit(last_stmt)
-            return None
+                await new_interp.visit(stmt)
+            return await new_interp.visit(self.node.body[-1])
         except ReturnException as ret:
             return ret.value
+        return None
 
-    # Add __get__ to support method binding.
     def __get__(self, instance: Any, owner: Any):
-        """Support method binding for instance methods."""
-        def method(*args: Any, **kwargs: Any) -> Any:
-            return self(instance, *args, **kwargs)
+        async def method(*args: Any, **kwargs: Any) -> Any:
+            return await self(instance, *args, **kwargs)
         return method
 
 
-# Class to represent a lambda function.
-class LambdaFunction:
-    def __init__(self, node: ast.Lambda, closure: List[Dict[str, Any]], interpreter: ASTInterpreter) -> None:
-        """Initialize a lambda function."""
-        self.node: ast.Lambda = node
-        self.closure: List[Dict[str, Any]] = self.env_stack_reference(closure)
+class AsyncFunction:
+    def __init__(self, node: ast.AsyncFunctionDef, closure: List[Dict[str, Any]], interpreter: ASTInterpreter,
+                 pos_kw_params: List[str], vararg_name: Optional[str], kwonly_params: List[str],
+                 kwarg_name: Optional[str], pos_defaults: Dict[str, Any], kw_defaults: Dict[str, Any]) -> None:
+        self.node: ast.AsyncFunctionDef = node
+        self.closure: List[Dict[str, Any]] = closure[:]
         self.interpreter: ASTInterpreter = interpreter
-        
-        # Set standard function attributes
-        self.__name__ = "<lambda>"
-        self.__qualname__ = "<lambda>"
-        self.__module__ = "__main__"
-        self.__annotations__ = {}
+        self.pos_kw_params = pos_kw_params
+        self.vararg_name = vararg_name
+        self.kwonly_params = kwonly_params
+        self.kwarg_name = kwarg_name
+        self.pos_defaults = pos_defaults
+        self.kw_defaults = kw_defaults
 
-    def env_stack_reference(self, env_stack: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Return a shallow copy of the environment stack."""
-        return env_stack[:]
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        """Execute the lambda function with given arguments."""
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         new_env_stack: List[Dict[str, Any]] = self.closure[:]
         local_frame: Dict[str, Any] = {}
-        
-        # Process arguments
-        arg_names = [arg.arg for arg in self.node.args.args]
-        
-        # Check for too many arguments
-        if len(args) > len(arg_names):
-            raise TypeError(f"Too many positional arguments for lambda: got {len(args)}, expected {len(arg_names)}")
-        
-        # Check for invalid keyword arguments
-        for kwarg in kwargs:
-            if kwarg not in arg_names:
-                raise TypeError(f"Unexpected keyword argument '{kwarg}' for lambda")
-        
-        # Assign positional arguments
-        for i, arg_value in enumerate(args):
-            local_frame[arg_names[i]] = arg_value
-        
-        # Assign keyword arguments
-        for kwarg, kwvalue in kwargs.items():
-            if kwarg in local_frame:
-                raise TypeError(f"Multiple values for lambda argument '{kwarg}'")
-            local_frame[kwarg] = kwvalue
-        
-        # Check for missing arguments and handle defaults
-        defaults = self.node.args.defaults or []
-        if defaults:
-            default_start = len(arg_names) - len(defaults)
-            for i, arg_name in enumerate(arg_names):
-                if arg_name not in local_frame:
-                    if i >= default_start:
-                        default_idx = i - default_start
-                        default_val = self.interpreter.visit(defaults[default_idx])
-                        local_frame[arg_name] = default_val
-                    else:
-                        raise TypeError(f"Missing required argument '{arg_name}' for lambda")
-        else:
-            # Check for missing arguments
-            for arg_name in arg_names:
-                if arg_name not in local_frame:
-                    raise TypeError(f"Missing required argument '{arg_name}' for lambda")
-        
+        local_frame[self.node.name] = self
+
+        num_pos = len(self.pos_kw_params)
+        for i, arg in enumerate(args):
+            if i < num_pos:
+                local_frame[self.pos_kw_params[i]] = arg
+            elif self.vararg_name:
+                if self.vararg_name not in local_frame:
+                    local_frame[self.vararg_name] = []
+                local_frame[self.vararg_name].append(arg)
+            else:
+                raise TypeError(f"Async function '{self.node.name}' takes {num_pos} positional arguments but {len(args)} were given")
+        if self.vararg_name and self.vararg_name not in local_frame:
+            local_frame[self.vararg_name] = tuple()
+
+        for kwarg_name, kwarg_value in kwargs.items():
+            if kwarg_name in self.pos_kw_params or kwarg_name in self.kwonly_params:
+                if kwarg_name in local_frame:
+                    raise TypeError(f"Async function '{self.node.name}' got multiple values for argument '{kwarg_name}'")
+                local_frame[kwarg_name] = kwarg_value
+            elif self.kwarg_name:
+                if self.kwarg_name not in local_frame:
+                    local_frame[self.kwarg_name] = {}
+                local_frame[self.kwarg_name][kwarg_name] = kwarg_value
+            else:
+                raise TypeError(f"Async function '{self.node.name}' got an unexpected keyword argument '{kwarg_name}'")
+
+        for param in self.pos_kw_params:
+            if param not in local_frame and param in self.pos_defaults:
+                local_frame[param] = self.pos_defaults[param]
+        for param in self.kwonly_params:
+            if param not in local_frame and param in self.kw_defaults:
+                local_frame[param] = self.kw_defaults[param]
+
+        missing_args = [param for param in self.pos_kw_params if param not in local_frame and param not in self.pos_defaults]
+        missing_args += [param for param in self.kwonly_params if param not in local_frame and param not in self.kw_defaults]
+        if missing_args:
+            raise TypeError(f"Async function '{self.node.name}' missing required arguments: {', '.join(missing_args)}")
+
         new_env_stack.append(local_frame)
         new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
-        return new_interp.visit(self.node.body)
-
-
-# The main function to interpret an AST.
-def interpret_ast(ast_tree: Any, allowed_modules: list[str], source: str = "") -> Any:
-    """Interpret an AST with restricted module access."""
-    import ast
-
-    # Keep only yield-based nodes in fallback.
-    unsupported = (ast.Yield, ast.YieldFrom)
-    for node in ast.walk(ast_tree):
-        if isinstance(node, unsupported):
-            safe_globals = {
-                "__builtins__": {
-                    "range": range,
-                    "len": len,
-                    "print": print,
-                    "__import__": __import__,
-                    "ZeroDivisionError": ZeroDivisionError,
-                    "ValueError": ValueError,
-                    "NameError": NameError,
-                    "TypeError": TypeError,
-                    "list": list,
-                    "dict": dict,
-                    "tuple": tuple,
-                    "set": set,
-                    "float": float,
-                    "int": int,
-                    "bool": bool,
-                    "Exception": Exception,
-                }
-            }
-            for mod in allowed_modules:
-                safe_globals[mod] = __import__(mod)
-            local_vars = {}
-            exec(compile(ast_tree, "<string>", "exec"), safe_globals, local_vars)
-            return local_vars.get("result", None)
-    # Otherwise, use the custom interpreter.
-    interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source)
-    return interpreter.visit(ast_tree)
-
-
-# A helper function which takes a Python code string and a list of allowed module names,
-# then parses and interprets the code.
-def interpret_code(source_code: str, allowed_modules: List[str]) -> Any:
-    """
-    Interpret a Python source code string with a restricted set of allowed modules.
-
-    Args:
-        source_code: The Python source code to interpret.
-        allowed_modules: A list of module names that are allowed.
-    Returns:
-        The result of interpreting the source code.
-    """
-    # Add special handling for the action generator use case
-    if "async def main(" in source_code and "await multiply_tool" in source_code:
-        # This is our specific target case - create a direct calculator
+        last_value = None
         try:
-            # Extract the calculation from main()
-            calculation_code = """
-def add_tool(a, b):
-    return a + b
+            for stmt in self.node.body:
+                last_value = await new_interp.visit(stmt)
+            return last_value
+        except ReturnException as ret:
+            return ret.value
 
-def multiply_tool(x, y):
-    return x * y
 
-def concat_tool(s1, s2):
-    return s1 + s2
+class LambdaFunction:
+    def __init__(self, node: ast.Lambda, closure: List[Dict[str, Any]], interpreter: ASTInterpreter,
+                 pos_kw_params: List[str], vararg_name: Optional[str], kwonly_params: List[str],
+                 kwarg_name: Optional[str], pos_defaults: Dict[str, Any], kw_defaults: Dict[str, Any]) -> None:
+        self.node: ast.Lambda = node
+        self.closure: List[Dict[str, Any]] = closure[:]
+        self.interpreter: ASTInterpreter = interpreter
+        self.pos_kw_params = pos_kw_params
+        self.vararg_name = vararg_name
+        self.kwonly_params = kwonly_params
+        self.kwarg_name = kwarg_name
+        self.pos_defaults = pos_defaults
+        self.kw_defaults = kw_defaults
 
-# Perform the calculation
-mult_result = multiply_tool(8, 7)
-add_result = add_tool(mult_result, 7)
-final_result = add_tool(add_result, -788)
-result = concat_tool("MANSUY", str(final_result))
-print(result)
-"""
-            # Execute as regular Python
-            local_vars = {}
-            exec(calculation_code, {}, local_vars)
-            return local_vars.get("result")
-        except Exception:
-            # If the special case fails, continue with normal execution
-            pass
-    
-    # For normal execution:
-    # Dedent the source to normalize its indentation.
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        new_env_stack: List[Dict[str, Any]] = self.closure[:]
+        local_frame: Dict[str, Any] = {}
+
+        num_pos = len(self.pos_kw_params)
+        for i, arg in enumerate(args):
+            if i < num_pos:
+                local_frame[self.pos_kw_params[i]] = arg
+            elif self.vararg_name:
+                if self.vararg_name not in local_frame:
+                    local_frame[self.vararg_name] = []
+                local_frame[self.vararg_name].append(arg)
+            else:
+                raise TypeError(f"Lambda takes {num_pos} positional arguments but {len(args)} were given")
+        if self.vararg_name and self.vararg_name not in local_frame:
+            local_frame[self.vararg_name] = tuple()
+
+        for kwarg_name, kwarg_value in kwargs.items():
+            if kwarg_name in self.pos_kw_params or kwarg_name in self.kwonly_params:
+                if kwarg_name in local_frame:
+                    raise TypeError(f"Lambda got multiple values for argument '{kwarg_name}'")
+                local_frame[kwarg_name] = kwarg_value
+            elif self.kwarg_name:
+                if self.kwarg_name not in local_frame:
+                    local_frame[self.kwarg_name] = {}
+                local_frame[self.kwarg_name][kwarg_name] = kwarg_value
+            else:
+                raise TypeError(f"Lambda got an unexpected keyword argument '{kwarg_name}'")
+
+        for param in self.pos_kw_params:
+            if param not in local_frame and param in self.pos_defaults:
+                local_frame[param] = self.pos_defaults[param]
+        for param in self.kwonly_params:
+            if param not in local_frame and param in self.kw_defaults:
+                local_frame[param] = self.kw_defaults[param]
+
+        missing_args = [param for param in self.pos_kw_params if param not in local_frame and param not in self.pos_defaults]
+        missing_args += [param for param in self.kwonly_params if param not in local_frame and param not in self.kw_defaults]
+        if missing_args:
+            raise TypeError(f"Lambda missing required arguments: {', '.join(missing_args)}")
+
+        new_env_stack.append(local_frame)
+        new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
+        return await new_interp.visit(self.node.body)
+
+
+def interpret_ast(ast_tree: Any, allowed_modules: list[str], source: str = "") -> Any:
+    interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source)
+
+    async def run_interpreter():
+        result = await interpreter.visit(ast_tree)
+        if asyncio.iscoroutine(result):
+            return await result
+        return result
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    interpreter.loop = loop
+    try:
+        return loop.run_until_complete(run_interpreter())
+    finally:
+        loop.close()
+
+
+def interpret_code(source_code: str, allowed_modules: List[str]) -> Any:
     dedented_source = textwrap.dedent(source_code)
     tree: ast.AST = ast.parse(dedented_source)
     return interpret_ast(tree, allowed_modules, source=dedented_source)
@@ -1036,82 +1130,89 @@ print(result)
 
 if __name__ == "__main__":
     print("Script is running!")
+
     source_code_1: str = """
-import math
-def square(x):
-    return x * x
+def my_decorator(func):
+    def wrapper(*args, **kwargs):
+        print("Decorated!")
+        return func(*args, **kwargs)
+    return wrapper
 
-y = square(5)
-z = math.sqrt(y)
-z
+@my_decorator
+def example(a, b=2, *args, c=3, **kwargs):
+    return a + b + c + sum(args) + sum(kwargs.values())
+
+result = example(1, 4, 5, 6, c=7, x=8)
 """
-    # Only "math" is allowed here.
+    print("Example 1 (function with decorator, defaults, *args, **kwargs):")
     try:
-        result_1: Any = interpret_code(source_code_1, allowed_modules=["math"])
-        print("Result:", result_1)
+        result_1: Any = interpret_code(source_code_1, allowed_modules=[])
+        print("Result:", result_1)  # Expected: 31 (1 + 4 + 7 + 5 + 6 + 8)
     except Exception as e:
         print("Interpreter error:", e)
 
-    print("Second example:")
-
-    # Define the source code with multiple operations and a list comprehension.
     source_code_2: str = """
-import math
-import numpy as np
-def transform_array(x):
-    # Apply square root
-    sqrt_vals = [math.sqrt(val) for val in x]
-    
-    # Apply sine function
-    sin_vals = [math.sin(val) for val in sqrt_vals]
-    
-    # Apply exponential
-    exp_vals = [math.exp(val) for val in sin_vals]
-    
-    return exp_vals
-
-array_input = np.array([1, 4, 9, 16, 25])
-result = transform_array(array_input)
-result
-"""
-    print("About to parse source code")
-    try:
-        tree_2: ast.AST = ast.parse(textwrap.dedent(source_code_2))
-        print("Source code parsed successfully")
-        # Allow both math and numpy.
-        result_2: Any = interpret_ast(tree_2, allowed_modules=["math", "numpy"], source=textwrap.dedent(source_code_2))
-        print("Result:", result_2)
-    except Exception as e:
-        print("Interpreter error:", e)
-
-    # Test async functionality
-    print("Testing async functionality:")
-    async_code = """
 import asyncio
 
-# Define the async functions - simplified versions that run synchronously
-async def add_tool(a, b):
-    return a + b
+async def delay_square(x, delay=1):
+    await asyncio.sleep(delay)
+    return x * x
 
-async def multiply_tool(x, y):
-    return x * y
-
-async def concat_tool(s1, s2):
-    return s1 + s2
-
-async def main():
-    mult_result = await multiply_tool(8, 7)
-    add_result = await add_tool(mult_result, 7)
-    final_result = await add_tool(add_result, -788)
-    concatenated_string = await concat_tool("MANSUY", str(final_result))
-    print(concatenated_string)
-    return concatenated_string
-
-# Manually run main and store result
-result = main()  # No await needed in our interpreter
+result = await delay_square(5)
 """
+    print("Example 2 (async function):")
     try:
-        async_result = interpret_code(async_code, allowed_modules=["asyncio"])
-        print("Async Result:", async_result)
+        result_2: Any = interpret_code(source_code_2, allowed_modules=["asyncio"])
+        print("Result:", result_2)  # Expected: 25
     except Exception as e:
-        print("Async interpreter error:", e)
+        print("Interpreter error:", e)
+
+    source_code_3: str = """
+f = lambda x, y=2, *args, z=3, **kwargs: x + y + z + sum(args) + sum(kwargs.values())
+result = f(1, 4, 5, z=6, w=7)
+"""
+    print("Example 3 (lambda with defaults and kwargs):")
+    try:
+        result_3: Any = interpret_code(source_code_3, allowed_modules=[])
+        print("Result:", result_3)  # Expected: 23 (1 + 4 + 6 + 5 + 7)
+    except Exception as e:
+        print("Interpreter error:", e)
+
+    source_code_4: str = """
+def describe(x):
+    match x:
+        case 1:
+            return "One"
+        case [a, b]:
+            return f"List of {a} and {b}"
+        case {"key": value}:
+            return f"Dict with key={value}"
+        case _:
+            return "Unknown"
+
+result = describe([10, 20])
+"""
+    print("Example 4 (structural pattern matching):")
+    try:
+        result_4: Any = interpret_code(source_code_4, allowed_modules=[])
+        print("Result:", result_4)  # Expected: "List of 10 and 20"
+    except Exception as e:
+        print("Interpreter error:", e)
+
+    source_code_5: str = """
+def risky():
+    raise ExceptionGroup("Problems", [ValueError("bad value"), TypeError("bad type")])
+
+try:
+    risky()
+except* ValueError as ve:
+    result = "Caught ValueError"
+except* TypeError as te:
+    result = "Caught TypeError"
+"""
+    print("Example 5 (exception groups with except*):")
+    try:
+        result_5: Any = interpret_code(source_code_5, allowed_modules=[])
+        print("Result:", result_5)  # Expected: "Caught ValueError"
+    except Exception as e:
+        print("Interpreter error:", e)
