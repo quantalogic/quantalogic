@@ -1,12 +1,12 @@
 import asyncio
-from typing import List
+from functools import partial
+from typing import Callable, Dict, List
 
 import litellm
 import typer
 from loguru import logger
 
 from quantalogic.tools.tool import Tool, ToolArgument
-from quantalogic.utils.python_interpreter import interpret_code
 
 # Configure loguru to log to a file with rotation
 logger.add("action_gen.log", rotation="10 MB", level="DEBUG")
@@ -91,23 +91,22 @@ You have access to the following pre-defined async tool functions, as defined wi
 {tool_docstrings}
 
 Instructions:
-1. Generate a Python program as a single string enclosed in triple backticks.
+1. Generate a Python program as a single string.
 2. Include only the import for asyncio (import asyncio).
 3. Define an async function named main() that solves the task.
 4. Use the pre-defined tool functions (e.g., add_tool, multiply_tool, concat_tool) directly by calling them with await and the appropriate arguments as specified in their descriptions.
 5. Do not redefine the tool functions within the program; assume they are already available in the namespace.
-6. Return the program as a string enclosed in triple backticks.
+6. Return the program as a string enclosed in triple quotes (\"\"\"program\"\"\")).
 7. Do not include asyncio.run(main()) or any code outside the main() function definition.
 8. Do not include explanatory text outside the program string.
 
 Example task: "Add 5 and 7 and print the result"
 Example output:
-```python
-import asyncio
+\"\"\"import asyncio
 async def main():
     result = await add_tool(a=5, b=7)
     print(result)
-```
+\"\"\"
 """
     
     logger.debug(f"Prompt sent to litellm:\n{prompt}")
@@ -130,16 +129,13 @@ async def main():
         logger.error(f"Failed to generate code: {str(e)}")
         raise typer.BadParameter(f"Failed to generate code with model '{model}': {str(e)}")
 
-    # Robustly clean up the output to ensure only raw Python code remains
-    generated_code = generated_code.strip()
-    if generated_code.startswith('```python') and generated_code.endswith('```'):
+    # Clean up the output
+    if generated_code.startswith('"""') and generated_code.endswith('"""'):
+        generated_code = generated_code[3:-3]
+    elif generated_code.startswith("```python") and generated_code.endswith("```"):
         generated_code = generated_code[9:-3].strip()
     
     return generated_code
-
-# Function to clean unnecessary backticks before execution
-def clean_backticks(code: str) -> str:
-    return code.replace('```python', '').replace('```', '').strip()
 
 # Async core logic for generate
 async def generate_core(task: str, model: str, max_tokens: int):
@@ -168,7 +164,7 @@ async def generate_core(task: str, model: str, max_tokens: int):
     typer.echo(typer.style("Generated Python Program:", fg=typer.colors.GREEN, bold=True))
     typer.echo(program)
     
-    # Attempt to execute the program using the safe interpreter
+    # Attempt to execute the program asynchronously
     typer.echo("\n" + typer.style("Executing the program:", fg=typer.colors.GREEN, bold=True))
     try:
         # Create instances of tools
@@ -176,69 +172,23 @@ async def generate_core(task: str, model: str, max_tokens: int):
         multiply_tool_instance = MultiplyTool()
         concat_tool_instance = ConcatTool()
 
-        # Ensure the program is a clean string without extra quotes or whitespace
-        program = clean_backticks(program)
-        
-        # Prepare the program by adding necessary wrappers to make it compatible
-        # with the safe interpreter and our tool functions
-        wrapper_program = f"""
-import asyncio
+        # Map function names to callables that invoke the tool instances
+        namespace: Dict[str, Callable] = {
+            "asyncio": asyncio,
+            "add_tool": partial(add_tool_instance.async_execute),
+            "multiply_tool": partial(multiply_tool_instance.async_execute),
+            "concat_tool": partial(concat_tool_instance.async_execute),
+        }
 
-# Create tool function adapters
-async def add_tool(a, b):
-    return await _add_tool_instance.async_execute(a=a, b=b)
-
-async def multiply_tool(x, y):
-    return await _multiply_tool_instance.async_execute(x=x, y=y)
-
-async def concat_tool(s1, s2):
-    return await _concat_tool_instance.async_execute(s1=s1, s2=s2)
-
-# The generated program begins here
-{program}
-
-# Create a helper to run main
-async def _run_main():
-    result = await main()
-    if result is not None:
-        print(result)
-        
-# Store the result for the interpreter
-result = asyncio.run(_run_main())
-"""
-        
-        logger.debug("Executing generated code with safe interpreter")
-        
-        # Use the safe interpreter with a controlled set of allowed modules
-        allowed_modules = ["asyncio"]
-        
-        # We'll create a simple context manager to set and restore global variables
-        class ToolContext:
-            def __init__(self, tools):
-                self.tools = tools
-                self.old_globals = {}
-                
-            def __enter__(self):
-                # No need to modify globals with the safe interpreter approach
-                return self
-                
-            def __exit__(self, exc_type, exc_val, exc_tb):
-                # No need to restore globals with the safe interpreter approach
-                pass
-        
-        # Execute in the context of our tools
-        with ToolContext(tools):
-            # Pass tool instances to the interpreter via globals
-            # The interpreter will find these via builtins
-            globals_dict = {
-                "_add_tool_instance": add_tool_instance,
-                "_multiply_tool_instance": multiply_tool_instance,
-                "_concat_tool_instance": concat_tool_instance,
-            }
-            
-            # Run the program with the safe interpreter
-            interpret_code(wrapper_program, allowed_modules=allowed_modules)
-            
+        logger.debug("Compiling and executing generated code")
+        compiled = compile(program, "<string>", "exec")
+        exec(compiled, namespace)
+        if "main" in namespace and asyncio.iscoroutinefunction(namespace["main"]):
+            logger.debug("Running async main function")
+            await namespace["main"]()
+        else:
+            logger.warning("No async main() function found in generated code")
+            typer.echo(typer.style("Warning: No async main() function found", fg=typer.colors.YELLOW))
     except SyntaxError as e:
         logger.error(f"Syntax error in generated code: {e}")
         typer.echo(typer.style(f"Syntax error: {e}", fg=typer.colors.RED))
