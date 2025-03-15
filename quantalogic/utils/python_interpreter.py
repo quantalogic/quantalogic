@@ -580,7 +580,7 @@ class ASTInterpreter:
                     if isinstance(init_method, Function):
                         await init_method(instance, *evaluated_args, **kwargs)
                     else:
-                        # Fix for test_exception_with_message: Explicitly call __init__ for built-in         # built-in exceptions to ensure message is set
+                        # Fix for test_exception_with_message: Explicitly initialize built-in exceptions
                         if issubclass(func, BaseException):
                             instance.__init__(*evaluated_args, **kwargs)
                         else:
@@ -1163,7 +1163,7 @@ class Function:
         if missing_args:
             raise TypeError(f"Function '{self.node.name}' missing required arguments: {', '.join(missing_args)}")
 
-        # Fix for test_class_inheritance: Ensure 'self' is bound early for instance methods
+        # Fix for test_class_inheritance: Bind 'self' before adding to env_stack for instance methods
         if self.pos_kw_params and self.pos_kw_params[0] == 'self' and args:
             local_frame['self'] = args[0]  # Explicitly bind instance
             local_frame['__current_method__'] = self  # For super() support
@@ -1172,7 +1172,7 @@ class Function:
         new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
 
         if self.is_generator:
-            # Fix for test_nested_generator: Handle nested generators with 'yield from' in for loops
+            # Fix for test_nested_generator: Ensure proper yielding from nested generators
             async def generator():
                 for body_stmt in self.node.body:
                     if isinstance(body_stmt, ast.For):  # Handle for loops with yield from
@@ -1228,7 +1228,6 @@ class Function:
     def __get__(self, instance: Any, owner: Any):
         if instance is None:
             return self
-        # Fix for test_class_inheritance: Ensure proper binding for instance methods
         async def method(*args: Any, **kwargs: Any) -> Any:
             return await self(instance, *args, **kwargs)
         method.__self__ = instance  # Explicitly bind instance to method
