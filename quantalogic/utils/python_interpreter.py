@@ -571,7 +571,7 @@ class ASTInterpreter:
         if func in (range, list, dict, set, tuple, frozenset):
             return func(*evaluated_args, **kwargs)
 
-        # Special case for class instantiation
+        # Special case for class instantiation and exceptions
         if inspect.isclass(func):
             instance = func.__new__(func)
             if instance is not None:
@@ -580,7 +580,11 @@ class ASTInterpreter:
                     if isinstance(init_method, Function):
                         await init_method(instance, *evaluated_args, **kwargs)
                     else:
-                        init_method(instance, *evaluated_args, **kwargs)
+                        # Fix for test_exception_with_message: Explicitly call __init__ for built-in         # built-in exceptions to ensure message is set
+                        if issubclass(func, BaseException):
+                            instance.__init__(*evaluated_args, **kwargs)
+                        else:
+                            init_method(instance, *evaluated_args, **kwargs)
             return instance
 
         # Handle super() with or without arguments
@@ -1111,6 +1115,8 @@ class Function:
         self.pos_defaults = pos_defaults
         self.kw_defaults = kw_defaults
         self.defining_class = None  # Added for class inheritance support
+        # Fix for test_nested_generator: Recursively check for yield/yield from to detect generators
+        self.is_generator = any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
 
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         new_env_stack: List[Dict[str, Any]] = self.closure[:]
@@ -1157,19 +1163,47 @@ class Function:
         if missing_args:
             raise TypeError(f"Function '{self.node.name}' missing required arguments: {', '.join(missing_args)}")
 
-        new_env_stack.append(local_frame)
+        # Fix for test_class_inheritance: Ensure 'self' is bound early for instance methods
         if self.pos_kw_params and self.pos_kw_params[0] == 'self' and args:
-            local_frame['__current_method__'] = self  # Added for super() support
+            local_frame['self'] = args[0]  # Explicitly bind instance
+            local_frame['__current_method__'] = self  # For super() support
+
+        new_env_stack.append(local_frame)
         new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
 
-        # Check if the function is a generator
-        is_generator = any(isinstance(stmt, ast.Expr) and isinstance(stmt.value, (ast.Yield, ast.YieldFrom))
-                           for stmt in self.node.body)
-
-        if is_generator:
+        if self.is_generator:
+            # Fix for test_nested_generator: Handle nested generators with 'yield from' in for loops
             async def generator():
                 for body_stmt in self.node.body:
-                    if isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, (ast.Yield, ast.YieldFrom)):
+                    if isinstance(body_stmt, ast.For):  # Handle for loops with yield from
+                        iter_obj = await new_interp.visit(body_stmt.iter, wrap_exceptions=True)
+                        for item in iter_obj:
+                            new_frame = new_interp.env_stack[-1].copy()
+                            new_interp.env_stack.append(new_frame)
+                            await new_interp.assign(body_stmt.target, item)
+                            try:
+                                for inner_stmt in body_stmt.body:
+                                    if isinstance(inner_stmt, ast.Expr) and isinstance(inner_stmt.value, ast.YieldFrom):
+                                        sub_iterable = await new_interp.visit(inner_stmt.value, wrap_exceptions=True)
+                                        if hasattr(sub_iterable, '__aiter__'):
+                                            async for v in sub_iterable:
+                                                yield v
+                                        else:
+                                            for v in sub_iterable:
+                                                yield v
+                                    elif isinstance(inner_stmt, ast.Expr) and isinstance(inner_stmt.value, ast.Yield):
+                                        value = await new_interp.visit(inner_stmt.value, wrap_exceptions=True)
+                                        yield value
+                                    else:
+                                        await new_interp.visit(inner_stmt, wrap_exceptions=True)
+                            except BreakException:
+                                new_interp.env_stack.pop()
+                                break
+                            except ContinueException:
+                                new_interp.env_stack.pop()
+                                continue
+                            new_interp.env_stack.pop()
+                    elif isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, (ast.Yield, ast.YieldFrom)):
                         value = await new_interp.visit(body_stmt.value, wrap_exceptions=True)
                         if hasattr(value, '__aiter__'):
                             async for v in value:
@@ -1194,8 +1228,10 @@ class Function:
     def __get__(self, instance: Any, owner: Any):
         if instance is None:
             return self
+        # Fix for test_class_inheritance: Ensure proper binding for instance methods
         async def method(*args: Any, **kwargs: Any) -> Any:
             return await self(instance, *args, **kwargs)
+        method.__self__ = instance  # Explicitly bind instance to method
         return method
 
 
