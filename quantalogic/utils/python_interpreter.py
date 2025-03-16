@@ -300,18 +300,7 @@ class ASTInterpreter:
         last_value = None
         for stmt in node.body:
             last_value = await self.visit(stmt, wrap_exceptions=True)
-        result = self.env_stack[0].get("result", last_value)
-        
-        # Execute main() if it exists
-        main_func = self.env_stack[0].get('main')
-        if main_func:
-            if isinstance(main_func, AsyncFunction):
-                result = await main_func()
-            elif inspect.iscoroutinefunction(main_func):
-                result = await main_func()
-            elif callable(main_func):
-                result = main_func()
-        return result
+        return last_value
 
     async def visit_Expr(self, node: ast.Expr, wrap_exceptions: bool = True) -> Any:
         return await self.visit(node.value, wrap_exceptions=wrap_exceptions)
@@ -1471,9 +1460,12 @@ class LambdaFunction:
 
 async def execute_async(
     code: str,
+    entry_point: Optional[str] = None,
+    args: Optional[Tuple] = None,
+    kwargs: Optional[Dict[str, Any]] = None,
     timeout: float = 30,
     allowed_modules: List[str] = ['asyncio'],
-    namespace: Optional[Dict[str, Any]] = None  # Added namespace parameter
+    namespace: Optional[Dict[str, Any]] = None
 ) -> AsyncExecutionResult:
     start_time = time.time()
     try:
@@ -1492,7 +1484,7 @@ async def execute_async(
         interpreter = ASTInterpreter(
             allowed_modules=allowed_modules,
             restrict_os=True,
-            namespace=namespace  # Pass namespace to interpreter
+            namespace=namespace
         )
         
         # Set the interpreter's loop to be the same as our current loop
@@ -1502,8 +1494,26 @@ async def execute_async(
         async def run_execution():
             return await interpreter.execute_async(ast_tree)
         
-        # Execute with timeout in the current loop
-        result = await asyncio.wait_for(run_execution(), timeout=timeout)
+        # Execute the module with timeout
+        module_result = await asyncio.wait_for(run_execution(), timeout=timeout)
+        
+        # If an entry_point is specified, execute that function
+        if entry_point:
+            func = interpreter.env_stack[0].get(entry_point)
+            if not func:
+                raise NameError(f"Function '{entry_point}' not found in the code")
+            args = args or ()
+            kwargs = kwargs or {}
+            if isinstance(func, AsyncFunction) or asyncio.iscoroutinefunction(func):
+                result = await func(*args, **kwargs)
+            elif isinstance(func, Function):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
+                if asyncio.iscoroutine(result):
+                    result = await result
+        else:
+            result = module_result
         
         return AsyncExecutionResult(
             result=result,
@@ -1624,3 +1634,20 @@ with open("test.txt", "r") as f:
         print("Result:", result_4)
     except Exception as e:
         print("Interpreter error:", e)
+
+    # New example with execute_async and entry_point
+    source_code_5: str = """
+def add(a, b):
+    return a + b
+
+async def async_multiply(x, y):
+    await asyncio.sleep(0.1)
+    return x * y
+"""
+    print("Example 5 (execute_async with entry_point):")
+    async def run_example_5():
+        result_5a = await execute_async(source_code_5, entry_point="add", args=(3, 4))
+        print("Result (add):", result_5a.result)
+        result_5b = await execute_async(source_code_5, entry_point="async_multiply", args=(2, 3), allowed_modules=["asyncio"])
+        print("Result (async_multiply):", result_5b.result)
+    asyncio.run(run_example_5())
