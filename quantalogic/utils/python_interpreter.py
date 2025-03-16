@@ -2,6 +2,7 @@ import ast
 import asyncio
 import builtins
 import inspect  # For class checking in visit_Call
+import logging  # Added for error logging in visit_Await
 import textwrap
 import time
 from asyncio import TimeoutError
@@ -69,14 +70,16 @@ class ASTInterpreter:
                 "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
                 "ValueError": ValueError, "TypeError": TypeError,
             }
+            # Only include 'open' if restrict_os is False
             if not restrict_os:
-                # Add file-related built-ins only if OS restriction is off
                 allowed_builtins["open"] = open
             safe_builtins.update(allowed_builtins)
             if "set" not in safe_builtins:
                 safe_builtins["set"] = set
             self.env_stack[0]["__builtins__"] = safe_builtins
             self.env_stack[0].update(safe_builtins)
+            # Initialize logger
+            self.env_stack[0]["logger"] = logging.getLogger(__name__)
             # Add custom namespace to the global scope if provided
             if namespace is not None:
                 self.env_stack[0].update(namespace)
@@ -92,6 +95,7 @@ class ASTInterpreter:
                     "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
                     "ValueError": ValueError, "TypeError": TypeError,
                 }
+                # Only include 'open' if restrict_os is False
                 if not restrict_os:
                     allowed_builtins["open"] = open
                 safe_builtins.update(allowed_builtins)
@@ -99,9 +103,21 @@ class ASTInterpreter:
                     safe_builtins["set"] = set
                 self.env_stack[0]["__builtins__"] = safe_builtins
                 self.env_stack[0].update(safe_builtins)
+                # Initialize logger
+                self.env_stack[0]["logger"] = logging.getLogger(__name__)
             # Add custom namespace to the provided env_stack if given
             if namespace is not None:
                 self.env_stack[0].update(namespace)
+
+        # Ensure OS-related modules are blocked when restrict_os is True, regardless of allowed_modules
+        if self.restrict_os:
+            os_related_modules = {"os", "sys", "subprocess", "shutil", "platform"}
+            for mod in os_related_modules:
+                if mod in self.modules:
+                    del self.modules[mod]
+            for mod in list(self.allowed_modules):
+                if mod in os_related_modules:
+                    self.allowed_modules.remove(mod)
 
         if source is not None:
             self.source_lines: Optional[List[str]] = source.splitlines()
@@ -674,9 +690,8 @@ class ASTInterpreter:
             error_msg = f"Operation timed out after 60 seconds at {line_info}: {context_line.strip()}"
             logger_msg = f"Coroutine execution timed out: {error_msg}"
             
-            # If we have access to a logger, use it
-            if "logger" in self.env_stack[0]:
-                self.env_stack[0]["logger"].error(logger_msg)
+            # Use the logger initialized in __init__
+            self.env_stack[0]["logger"].error(logger_msg)
             
             if wrap_exceptions:
                 col = getattr(node, "col_offset", 0)
@@ -1149,18 +1164,21 @@ class ASTInterpreter:
                 raise Exception(f"Unsupported del target: {type(target).__name__}")
 
     async def visit_AsyncFor(self, node: ast.AsyncFor, wrap_exceptions: bool = True) -> None:
-        results = []
-        async for value in self.visit(node.iter):
-            self.assign(node.target, value)
-            results.append(await self.visit(node.body[-1]))
-        return results
-
-    async def visit_AsyncFor(self, node: ast.AsyncFor, wrap_exceptions: bool = True) -> None:
-        results = []
-        async for value in self.visit(node.iter):
-            self.assign(node.target, value)
-            results.extend([await self.visit(stmt) for stmt in node.body])
-        return results
+        iterable = await self.visit(node.iter, wrap_exceptions=wrap_exceptions)
+        broke = False
+        async for value in iterable:
+            await self.assign(node.target, value)
+            try:
+                for stmt in node.body:
+                    await self.visit(stmt, wrap_exceptions=wrap_exceptions)
+            except BreakException:
+                broke = True
+                break
+            except ContinueException:
+                continue
+        if not broke:
+            for stmt in node.orelse:
+                await self.visit(stmt, wrap_exceptions=wrap_exceptions)
 
     async def execute_async(self, node: ast.Module) -> Any:
         # Find async main function
@@ -1174,19 +1192,6 @@ class ASTInterpreter:
             # Create task and run until complete
             task = self.loop.create_task(self.visit(main_func))
             return await task
-        return None
-
-    async def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> Any:
-        # Create new environment for function execution
-        new_env = [{}]
-        new_env[0].update(self.env_stack[0])
-        child_interpreter = self.spawn_from_env(new_env)
-        
-        try:
-            for stmt in node.body:
-                await child_interpreter.visit(stmt)
-        except ReturnException as e:
-            return e.value
         return None
 
     def new_scope(self):
