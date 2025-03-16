@@ -427,9 +427,7 @@ if __name__ == "__main__":
     
     # Example queries in different languages
     queries = [
-        "What is the main topic?",
-        "Quel est le sujet principal ?",
-        "ما هو الموضوع الرئيسي؟"
+        "Donne moi toutes les lois lister dans mes documents, détaille chaqune des lois", 
     ]
     
     for query in queries:
