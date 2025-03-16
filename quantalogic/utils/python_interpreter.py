@@ -1,10 +1,10 @@
 import ast
-import builtins
-import textwrap
-from typing import Any, Dict, List, Optional, Tuple
 import asyncio
-from functools import wraps
+import builtins
 import inspect  # For class checking in visit_Call
+import textwrap
+from asyncio import TimeoutError
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class ReturnException(Exception):
@@ -42,7 +42,8 @@ class ASTInterpreter:
         allowed_modules: List[str], 
         env_stack: Optional[List[Dict[str, Any]]] = None, 
         source: Optional[str] = None,
-        restrict_os: bool = True  # New parameter to restrict OS access
+        restrict_os: bool = True,  # New parameter to restrict OS access
+        namespace: Optional[Dict[str, Any]] = None  # New parameter for custom namespace
     ) -> None:
         self.allowed_modules: List[str] = allowed_modules
         self.modules: Dict[str, Any] = {mod: __import__(mod) for mod in allowed_modules}
@@ -68,6 +69,9 @@ class ASTInterpreter:
                 safe_builtins["set"] = set
             self.env_stack[0]["__builtins__"] = safe_builtins
             self.env_stack[0].update(safe_builtins)
+            # Add custom namespace to the global scope if provided
+            if namespace is not None:
+                self.env_stack[0].update(namespace)
         else:
             self.env_stack = env_stack
             if "__builtins__" not in self.env_stack[0]:
@@ -87,6 +91,9 @@ class ASTInterpreter:
                     safe_builtins["set"] = set
                 self.env_stack[0]["__builtins__"] = safe_builtins
                 self.env_stack[0].update(safe_builtins)
+            # Add custom namespace to the provided env_stack if given
+            if namespace is not None:
+                self.env_stack[0].update(namespace)
 
         if source is not None:
             self.source_lines: Optional[List[str]] = source.splitlines()
@@ -657,7 +664,26 @@ class ASTInterpreter:
         coro = await self.visit(node.value, is_await_context=True, wrap_exceptions=wrap_exceptions)
         if not asyncio.iscoroutine(coro):
             raise TypeError(f"Cannot await non-coroutine object: {type(coro)}")
-        return await coro
+        
+        try:
+            # Set a 60-second timeout for any coroutine execution
+            # This prevents indefinite hanging if a coroutine never resolves
+            return await asyncio.wait_for(coro, timeout=60)
+        except TimeoutError as e:
+            line_info = f"line {node.lineno}" if hasattr(node, "lineno") else "unknown line"
+            context_line = self.source_lines[node.lineno - 1] if self.source_lines and hasattr(node, "lineno") else "<unknown>"
+            error_msg = f"Operation timed out after 60 seconds at {line_info}: {context_line.strip()}"
+            logger_msg = f"Coroutine execution timed out: {error_msg}"
+            
+            # If we have access to a logger, use it
+            if "logger" in self.env_stack[0]:
+                self.env_stack[0]["logger"].error(logger_msg)
+            
+            if wrap_exceptions:
+                col = getattr(node, "col_offset", 0)
+                raise WrappedException(error_msg, e, node.lineno if hasattr(node, "lineno") else 0, col, context_line)
+            else:
+                raise TimeoutError(error_msg) from e
 
     async def visit_Return(self, node: ast.Return, wrap_exceptions: bool = True) -> None:
         value: Any = await self.visit(node.value, wrap_exceptions=wrap_exceptions) if node.value is not None else None
@@ -1384,8 +1410,8 @@ class LambdaFunction:
         return await new_interp.visit(self.node.body, wrap_exceptions=True)
 
 
-def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", restrict_os: bool = False) -> Any:
-    interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source, restrict_os=restrict_os)
+def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
+    interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source, restrict_os=restrict_os, namespace=namespace)
 
     async def run_interpreter():
         result = await interpreter.visit(ast_tree, wrap_exceptions=True)
@@ -1395,19 +1421,26 @@ def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", r
             return [val async for val in result]
         return result
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    interpreter.loop = loop
+    # Use the current event loop if one is running, otherwise create a new one
     try:
-        return loop.run_until_complete(run_interpreter())
-    finally:
-        loop.close()
+        loop = asyncio.get_running_loop()
+    except RuntimeError:  # No running event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        interpreter.loop = loop
+        try:
+            return loop.run_until_complete(run_interpreter())
+        finally:
+            loop.close()
+    else:
+        interpreter.loop = loop
+        return asyncio.run_coroutine_threadsafe(run_interpreter(), loop).result()
 
 
-def interpret_code(source_code: str, allowed_modules: List[str], restrict_os: bool = False) -> Any:
+def interpret_code(source_code: str, allowed_modules: List[str], restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
     dedented_source = textwrap.dedent(source_code).strip()
     tree: ast.AST = ast.parse(dedented_source)
-    return interpret_ast(tree, allowed_modules, source=dedented_source, restrict_os=restrict_os)
+    return interpret_ast(tree, allowed_modules, source=dedented_source, restrict_os=restrict_os, namespace=namespace)
 
 
 if __name__ == "__main__":
