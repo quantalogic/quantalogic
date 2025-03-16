@@ -44,6 +44,7 @@ tree-sitter-rust = "^0.23.2"
 fuzzywuzzy = "^0.18.0"
 types-pyyaml = "^6.0.12.20241230"
 typing-extensions = "^4.12.2"
+pytest-asyncio = "^0.25.3"
 
 [tool.poetry.group.file-tools]
 optional = false
