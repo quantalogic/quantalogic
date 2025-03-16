@@ -5,7 +5,6 @@ import logging
 import textwrap
 from typing import Any, Dict, List, Optional, Tuple, Callable
 import types
-import inspect
 from collections import defaultdict
 from contextlib import contextmanager
 
@@ -50,25 +49,26 @@ class GeneratorWrapper:
     def __next__(self):
         if not self.running:
             self.running = True
-            return asyncio.run(self.interpreter.run(self.code, initial_stack=self.stack))
+            return self.interpreter.loop.run_until_complete(self.interpreter.run(self.code, initial_stack=self.stack))
         raise StopIteration
 
 class BytecodeInterpreter:
     def __init__(
         self, allowed_modules: List[str], env_stack: Optional[List[Dict[str, Any]]] = None, source: Optional[str] = None,
-        max_execution_time: float = 10.0  # Sandboxing: time limit in seconds
+        max_execution_time: float = 10.0
     ) -> None:
         self.allowed_modules = allowed_modules
         self.modules = {mod: __import__(mod) for mod in allowed_modules}
         self.stack: List[Any] = []
         self.frames: List[Dict[str, Any]] = []
         self.ip = 0
-        self.loop = None
+        self.loop = asyncio.get_event_loop()
         self.block_stack: List[Tuple[str, int]] = []
         self.cells: Dict[str, Cell] = {}
         self.max_execution_time = max_execution_time
         self.source_lines = source.splitlines() if source else None
         self.stack_trace: List[str] = []
+        self.current_kw_names = None
 
         if env_stack is None:
             self.env_stack = [defaultdict(lambda: None)]
@@ -84,7 +84,6 @@ class BytecodeInterpreter:
         else:
             self.env_stack = env_stack
 
-        # Opcode dispatch table with named functions
         self.opcode_handlers: Dict[str, Callable[[dis.Instruction], None]] = {
             "NOP": self._handle_nop,
             "CACHE": self._handle_cache,
@@ -99,6 +98,7 @@ class BytecodeInterpreter:
             "STORE_GLOBAL": self._handle_store_global,
             "DELETE_GLOBAL": self._handle_delete_global,
             "DELETE_NAME": self._handle_delete_name,
+            "BINARY_OP": self._handle_binary_op,
             "BINARY_ADD": self._handle_binary_add,
             "BINARY_SUBTRACT": self._handle_binary_subtract,
             "BINARY_MULTIPLY": self._handle_binary_multiply,
@@ -143,6 +143,7 @@ class BytecodeInterpreter:
             "JUMP_IF_FALSE_OR_POP": self._handle_jump_if_false_or_pop,
             "POP_TOP": self._handle_pop_top,
             "RETURN_VALUE": self._handle_return_value,
+            "RETURN_CONST": self._handle_return_const,  # Added for Python 3.11+
             "CALL": self._handle_call,
             "MAKE_FUNCTION": self._handle_make_function,
             "BUILD_LIST": self._handle_build_list,
@@ -203,9 +204,9 @@ class BytecodeInterpreter:
             "MATCH_MAPPING": self._handle_match_mapping,
             "MATCH_SEQUENCE": self._handle_match_sequence,
             "MATCH_KEYS": self._handle_match_keys,
+            "MATCH_CLASS": self._handle_match_class,
         }
 
-    # Opcode handler methods
     def _handle_nop(self, instr: dis.Instruction) -> None:
         pass
 
@@ -225,7 +226,10 @@ class BytecodeInterpreter:
         self.set_variable(instr.argval, self.safe_pop(instr.opname))
 
     def _handle_load_fast(self, instr: dis.Instruction) -> None:
-        self.stack.append(self.env_stack[-1][instr.argval])
+        value = self.env_stack[-1].get(instr.argval)
+        if value is None:
+            raise NameError(f"Variable '{instr.argval}' not initialized")
+        self.stack.append(value)
 
     def _handle_store_fast(self, instr: dis.Instruction) -> None:
         self._store_fast(instr.argval, self.safe_pop(instr.opname))
@@ -234,7 +238,10 @@ class BytecodeInterpreter:
         self.env_stack[-1].pop(instr.argval, None)
 
     def _handle_load_global(self, instr: dis.Instruction) -> None:
-        self.stack.append(self.env_stack[0][instr.argval])
+        value = self.env_stack[0].get(instr.argval)
+        if value is None:
+            raise NameError(f"Global '{instr.argval}' not defined")
+        self.stack.append(value)
 
     def _handle_store_global(self, instr: dis.Instruction) -> None:
         self.env_stack[0].update({instr.argval: self.safe_pop(instr.opname)})
@@ -244,6 +251,26 @@ class BytecodeInterpreter:
 
     def _handle_delete_name(self, instr: dis.Instruction) -> None:
         self._delete_name(instr.argval)
+
+    def _handle_binary_op(self, instr: dis.Instruction) -> None:
+        ops = {
+            0: lambda x, y: x + y,
+            1: lambda x, y: x & y,
+            2: lambda x, y: x // y,
+            3: lambda x, y: x << y,
+            4: lambda x, y: x @ y,
+            5: lambda x, y: x * y,
+            6: lambda x, y: x % y,
+            7: lambda x, y: x | y,
+            8: lambda x, y: x ** y,
+            9: lambda x, y: x >> y,
+            10: lambda x, y: x - y,
+            11: lambda x, y: x / y,
+            12: lambda x, y: x ^ y,
+        }
+        right = self.safe_pop(instr.opname)
+        left = self.safe_pop(instr.opname)
+        self.stack.append(ops[instr.arg](left, right))
 
     def _handle_binary_add(self, instr: dis.Instruction) -> None:
         self._binary_op(instr.opname, lambda x, y: x + y)
@@ -285,7 +312,16 @@ class BytecodeInterpreter:
         self._binary_op(instr.opname, lambda x, y: x @ y)
 
     def _handle_inplace_add(self, instr: dis.Instruction) -> None:
-        self._inplace_op(instr.opname, lambda x, y: x + y)
+        right = self.safe_pop(instr.opname)
+        left = self.safe_pop(instr.opname)
+        if isinstance(left, list):
+            if isinstance(right, (list, tuple, set)):
+                left.extend(right)
+            else:
+                left.append(right)
+            self.stack.append(left)
+        else:
+            self.stack.append(left + right)
 
     def _handle_inplace_subtract(self, instr: dis.Instruction) -> None:
         self._inplace_op(instr.opname, lambda x, y: x - y)
@@ -321,7 +357,9 @@ class BytecodeInterpreter:
         self._inplace_op(instr.opname, lambda x, y: x ^ y)
 
     def _handle_binary_subscr(self, instr: dis.Instruction) -> None:
-        self.stack.append(self.safe_pop(instr.opname)[self.safe_pop(instr.opname)])
+        index = self.safe_pop(instr.opname)
+        obj = self.safe_pop(instr.opname)
+        self.stack.append(obj[index])
 
     def _handle_store_subscr(self, instr: dis.Instruction) -> None:
         self._store_subscr(instr.opname)
@@ -330,7 +368,19 @@ class BytecodeInterpreter:
         self._delete_subscr(instr.opname)
 
     def _handle_compare_op(self, instr: dis.Instruction) -> None:
-        self._compare_op(instr.argval)
+        right = self.safe_pop("COMPARE_OP")
+        left = self.safe_pop("COMPARE_OP")
+        ops = {
+            "==": lambda x, y: x == y,
+            "<": lambda x, y: x < y,
+            ">": lambda x, y: x > y,
+            "!=": lambda x, y: x != y,
+            "in": lambda x, y: x in y,
+            "not in": lambda x, y: x not in y,
+            "<=": lambda x, y: x <= y,
+            ">=": lambda x, y: x >= y
+        }
+        self.stack.append(ops[instr.argval](left, right))
 
     def _handle_is_op(self, instr: dis.Instruction) -> None:
         self.stack.append((self.safe_pop(instr.opname) is self.safe_pop(instr.opname)) == (instr.argval == 0))
@@ -377,8 +427,29 @@ class BytecodeInterpreter:
     def _handle_return_value(self, instr: dis.Instruction) -> None:
         self._raise_return(self.safe_pop(instr.opname))
 
-    def _handle_call(self, instr: dis.Instruction) -> None:
-        asyncio.run(self._call(instr.arg))
+    def _handle_return_const(self, instr: dis.Instruction) -> None:
+        self._raise_return(instr.argval)
+
+    async def _handle_call(self, instr: dis.Instruction) -> None:
+        if self.current_kw_names is not None:
+            kw_names = self.current_kw_names
+            self.current_kw_names = None
+            kw_count = len(kw_names)
+            total_args = instr.arg
+            if total_args < kw_count:
+                raise RuntimeError("Not enough arguments for keyword names")
+            kw_values = [self.safe_pop("CALL") for _ in range(kw_count)][::-1]
+            pos_args = [self.safe_pop("CALL") for _ in range(total_args - kw_count)][::-1]
+            func = self.safe_pop("CALL")
+            kwargs = dict(zip(kw_names, kw_values))
+            result = func(*pos_args, **kwargs)
+        else:
+            args = [self.safe_pop("CALL") for _ in range(instr.arg)][::-1]
+            func = self.safe_pop("CALL")
+            result = func(*args)
+        if asyncio.iscoroutine(result):
+            result = await result
+        self.stack.append(result)
 
     def _handle_make_function(self, instr: dis.Instruction) -> None:
         self._make_function(instr.arg)
@@ -387,7 +458,7 @@ class BytecodeInterpreter:
         self.stack.append([self.safe_pop(instr.opname) for _ in range(instr.arg)][::-1])
 
     def _handle_build_tuple(self, instr: dis.Instruction) -> None:
-        self.stack.append(tuple(self.safe_pop(instr.opname) for _ in range(instr.arg))[::-1])
+        self.stack.append(tuple([self.safe_pop(instr.opname) for _ in range(instr.arg)][::-1]))
 
     def _handle_build_map(self, instr: dis.Instruction) -> None:
         self._build_map(instr.arg)
@@ -396,7 +467,7 @@ class BytecodeInterpreter:
         self._build_const_key_map(instr.arg)
 
     def _handle_build_set(self, instr: dis.Instruction) -> None:
-        self.stack.append(set(self.safe_pop(instr.opname) for _ in range(instr.arg)[::-1]))
+        self.stack.append(set([self.safe_pop(instr.opname) for _ in range(instr.arg)][::-1]))
 
     def _handle_build_string(self, instr: dis.Instruction) -> None:
         self.stack.append("".join(str(self.safe_pop(instr.opname)) for _ in range(instr.arg)[::-1]))
@@ -414,16 +485,21 @@ class BytecodeInterpreter:
         self.stack[-instr.arg].update(self.safe_pop(instr.opname))
 
     def _handle_unpack_sequence(self, instr: dis.Instruction) -> None:
-        self.stack.extend(reversed(self.safe_pop(instr.opname)))
+        seq = self.safe_pop(instr.opname)
+        if len(seq) != instr.arg:
+            raise ValueError(f"Expected sequence of length {instr.arg}, got {len(seq)}")
+        self.stack.extend(reversed(seq))
 
-    def _handle_for_iter(self, instr: dis.Instruction) -> None:
+    async def _handle_for_iter(self, instr: dis.Instruction) -> None:
         self._for_iter(instr)
 
     def _handle_load_attr(self, instr: dis.Instruction) -> None:
         self.stack.append(getattr(self.safe_pop(instr.opname), instr.argval))
 
     def _handle_store_attr(self, instr: dis.Instruction) -> None:
-        setattr(self.safe_pop(instr.opname), instr.argval, self.safe_pop(instr.opname))
+        obj = self.safe_pop(instr.opname)
+        value = self.safe_pop(instr.opname)
+        setattr(obj, instr.argval, value)
 
     def _handle_delete_attr(self, instr: dis.Instruction) -> None:
         delattr(self.safe_pop(instr.opname), instr.argval)
@@ -431,8 +507,14 @@ class BytecodeInterpreter:
     def _handle_load_method(self, instr: dis.Instruction) -> None:
         self._load_method(instr.argval)
 
-    def _handle_call_method(self, instr: dis.Instruction) -> None:
-        asyncio.run(self._call_method(instr.arg))
+    async def _handle_call_method(self, instr: dis.Instruction) -> None:
+        args = [self.safe_pop("CALL_METHOD") for _ in range(instr.arg)][::-1]
+        obj = self.safe_pop("CALL_METHOD")
+        method = self.safe_pop("CALL_METHOD")
+        result = method(obj, *args)
+        if asyncio.iscoroutine(result):
+            result = await result
+        self.stack.append(result)
 
     def _handle_get_iter(self, instr: dis.Instruction) -> None:
         self.stack[-1] = iter(self.stack[-1])
@@ -453,19 +535,19 @@ class BytecodeInterpreter:
         self._raise_varargs(instr.arg)
 
     def _handle_setup_finally(self, instr: dis.Instruction) -> None:
-        self.block_stack.append(("finally", instr.arg))
+        self.block_stack.append(("finally", self.ip + instr.arg))
 
     def _handle_setup_except(self, instr: dis.Instruction) -> None:
-        self.block_stack.append(("except", instr.arg))
+        self.block_stack.append(("except", self.ip + instr.arg))
 
     def _handle_setup_loop(self, instr: dis.Instruction) -> None:
-        self.block_stack.append(("loop", instr.arg))
+        self.block_stack.append(("loop", self.ip + instr.arg))
 
     def _handle_setup_with(self, instr: dis.Instruction) -> None:
-        self._setup_with(instr.arg)
+        self._setup_with(self.ip + instr.arg)
 
-    def _handle_setup_async_with(self, instr: dis.Instruction) -> None:
-        self._setup_async_with(instr.arg)
+    async def _handle_setup_async_with(self, instr: dis.Instruction) -> None:
+        self._setup_async_with(self.ip + instr.arg)
 
     def _handle_pop_block(self, instr: dis.Instruction) -> None:
         if self.block_stack:
@@ -512,7 +594,7 @@ class BytecodeInterpreter:
         self.stack.append(None)
 
     def _handle_kw_names(self, instr: dis.Instruction) -> None:
-        self.stack.append(instr.argval)
+        self.current_kw_names = instr.argval
 
     def _handle_unary_positive(self, instr: dis.Instruction) -> None:
         self.stack.append(+self.safe_pop(instr.opname))
@@ -530,7 +612,9 @@ class BytecodeInterpreter:
         self.stack[-instr.argval].append(self.safe_pop(instr.opname))
 
     def _handle_map_add(self, instr: dis.Instruction) -> None:
-        self.stack[-instr.argval].update({self.safe_pop(instr.opname): self.safe_pop(instr.opname)})
+        value = self.safe_pop(instr.opname)
+        key = self.safe_pop(instr.opname)
+        self.stack[-instr.argval][key] = value
 
     def _handle_format_value(self, instr: dis.Instruction) -> None:
         self._format_value(instr.arg)
@@ -559,6 +643,22 @@ class BytecodeInterpreter:
     def _handle_match_keys(self, instr: dis.Instruction) -> None:
         self._match_keys(instr)
 
+    def _handle_match_class(self, instr: dis.Instruction) -> None:
+        nargs = instr.arg
+        args = [self.safe_pop(instr.opname) for _ in range(nargs)][::-1]
+        cls = self.safe_pop(instr.opname)
+        value = self.stack[-1]
+        if isinstance(value, cls):
+            if nargs:
+                try:
+                    self.stack.append(tuple(getattr(value, arg) for arg in args))
+                except AttributeError:
+                    self.stack.append(False)
+            else:
+                self.stack.append(True)
+        else:
+            self.stack.append(False)
+
     def safe_import(self, name: str, globals=None, locals=None, fromlist: Tuple[str, ...] = (), level: int = 0) -> Any:
         if name not in self.allowed_modules:
             raise ImportError(f"Module '{name}' not allowed. Permitted: {self.allowed_modules}")
@@ -572,7 +672,7 @@ class BytecodeInterpreter:
 
     def get_variable(self, name: str) -> Any:
         for frame in reversed(self.env_stack):
-            if name in frame:
+            if name in frame and frame[name] is not None:
                 return frame[name]
         raise NameError(f"Name '{name}' is not defined")
 
@@ -621,17 +721,10 @@ class BytecodeInterpreter:
         self.stack.append(op(left, right))
 
     def _store_subscr(self, opcode: str) -> None:
+        value = self.safe_pop(opcode)
         index = self.safe_pop(opcode)
         obj = self.safe_pop(opcode)
-        value = self.safe_pop(opcode)
         obj[index] = value
-
-    def _compare_op(self, op: str) -> None:
-        right = self.safe_pop("COMPARE_OP")
-        left = self.safe_pop("COMPARE_OP")
-        ops = {"==": lambda x, y: x == y, "<": lambda x, y: x < y, ">": lambda x, y: x > y, "!=": lambda x, y: x != y,
-               "in": lambda x, y: x in y, "not in": lambda x, y: x not in y, "<=": lambda x, y: x <= y, ">=": lambda x, y: x >= y}
-        self.stack.append(ops[op](left, right))
 
     def _jump_if(self, instr: dis.Instruction, condition: Callable[[Any], bool]) -> None:
         if condition(self.safe_pop(instr.opname)):
@@ -649,14 +742,6 @@ class BytecodeInterpreter:
 
     def _raise_return(self, value: Any) -> None:
         raise ReturnException(value)
-
-    async def _call(self, nargs: int) -> None:
-        args = [self.safe_pop("CALL") for _ in range(nargs)][::-1]
-        func = self.safe_pop("CALL")
-        result = func(*args)
-        if asyncio.iscoroutine(result):
-            result = await result
-        self.stack.append(result)
 
     def _make_function(self, flags: int) -> None:
         code = self.safe_pop("MAKE_FUNCTION")
@@ -703,15 +788,6 @@ class BytecodeInterpreter:
         self.stack.append(method)
         self.stack.append(obj)
 
-    async def _call_method(self, nargs: int) -> None:
-        args = [self.safe_pop("CALL_METHOD") for _ in range(nargs)][::-1]
-        obj = self.safe_pop("CALL_METHOD")
-        method = self.safe_pop("CALL_METHOD")
-        result = method(obj, *args)
-        if asyncio.iscoroutine(result):
-            result = await result
-        self.stack.append(result)
-
     def _end_async_for(self, instr: dis.Instruction) -> None:
         exc = self.safe_pop(instr.opname)
         self.safe_pop(instr.opname)
@@ -744,7 +820,7 @@ class BytecodeInterpreter:
     def _yield_value(self, instr: dis.Instruction) -> None:
         value = self.safe_pop(instr.opname)
         self.stack.append(value)
-        raise ReturnException(value)  # Simplified yield handling
+        raise ReturnException(value)
 
     def _yield_from(self, instr: dis.Instruction) -> None:
         value = self.safe_pop(instr.opname)
@@ -791,13 +867,14 @@ class BytecodeInterpreter:
         last_value = None
         exception_state = None
         self.frames.append({"code": code_obj})
+        if initial_stack:
+            self.stack.extend(initial_stack)
 
         @contextmanager
         def execution_timer():
-            loop = asyncio.get_running_loop()
-            deadline = loop.time() + self.max_execution_time
+            deadline = self.loop.time() + self.max_execution_time
             yield
-            if loop.time() > deadline:
+            if self.loop.time() > deadline:
                 raise TimeoutError("Execution time exceeded")
 
         with execution_timer():
@@ -809,7 +886,9 @@ class BytecodeInterpreter:
 
                 try:
                     handler = self.opcode_handlers.get(instr.opname, self._not_implemented)
-                    handler(instr)
+                    result = handler(instr)
+                    if asyncio.iscoroutine(result):
+                        result = await result
                     self.ip += 1
                 except (ReturnException, BreakException, ContinueException) as e:
                     if isinstance(e, ReturnException):
@@ -818,6 +897,18 @@ class BytecodeInterpreter:
                     raise
                 except Exception as e:
                     context_line = self.source_lines[lineno - 1] if self.source_lines and lineno <= len(self.source_lines) else ""
+                    if isinstance(e, ExceptionGroup) and self.block_stack:
+                        block_type, target = self.block_stack[-1]
+                        if block_type == "except":
+                            self.ip = target
+                            for sub_exc in e.exceptions:
+                                if isinstance(sub_exc, ValueError):  # Simplified except* simulation
+                                    self.stack.append(sub_exc)
+                                    exception_state = sub_exc
+                                    break
+                            else:
+                                self.stack.append(e.exceptions[0])
+                            continue
                     if self.block_stack:
                         block_type, target = self.block_stack[-1]
                         if block_type in ("finally", "except"):
@@ -834,6 +925,8 @@ class BytecodeInterpreter:
                     ) from e
 
         self.frames.pop()
+        if asyncio.iscoroutine(last_value):
+            last_value = await last_value
         return last_value
 
     def _not_implemented(self, instr: dis.Instruction) -> None:
@@ -847,33 +940,54 @@ class Function:
         self.defaults = defaults
         self.closure = closure
         self.kwdefaults = kwdefaults
-        self.signature = inspect.signature(lambda: None)  # Placeholder; actual signature derived from code
 
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         new_env_stack = self.interpreter.env_stack[:]
-        local_frame = {}
-        sig = inspect.Signature.from_callable(lambda *a, **kw: None, parameters=[
-            inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-            for name in self.code.co_varnames[:self.code.co_argcount]
-        ] + [
-            inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, default=self.kwdefaults.get(name))
-            for name in self.code.co_varnames[self.code.co_argcount:self.code.co_argcount + self.code.co_kwonlyargcount]
-        ] + ([inspect.Parameter("args", inspect.Parameter.VAR_POSITIONAL)] if self.code.co_flags & 0x04 else []) +
-        ([inspect.Parameter("kwargs", inspect.Parameter.VAR_KEYWORD)] if self.code.co_flags & 0x08 else []))
+        local_frame = defaultdict(lambda: None)
 
-        bound_args = sig.bind(*args, **kwargs)
-        bound_args.apply_defaults()
-        local_frame.update(bound_args.arguments)
+        arg_count = self.code.co_argcount
+        varnames = self.code.co_varnames
+        for i, arg in enumerate(args[:arg_count]):
+            local_frame[varnames[i]] = arg
+
+        default_start = max(0, arg_count - len(self.defaults))
+        for i, default in enumerate(self.defaults):
+            idx = default_start + i
+            if idx < arg_count and idx >= len(args):
+                local_frame[varnames[idx]] = default
+
+        kwonly_start = arg_count
+        kwonly_count = self.code.co_kwonlyargcount
+        for i in range(kwonly_start, kwonly_start + kwonly_count):
+            name = varnames[i]
+            if name in kwargs:
+                local_frame[name] = kwargs[name]
+            elif name in self.kwdefaults:
+                local_frame[name] = self.kwdefaults[name]
+
+        if self.code.co_flags & 0x04:  # CO_VARARGS
+            vararg_name = varnames[arg_count + kwonly_count]
+            local_frame[vararg_name] = args[arg_count:] if len(args) > arg_count else ()
+
+        if self.code.co_flags & 0x08:  # CO_VARKEYWORDS
+            varkw_name = varnames[arg_count + kwonly_count + (1 if self.code.co_flags & 0x04 else 0)]
+            remaining_kwargs = {k: v for k, v in kwargs.items() if k not in varnames[:arg_count + kwonly_count]}
+            local_frame[varkw_name] = remaining_kwargs
+
+        for name, value in kwargs.items():
+            if name in varnames[:arg_count]:
+                local_frame[name] = value
 
         new_env_stack.append(local_frame)
         new_interp = self.interpreter.spawn_from_env(new_env_stack)
         if self.code.co_freevars and self.closure:
             for name, cell in zip(self.code.co_freevars, self.closure):
                 new_interp.cells[name] = cell
-        try:
-            return await new_interp.run(self.code)
-        except ReturnException as ret:
-            return ret.value
+
+        result = await new_interp.run(self.code)
+        if asyncio.iscoroutine(result):
+            return await result
+        return result
 
     def __get__(self, instance: Any, owner: Any):
         if instance is None:
@@ -883,32 +997,25 @@ class Function:
         method.__self__ = instance
         return method
 
-def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "") -> Any:
+async def interpret_ast_async(ast_tree: Any, allowed_modules: List[str], source: str = "") -> Any:
     code_obj = compile(ast_tree, "<string>", "exec") if not isinstance(ast_tree, types.CodeType) else ast_tree
     interpreter = BytecodeInterpreter(allowed_modules=allowed_modules, source=source)
+    result = await interpreter.run(code_obj)
+    if asyncio.iscoroutine(result):
+        result = await result
+    elif hasattr(result, '__aiter__'):
+        return [val async for val in result]
+    return interpreter.env_stack[0].get('result', result)
 
-    async def run_interpreter():
-        result = await interpreter.run(code_obj)
-        if asyncio.iscoroutine(result):
-            return await result
-        elif hasattr(result, '__aiter__'):
-            return [val async for val in result]
-        return interpreter.env_stack[0].get('result', result)
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    interpreter.loop = loop
-    try:
-        return loop.run_until_complete(run_interpreter())
-    finally:
-        loop.close()
+def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "") -> Any:
+    return asyncio.run(interpret_ast_async(ast_tree, allowed_modules, source))
 
 def interpret_code(source_code: str, allowed_modules: List[str]) -> Any:
     dedented_source = textwrap.dedent(source_code).strip()
     code_obj = compile(dedented_source, "<string>", "exec")
     return interpret_ast(code_obj, allowed_modules, source=dedented_source)
 
-if __name__ == "__main__":
+async def run_examples():
     examples = [
         (
             "Decorators and args",
@@ -1003,8 +1110,11 @@ result = x
     for name, code, modules, expected in examples:
         print(f"\nRunning: {name}")
         try:
-            result = interpret_code(code, modules)
+            result = await interpret_ast_async(compile(textwrap.dedent(code).strip(), "<string>", "exec"), modules, code)
             print(f"Result: {result} (Expected: {expected})")
             assert str(result) == str(expected), f"Expected {expected}, got {result}"
         except Exception as e:
             print(f"Error: {e}")
+
+if __name__ == "__main__":
+    asyncio.run(run_examples())
