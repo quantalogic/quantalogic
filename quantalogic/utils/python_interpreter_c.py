@@ -621,19 +621,43 @@ class BytecodeInterpreter:
         self.stack[-instr.arg].update(items)
 
     def _handle_unpack_sequence(self, instr: dis.Instruction) -> None:
+        """Improved sequence unpacking for comprehensions."""
         seq = self.safe_pop(instr.opname)
-        if len(seq) != instr.arg:
-            raise ValueError(f"Expected sequence of length {instr.arg}, got {len(seq)}")
-        self.stack.extend(reversed(list(seq)))
+        
+        if seq is None:
+            raise TypeError("cannot unpack non-iterable NoneType object")
+            
+        try:
+            # Convert to a list if it's an iterator or iterable
+            if not isinstance(seq, (list, tuple)) and hasattr(seq, '__iter__'):
+                seq = list(seq)
+                
+            if len(seq) != instr.arg:
+                raise ValueError(f"Expected sequence of length {instr.arg}, got {len(seq)}")
+                
+            # Push items onto the stack in reverse order
+            self.stack.extend(reversed(list(seq)))
+        except (TypeError, ValueError) as e:
+            raise e
 
     async def _handle_for_iter(self, instr: dis.Instruction) -> None:
+        """Improved FOR_ITER handling for comprehensions and generators."""
+        if not self.stack:
+            raise ValueError("FOR_ITER: Stack underflow")
+        
         iterator = self.stack[-1]
+        if iterator is None:
+            # Better error message when the iterator is None
+            raise TypeError("'NoneType' object is not an iterator")
+            
         try:
             value = next(iterator)
             self.stack.append(value)
         except StopIteration:
+            # Remove the exhausted iterator
             self.safe_pop(instr.opname)
-            self.ip = instr.argval
+            # Jump to target
+            self.ip = instr.argval - 1  # Adjust for the auto-increment
 
     def _handle_load_attr(self, instr: dis.Instruction) -> None:
         obj = self.safe_pop(instr.opname)
@@ -664,7 +688,17 @@ class BytecodeInterpreter:
         self.stack.append(result)
 
     def _handle_get_iter(self, instr: dis.Instruction) -> None:
-        self.stack[-1] = iter(self.stack[-1])
+        """Improved iterator handling to fix dictionary/list comprehension issues."""
+        obj = self.stack[-1]
+        if obj is None:
+            raise TypeError("'NoneType' object is not iterable")
+        
+        try:
+            # Ensure we get a proper iterator
+            iterator = iter(obj)
+            self.stack[-1] = iterator
+        except TypeError:
+            raise TypeError(f"'{type(obj).__name__}' object is not iterable")
 
     def _handle_raise_varargs(self, instr: dis.Instruction) -> None:
         if instr.arg == 1:
@@ -846,9 +880,22 @@ class BytecodeInterpreter:
         self.stack[-instr.arg].append(value)
 
     def _handle_map_add(self, instr: dis.Instruction) -> None:
+        """Improved MAP_ADD for dictionary comprehensions."""
+        if len(self.stack) < 2:
+            raise ValueError("MAP_ADD requires at least 2 values on the stack")
+            
         value = self.safe_pop(instr.opname)
         key = self.safe_pop(instr.opname)
-        self.stack[-instr.arg][key] = value
+        
+        # Make sure the target dictionary exists
+        if len(self.stack) < instr.arg:
+            raise ValueError(f"MAP_ADD: Stack doesn't have {instr.arg} elements")
+            
+        target_dict = self.stack[-instr.arg]
+        if not isinstance(target_dict, dict):
+            raise TypeError(f"MAP_ADD: Expected dict, got {type(target_dict).__name__}")
+            
+        target_dict[key] = value
 
     def _handle_set_add(self, instr: dis.Instruction) -> None:
         value = self.safe_pop(instr.opname)
