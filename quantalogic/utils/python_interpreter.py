@@ -64,7 +64,7 @@ class ASTInterpreter:
                 "type": type, "isinstance": isinstance, "issubclass": issubclass,
                 "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
                 "ValueError": ValueError, "TypeError": TypeError,
-                "print": print  # Add print to allowed_builtins
+                "print": print, 
             }
             # Only include 'open' if restrict_os is False
             if not restrict_os:
@@ -90,7 +90,7 @@ class ASTInterpreter:
                     "type": type, "isinstance": isinstance, "issubclass": issubclass,
                     "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
                     "ValueError": ValueError, "TypeError": TypeError,
-                    "print": print  # Add print to allowed_builtins
+                    "print": print, 
                 }
                 # Only include 'open' if restrict_os is False
                 if not restrict_os:
@@ -407,6 +407,14 @@ class ASTInterpreter:
             raise Exception("Unsupported augmented operator: " + str(op))
         await self.assign(node.target, result)
         return result
+
+    async def visit_AnnAssign(self, node: ast.AnnAssign, wrap_exceptions: bool = True) -> None:
+        # Evaluate the value if provided
+        value = await self.visit(node.value, wrap_exceptions=wrap_exceptions) if node.value else None
+        # Assign the value to the target (annotation is ignored for execution)
+        if value is not None or node.simple:
+            await self.assign(node.target, value)
+        # Note: Annotation (node.annotation) is not processed, as this interpreter doesn't use type info
 
     async def visit_Compare(self, node: ast.Compare, wrap_exceptions: bool = True) -> bool:
         left: Any = await self.visit(node.left, wrap_exceptions=wrap_exceptions)
@@ -966,6 +974,27 @@ class ASTInterpreter:
             else:
                 ctx.__exit__(None, None, None)
 
+    async def visit_AsyncWith(self, node: ast.AsyncWith, wrap_exceptions: bool = True):
+        for item in node.items:
+            ctx = await self.visit(item.context_expr, wrap_exceptions=wrap_exceptions)
+            val = await ctx.__aenter__()
+            if item.optional_vars:
+                await self.assign(item.optional_vars, val)
+            try:
+                for stmt in node.body:
+                    try:
+                        await self.visit(stmt, wrap_exceptions=wrap_exceptions)
+                    except ReturnException as ret:
+                        await ctx.__aexit__(None, None, None)
+                        raise ret
+            except ReturnException as ret:
+                raise ret
+            except Exception as e:
+                if not await ctx.__aexit__(type(e), e, None):
+                    raise
+            else:
+                await ctx.__aexit__(None, None, None)
+
     async def visit_Raise(self, node: ast.Raise, wrap_exceptions: bool = True) -> None:
         exc = await self.visit(node.exc, wrap_exceptions=wrap_exceptions) if node.exc else None
         if exc:
@@ -1192,6 +1221,17 @@ class ASTInterpreter:
         if not broke:
             for stmt in node.orelse:
                 await self.visit(stmt, wrap_exceptions=wrap_exceptions)
+
+    async def visit_Assert(self, node: ast.Assert, wrap_exceptions: bool = True) -> None:
+        test = await self.visit(node.test, wrap_exceptions=wrap_exceptions)
+        if not test:
+            msg = await self.visit(node.msg, wrap_exceptions=wrap_exceptions) if node.msg else "Assertion failed"
+            raise AssertionError(msg)
+
+    async def visit_NamedExpr(self, node: ast.NamedExpr, wrap_exceptions: bool = True) -> Any:
+        value = await self.visit(node.value, wrap_exceptions=wrap_exceptions)
+        await self.assign(node.target, value)
+        return value
 
     async def execute_async(self, node: ast.Module) -> Any:
         return await self.visit(node)
@@ -1626,30 +1666,3 @@ result = os.path.join("a", "b")
         print("Result:", result_3)
     except Exception as e:
         print("Interpreter error:", e)
-
-    source_code_4: str = """
-with open("test.txt", "r") as f:
-    result = f.read()
-"""
-    print("Example 4 (attempt to use open() with restrict_os=True):")
-    try:
-        result_4: Any = interpret_code(source_code_4, allowed_modules=[], restrict_os=True)
-        print("Result:", result_4)
-    except Exception as e:
-        print("Interpreter error:", e)
-
-    source_code_5: str = """
-def add(a, b):
-    return a + b
-
-async def async_multiply(x, y):
-    await asyncio.sleep(0.1)
-    return x * y
-"""
-    print("Example 5 (execute_async with entry_point):")
-    async def run_example_5():
-        result_5a = await execute_async(source_code_5, entry_point="add", args=(3, 4))
-        print("Result (add):", result_5a.result)
-        result_5b = await execute_async(source_code_5, entry_point="async_multiply", args=(2, 3), allowed_modules=["asyncio"])
-        print("Result (async_multiply):", result_5b.result)
-    asyncio.run(run_example_5())
