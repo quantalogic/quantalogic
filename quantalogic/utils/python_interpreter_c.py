@@ -252,39 +252,127 @@ class BytecodeInterpreter:
         self._delete_name(instr.argval)
 
     def _handle_binary_op(self, instr: dis.Instruction) -> None:
-        # Fix operator precedence issues, especially bitwise operations
-        ops = {
-            0: lambda x, y: x + y,    # +
-            1: lambda x, y: x & y,    # &
-            2: lambda x, y: x // y,   # //
-            3: lambda x, y: x << y,   # <<
-            4: lambda x, y: x @ y,    # @
-            5: lambda x, y: x * y,    # *
-            6: lambda x, y: x % y,    # %
-            7: lambda x, y: x | y,    # |  (bitwise OR)
-            8: lambda x, y: x ** y,   # **
-            9: lambda x, y: x >> y,   # >>
-            10: lambda x, y: x - y,   # -
-            11: lambda x, y: x / y,   # /
-            12: lambda x, y: x ^ y,   # ^  (bitwise XOR)
-            13: lambda x, y: x.__iadd__(y) if hasattr(x, '__iadd__') else x + y,  # +=
-        }
+        """Handle binary operations according to Python 3.11 opcode mapping."""
         right = self.safe_pop(instr.opname)
         left = self.safe_pop(instr.opname)
+        
+        # Check for None operands
         if left is None or right is None:
-            raise TypeError(f"Cannot perform {instr.opname} on NoneType")
+            raise TypeError(f"Cannot perform binary operation on NoneType")
+        
         try:
-            result = ops[instr.arg](left, right)
-            self.stack.append(result)
-        except (TypeError, KeyError) as e:
-            if instr.arg == 7:  # Bitwise OR
-                self.stack.append(left | right)  # Explicit bitwise OR
-            elif instr.arg == 12:  # Bitwise XOR
-                self.stack.append(left ^ right)  # Explicit bitwise XOR
-            elif instr.arg == 1:  # Bitwise AND
-                self.stack.append(left & right)  # Explicit bitwise AND
+            # Full Python 3.11 binary operations mapping
+            if instr.arg == 0:      # +
+                result = left + right
+            elif instr.arg == 1:    # &
+                result = left & right
+            elif instr.arg == 2:    # //
+                result = left // right
+            elif instr.arg == 3:    # <<
+                result = left << right
+            elif instr.arg == 4:    # @
+                result = left @ right
+            elif instr.arg == 5:    # *
+                result = left * right
+            elif instr.arg == 6:    # %
+                result = left % right
+            elif instr.arg == 7:    # |
+                result = left | right
+            elif instr.arg == 8:    # **
+                result = left ** right
+            elif instr.arg == 9:    # >>
+                result = left >> right
+            elif instr.arg == 10:   # -
+                result = left - right
+            elif instr.arg == 11:   # /
+                result = left / right
+            elif instr.arg == 12:   # ^
+                result = left ^ right
+            # In-place operations (13-25)
+            elif instr.arg == 13:   # +=
+                if hasattr(left, '__iadd__'):
+                    result = left.__iadd__(right)
+                else:
+                    result = left + right
+            elif instr.arg == 14:   # &=
+                if hasattr(left, '__iand__'):
+                    result = left.__iand__(right)
+                else:
+                    result = left & right
+            elif instr.arg == 15:   # //=
+                if hasattr(left, '__ifloordiv__'):
+                    result = left.__ifloordiv__(right)
+                else:
+                    result = left // right
+            elif instr.arg == 16:   # <<=
+                if hasattr(left, '__ilshift__'):
+                    result = left.__ilshift__(right)
+                else:
+                    result = left << right
+            elif instr.arg == 17:   # @=
+                if hasattr(left, '__imatmul__'):
+                    result = left.__imatmul__(right)
+                else:
+                    result = left @ right
+            elif instr.arg == 18:   # *=
+                if hasattr(left, '__imul__'):
+                    result = left.__imul__(right)
+                else:
+                    result = left * right
+            elif instr.arg == 19:   # %=
+                if hasattr(left, '__imod__'):
+                    result = left.__imod__(right)
+                else:
+                    result = left % right
+            elif instr.arg == 20:   # |=
+                if hasattr(left, '__ior__'):
+                    result = left.__ior__(right)
+                else:
+                    result = left | right
+            elif instr.arg == 21:   # **=
+                if hasattr(left, '__ipow__'):
+                    result = left.__ipow__(right)
+                else:
+                    result = left ** right
+            elif instr.arg == 22:   # >>=
+                if hasattr(left, '__irshift__'):
+                    result = left.__irshift__(right)
+                else:
+                    result = left >> right
+            elif instr.arg == 23:   # -=
+                if hasattr(left, '__isub__'):
+                    result = left.__isub__(right)
+                else:
+                    result = left - right
+            elif instr.arg == 24:   # /=
+                if hasattr(left, '__itruediv__'):
+                    result = left.__itruediv__(right)
+                else:
+                    result = left / right
+            elif instr.arg == 25:   # ^=
+                if hasattr(left, '__ixor__'):
+                    result = left.__ixor__(right)
+                else:
+                    result = left ^ right
             else:
-                raise TypeError(f"unsupported operand type(s) for {instr.opname}: '{type(left).__name__}' and '{type(right).__name__}'") from e
+                raise ValueError(f"Unknown binary operation code: {instr.arg}")
+                
+            self.stack.append(result)
+        except Exception as e:
+            # Provide detailed error message for debugging
+            op_name = self._get_binary_op_name(instr.arg)
+            raise TypeError(f"unsupported operand type(s) for {op_name}: '{type(left).__name__}' and '{type(right).__name__}'") from e
+    
+    def _get_binary_op_name(self, op_code: int) -> str:
+        """Return the string representation of a binary operation code."""
+        op_names = {
+            0: '+', 1: '&', 2: '//', 3: '<<', 4: '@', 5: '*', 
+            6: '%', 7: '|', 8: '**', 9: '>>', 10: '-', 11: '/', 
+            12: '^', 13: '+=', 14: '&=', 15: '//=', 16: '<<=',
+            17: '@=', 18: '*=', 19: '%=', 20: '|=', 21: '**=',
+            22: '>>=', 23: '-=', 24: '/=', 25: '^='
+        }
+        return op_names.get(op_code, f"operation {op_code}")
 
     def _handle_binary_subscr(self, instr: dis.Instruction) -> None:
         # Improved error handling for subscripting
@@ -377,21 +465,26 @@ class BytecodeInterpreter:
     def _handle_pop_jump_forward_if_none(self, instr: dis.Instruction) -> None:
         value = self.safe_pop(instr.opname)
         if value is None:
-            self.ip += instr.arg
+            # Adjust for the auto-increment that happens in the main loop
+            self.ip += instr.arg - 1
 
     def _handle_pop_jump_forward_if_not_none(self, instr: dis.Instruction) -> None:
         value = self.safe_pop(instr.opname)
         if value is not None:
-            self.ip += instr.arg
+            # Adjust for the auto-increment that happens in the main loop
+            self.ip += instr.arg - 1
 
     def _handle_jump_forward(self, instr: dis.Instruction) -> None:
-        self.ip += instr.arg
+        # Adjust for the auto-increment that happens in the main loop
+        self.ip += instr.arg - 1
 
     def _handle_jump_absolute(self, instr: dis.Instruction) -> None:
-        self.ip = instr.arg
+        # Set IP directly to target and adjust for the auto-increment
+        self.ip = instr.argval - 1
 
     def _handle_jump_backward(self, instr: dis.Instruction) -> None:
-        self.ip -= instr.arg
+        # Adjust for the auto-increment that happens in the main loop
+        self.ip -= instr.arg + 1
 
     def _handle_pop_top(self, instr: dis.Instruction) -> None:
         self.safe_pop(instr.opname)
