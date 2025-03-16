@@ -15,8 +15,7 @@ from llama_index.core import (
     VectorStoreIndex,
     load_index_from_storage,
 )
-from llama_index.core.settings import Settings
-from llama_index.embeddings.bedrock import BedrockEmbedding
+from llama_index.core.settings import Settings 
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.embeddings.instructor import InstructorEmbedding
 from llama_index.embeddings.openai import OpenAIEmbedding
@@ -151,9 +150,7 @@ class RagTool(Tool):
         elif model_type == EmbeddingType.HUGGINGFACE:
             return HuggingFaceEmbedding()
         elif model_type == EmbeddingType.INSTRUCTOR:
-            return InstructorEmbedding()
-        elif model_type == EmbeddingType.BEDROCK:
-            return BedrockEmbedding()
+            return InstructorEmbedding() 
         else:
             raise ValueError(f"Unsupported embedding model type: {model_type}")
 
@@ -255,8 +252,8 @@ if __name__ == "__main__":
         embedding_model="openai",
         persist_dir="./storage/rag",
         document_paths=[
-            "./docs/file1.pdf",
-            "./docs/directory1"
+            "./docs/test/F2015054.pdf",
+            "./docs/test/F2015055.pdf"
         ]
     )
     

@@ -13,11 +13,23 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 from pydantic import BaseModel, Field
+from llama_index.core import (
+    SimpleDirectoryReader,
+    StorageContext,
+    VectorStoreIndex,
+    load_index_from_storage,
+)
+from llama_index.core.settings import Settings 
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.embeddings.instructor import InstructorEmbedding
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.vector_stores.chroma import ChromaVectorStore
+from llama_index.vector_stores.faiss import FaissVectorStore
 
 from quantalogic.tools.tool import Tool, ToolArgument
 
-from .document_metadata import DocumentMetadata
-from .query_response import QueryResponse
+from quantalogic.tools.rag_tool.document_metadata import DocumentMetadata
+from quantalogic.tools.rag_tool.query_response import QueryResponse
 
 
 class EmbeddingType(str, Enum):
@@ -128,7 +140,7 @@ class RagTool(Tool):
         if not self._dependencies_loaded:
             global VectorStoreIndex, Document, StorageContext, SentenceSplitter, VectorIndexRetriever
             global SimilarityPostprocessor, KeywordNodePostprocessor, Settings, SimpleNodeParser
-            global OpenAIEmbedding, HuggingFaceEmbedding, InstructorEmbedding, BedrockEmbedding
+            global OpenAIEmbedding, HuggingFaceEmbedding, InstructorEmbedding
             global ChromaVectorStore, FaissVectorStore, PersistentClient
             
             from chromadb import PersistentClient
@@ -142,8 +154,7 @@ class RagTool(Tool):
                 StorageContext,
                 VectorIndexRetriever,
                 VectorStoreIndex,
-            )
-            from llama_index.embeddings.bedrock import BedrockEmbedding
+            ) 
             from llama_index.embeddings.huggingface import HuggingFaceEmbedding
             from llama_index.embeddings.instructor import InstructorEmbedding
             from llama_index.embeddings.openai import OpenAIEmbedding
@@ -217,9 +228,7 @@ class RagTool(Tool):
         elif model_type == EmbeddingType.HUGGINGFACE:
             return HuggingFaceEmbedding()
         elif model_type == EmbeddingType.INSTRUCTOR:
-            return InstructorEmbedding()
-        elif model_type == EmbeddingType.BEDROCK:
-            return BedrockEmbedding()
+            return InstructorEmbedding() 
         else:
             raise ValueError(f"Unsupported embedding model type: {model_type}")
 
@@ -557,8 +566,8 @@ if __name__ == "__main__":
         embedding_model="openai",
         persist_dir="./storage/rag",
         document_paths=[
-            "./docs/file1.pdf",
-            "./docs/directory1"
+            "./docs/test/F2015054.pdf",
+            "./docs/test/F2015055.pdf"
         ]
     )
     

@@ -1,0 +1,13 @@
+This is a sample test document that contains multilingual content.
+
+English Section:
+The main topic of this document is testing multilingual RAG capabilities.
+We are testing the system's ability to handle multiple languages effectively.
+
+French Section (Section Française):
+Le sujet principal de ce document est de tester les capacités RAG multilingues.
+Nous testons la capacité du système à gérer efficacement plusieurs langues.
+
+Arabic Section (القسم العربي):
+الموضوع الرئيسي لهذا المستند هو اختبار قدرات RAG متعددة اللغات.
+نحن نختبر قدرة النظام على التعامل مع لغات متعددة بشكل فعال.
