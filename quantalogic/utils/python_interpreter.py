@@ -1162,6 +1162,33 @@ class ASTInterpreter:
             results.extend([await self.visit(stmt) for stmt in node.body])
         return results
 
+    async def execute_async(self, node: ast.Module) -> Any:
+        # Find async main function
+        main_func = next((n for n in node.body if isinstance(n, ast.AsyncFunctionDef) and n.name == 'main'), None)
+        
+        if main_func:
+            if not self.loop:
+                self.loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self.loop)
+            
+            # Create task and run until complete
+            task = self.loop.create_task(self.visit(main_func))
+            return await task
+        return None
+
+    async def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> Any:
+        # Create new environment for function execution
+        new_env = [{}]
+        new_env[0].update(self.env_stack[0])
+        child_interpreter = self.spawn_from_env(new_env)
+        
+        try:
+            for stmt in node.body:
+                await child_interpreter.visit(stmt)
+        except ReturnException as e:
+            return e.value
+        return None
+
     def new_scope(self):
         return Scope(self.env_stack)
 
@@ -1449,7 +1476,7 @@ async def execute_async(
         )
         
         async def run_execution():
-            return await interpreter.visit(ast_tree)
+            return await interpreter.execute_async(ast_tree)
 
         result = await asyncio.wait_for(run_execution(), timeout=timeout)
         return AsyncExecutionResult(
