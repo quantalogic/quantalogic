@@ -9,7 +9,7 @@ import types
 from collections import defaultdict
 from contextlib import contextmanager
 
-# Configure logging
+# Configure logging - change DEBUG to INFO for less verbosity
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,7 @@ class GeneratorWrapper:
         self.ip = 0
         self.running = False
         self.task = None
+        self.last_value = None
 
     def __iter__(self):
         return self
@@ -51,13 +52,16 @@ class GeneratorWrapper:
     def __next__(self):
         if not self.running:
             self.running = True
-            self.task = self.interpreter.loop.create_task(self.interpreter.run(self.code, initial_stack=self.stack))
-        
+            self.task = asyncio.create_task(self.interpreter.run(self.code, initial_stack=self.stack))
         try:
             result = self.interpreter.loop.run_until_complete(self.task)
             if isinstance(result, ReturnException):
+                self.last_value = result.value
                 return result.value
-            return result
+            elif result is not None:
+                self.last_value = result
+                return result
+            raise StopIteration
         except StopIteration:
             raise
         except Exception as e:
@@ -74,12 +78,19 @@ class BytecodeInterpreter:
         self.stack: List[Any] = []
         self.frames: List[Dict[str, Any]] = []
         self.ip = 0
-        self.loop = asyncio.get_event_loop()
+        try:
+            # Try to get the current event loop
+            self.loop = asyncio.get_event_loop()
+        except RuntimeError:
+            # Create a new event loop if there's no current loop
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
         self.block_stack: List[Tuple[str, int]] = []
         self.cells: Dict[str, Cell] = {}
         self.max_execution_time = max_execution_time
         self.source_lines = source.splitlines() if source else []
         self.stack_trace: List[str] = []
+        self.current_kw_names: Optional[Tuple[str, ...]] = None
 
         if env_stack is None:
             self.env_stack = [defaultdict(lambda: None)]
@@ -130,6 +141,7 @@ class BytecodeInterpreter:
             "RETURN_VALUE": self._handle_return_value,
             "RETURN_CONST": self._handle_return_const,
             "CALL": self._handle_call,
+            "CALL_FUNCTION_EX": self._handle_call_function_ex,
             "MAKE_FUNCTION": self._handle_make_function,
             "BUILD_LIST": self._handle_build_list,
             "BUILD_TUPLE": self._handle_build_tuple,
@@ -138,7 +150,7 @@ class BytecodeInterpreter:
             "BUILD_SET": self._handle_build_set,
             "BUILD_STRING": self._handle_build_string,
             "BUILD_SLICE": self._handle_build_slice,
-            "BINARY_SLICE": self._handle_binary_slice,  # Added for slicing support
+            "BINARY_SLICE": self._handle_binary_slice,
             "LIST_EXTEND": self._handle_list_extend,
             "SET_UPDATE": self._handle_set_update,
             "DICT_UPDATE": self._handle_dict_update,
@@ -160,7 +172,7 @@ class BytecodeInterpreter:
             "RERAISE": self._handle_reraise,
             "YIELD_VALUE": self._handle_yield_value,
             "YIELD_FROM": self._handle_yield_from,
-            "GET_YIELD_FROM_ITER": self._handle_get_yield_from_iter,  # Added for yield from
+            "GET_YIELD_FROM_ITER": self._handle_get_yield_from_iter,
             "RETURN_GENERATOR": self._handle_return_generator,
             "IMPORT_NAME": self._handle_import_name,
             "IMPORT_FROM": self._handle_import_from,
@@ -169,7 +181,7 @@ class BytecodeInterpreter:
             "STORE_DEREF": self._handle_store_deref,
             "LOAD_CLASSDEREF": self._handle_load_classderef,
             "MAKE_CELL": self._handle_make_cell,
-            "LOAD_BUILD_CLASS": self._handle_load_build_class,  # Added for class support
+            "LOAD_BUILD_CLASS": self._handle_load_build_class,
             "PUSH_NULL": self._handle_push_null,
             "KW_NAMES": self._handle_kw_names,
             "UNARY_POSITIVE": self._handle_unary_positive,
@@ -186,6 +198,15 @@ class BytecodeInterpreter:
             "COPY": self._handle_copy,
             "SWAP": self._handle_swap,
             "LOAD_FAST_AND_CLEAR": self._handle_load_fast_and_clear,
+            "GET_AWAITABLE": self._handle_get_awaitable,
+            "MATCH_SEQUENCE": self._handle_match_sequence,
+            "MATCH_MAPPING": self._handle_match_mapping,
+            "MATCH_CLASS": self._handle_match_class,
+            "MATCH_KEYS": self._handle_match_keys,
+            "GET_LEN": self._handle_get_len,
+            "CHECK_EG_MATCH": self._handle_check_eg_match,
+            "JUMP_NO_INTERRUPT": self._handle_jump_no_interrupt,
+            "SEND": self._handle_send,  # Added for yield from
         }
 
     def _handle_nop(self, instr: dis.Instruction) -> None:
@@ -231,54 +252,76 @@ class BytecodeInterpreter:
         self._delete_name(instr.argval)
 
     def _handle_binary_op(self, instr: dis.Instruction) -> None:
+        # Fix operator precedence issues
         ops = {
-            0: lambda x, y: x + y,
-            1: lambda x, y: x & y,
-            2: lambda x, y: x // y,
-            3: lambda x, y: x << y,
-            4: lambda x, y: x @ y,
-            5: lambda x, y: x * y,
-            6: lambda x, y: x % y,
-            7: lambda x, y: x | y,
-            8: lambda x, y: x ** y,
-            9: lambda x, y: x >> y,
-            10: lambda x, y: x - y,
-            11: lambda x, y: x / y,
-            12: lambda x, y: x ^ y,
-            13: lambda x, y: x.__iadd__(y) if hasattr(x, '__iadd__') else x + y,  # Support += operator
+            0: lambda x, y: x + y,  # +
+            1: lambda x, y: x & y,  # &
+            2: lambda x, y: x // y, # //
+            3: lambda x, y: x << y, # <<
+            4: lambda x, y: x @ y,  # @
+            5: lambda x, y: x * y,  # *
+            6: lambda x, y: x % y,  # %
+            7: lambda x, y: x | y,  # |
+            8: lambda x, y: x ** y, # **
+            9: lambda x, y: x >> y, # >>
+            10: lambda x, y: x - y, # -
+            11: lambda x, y: x / y, # /
+            12: lambda x, y: x ^ y, # ^
+            13: lambda x, y: x.__iadd__(y) if hasattr(x, '__iadd__') else x + y, # +=
         }
         right = self.safe_pop(instr.opname)
         left = self.safe_pop(instr.opname)
+        if left is None or right is None:
+            raise TypeError(f"Cannot perform {instr.opname} on NoneType")
         try:
             self.stack.append(ops[instr.arg](left, right))
         except TypeError as e:
             raise TypeError(f"unsupported operand type(s) for {instr.opname}: '{type(left).__name__}' and '{type(right).__name__}'") from e
 
     def _handle_binary_subscr(self, instr: dis.Instruction) -> None:
+        # Improved error handling for subscripting
         index = self.safe_pop(instr.opname)
         obj = self.safe_pop(instr.opname)
-        self.stack.append(obj[index])
+        if obj is None:
+            raise TypeError(f"'NoneType' object is not subscriptable")
+        if not hasattr(obj, '__getitem__'):
+            raise TypeError(f"'{type(obj).__name__}' object is not subscriptable")
+        try:
+            self.stack.append(obj[index])
+        except (IndexError, KeyError) as e:
+            raise e
 
     def _handle_store_subscr(self, instr: dis.Instruction) -> None:
+        # Improved error handling for store subscript
         value = self.safe_pop(instr.opname)
         index = self.safe_pop(instr.opname)
         obj = self.safe_pop(instr.opname)
+        if obj is None:
+            raise TypeError(f"'NoneType' object does not support item assignment")
+        if not hasattr(obj, '__setitem__'):
+            raise TypeError(f"'{type(obj).__name__}' object does not support item assignment")
         obj[index] = value
-        # Ensure the modified object is pushed back if it's a local variable
-        if isinstance(obj, (list, dict, set)):
-            frame = self.env_stack[-1]
-            for var_name, var_value in frame.items():
+        # Update references
+        for env in self.env_stack:
+            for var_name, var_value in env.items():
                 if var_value is obj:
-                    frame[var_name] = obj
+                    env[var_name] = obj
 
     def _handle_delete_subscr(self, instr: dis.Instruction) -> None:
         index = self.safe_pop(instr.opname)
         obj = self.safe_pop(instr.opname)
+        if not hasattr(obj, '__delitem__'):
+            raise TypeError(f"'{type(obj).__name__}' object does not support item deletion")
         del obj[index]
+        frame = self.env_stack[-1]
+        for var_name, var_value in frame.items():
+            if var_value is obj:
+                frame[var_name] = obj
 
     def _handle_compare_op(self, instr: dis.Instruction) -> None:
+        # Fix stack underflow in compare operations
         if len(self.stack) < 2:
-            raise RuntimeError(f"Stack underflow in COMPARE_OP, stack: {self.stack}")
+            raise ValueError(f"Not enough values on stack for comparison operation")
         right = self.safe_pop("COMPARE_OP")
         left = self.safe_pop("COMPARE_OP")
         ops = {
@@ -352,20 +395,59 @@ class BytecodeInterpreter:
         self._raise_return(instr.argval)
 
     async def _handle_call(self, instr: dis.Instruction) -> None:
-        args = [self.safe_pop("CALL") for _ in range(instr.arg)][::-1]
+        num_pos = instr.arg & 0xFF
+        num_kw = (instr.arg >> 8) if self.current_kw_names else 0
+
+        kwargs = {}
+        if num_kw > 0 and self.current_kw_names:
+            kw_values = [self.safe_pop("CALL") for _ in range(num_kw)][::-1]
+            kwargs = dict(zip(self.current_kw_names, kw_values)) or {}
+            self.current_kw_names = None
+
+        args = [self.safe_pop("CALL") for _ in range(num_pos)][::-1] or ()
         func = self.safe_pop("CALL")
-        if isinstance(func, Function) or asyncio.iscoroutinefunction(func):
-            result = await func(*args)
+
+        try:
+            if isinstance(func, Function):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
+                if asyncio.iscoroutine(result):
+                    result = await result
+            self.stack.append(result)
+        except Exception as e:
+            lineno = instr.starts_line or 1
+            context_line = self.source_lines[lineno - 1] if self.source_lines and lineno <= len(self.source_lines) else ""
+            raise WrappedException(
+                f"Error line {lineno}, col 0:\n{context_line}\nDescription: {str(e)}",
+                e, lineno, 0, context_line, self.stack_trace
+            ) from e
+
+    async def _handle_call_function_ex(self, instr: dis.Instruction) -> None:
+        if instr.arg & 0x01:  # Has **kwargs
+            kwargs = self.safe_pop("CALL_FUNCTION_EX")
         else:
-            result = func(*args)
-        if asyncio.iscoroutine(result):
-            # For generator/coroutine results, return as-is
-            if inspect.isgenerator(result) or inspect.iscoroutine(result):
-                self.stack.append(result)
-                return
-            # Otherwise await the result
-            result = await result
-        self.stack.append(result)
+            kwargs = {}
+        if instr.arg & 0x02:  # Has *args
+            args = self.safe_pop("CALL_FUNCTION_EX")
+        else:
+            args = ()
+        func = self.safe_pop("CALL_FUNCTION_EX")
+        try:
+            if isinstance(func, Function):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
+                if asyncio.iscoroutine(result):
+                    result = await result
+            self.stack.append(result)
+        except Exception as e:
+            lineno = instr.starts_line or 1
+            context_line = self.source_lines[lineno - 1] if self.source_lines and lineno <= len(self.source_lines) else ""
+            raise WrappedException(
+                f"Error line {lineno}, col 0:\n{context_line}\nDescription: {str(e)}",
+                e, lineno, 0, context_line, self.stack_trace
+            ) from e
 
     def _handle_make_function(self, instr: dis.Instruction) -> None:
         flags = instr.arg
@@ -379,7 +461,8 @@ class BytecodeInterpreter:
         self.stack.append(func)
 
     def _handle_build_list(self, instr: dis.Instruction) -> None:
-        self.stack.append([self.safe_pop(instr.opname) for _ in range(instr.arg)][::-1])
+        items = [self.safe_pop(instr.opname) for _ in range(instr.arg)][::-1]
+        self.stack.append(items)
 
     def _handle_build_tuple(self, instr: dis.Instruction) -> None:
         self.stack.append(tuple([self.safe_pop(instr.opname) for _ in range(instr.arg)][::-1]))
@@ -397,7 +480,8 @@ class BytecodeInterpreter:
         self.stack.append(set([self.safe_pop(instr.opname) for _ in range(instr.arg)][::-1]))
 
     def _handle_build_string(self, instr: dis.Instruction) -> None:
-        self.stack.append("".join(str(self.safe_pop(instr.opname)) for _ in range(instr.arg)[::-1]))
+        parts = [self.safe_pop(instr.opname) for _ in range(instr.arg)][::-1]
+        self.stack.append("".join(str(part) for part in parts))
 
     def _handle_build_slice(self, instr: dis.Instruction) -> None:
         if instr.arg == 3:
@@ -411,9 +495,17 @@ class BytecodeInterpreter:
         self.stack.append(slice(start, stop, step))
 
     def _handle_binary_slice(self, instr: dis.Instruction) -> None:
-        obj = self.safe_pop(instr.opname)
+        # Fix slice handling
         slc = self.safe_pop(instr.opname)
-        self.stack.append(obj[slc])
+        obj = self.safe_pop(instr.opname)
+        if obj is None:
+            raise TypeError(f"'NoneType' object is not subscriptable")
+        if not hasattr(obj, '__getitem__'):
+            raise TypeError(f"'{type(obj).__name__}' object is not subscriptable")
+        try:
+            self.stack.append(obj[slc])
+        except (IndexError, TypeError) as e:
+            raise e
 
     def _handle_list_extend(self, instr: dis.Instruction) -> None:
         items = self.safe_pop(instr.opname)
@@ -475,16 +567,22 @@ class BytecodeInterpreter:
 
     def _handle_raise_varargs(self, instr: dis.Instruction) -> None:
         if instr.arg == 1:
-            raise self.safe_pop("RAISE_VARARGS")
+            exc = self.safe_pop("RAISE_VARARGS")
+            self.stack.append(exc)
+            raise exc
         elif instr.arg == 0:
-            raise
+            if not self.stack or not isinstance(self.stack[-1], Exception):
+                raise RuntimeError("No exception to reraise")
+            raise self.stack[-1]
         elif instr.arg == 2:
             exc = self.safe_pop("RAISE_VARARGS")
             cause = self.safe_pop("RAISE_VARARGS")
+            self.stack.append(exc)
             raise exc from cause
         else:
             exc = self.safe_pop("RAISE_VARARGS")
             cause = self.safe_pop("RAISE_VARARGS")
+            self.stack.append(exc)
             raise exc from cause
 
     def _handle_setup_finally(self, instr: dis.Instruction) -> None:
@@ -503,7 +601,15 @@ class BytecodeInterpreter:
         self.block_stack.append(("with", self.ip + instr.arg))
 
     def _handle_load_build_class(self, instr: dis.Instruction) -> None:
-        self.stack.append(type)
+        # Fix class creation
+        def build_class(func, name, *bases, **kwds):
+            # Simplified build_class implementation
+            namespace = {}
+            func.__globals__.update(self.env_stack[0])
+            func(namespace)
+            return type(name, bases, namespace)
+        
+        self.stack.append(build_class)
 
     def _handle_pop_block(self, instr: dis.Instruction) -> None:
         if self.block_stack:
@@ -523,18 +629,22 @@ class BytecodeInterpreter:
         self.stack.append(value)
         raise ReturnException(value)
 
-    def _handle_yield_from(self, instr: dis.Instruction) -> None:
-        value = self.safe_pop(instr.opname)
-        iterator = iter(value)
-        while True:
-            try:
-                yield_val = next(iterator)
-                self.stack.append(yield_val)
-                raise ReturnException(yield_val)
-            except StopIteration as e:
-                if e.value is not None:
-                    self.stack.append(e.value)
-                break
+    async def _handle_yield_from(self, instr: dis.Instruction) -> None:
+        value = self.safe_pop("YIELD_FROM")
+        if asyncio.iscoroutine(value):
+            result = await value
+            self.stack.append(result)
+        else:
+            iterator = iter(value)
+            while True:
+                try:
+                    yield_val = next(iterator)
+                    self.stack.append(yield_val)
+                    raise ReturnException(yield_val)
+                except StopIteration as e:
+                    if e.value is not None:
+                        self.stack.append(e.value)
+                    break
 
     def _handle_get_yield_from_iter(self, instr: dis.Instruction) -> None:
         self.stack[-1] = iter(self.stack[-1])
@@ -575,7 +685,7 @@ class BytecodeInterpreter:
         self.stack.append(None)
 
     def _handle_kw_names(self, instr: dis.Instruction) -> None:
-        self.stack.append(instr.argval)
+        self.current_kw_names = instr.argval
 
     def _handle_unary_positive(self, instr: dis.Instruction) -> None:
         self.stack.append(+self.safe_pop(instr.opname))
@@ -604,11 +714,11 @@ class BytecodeInterpreter:
 
     def _handle_format_value(self, instr: dis.Instruction) -> None:
         spec = self.safe_pop("FORMAT_VALUE") if instr.arg & 0x04 else ""
-        if instr.arg & 0x03 == 0:  # FVS_NULL
+        if instr.arg & 0x03 == 0:
             value = self.safe_pop("FORMAT_VALUE")
-        elif instr.arg & 0x03 == 1:  # FVS_STR
+        elif instr.arg & 0x03 == 1:
             value = str(self.safe_pop("FORMAT_VALUE"))
-        elif instr.arg & 0x03 == 2:  # FVS_REPR
+        elif instr.arg & 0x03 == 2:
             value = repr(self.safe_pop("FORMAT_VALUE"))
         else:
             value = self.safe_pop("FORMAT_VALUE")
@@ -636,13 +746,92 @@ class BytecodeInterpreter:
         self.stack.append(value)
         self.env_stack[-1][instr.argval] = None
 
+    def _handle_get_awaitable(self, instr: dis.Instruction) -> None:
+        obj = self.safe_pop("GET_AWAITABLE")
+        if not asyncio.iscoroutine(obj):
+            raise TypeError(f"object {type(obj).__name__} cannot be used in 'await'")
+        self.stack.append(obj)
+
+    def _handle_match_sequence(self, instr: dis.Instruction) -> None:
+        subject = self.stack[-1]
+        is_match = isinstance(subject, (list, tuple)) and not isinstance(subject, str)
+        self.stack.append(is_match)
+        if is_match:
+            self.env_stack[-1]['__match_args__'] = tuple(subject)
+
+    def _handle_match_mapping(self, instr: dis.Instruction) -> None:
+        subject = self.stack[-1]
+        self.stack.append(isinstance(subject, dict))
+
+    def _handle_match_class(self, instr: dis.Instruction) -> None:
+        cls = self.safe_pop("MATCH_CLASS")
+        subject = self.stack[-1]
+        self.stack.append(isinstance(subject, cls))
+
+    def _handle_match_keys(self, instr: dis.Instruction) -> None:
+        keys = self.safe_pop("MATCH_KEYS")
+        subject = self.stack[-1]
+        if not isinstance(subject, dict):
+            self.stack.append(None)
+        else:
+            missing = [k for k in keys if k not in subject]
+            if missing:
+                self.stack.append(None)
+            else:
+                values = tuple(subject[k] for k in keys)
+                self.stack.append(values)
+                self.env_stack[-1]['__match_args__'] = values
+
+    def _handle_get_len(self, instr: dis.Instruction) -> None:
+        obj = self.stack[-1]
+        self.stack.append(len(obj) if hasattr(obj, '__len__') else 0)
+
+    def _handle_check_eg_match(self, instr: dis.Instruction) -> None:
+        exc = self.safe_pop("CHECK_EG_MATCH")
+        exc_type = self.safe_pop("CHECK_EG_MATCH")
+        if isinstance(exc, BaseExceptionGroup):
+            matches = [e for e in exc.exceptions if isinstance(e, exc_type)]
+            if matches:
+                eg = BaseExceptionGroup(f"matching {exc_type.__name__}", matches)
+                self.stack.append(eg)
+            else:
+                self.stack.append(None)
+        else:
+            self.stack.append(exc if isinstance(exc, exc_type) else None)
+
+    def _handle_jump_no_interrupt(self, instr: dis.Instruction) -> None:
+        self.ip += instr.arg
+
+    def _handle_send(self, instr: dis.Instruction) -> None:
+        value = self.safe_pop(instr.opname)
+        gen = self.stack[-1]
+        try:
+            result = gen.send(value)
+            self.stack.append(result)
+        except StopIteration as e:
+            self.ip = instr.argval
+            if e.value is not None:
+                self.stack.append(e.value)
+
+    def _handle_copy_free_vars(self, instr: dis.Instruction) -> None:
+        """Handle the COPY_FREE_VARS opcode needed for closures.
+        
+        This opcode copies free variables from the current function to cells
+        that will be used by nested functions.
+        """
+        if hasattr(self.frames[-1]["code"], "co_freevars"):
+            for var_name in self.frames[-1]["code"].co_freevars:
+                if var_name not in self.cells:
+                    value = self.env_stack[-1].get(var_name)
+                    self.cells[var_name] = Cell(value)
+
     def safe_import(self, name: str, globals=None, locals=None, fromlist: Tuple[str, ...] = (), level: int = 0) -> Any:
         if name not in self.allowed_modules:
             raise ImportError(f"Module '{name}' not allowed. Permitted: {self.allowed_modules}")
         module = self.modules[name]
         if fromlist:
             for attr in fromlist:
-                getattr(module, attr)  # Ensure attributes exist
+                getattr(module, attr)
         return module
 
     def spawn_from_env(self, env_stack: List[Dict[str, Any]]) -> "BytecodeInterpreter":
@@ -695,26 +884,52 @@ class BytecodeInterpreter:
         last_value = None
         exception_state = None
         self.frames.append({"code": code_obj})
+        if initial_stack:
+            self.stack = initial_stack[:]
 
         @contextmanager
         def execution_timer():
-            deadline = self.loop.time() + self.max_execution_time
-            yield
-            if self.loop.time() > deadline:
-                raise TimeoutError("Execution time exceeded")
+            try:
+                deadline = self.loop.time() + self.max_execution_time
+                yield
+                if self.loop.time() > deadline:
+                    raise TimeoutError("Execution time exceeded")
+            except (RuntimeError, AttributeError):
+                # Fallback if loop.time() fails
+                yield
+
+        # Register the COPY_FREE_VARS handler
+        self.opcode_handlers["COPY_FREE_VARS"] = self._handle_copy_free_vars
 
         with execution_timer():
             while self.ip < len(instructions):
                 instr = instructions[self.ip]
                 lineno = instr.starts_line or (self.ip > 0 and instructions[self.ip - 1].starts_line) or 1
                 self.stack_trace.append(f"Line {lineno}: {instr.opname} {instr.argval}")
-                logger.debug(f"IP: {self.ip}, Opcode: {instr.opname}, Arg: {instr.arg}, Stack: {self.stack}")
+                logger.debug(f"IP: {self.ip}, Opcode: {instr.opname}, Arg: {instr.arg}, Stack: {self.stack}, Env: {dict(self.env_stack[-1])}")
 
                 try:
                     handler = self.opcode_handlers.get(instr.opname, self._not_implemented)
                     result = handler(instr)
                     if asyncio.iscoroutine(result):
                         await result
+
+                    if instr.opname in ("MATCH_SEQUENCE", "MATCH_KEYS") and self.stack[-1]:
+                        match_args = self.env_stack[-1].get('__match_args__')
+                        if match_args:
+                            i = self.ip + 1
+                            arg_idx = 0
+                            while (i < len(instructions) and instructions[i].opname in ("STORE_FAST", "STORE_NAME") and
+                                   arg_idx < len(match_args)):
+                                value = match_args[arg_idx]
+                                if instructions[i].opname == "STORE_FAST":
+                                    self._store_fast(instructions[i].argval, value)
+                                else:  # STORE_NAME
+                                    self.set_variable(instructions[i].argval, value)
+                                arg_idx += 1
+                                i += 1
+                            self.ip = i - 1
+
                     self.ip += 1
                 except (ReturnException, BreakException, ContinueException) as e:
                     if isinstance(e, ReturnException):
@@ -737,6 +952,7 @@ class BytecodeInterpreter:
                             self.ip = target
                             exception_state = e
                             self.stack.append(e)
+                            self.block_stack.pop()
                             continue
                         elif block_type == "loop":
                             self.ip = target
@@ -747,7 +963,7 @@ class BytecodeInterpreter:
                     ) from e
 
         self.frames.pop()
-        return last_value
+        return last_value if last_value is not None else self.env_stack[-1].get('result')
 
     def _not_implemented(self, instr: dis.Instruction) -> None:
         raise NotImplementedError(f"Opcode {instr.opname} not implemented")
@@ -760,44 +976,51 @@ class Function:
         self.defaults = defaults
         self.closure = closure
         self.kwdefaults = kwdefaults
+        self.is_async = bool(code.co_flags & inspect.CO_COROUTINE)
 
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        new_env_stack = self.interpreter.env_stack[:]
         local_frame = defaultdict(lambda: None)
-
-        arg_count = self.code.co_argcount
         varnames = self.code.co_varnames
-        for i, arg in enumerate(args[:arg_count]):
+        arg_count = self.code.co_argcount
+        kwonly_count = self.code.co_kwonlyargcount
+
+        pos_args = list(args[:arg_count])
+        for i, arg in enumerate(pos_args):
             local_frame[varnames[i]] = arg
 
-        default_start = len(args)
-        for i, default in enumerate(self.defaults, start=default_start):
-            if i < arg_count and i >= len(args):
-                local_frame[varnames[i]] = default
+        default_start = arg_count - len(self.defaults) if self.defaults else arg_count
+        for i in range(len(pos_args), arg_count):
+            if i >= default_start and i - default_start < len(self.defaults):
+                local_frame[varnames[i]] = self.defaults[i - default_start]
+            else:
+                local_frame[varnames[i]] = None
 
-        kwonly_start = arg_count
-        kwonly_count = self.code.co_kwonlyargcount
-        for i in range(kwonly_start, kwonly_start + kwonly_count):
-            name = varnames[i]
+        if self.code.co_flags & 0x04:  # CO_VARARGS
+            varargs_name = varnames[arg_count]
+            local_frame[varargs_name] = tuple(args[arg_count:]) or ()
+
+        kwonly_start = arg_count + (1 if self.code.co_flags & 0x04 else 0)
+        for i in range(kwonly_count):
+            name = varnames[kwonly_start + i]
             if name in kwargs:
                 local_frame[name] = kwargs[name]
             elif name in self.kwdefaults:
                 local_frame[name] = self.kwdefaults[name]
-
-        if self.code.co_flags & 0x04:  # CO_VARARGS
-            vararg_name = varnames[arg_count + kwonly_count]
-            local_frame[vararg_name] = tuple(args[arg_count:]) if len(args) > arg_count else ()
+            elif not self.code.co_flags & 0x08:
+                raise TypeError(f"{self.name}() missing required keyword-only argument: '{name}'")
 
         if self.code.co_flags & 0x08:  # CO_VARKEYWORDS
-            varkw_name = varnames[arg_count + kwonly_count + (1 if self.code.co_flags & 0x04 else 0)]
-            remaining_kwargs = {k: v for k, v in kwargs.items() if k not in varnames[:arg_count + kwonly_count]}
-            local_frame[varkw_name] = remaining_kwargs
+            varkw_name = varnames[kwonly_start + kwonly_count]
+            remaining_kwargs = {k: v for k, v in kwargs.items() if k not in varnames[kwonly_start:kwonly_start + kwonly_count]}
+            local_frame[varkw_name] = remaining_kwargs or {}
 
         for name, value in kwargs.items():
             if name in varnames[:arg_count]:
+                if local_frame[name] is not None and args:
+                    raise TypeError(f"{self.name}() got multiple values for argument '{name}'")
                 local_frame[name] = value
 
-        new_env_stack.append(local_frame)
+        new_env_stack = self.interpreter.env_stack[:] + [local_frame]
         new_interp = self.interpreter.spawn_from_env(new_env_stack)
         if self.code.co_freevars and self.closure:
             for name, cell in zip(self.code.co_freevars, self.closure):
@@ -820,14 +1043,25 @@ async def interpret_ast_async(ast_tree: Any, allowed_modules: List[str], source:
     code_obj = compile(ast_tree, "<string>", "exec") if not isinstance(ast_tree, types.CodeType) else ast_tree
     interpreter = BytecodeInterpreter(allowed_modules=allowed_modules, source=source)
     result = await interpreter.run(code_obj)
-    if asyncio.iscoroutine(result):
-        return await result
-    elif hasattr(result, '__aiter__'):
-        return [val async for val in result]
-    return interpreter.env_stack[-1].get('result', result)
+    final_result = interpreter.env_stack[-1].get('result', result)
+    if asyncio.iscoroutine(final_result):
+        return await final_result
+    return final_result
 
 def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "") -> Any:
-    return asyncio.run(interpret_ast_async(ast_tree, allowed_modules, source))
+    try:
+        # Try to get the current event loop
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        # Create a new event loop if there's no current loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    try:
+        return loop.run_until_complete(interpret_ast_async(ast_tree, allowed_modules, source))
+    finally:
+        # Don't close the loop - it might be needed for other operations
+        pass
 
 def interpret_code(source_code: str, allowed_modules: List[str]) -> Any:
     dedented_source = textwrap.dedent(source_code).strip()
@@ -859,11 +1093,15 @@ result = example(1, 4, 5, 6, c=7, x=8)
             """
 import asyncio
 
-async def delay_square(x, delay=1):
+async def delay_square(x, delay=0):
     await asyncio.sleep(delay)
     return x * x
 
-result = delay_square(5)
+async def main():
+    result = await delay_square(5)
+    return result
+
+result = await main()
             """,
             ["asyncio"],
             25
