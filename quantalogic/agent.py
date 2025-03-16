@@ -152,7 +152,7 @@ class Agent(BaseModel):
                 system_prompt=system_prompt_text,
             )
 
-            chat_system_prompt = chat_system_prompt or (
+            chat_system_prompt = chat_system_prompt or specific_expertise or (
                 "You are a friendly, helpful AI assistant. Engage in natural conversation, "
                 "answer questions, and use tools when explicitly requested or when they enhance your response."
             )
@@ -375,6 +375,7 @@ class Agent(BaseModel):
 
         # Prepare chat system prompt with tool information
         tools_prompt = self._get_tools_names_prompt()
+        logger.debug(tools_prompt)
         if self.tool_mode:
             tools_prompt += f"\nPrioritized tool mode: {self.tool_mode}. Prefer tools related to {self.tool_mode} when applicable."
 
