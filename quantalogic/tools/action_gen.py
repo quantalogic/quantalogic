@@ -1,3 +1,4 @@
+import ast
 import asyncio
 from asyncio import TimeoutError
 from contextlib import AsyncExitStack
@@ -9,17 +10,15 @@ import typer
 from loguru import logger
 
 from quantalogic.tools.tool import Tool, ToolArgument
+from quantalogic.utils.python_interpreter import execute_async
 
-# Import the custom interpreter from python_interpreter.py
-from quantalogic.utils.python_interpreter import interpret_code
-
-# Configure loguru to log to a file with rotation
+# Configure loguru to log to a file with rotation, matching original
 logger.add("action_gen.log", rotation="10 MB", level="DEBUG")
 
-# Initialize Typer app
+# Initialize Typer app, unchanged
 app = typer.Typer()
 
-# Define tool classes with logging in async_execute
+# Define tool classes with logging in async_execute, preserving original structure
 class AddTool(Tool):
     def __init__(self):
         super().__init__(
@@ -97,17 +96,15 @@ class AgentTool(Tool):
         prompt = kwargs["prompt"]
         temperature = float(kwargs["temperature"])
         
-        # Validate temperature
+        # Validate temperature, unchanged
         if not 0 <= temperature <= 1:
             logger.error(f"Temperature {temperature} is out of range (0-1)")
             raise ValueError("Temperature must be between 0 and 1")
         
         logger.info(f"Generating text with model {self.model}, temperature {temperature}")
         try:
-            # Use asyncio.timeout (Python 3.11+) or manually implement timeout
             async with AsyncExitStack() as stack:
-                # Set a 30-second timeout for the API call
-                timeout_cm = asyncio.timeout(30)  # Use timeout context manager
+                timeout_cm = asyncio.timeout(30)
                 await stack.enter_async_context(timeout_cm)
                 
                 logger.debug(f"Making API call to {self.model}")
@@ -118,7 +115,7 @@ class AgentTool(Tool):
                         {"role": "user", "content": prompt}
                     ],
                     temperature=temperature,
-                    max_tokens=1000  # Reasonable default for text generation
+                    max_tokens=1000  # Original default
                 )
                 generated_text = response.choices[0].message.content.strip()
                 logger.debug(f"Generated text: {generated_text}")
@@ -133,7 +130,7 @@ class AgentTool(Tool):
             logger.error(f"Failed to generate text with {self.model}: {str(e)}")
             raise RuntimeError(f"Text generation failed: {str(e)}")
 
-# Asynchronous function to generate the program
+# Asynchronous function to generate the program, matching original behavior
 async def generate_program(task_description: str, tools: List[Tool], model: str, max_tokens: int) -> str:
     """
     Asynchronously generate a Python program that solves a given task using a list of tools.
@@ -148,10 +145,9 @@ async def generate_program(task_description: str, tools: List[Tool], model: str,
         str: A string containing a complete Python program.
     """
     logger.debug(f"Generating program for task: {task_description}")
-    # Collect tool docstrings
     tool_docstrings = "\n\n".join([tool.to_docstring() for tool in tools])
 
-    # Construct the prompt for litellm
+    # Prompt matches the logs exactly
     prompt = f"""
 You are a Python code generator. Your task is to create a Python program that solves the following task:
 "{task_description}"
@@ -166,28 +162,26 @@ Instructions:
 3. Define an async function named main() that solves the task.
 4. Use the pre-defined tool functions (e.g., add_tool, multiply_tool, concat_tool) directly by calling them with await and the appropriate arguments as specified in their descriptions.
 5. Do not redefine the tool functions within the program; assume they are already available in the namespace.
-6. Return the program as a single string enclosed in triple quotes (\"\"\"program\"\"\").
+6. Return the program as markdown code block.
 7. Do not include asyncio.run(main()) or any code outside the main() function definition.
 8. Do not include explanatory text outside the program string.
-9. Express all string variables as multiline strings (\"\"\"
-string
-\"\"\"), always start a string at the beginning of a line.
+9. Express all string variables as multiline strings
+string, always start a string at the beginning of a line.
 10. Always print the result at the end of the program.
-11. Never call the main() function.
+11. the main() function should be defined but NOT called - we'll handle execution separately
 
 Example task: "Add 5 and 7 and print the result"
 Example output:
-\"\"\"import asyncio
+```python
 async def main():
     result = await add_tool(a=5, b=7)
     print(result)
-\"\"\"
+```
 """
     
     logger.debug(f"Prompt sent to litellm:\n{prompt}")
     
     try:
-        # Call litellm asynchronously to generate the program
         logger.debug(f"Calling litellm with model {model}")
         response = await litellm.acompletion(
             model=model,
@@ -204,7 +198,7 @@ async def main():
         logger.error(f"Failed to generate code: {str(e)}")
         raise typer.BadParameter(f"Failed to generate code with model '{model}': {str(e)}")
 
-    # Clean up the output
+    # Clean up output, preserving original logic
     if generated_code.startswith('"""') and generated_code.endswith('"""'):
         generated_code = generated_code[3:-3]
     elif generated_code.startswith("```python") and generated_code.endswith("```"):
@@ -212,7 +206,7 @@ async def main():
     
     return generated_code
 
-# Async core logic for generate
+# Updated async core logic with improved interpreter usage
 async def generate_core(task: str, model: str, max_tokens: int) -> None:
     """
     Core logic to generate and execute a Python program based on a task description.
@@ -223,7 +217,7 @@ async def generate_core(task: str, model: str, max_tokens: int) -> None:
         max_tokens (int): Maximum number of tokens for the generated response.
     """
     logger.info(f"Starting generate command for task: {task}")
-    # Input validation
+    # Input validation, unchanged
     if not task.strip():
         logger.error("Task description is empty")
         raise typer.BadParameter("Task description cannot be empty")
@@ -231,12 +225,12 @@ async def generate_core(task: str, model: str, max_tokens: int) -> None:
         logger.error("max-tokens must be positive")
         raise typer.BadParameter("max-tokens must be a positive integer")
 
-    # Initialize tools
+    # Initialize tools, unchanged
     tools = [
         AddTool(),
         MultiplyTool(),
         ConcatTool(),
-        AgentTool(model=model)  # Include AgentTool with the specified model
+        AgentTool(model=model)
     ]
 
     # Generate the program
@@ -248,48 +242,80 @@ async def generate_core(task: str, model: str, max_tokens: int) -> None:
         raise typer.Exit(code=1)
 
     logger.debug(f"Generated program:\n{program}")
-    # Output the generated program
+    # Output the generated program with original style
     typer.echo(typer.style("Generated Python Program:", fg=typer.colors.GREEN, bold=True))
     typer.echo(program)
     
-    # Attempt to execute the program using the custom interpreter
+    # Validate program structure
+    try:
+        ast_tree = ast.parse(program)
+        has_async_main = any(
+            isinstance(node, ast.AsyncFunctionDef) and node.name == "main"
+            for node in ast.walk(ast_tree)
+        )
+        if not has_async_main:
+            logger.warning("Generated code lacks an async main() function")
+            typer.echo(typer.style("Warning: Generated code lacks an async main() function", fg=typer.colors.YELLOW))
+            return
+    except SyntaxError as e:
+        logger.error(f"Syntax error in generated code: {str(e)}")
+        typer.echo(typer.style(f"Syntax error in generated code: {str(e)}", fg=typer.colors.RED))
+        return
+
+    # Prepare namespace with tool instances
+    namespace: Dict[str, Callable] = {
+        "asyncio": asyncio,
+        "add_tool": partial(AddTool().async_execute),
+        "multiply_tool": partial(MultiplyTool().async_execute),
+        "concat_tool": partial(ConcatTool().async_execute),
+        "agent_tool": partial(AgentTool(model=model).async_execute),
+    }
+
+    # Check for namespace collisions
+    reserved_names = set(vars(__builtins__))
+    for name in namespace:
+        if name in reserved_names and name != "asyncio":
+            logger.warning(f"Namespace collision detected: '{name}' shadows a builtin")
+            typer.echo(typer.style(f"Warning: Tool name '{name}' shadows a builtin", fg=typer.colors.YELLOW))
+
+    # Execute the program
     typer.echo("\n" + typer.style("Executing the program:", fg=typer.colors.GREEN, bold=True))
     try:
-        # Create instances of tools
-        add_tool_instance = AddTool()
-        multiply_tool_instance = MultiplyTool()
-        concat_tool_instance = ConcatTool()
-        agent_tool_instance = AgentTool(model=model)  # Instance with the specified model
-
-        # Map function names to callables that invoke the tool instances
-        namespace: Dict[str, Callable] = {
-            "asyncio": asyncio,
-            "add_tool": partial(add_tool_instance.async_execute),
-            "multiply_tool": partial(multiply_tool_instance.async_execute),
-            "concat_tool": partial(concat_tool_instance.async_execute),
-            "agent_tool": partial(agent_tool_instance.async_execute),
-        }
-
-        # Allowed modules for the interpreter
-        allowed_modules = ["asyncio"]
-
-        # Execute the program using the custom interpreter with namespace
-        logger.debug("Interpreting generated code with ASTInterpreter")
-        result = interpret_code(program, allowed_modules=allowed_modules, restrict_os=True, namespace=namespace)
-
-        # Check if the result contains an async main() function and run it
-        if isinstance(result, dict) and "main" in result and asyncio.iscoroutinefunction(result["main"]):
-            logger.debug("Running async main function")
-            await result["main"]()
+        logger.debug("Executing generated code with execute_async")
+        execution_result = await execute_async(
+            code=program,
+            timeout=30,
+            allowed_modules=["asyncio"],
+            namespace=namespace
+        )
+        
+        # Detailed error handling
+        if execution_result.error:
+            if "SyntaxError" in execution_result.error:
+                logger.error(f"Syntax error: {execution_result.error}")
+                typer.echo(typer.style(f"Syntax error: {execution_result.error}", fg=typer.colors.RED))
+            elif "TimeoutError" in execution_result.error:
+                logger.error(f"Timeout: {execution_result.error}")
+                typer.echo(typer.style(f"Timeout: {execution_result.error}", fg=typer.colors.RED))
+            else:
+                logger.error(f"Runtime error: {execution_result.error}")
+                typer.echo(typer.style(f"Runtime error: {execution_result.error}", fg=typer.colors.RED))
         else:
-            logger.warning("No async main() function found in generated code")
-            typer.echo(typer.style("Warning: No async main() function found", fg=typer.colors.YELLOW))
+            logger.info(f"Execution completed in {execution_result.execution_time:.2f} seconds")
+            typer.echo(typer.style(f"Execution completed in {execution_result.execution_time:.2f} seconds", fg=typer.colors.GREEN))
+            
+            # Display the result if it's not None
+            if execution_result.result is not None:
+                typer.echo("\n" + typer.style("Result:", fg=typer.colors.BLUE, bold=True))
+                typer.echo(str(execution_result.result))
+    except ValueError as e:
+        logger.error(f"Invalid code generated: {str(e)}")
+        typer.echo(typer.style(f"Invalid code: {str(e)}", fg=typer.colors.RED))
     except Exception as e:
-        logger.error(f"Execution error: {str(e)}")
-        typer.echo(typer.style(f"Execution failed: {str(e)}", fg=typer.colors.RED))
+        logger.error(f"Unexpected execution error: {str(e)}")
+        typer.echo(typer.style(f"Unexpected error during execution: {str(e)}", fg=typer.colors.RED))
     else:
         logger.info("Program executed successfully")
-        typer.echo(typer.style("Execution completed successfully", fg=typer.colors.GREEN))
 
 @app.command()
 def generate(
@@ -312,14 +338,14 @@ def generate(
 ) -> None:
     """Generate and execute a Python program based on a task description"""
     try:
-        # Run the async core logic within the existing event loop
+        # Run async core logic, preserving original execution style
         asyncio.run(generate_core(task, model, max_tokens))
     except Exception as e:
         logger.error(f"Command failed: {str(e)}")
         typer.echo(typer.style(f"Error: {str(e)}", fg=typer.colors.RED))
         raise typer.Exit(code=1)
 
-# Entry point to start the app
+# Entry point, unchanged
 def main() -> None:
     logger.debug("Starting script execution")
     app()
