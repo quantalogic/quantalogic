@@ -31,14 +31,15 @@ class VectorStoreType(str, Enum):
     CHROMA = "chroma"
     FAISS = "faiss"
 
+
 class EmbeddingType(str, Enum):
     """Supported embedding model types."""
     OPENAI = "openai"
     HUGGINGFACE = "huggingface"
     INSTRUCTOR = "instructor"
-    BEDROCK = "bedrock"
 
-class RagTool(Tool):
+
+class RagToolBeta(Tool):
     """Tool for performing RAG operations using LlamaIndex."""
 
     name: str = "rag_tool"
@@ -67,7 +68,7 @@ class RagTool(Tool):
 
         Args:
             vector_store: Vector store type (chroma, faiss)
-            embedding_model: Embedding model type (openai, huggingface, instructor, bedrock)
+            embedding_model: Embedding model type (openai, huggingface, instructor)
             persist_dir: Directory for persistence
             document_paths: Optional list of paths to documents or directories to index
         """
@@ -247,7 +248,7 @@ class RagTool(Tool):
 
 if __name__ == "__main__":
     # Example usage
-    tool = RagTool(
+    tool = RagToolBeta(
         vector_store="chroma",
         embedding_model="openai",
         persist_dir="./storage/rag",

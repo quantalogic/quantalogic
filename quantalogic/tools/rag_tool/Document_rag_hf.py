@@ -10,6 +10,8 @@ This tool provides enhanced RAG capabilities with:
 import os
 from typing import List, Optional, Dict
 from dataclasses import dataclass
+import asyncio
+import shutil
 
 import chromadb
 from sentence_transformers import SentenceTransformer
@@ -29,15 +31,15 @@ from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.readers.file.docs import PDFReader
 from loguru import logger
-
 from quantalogic.tools.tool import Tool, ToolArgument
+from quantalogic.tools.rag_tool.ocr_pdf_markdown import PDFToMarkdownConverter
 
-# Configure detailed logging
+# Configure tool-specific logging
 logger.remove()
 logger.add(
-    lambda msg: print(msg),
-    format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-    level="DEBUG"
+    sink=lambda msg: print(msg, end=""),
+    level="INFO",
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>"
 )
 
 @dataclass
@@ -47,10 +49,10 @@ class SearchResult:
     sources: List[Dict[str, str]]
     confidence: float
 
-class MultilingualRagTool(Tool):
+class RagToolHf(Tool):
     """Enhanced RAG tool with multilingual support and improved response formatting."""
 
-    name: str = "multilingual_rag"
+    name: str = "rag_tool_hf"
     description: str = (
         "Advanced multilingual RAG tool optimized for French and Arabic content "
         "with detailed responses and source attribution."
@@ -74,35 +76,43 @@ class MultilingualRagTool(Tool):
 
     def __init__(
         self,
+        name: str = "rag_tool_hf", 
         persist_dir: str = "./storage/multilingual_rag",
         document_paths: Optional[List[str]] = None,
         chunk_size: int = 512,
         chunk_overlap: int = 50,
+        use_ocr_for_pdfs: bool = False,
+        ocr_model: str = "openai/gpt-4o-mini", # "gemini/gemini-2.0-flash",
+        embed_model: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2" # "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     ):
         """Initialize the multilingual RAG tool."""
         super().__init__()
+        self.name = name
         self.persist_dir = os.path.abspath(persist_dir)
-        logger.info(f"Initializing MultilingualRagTool with persist_dir: {self.persist_dir}")
+        self.use_ocr_for_pdfs = use_ocr_for_pdfs
+        self.ocr_model = ocr_model
         
+        # Clean up existing index if embedding model changed
+        chroma_persist_dir = os.path.join(self.persist_dir, "chroma")
+        if os.path.exists(chroma_persist_dir):
+            shutil.rmtree(chroma_persist_dir)
+            logger.info("Cleaned up existing index due to embedding model change")
+
         # Use paraphrase-multilingual-mpnet-base-v2 for better multilingual understanding
-        logger.info("Initializing embedding model...")
         self.embed_model = HuggingFaceEmbedding(
-            model_name="sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+            model_name=embed_model,
             embed_batch_size=8  # Smaller batch size for better memory usage
         )
-        logger.info("Embedding model initialized successfully")
         
         # Configure ChromaDB
         chroma_persist_dir = os.path.join(self.persist_dir, "chroma")
         os.makedirs(chroma_persist_dir, exist_ok=True)
-        logger.info(f"Setting up ChromaDB at: {chroma_persist_dir}")
         
         chroma_client = chromadb.PersistentClient(path=chroma_persist_dir)
         collection = chroma_client.create_collection(
             name="multilingual_collection",
             get_or_create=True
         )
-        logger.info("ChromaDB collection created/loaded successfully")
         
         self.vector_store = ChromaVectorStore(chroma_collection=collection)
         
@@ -111,7 +121,6 @@ class MultilingualRagTool(Tool):
         Settings.chunk_size = chunk_size
         Settings.chunk_overlap = chunk_overlap
         Settings.num_output = 1024  # Increased output length
-        logger.info(f"Configured settings - chunk_size: {chunk_size}, chunk_overlap: {chunk_overlap}")
         
         self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
         
@@ -126,6 +135,39 @@ class MultilingualRagTool(Tool):
         # Initialize or load index
         self.index = self._initialize_index(document_paths)
 
+    async def _process_pdf_with_ocr(self, path: str) -> List[Document]:
+        """Process a PDF file using OCR and convert to Documents."""
+        try:
+            converter = PDFToMarkdownConverter(
+                model=self.ocr_model,
+                custom_system_prompt=(
+                    "Convert the PDF page to clean, well-formatted text. "
+                    "Preserve all content including tables, lists, and mathematical notation. "
+                    "For images and charts, provide detailed descriptions. "
+                    "Maintain the original document structure and hierarchy."
+                )
+            )
+            
+            markdown_content = await converter.convert_pdf(path)
+            if not markdown_content:
+                logger.warning(f"OCR produced no content for {path}")
+                return []
+                
+            # Create a single document with the full content
+            doc = Document(
+                text=markdown_content,
+                metadata={
+                    "file_name": os.path.basename(path),
+                    "file_path": path,
+                    "processing_method": "ocr"
+                }
+            )
+            return [doc]
+            
+        except Exception as e:
+            logger.error(f"Error processing PDF with OCR {path}: {e}")
+            return []
+
     def _load_documents(self, document_paths: List[str]) -> List[Document]:
         """Load documents with special handling for PDFs."""
         all_documents = []
@@ -136,56 +178,58 @@ class MultilingualRagTool(Tool):
                 logger.warning(f"Document path does not exist: {path}")
                 continue
             
-            logger.info(f"Loading document: {path}")
             try:
                 if path.lower().endswith('.pdf'):
-                    # Special handling for PDFs
-                    docs = pdf_reader.load_data(
-                        path,
-                        extra_info={
-                            "file_name": os.path.basename(path),
-                            "file_path": path
-                        }
-                    )
-                    logger.info(f"Loaded PDF with {len(docs)} pages")
-                    
-                    # Process each page to improve text quality
-                    processed_docs = []
-                    for doc in docs:
-                        # Clean up text
-                        text = doc.text
-                        text = text.replace('\n\n', '[PAGE_BREAK]')  # Preserve important breaks
-                        text = text.replace('\n', ' ')  # Replace single breaks with space
-                        text = text.replace('[PAGE_BREAK]', '\n\n')  # Restore important breaks
-                        text = ' '.join(text.split())  # Normalize whitespace
-                        
-                        # Create new document with cleaned text
-                        processed_doc = Document(
-                            text=text,
-                            metadata={
-                                **doc.metadata,
+                    if self.use_ocr_for_pdfs:
+                        # Use asyncio to run the async OCR function
+                        docs = asyncio.run(self._process_pdf_with_ocr(path))
+                    else:
+                        # Use standard PDF reader
+                        docs = pdf_reader.load_data(
+                            path,
+                            extra_info={
                                 "file_name": os.path.basename(path),
                                 "file_path": path,
-                                "page_number": doc.metadata.get("page_number", "unknown")
+                                "processing_method": "standard"
                             }
                         )
-                        processed_docs.append(processed_doc)
                     
-                    all_documents.extend(processed_docs)
+                    if not self.use_ocr_for_pdfs:
+                        # Process each page to improve text quality (only for standard PDF reader)
+                        processed_docs = []
+                        for doc in docs:
+                            # Clean up text
+                            text = doc.text
+                            text = text.replace('\n\n', '[PAGE_BREAK]')
+                            text = text.replace('\n', ' ')
+                            text = text.replace('[PAGE_BREAK]', '\n\n')
+                            text = ' '.join(text.split())
+                            
+                            processed_doc = Document(
+                                text=text,
+                                metadata={
+                                    **doc.metadata,
+                                    "file_name": os.path.basename(path),
+                                    "file_path": path,
+                                    "page_number": doc.metadata.get("page_number", "unknown"),
+                                    "processing_method": "standard"
+                                }
+                            )
+                            processed_docs.append(processed_doc)
+                        docs = processed_docs
                 else:
                     docs = SimpleDirectoryReader(
                         input_files=[path],
                         filename_as_id=True,
                         file_metadata=lambda x: {"file_name": os.path.basename(x), "file_path": x}
                     ).load_data()
-                    logger.info(f"Loaded text document: {path}")
-                    all_documents.extend(docs)
+                
+                all_documents.extend(docs)
                 
                 # Log document details
                 for doc in docs:
                     logger.debug(f"Document content length: {len(doc.text)} characters")
                     logger.debug(f"Document metadata: {doc.metadata}")
-                    # Log a preview of the content
                     preview = doc.text[:200].replace('\n', ' ').strip()
                     logger.debug(f"Content preview: {preview}...")
                 
@@ -200,14 +244,12 @@ class MultilingualRagTool(Tool):
         logger.info("Initializing index...")
         
         if document_paths:
-            logger.info("Document paths provided, creating new index")
             return self._create_index(document_paths)
         
         # Try loading existing index
         index_path = os.path.join(self.persist_dir, "docstore.json")
         if os.path.exists(index_path):
             try:
-                logger.info(f"Loading existing index from {index_path}")
                 return load_index_from_storage(storage_context=self.storage_context)
             except Exception as e:
                 logger.error(f"Failed to load existing index: {str(e)}")
@@ -219,15 +261,12 @@ class MultilingualRagTool(Tool):
     def _create_index(self, document_paths: List[str]) -> Optional[VectorStoreIndex]:
         """Create a new index from documents."""
         try:
-            # Load documents with special PDF handling
             all_documents = self._load_documents(document_paths)
 
             if not all_documents:
                 logger.warning("No valid documents found")
                 return None
 
-            logger.info(f"Processing {len(all_documents)} documents...")
-            # Log document chunks
             total_chunks = 0
             for doc in all_documents:
                 chunks = self.text_splitter.split_text(doc.text)
@@ -246,8 +285,6 @@ class MultilingualRagTool(Tool):
                 show_progress=True
             )
             
-            # Persist index
-            logger.info("Persisting index...")
             self.storage_context.persist(persist_dir=self.persist_dir)
             logger.info(f"Created and persisted index with {len(all_documents)} documents")
             
@@ -265,13 +302,12 @@ class MultilingualRagTool(Tool):
 
             logger.info(f"Processing query: {query}")
             
-            # Configure query engine with settings for detailed responses
             query_engine = self.index.as_query_engine(
-                similarity_top_k=15,  # Get more candidates for better context
+                similarity_top_k=15,  
                 node_postprocessors=[
-                    SimilarityPostprocessor(similarity_cutoff=0.2)  # More lenient for broader context
+                    SimilarityPostprocessor(similarity_cutoff=0.2)  
                 ],
-                response_mode="tree_summarize",  # Better for synthesizing detailed responses
+                response_mode="tree_summarize",  
                 response_kwargs={
                     "response_template": (
                         "Based on the provided documents, here is a detailed analysis:\n\n"
@@ -283,15 +319,11 @@ class MultilingualRagTool(Tool):
                 streaming=False,
                 verbose=True
             )
-            logger.info("Query engine configured")
-
-            # Execute query
-            logger.info("Executing query...")
+            
             response = query_engine.query(query)
             logger.debug(f"Raw response: {str(response)}")
             logger.debug(f"Number of source nodes: {len(response.source_nodes)}")
             
-            # Log source nodes details
             for i, node in enumerate(response.source_nodes):
                 logger.debug(f"Source node {i+1}:")
                 logger.debug(f"  Score: {node.score}")
@@ -299,13 +331,10 @@ class MultilingualRagTool(Tool):
                 logger.debug(f"  Metadata: {node.node.metadata}")
                 logger.debug(f"  Page: {node.node.metadata.get('page_number', 'N/A')}")
             
-            # Format response
             result = self._format_response(response, max_sources)
-            logger.info("Response formatted successfully")
             
             if not result.answer or result.answer.strip() == "Empty Response":
                 logger.warning("Empty response received, using direct node text")
-                # Enhanced fallback with structured information
                 sections = []
                 current_topic = None
                 
@@ -317,7 +346,6 @@ class MultilingualRagTool(Tool):
                     if not text:
                         continue
                         
-                    # Try to identify topic from content
                     if text.startswith('Art.'):
                         current_topic = "Legal Framework"
                     elif any(word in text.lower() for word in ['comité', 'committee', 'اللجنة']):
@@ -336,11 +364,9 @@ class MultilingualRagTool(Tool):
                 else:
                     result.answer = "No relevant content found in the documents."
             
-            # Build enhanced output with detailed structure
             output = ["# Detailed Analysis\n"]
             output.append(result.answer)
             
-            # Add source summary section
             output.append("\n## Source Documents\n")
             source_summary = {}
             
@@ -375,7 +401,7 @@ class MultilingualRagTool(Tool):
         """Format the query response with source attribution."""
         sources = []
         for node in response.source_nodes[:max_sources]:
-            if node.score < 0.2:  # Skip very low relevance nodes
+            if node.score < 0.2:  
                 continue
                 
             source_info = {
@@ -407,25 +433,25 @@ class MultilingualRagTool(Tool):
 
 if __name__ == "__main__":
     # Example usage
-    logger.info("Starting example usage...")
+    # logger.info("Starting example usage...")
     
     # Clean up any existing index
-    import shutil
     if os.path.exists("./storage/multilingual_rag"):
         shutil.rmtree("./storage/multilingual_rag")
-        logger.info("Cleaned up existing index")
+        # logger.info("Cleaned up existing index")
     
-    tool = MultilingualRagTool(
+    tool = RagToolHf(
         persist_dir="./storage/multilingual_rag",
         document_paths=[
             "./docs/test/F2015054.pdf",
             "./docs/test/F2015055.pdf"
         ],
-        chunk_size=512,  # Increased for PDF documents
-        chunk_overlap=50
+        chunk_size=512,  
+        chunk_overlap=50,
+        use_ocr_for_pdfs=False,
+        ocr_model="gemini/gemini-2.0-flash"
     )
     
-    # Example queries in different languages
     queries = [
         "Donne moi toutes les lois lister dans mes documents, détaille chaqune des lois", 
     ]

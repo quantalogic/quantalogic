@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic"
-version = "0.59.3"
+version = "0.59.4"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
@@ -8,7 +8,7 @@ packages = [{include = "quantalogic"}]
 
 # Core dependencies required for the base Agent and ToolManager
 [tool.poetry.dependencies]
-python = "<4.0,>=3.10"
+python = "<4.0,>=3.11"
 pydantic = "^2.10.4"
 litellm = "^1.56.4"
 rich = "^13.9.4"
@@ -43,25 +43,35 @@ tree-sitter-go = "^0.23.4"
 tree-sitter-rust = "^0.23.2"
 fuzzywuzzy = "^0.18.0"
 types-pyyaml = "^6.0.12.20241230"
+typing-extensions = "^4.12.2"
+py-zerox = "^0.0.7"
 uvicorn = "^0.34.0"
 fastapi = "^0.115.11"
 python-multipart = "^0.0.20"
 gnews = "^0.4.0"
-boto3 = "^1.37.7"
-docx = "^0.2.4"
-aiohttp = "^3.11.13"
-aiofiles = "^24.1.0"
-asciinema = "^2.4.0"
-browser-use = "^0.1.40"
+google-generativeai = "^0.8.4"
+google-genai = "^1.5.0"
+
+[tool.poetry.group.file-tools]
+optional = false
+
+[tool.poetry.group.file-tools.dependencies]
+# No additional dependencies needed
 
 [tool.poetry.group.git-tools]
-optional = false
+optional = true
 
 [tool.poetry.group.git-tools.dependencies]
 gitpython = "^3.1.44"
 
-[tool.poetry.group.document-tools]
+[tool.poetry.group.search-tools]
 optional = false
+
+[tool.poetry.group.search-tools.dependencies]
+# No additional dependencies needed
+
+[tool.poetry.group.document-tools]
+optional = true
 
 [tool.poetry.group.document-tools.dependencies]
 weasyprint = "^64.0"
@@ -75,7 +85,7 @@ mermaid-py = "^0.7.0"
 pillow = ">=10.2,<11.0"
 
 [tool.poetry.group.database-tools]
-optional = false
+optional = true
 
 [tool.poetry.group.database-tools.dependencies]
 chromadb = "^0.6.3"
@@ -83,7 +93,7 @@ faiss-cpu = "^1.10.0"
 pinecone-client = "^6.0.0"
 
 [tool.poetry.group.llm-tools]
-optional = false
+optional = true
 
 [tool.poetry.group.llm-tools.dependencies]
 transformers = "^4.49.0"
@@ -92,21 +102,29 @@ llama-index = "^0.12.19"
 llama-index-embeddings-openai = "^0.3.1"
 llama-index-embeddings-huggingface = "^0.5.1"
 llama-index-embeddings-instructor = "^0.3.0"
+llama-index-embeddings-bedrock = "^0.5.0"
 llama-index-vector-stores-chroma = "^0.4.1"
 llama-index-vector-stores-faiss = "^0.3.0"
 llmlingua = "^0.2.2"
 
 [tool.poetry.group.web-tools]
-optional = false
+optional = true
 
 [tool.poetry.group.web-tools.dependencies]
+boto3 = "^1.35.86"
 uvicorn = "^0.34.0"
 fastapi = "^0.115.6"
 websocket = "^0.2.1"
 python-multipart = "^0.0.20"
 
-[tool.poetry.group.docs]
+[tool.poetry.group.code-parsing]
 optional = false
+
+[tool.poetry.group.code-parsing.dependencies]
+# No additional dependencies needed
+
+[tool.poetry.group.docs]
+optional = true
 
 [tool.poetry.group.docs.dependencies]
 mkdocs-material = {extras = ["imaging"], version = "^9.5.49"}
@@ -120,7 +138,7 @@ pymdown-extensions = "^10.3.1"
 mkdocs = "^1.6.0"
 
 [tool.poetry.group.composio-tools]
-optional = false
+optional = true
 
 [tool.poetry.group.composio-tools.dependencies]
 composio = "^0.1.1"

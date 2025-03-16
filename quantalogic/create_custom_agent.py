@@ -10,11 +10,15 @@ from quantalogic.console_print_token import console_print_token
 from quantalogic.event_emitter import EventEmitter
 from quantalogic.tools.tool import Tool
 
-# Configure loguru to output debug messages
+# Configure loguru to output only INFO and above
 logger.remove()  # Remove default handler
-logger.add(sink=lambda msg: print(msg, end=""), level="DEBUG")  # Add a new handler that prints to console
+logger.add(
+    sink=lambda msg: print(msg, end=""),
+    level="INFO",
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+)
 
-
+# Helper function to import tool classes
 def _import_tool(module_path: str, class_name: str) -> Type[Tool]:
     """
     Import a tool class from a module path using standard Python imports.
@@ -128,8 +132,8 @@ TOOL_IMPORTS = {
     # Product Hunt Tools
     "product_hunt_tool": lambda: _import_tool("quantalogic.tools.product_hunt", "ProductHuntTool"),
     
-    # RAG Tools
-    "rag_tool": lambda: _import_tool("quantalogic.tools.rag_tool", "RagTool"),
+    # RAG Tools 
+    "rag_tool_hf": lambda: _import_tool("quantalogic.tools.rag_tool", "RagToolHf"),
     
     # Utility Tools
     "task_complete": lambda: _import_tool("quantalogic.tools.task_complete_tool", "TaskCompleteTool"),
@@ -170,6 +174,8 @@ def create_custom_agent(
     Returns:
         Agent: Configured agent instance
     """
+    logger.info("Creating custom agent with model: {}".format(model_name))
+    logger.info("tools: {}".format(tools))
     # Create storage directory for RAG
     storage_dir = os.path.join(os.path.dirname(__file__), "storage", "rag")
     os.makedirs(storage_dir, exist_ok=True)
@@ -298,12 +304,16 @@ def create_custom_agent(
         "nasa_apod_tool": lambda _: create_tool_instance(TOOL_IMPORTS["nasa_apod_tool"]()),
         "product_hunt_tool": lambda _: create_tool_instance(TOOL_IMPORTS["product_hunt_tool"]()),
         
-        # RAG tool
-        "rag_tool": lambda params: create_tool_instance(TOOL_IMPORTS["rag_tool"](),
-            vector_store=params.get("vector_store", "chroma"),
-            embedding_model=params.get("embedding_model", "openai"),
-            persist_dir=storage_dir,
-            document_paths=params.get("document_paths", [])
+        # Multilingual RAG tool
+        "rag_tool_hf": lambda params: create_tool_instance(TOOL_IMPORTS["rag_tool_hf"](),
+            persist_dir=params.get("persist_dir", "./storage/multilingual_rag"),
+            use_ocr_for_pdfs=params.get("use_ocr_for_pdfs", False),
+            ocr_model=params.get("ocr_model", "openai/gpt-4o-mini"),
+            embed_model=params.get("embed_model", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
+            document_paths=params.get("document_paths", [
+                "./docs/test/F2015054.pdf",
+                "./docs/test/F2015055.pdf"
+            ])
         ),
         
         "vscode_server_tool": lambda _: create_tool_instance(TOOL_IMPORTS["vscode_server_tool"]())
