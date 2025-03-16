@@ -252,31 +252,39 @@ class BytecodeInterpreter:
         self._delete_name(instr.argval)
 
     def _handle_binary_op(self, instr: dis.Instruction) -> None:
-        # Fix operator precedence issues
+        # Fix operator precedence issues, especially bitwise operations
         ops = {
-            0: lambda x, y: x + y,  # +
-            1: lambda x, y: x & y,  # &
-            2: lambda x, y: x // y, # //
-            3: lambda x, y: x << y, # <<
-            4: lambda x, y: x @ y,  # @
-            5: lambda x, y: x * y,  # *
-            6: lambda x, y: x % y,  # %
-            7: lambda x, y: x | y,  # |
-            8: lambda x, y: x ** y, # **
-            9: lambda x, y: x >> y, # >>
-            10: lambda x, y: x - y, # -
-            11: lambda x, y: x / y, # /
-            12: lambda x, y: x ^ y, # ^
-            13: lambda x, y: x.__iadd__(y) if hasattr(x, '__iadd__') else x + y, # +=
+            0: lambda x, y: x + y,    # +
+            1: lambda x, y: x & y,    # &
+            2: lambda x, y: x // y,   # //
+            3: lambda x, y: x << y,   # <<
+            4: lambda x, y: x @ y,    # @
+            5: lambda x, y: x * y,    # *
+            6: lambda x, y: x % y,    # %
+            7: lambda x, y: x | y,    # |  (bitwise OR)
+            8: lambda x, y: x ** y,   # **
+            9: lambda x, y: x >> y,   # >>
+            10: lambda x, y: x - y,   # -
+            11: lambda x, y: x / y,   # /
+            12: lambda x, y: x ^ y,   # ^  (bitwise XOR)
+            13: lambda x, y: x.__iadd__(y) if hasattr(x, '__iadd__') else x + y,  # +=
         }
         right = self.safe_pop(instr.opname)
         left = self.safe_pop(instr.opname)
         if left is None or right is None:
             raise TypeError(f"Cannot perform {instr.opname} on NoneType")
         try:
-            self.stack.append(ops[instr.arg](left, right))
-        except TypeError as e:
-            raise TypeError(f"unsupported operand type(s) for {instr.opname}: '{type(left).__name__}' and '{type(right).__name__}'") from e
+            result = ops[instr.arg](left, right)
+            self.stack.append(result)
+        except (TypeError, KeyError) as e:
+            if instr.arg == 7:  # Bitwise OR
+                self.stack.append(left | right)  # Explicit bitwise OR
+            elif instr.arg == 12:  # Bitwise XOR
+                self.stack.append(left ^ right)  # Explicit bitwise XOR
+            elif instr.arg == 1:  # Bitwise AND
+                self.stack.append(left & right)  # Explicit bitwise AND
+            else:
+                raise TypeError(f"unsupported operand type(s) for {instr.opname}: '{type(left).__name__}' and '{type(right).__name__}'") from e
 
     def _handle_binary_subscr(self, instr: dis.Instruction) -> None:
         # Improved error handling for subscripting
@@ -568,22 +576,56 @@ class BytecodeInterpreter:
     def _handle_raise_varargs(self, instr: dis.Instruction) -> None:
         if instr.arg == 1:
             exc = self.safe_pop("RAISE_VARARGS")
-            self.stack.append(exc)
-            raise exc
+            # Store the exception for potential exception handling
+            exc_value = exc
+            if isinstance(exc, type) and issubclass(exc, Exception):
+                exc_value = exc()
+            self.stack.append(exc_value)
+            # Check if we are in a try block by examining the block_stack
+            if any(block_type in ("finally", "except") for block_type, _ in self.block_stack):
+                # Let the outer try/except handle it in the run method
+                raise exc_value
+            else:
+                # Wrap the exception for better reporting
+                context_line = ""
+                lineno = instr.starts_line or 1
+                if self.source_lines and lineno <= len(self.source_lines):
+                    context_line = self.source_lines[lineno - 1]
+                raise WrappedException(
+                    f"Error line {lineno}, col 0:\n{context_line}\nDescription: {str(exc_value)}",
+                    exc_value, lineno, 0, context_line, self.stack_trace
+                )
         elif instr.arg == 0:
             if not self.stack or not isinstance(self.stack[-1], Exception):
                 raise RuntimeError("No exception to reraise")
-            raise self.stack[-1]
+            exc = self.stack[-1]
+            # Similar behavior as above
+            if any(block_type in ("finally", "except") for block_type, _ in self.block_stack):
+                raise exc
+            else:
+                context_line = ""
+                lineno = instr.starts_line or 1
+                if self.source_lines and lineno <= len(self.source_lines):
+                    context_line = self.source_lines[lineno - 1]
+                original_type = type(exc).__name__
+                raise WrappedException(
+                    f"Error line {lineno}, col 0:\n{context_line}\nDescription: {original_type}: {str(exc)}",
+                    exc, lineno, 0, context_line, self.stack_trace
+                )
         elif instr.arg == 2:
-            exc = self.safe_pop("RAISE_VARARGS")
             cause = self.safe_pop("RAISE_VARARGS")
+            exc = self.safe_pop("RAISE_VARARGS")
+            if isinstance(exc, type) and issubclass(exc, Exception):
+                exc = exc()
             self.stack.append(exc)
             raise exc from cause
         else:
+            # Handle other cases
             exc = self.safe_pop("RAISE_VARARGS")
-            cause = self.safe_pop("RAISE_VARARGS")
+            if isinstance(exc, type) and issubclass(exc, Exception):
+                exc = exc()
             self.stack.append(exc)
-            raise exc from cause
+            raise exc
 
     def _handle_setup_finally(self, instr: dis.Instruction) -> None:
         self.block_stack.append(("finally", self.ip + instr.arg))
@@ -605,8 +647,15 @@ class BytecodeInterpreter:
         def build_class(func, name, *bases, **kwds):
             # Simplified build_class implementation
             namespace = {}
-            func.__globals__.update(self.env_stack[0])
-            func(namespace)
+            if hasattr(func, '__globals__'):
+                func.__globals__.update(self.env_stack[0])
+            
+            # Call the function to populate the namespace
+            if isinstance(func, Function):
+                self.loop.run_until_complete(func(namespace))
+            else:
+                func(namespace)
+            
             return type(name, bases, namespace)
         
         self.stack.append(build_class)
@@ -887,83 +936,176 @@ class BytecodeInterpreter:
         if initial_stack:
             self.stack = initial_stack[:]
 
-        @contextmanager
-        def execution_timer():
-            try:
-                deadline = self.loop.time() + self.max_execution_time
-                yield
+        # Calculate the deadline outside the loop
+        try:
+            deadline = self.loop.time() + self.max_execution_time
+        except (RuntimeError, AttributeError):
+            # Fallback if loop.time() fails
+            deadline = None
+
+        # Register the COPY_FREE_VARS handler if not already registered
+        if "COPY_FREE_VARS" not in self.opcode_handlers:
+            self.opcode_handlers["COPY_FREE_VARS"] = self._handle_copy_free_vars
+
+        # Counter for instruction execution
+        instruction_count = 0
+        
+        # Create a new local variable scope if needed
+        if not self.env_stack or code_obj.co_varnames:
+            local_frame = defaultdict(lambda: None)
+            # Transfer function parameters if they exist
+            if len(self.env_stack) > 0 and len(code_obj.co_varnames) > 0:
+                for var_name in code_obj.co_varnames:
+                    if var_name in self.env_stack[-1]:
+                        local_frame[var_name] = self.env_stack[-1][var_name]
+            self.env_stack.append(local_frame)
+
+        # Initialize free variables cells if needed
+        if hasattr(code_obj, 'co_freevars') and code_obj.co_freevars:
+            for var_name in code_obj.co_freevars:
+                if var_name not in self.cells:
+                    self.cells[var_name] = Cell(None)
+
+        # Clear the stack trace for each new execution
+        self.stack_trace = []
+
+        while self.ip < len(instructions):
+            # Check for timeout more frequently for CPU-intensive code
+            instruction_count += 1
+            if deadline and instruction_count % 50 == 0:  # Check more often
                 if self.loop.time() > deadline:
-                    raise TimeoutError("Execution time exceeded")
-            except (RuntimeError, AttributeError):
-                # Fallback if loop.time() fails
-                yield
+                    raise TimeoutError(f"Execution time exceeded limit of {self.max_execution_time} seconds")
 
-        # Register the COPY_FREE_VARS handler
-        self.opcode_handlers["COPY_FREE_VARS"] = self._handle_copy_free_vars
-
-        with execution_timer():
-            while self.ip < len(instructions):
-                instr = instructions[self.ip]
-                lineno = instr.starts_line or (self.ip > 0 and instructions[self.ip - 1].starts_line) or 1
-                self.stack_trace.append(f"Line {lineno}: {instr.opname} {instr.argval}")
-                logger.debug(f"IP: {self.ip}, Opcode: {instr.opname}, Arg: {instr.arg}, Stack: {self.stack}, Env: {dict(self.env_stack[-1])}")
-
-                try:
-                    handler = self.opcode_handlers.get(instr.opname, self._not_implemented)
-                    result = handler(instr)
-                    if asyncio.iscoroutine(result):
-                        await result
-
-                    if instr.opname in ("MATCH_SEQUENCE", "MATCH_KEYS") and self.stack[-1]:
-                        match_args = self.env_stack[-1].get('__match_args__')
-                        if match_args:
-                            i = self.ip + 1
-                            arg_idx = 0
-                            while (i < len(instructions) and instructions[i].opname in ("STORE_FAST", "STORE_NAME") and
-                                   arg_idx < len(match_args)):
-                                value = match_args[arg_idx]
-                                if instructions[i].opname == "STORE_FAST":
-                                    self._store_fast(instructions[i].argval, value)
-                                else:  # STORE_NAME
-                                    self.set_variable(instructions[i].argval, value)
-                                arg_idx += 1
-                                i += 1
-                            self.ip = i - 1
-
-                    self.ip += 1
-                except (ReturnException, BreakException, ContinueException) as e:
-                    if isinstance(e, ReturnException):
-                        last_value = e.value
+            instr = instructions[self.ip]
+            # More accurate line number tracking
+            lineno = instr.starts_line
+            if lineno is None and self.ip > 0:
+                # Find the most recent instruction with a line number
+                for prev_i in range(self.ip - 1, -1, -1):
+                    if instructions[prev_i].starts_line is not None:
+                        lineno = instructions[prev_i].starts_line
                         break
-                    elif isinstance(e, BreakException):
-                        if self.block_stack and self.block_stack[-1][0] == "loop":
-                            self.ip = self.block_stack[-1][1]
-                            self.block_stack.pop()
-                        continue
-                    elif isinstance(e, ContinueException):
-                        if self.block_stack and self.block_stack[-1][0] == "loop":
-                            self.ip = self.block_stack[-1][1] - 1
-                        continue
-                except Exception as e:
-                    context_line = self.source_lines[lineno - 1] if self.source_lines and lineno <= len(self.source_lines) else ""
-                    if self.block_stack:
-                        block_type, target = self.block_stack[-1]
-                        if block_type in ("finally", "except"):
-                            self.ip = target
-                            exception_state = e
-                            self.stack.append(e)
-                            self.block_stack.pop()
-                            continue
-                        elif block_type == "loop":
-                            self.ip = target
-                            continue
-                    raise WrappedException(
-                        f"Error line {lineno}, col 0:\n{context_line}\nDescription: {str(e)}",
-                        e, lineno, 0, context_line, self.stack_trace
-                    ) from e
+            if lineno is None:
+                lineno = 1  # Default to line 1 if no line number is found
+            
+            # Add to stack trace with more detail
+            self.stack_trace.append(f"Line {lineno}: {instr.opname} {instr.argval if hasattr(instr, 'argval') else instr.arg}")
+            logger.debug(f"IP: {self.ip}, Opcode: {instr.opname}, Arg: {instr.arg}, Stack: {self.stack}, Env: {dict(self.env_stack[-1])}")
 
-        self.frames.pop()
-        return last_value if last_value is not None else self.env_stack[-1].get('result')
+            try:
+                # Get handler or use _not_implemented for unrecognized opcodes
+                handler = self.opcode_handlers.get(instr.opname)
+                if handler is None:
+                    # Try to handle any new opcodes that might have been added in Python updates
+                    logger.warning(f"Unhandled opcode: {instr.opname}. Attempting fallback handling.")
+                    handler = self._not_implemented
+                
+                # Execute the handler
+                result = handler(instr)
+                if asyncio.iscoroutine(result):
+                    await result
+
+                # Special handling for pattern matching - process STORE operations after pattern match
+                if instr.opname in ("MATCH_SEQUENCE", "MATCH_KEYS", "MATCH_MAPPING", "MATCH_CLASS") and self.stack and self.stack[-1]:
+                    match_args = self.env_stack[-1].get('__match_args__')
+                    if match_args:
+                        i = self.ip + 1
+                        arg_idx = 0
+                        while (i < len(instructions) and 
+                               instructions[i].opname in ("STORE_FAST", "STORE_NAME", "STORE_ATTR", "STORE_DEREF") and
+                               arg_idx < len(match_args)):
+                            value = match_args[arg_idx]
+                            if instructions[i].opname == "STORE_FAST":
+                                self._store_fast(instructions[i].argval, value)
+                            elif instructions[i].opname == "STORE_NAME":
+                                self.set_variable(instructions[i].argval, value)
+                            elif instructions[i].opname == "STORE_ATTR":
+                                obj = self.stack[-1]
+                                setattr(obj, instructions[i].argval, value)
+                            elif instructions[i].opname == "STORE_DEREF":
+                                self.cells[instructions[i].argval].contents = value
+                            arg_idx += 1
+                            i += 1
+                        self.ip = i - 1
+
+                self.ip += 1
+            except ReturnException as e:
+                last_value = e.value
+                break
+            except BreakException:
+                # Find the end of the loop block
+                if self.block_stack and self.block_stack[-1][0] == "loop":
+                    self.ip = self.block_stack[-1][1]
+                    self.block_stack.pop()
+                else:
+                    raise SyntaxError("'break' outside loop")
+                continue
+            except ContinueException:
+                # Find the start of the loop block
+                if self.block_stack and self.block_stack[-1][0] == "loop":
+                    # Find the FOR_ITER instruction
+                    for i in range(self.block_stack[-1][1] - 1, -1, -1):
+                        if instructions[i].opname == "FOR_ITER":
+                            self.ip = i
+                            break
+                    else:
+                        # If no FOR_ITER found, go back to the start of the loop
+                        self.ip = self.block_stack[-1][1] - 1
+                else:
+                    raise SyntaxError("'continue' outside loop")
+                continue
+            except Exception as e:
+                # Get context for error reporting
+                context_line = ""
+                if self.source_lines and lineno <= len(self.source_lines):
+                    context_line = self.source_lines[lineno - 1]
+                
+                # Check if we're in an exception handling block
+                if self.block_stack:
+                    block_type, target = self.block_stack[-1]
+                    if block_type in ("finally", "except"):
+                        self.ip = target
+                        exception_state = e
+                        self.stack.append(e)
+                        self.block_stack.pop()
+                        continue
+                    elif block_type == "loop":
+                        # Exit the loop on exception unless handled
+                        self.ip = target
+                        continue
+                
+                # Generate a better error message with more context
+                error_type = type(e).__name__
+                error_msg = str(e)
+                
+                # Handle wrapped exceptions
+                if isinstance(e, WrappedException):
+                    error_type = type(e.original_exception).__name__
+                    error_msg = str(e.original_exception)
+                
+                # Create a detailed error message
+                full_error = f"Error at line {lineno}, col 0:\n{context_line}\n"
+                full_error += f"Description: {error_type}: {error_msg}\n"
+                full_error += f"Current opcode: {instr.opname} {instr.argval if hasattr(instr, 'argval') else ''}"
+                
+                # Wrap the exception for better reporting
+                raise WrappedException(
+                    full_error,
+                    e, lineno, 0, context_line, self.stack_trace
+                ) from e
+
+        # Clean up frames and handle return value
+        if self.frames:
+            self.frames.pop()
+        
+        # Return either the explicit return value or the result variable if defined
+        if last_value is not None:
+            return last_value
+        elif self.env_stack and 'result' in self.env_stack[-1]:
+            return self.env_stack[-1]['result']
+        elif self.stack:
+            return self.stack[-1]  # Return the top of the stack if no explicit return
+        return None
 
     def _not_implemented(self, instr: dis.Instruction) -> None:
         raise NotImplementedError(f"Opcode {instr.opname} not implemented")
@@ -977,6 +1119,7 @@ class Function:
         self.closure = closure
         self.kwdefaults = kwdefaults
         self.is_async = bool(code.co_flags & inspect.CO_COROUTINE)
+        self.__globals__ = {}  # Add __globals__ attribute
 
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         local_frame = defaultdict(lambda: None)
@@ -1025,6 +1168,9 @@ class Function:
         if self.code.co_freevars and self.closure:
             for name, cell in zip(self.code.co_freevars, self.closure):
                 new_interp.cells[name] = cell
+
+        # Update the function's globals with the interpreter's environment
+        self.__globals__.update(self.interpreter.env_stack[0])
 
         result = await new_interp.run(self.code)
         if asyncio.iscoroutine(result):
