@@ -3,9 +3,16 @@ import asyncio
 import builtins
 import inspect  # For class checking in visit_Call
 import textwrap
+import time
 from asyncio import TimeoutError
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+@dataclass
+class AsyncExecutionResult:
+    result: Any
+    error: Optional[str]
+    execution_time: float
 
 class ReturnException(Exception):
     def __init__(self, value: Any) -> None:
@@ -109,6 +116,8 @@ class ASTInterpreter:
             self.env_stack[0]["Context"] = dec.Context
 
         self.loop = None
+        self.current_class = None
+        self.current_instance = None
 
     def safe_import(
         self,
@@ -250,38 +259,21 @@ class ASTInterpreter:
             self.set_variable(asname, attr)
 
     async def visit_ListComp(self, node: ast.ListComp, wrap_exceptions: bool = True) -> List[Any]:
-        result: List[Any] = []
-        base_frame: Dict[str, Any] = self.env_stack[-1].copy()
-        self.env_stack.append(base_frame)
-
-        async def rec(gen_idx: int) -> None:
-            if gen_idx == len(node.generators):
-                result.append(await self.visit(node.elt, wrap_exceptions=True))
-            else:
-                comp = node.generators[gen_idx]
-                iterable = await self.visit(comp.iter, wrap_exceptions=True)
-                if hasattr(iterable, '__aiter__'):
-                    async for item in iterable:
-                        new_frame: Dict[str, Any] = self.env_stack[-1].copy()
-                        self.env_stack.append(new_frame)
-                        await self.assign(comp.target, item)
-                        conditions = [await self.visit(if_clause, wrap_exceptions=True) for if_clause in comp.ifs]
-                        if all(conditions):
-                            await rec(gen_idx + 1)
-                        self.env_stack.pop()
-                else:
-                    for item in iterable:
-                        new_frame: Dict[str, Any] = self.env_stack[-1].copy()
-                        self.env_stack.append(new_frame)
-                        await self.assign(comp.target, item)
-                        conditions = [await self.visit(if_clause, wrap_exceptions=True) for if_clause in comp.ifs]
-                        if all(conditions):
-                            await rec(gen_idx + 1)
-                        self.env_stack.pop()
-
-        await rec(0)
-        self.env_stack.pop()
-        return result
+        results = []
+        gen = await self.visit(node.generators[0].iter)
+        # Create temporary scope for comprehension
+        with self.new_scope():
+            try:
+                async for value in gen:
+                    await self.assign(node.generators[0].target, value)
+                    element = await self.visit(node.elt, wrap_exceptions=wrap_exceptions)
+                    results.append(element)
+            except TypeError:
+                for value in gen:
+                    await self.assign(node.generators[0].target, value)
+                    element = await self.visit(node.elt, wrap_exceptions=wrap_exceptions)
+                    results.append(element)
+        return results
 
     async def visit_Module(self, node: ast.Module, wrap_exceptions: bool = True) -> Any:
         last_value = None
@@ -577,21 +569,14 @@ class ASTInterpreter:
                 kwargs[kw.arg] = await self.visit(kw.value, wrap_exceptions=wrap_exceptions)
 
         # Handle calls on super objects
-        if isinstance(node.func, ast.Attribute):
-            value = await self.visit(node.func.value, wrap_exceptions=wrap_exceptions)
-            if isinstance(value, super):
-                method_name = node.func.attr
-                method = getattr(value, method_name)
-                if isinstance(method, Function):
-                    # Ensure the instance is correctly bound and state persists
-                    instance = value.__self__
-                    bound_method = method.__get__(instance, method.defining_class or type(instance))
-                    result = await bound_method(*evaluated_args, **kwargs)
-                    if asyncio.iscoroutine(result) and not is_await_context:
-                        result = await result
-                    return result
-                # For built-in methods, call directly
-                return method(*evaluated_args, **kwargs)
+        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Call) and isinstance(node.func.value.func, ast.Name) and node.func.value.func.id == 'super':
+            # Handle super() calls
+            if self.current_class and self.current_instance:
+                base_class = (await self.visit(self.current_class.bases[0])) if self.current_class.bases else object
+                method = getattr(base_class, node.func.attr, None)
+                if method:
+                    args = [await self.visit(arg) for arg in node.args]
+                    return await method(self.current_instance, *args)
 
         # Handle list with async iterables
         if func is list and len(evaluated_args) == 1 and hasattr(evaluated_args[0], '__aiter__'):
@@ -882,7 +867,7 @@ class ASTInterpreter:
                 result.append(await self.visit(node.elt, wrap_exceptions=True))
             else:
                 comp = node.generators[gen_idx]
-                iterable = await self.visit(comp.iter, wrap_exceptions=True)
+                iterable = await self.visit(comp.iter, wrap_exceptions=wrap_exceptions)
                 if hasattr(iterable, '__aiter__'):
                     async for item in iterable:
                         new_frame = self.env_stack[-1].copy()
@@ -906,25 +891,23 @@ class ASTInterpreter:
         self.env_stack.pop()
         return result
 
-    async def visit_ClassDef(self, node: ast.ClassDef, wrap_exceptions: bool = True):
-        base_frame = self.env_stack[-1].copy()
+    async def visit_ClassDef(self, node: ast.ClassDef, wrap_exceptions: bool = True) -> Any:
+        # Create class frame
+        base_frame = {}
         self.env_stack.append(base_frame)
         bases = [await self.visit(base, wrap_exceptions=True) for base in node.bases]
         try:
+            self.current_class = node
             for stmt in node.body:
                 await self.visit(stmt, wrap_exceptions=True)
             class_dict = {k: v for k, v in self.env_stack[-1].items() if k not in ["__builtins__"]}
-            # Set defining_class for methods
-            new_class = type(node.name, tuple(bases), class_dict)
-            for name, value in class_dict.items():
-                if isinstance(value, Function):
-                    value.defining_class = new_class
+            cls = type(node.name, tuple(bases), class_dict)
+            # Store the class in parent scope
+            self.env_stack[-2][node.name] = cls
+            return cls
         finally:
             self.env_stack.pop()
-        for decorator in reversed(node.decorator_list):
-            dec = await self.visit(decorator, wrap_exceptions=True)
-            new_class = dec(new_class)
-        self.set_variable(node.name, new_class)
+            self.current_class = None
 
     async def visit_With(self, node: ast.With, wrap_exceptions: bool = True):
         for item in node.items:
@@ -965,7 +948,7 @@ class ASTInterpreter:
                 result[key] = val
             else:
                 comp = node.generators[gen_idx]
-                iterable = await self.visit(comp.iter, wrap_exceptions=True)
+                iterable = await self.visit(comp.iter, wrap_exceptions=wrap_exceptions)
                 if hasattr(iterable, '__aiter__'):
                     async for item in iterable:
                         new_frame = self.env_stack[-1].copy()
@@ -999,7 +982,7 @@ class ASTInterpreter:
                 result.add(await self.visit(node.elt, wrap_exceptions=True))
             else:
                 comp = node.generators[gen_idx]
-                iterable = await self.visit(comp.iter, wrap_exceptions=True)
+                iterable = await self.visit(comp.iter, wrap_exceptions=wrap_exceptions)
                 if hasattr(iterable, '__aiter__'):
                     async for item in iterable:
                         new_frame = self.env_stack[-1].copy()
@@ -1150,6 +1133,34 @@ class ASTInterpreter:
                 del obj[key]
             else:
                 raise Exception(f"Unsupported del target: {type(target).__name__}")
+
+    async def visit_AsyncFor(self, node: ast.AsyncFor, wrap_exceptions: bool = True) -> None:
+        results = []
+        async for value in self.visit(node.iter):
+            self.assign(node.target, value)
+            results.append(await self.visit(node.body[-1]))
+        return results
+
+    async def visit_AsyncFor(self, node: ast.AsyncFor, wrap_exceptions: bool = True) -> None:
+        results = []
+        async for value in self.visit(node.iter):
+            self.assign(node.target, value)
+            results.extend([await self.visit(stmt) for stmt in node.body])
+        return results
+
+    def new_scope(self):
+        return Scope(self.env_stack)
+
+
+class Scope:
+    def __init__(self, env_stack):
+        self.env_stack = env_stack
+
+    def __enter__(self):
+        self.env_stack.append({})
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.env_stack.pop()
 
 
 class Function:
@@ -1408,6 +1419,50 @@ class LambdaFunction:
         new_env_stack.append(local_frame)
         new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
         return await new_interp.visit(self.node.body, wrap_exceptions=True)
+
+
+async def execute_async(
+    code: str,
+    timeout: float = 30,
+    allowed_modules: List[str] = ['asyncio']
+) -> AsyncExecutionResult:
+    start_time = time.time()
+    try:
+        ast_tree = ast.parse(textwrap.dedent(code))
+        interpreter = ASTInterpreter(
+            allowed_modules=allowed_modules,
+            restrict_os=True
+        )
+        
+        async def run_execution():
+            return await interpreter.visit(ast_tree)
+
+        result = await asyncio.wait_for(run_execution(), timeout=timeout)
+        return AsyncExecutionResult(
+            result=result,
+            error=None,
+            execution_time=time.time() - start_time
+        )
+
+    except asyncio.TimeoutError as e:
+        return AsyncExecutionResult(
+            result=None,
+            error=f'{type(e).__name__}: {str(e)}',
+            execution_time=time.time() - start_time
+        )
+    except WrappedException as e:
+        return AsyncExecutionResult(
+            result=None,
+            error=str(e),
+            execution_time=time.time() - start_time
+        )
+    except Exception as e:
+        error_type = type(getattr(e, 'original_exception', e)).__name__
+        return AsyncExecutionResult(
+            result=None,
+            error=f'{error_type}: {str(e)}',
+            execution_time=time.time() - start_time
+        )
 
 
 def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
