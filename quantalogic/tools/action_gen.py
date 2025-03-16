@@ -168,7 +168,7 @@ Instructions:
 9. Express all string variables as multiline strings
 string, always start a string at the beginning of a line.
 10. Always print the result at the end of the program.
-11. the main() function should be defined but NOT called - we'll handle execution separately
+11. the main() must be called in __main__
 
 Example task: "Add 5 and 7 and print the result"
 Example output:
@@ -285,6 +285,7 @@ async def generate_core(task: str, model: str, max_tokens: int) -> None:
         execution_result = await execute_async(
             code=program,
             timeout=30,
+            entry_point="main",
             allowed_modules=["asyncio"],
             namespace=namespace
         )
