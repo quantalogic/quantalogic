@@ -69,6 +69,7 @@ class ASTInterpreter:
                 "type": type, "isinstance": isinstance, "issubclass": issubclass,
                 "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
                 "ValueError": ValueError, "TypeError": TypeError,
+                "print": print  # Add print to allowed_builtins
             }
             # Only include 'open' if restrict_os is False
             if not restrict_os:
@@ -94,6 +95,7 @@ class ASTInterpreter:
                     "type": type, "isinstance": isinstance, "issubclass": issubclass,
                     "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
                     "ValueError": ValueError, "TypeError": TypeError,
+                    "print": print  # Add print to allowed_builtins
                 }
                 # Only include 'open' if restrict_os is False
                 if not restrict_os:
@@ -298,7 +300,18 @@ class ASTInterpreter:
         last_value = None
         for stmt in node.body:
             last_value = await self.visit(stmt, wrap_exceptions=True)
-        return self.env_stack[0].get("result", last_value)
+        result = self.env_stack[0].get("result", last_value)
+        
+        # Execute main() if it exists
+        main_func = self.env_stack[0].get('main')
+        if main_func:
+            if isinstance(main_func, AsyncFunction):
+                result = await main_func()
+            elif inspect.iscoroutinefunction(main_func):
+                result = await main_func()
+            elif callable(main_func):
+                result = main_func()
+        return result
 
     async def visit_Expr(self, node: ast.Expr, wrap_exceptions: bool = True) -> Any:
         return await self.visit(node.value, wrap_exceptions=wrap_exceptions)
@@ -1181,18 +1194,7 @@ class ASTInterpreter:
                 await self.visit(stmt, wrap_exceptions=wrap_exceptions)
 
     async def execute_async(self, node: ast.Module) -> Any:
-        # Find async main function
-        main_func = next((n for n in node.body if isinstance(n, ast.AsyncFunctionDef) and n.name == 'main'), None)
-        
-        if main_func:
-            if not self.loop:
-                self.loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(self.loop)
-            
-            # Create task and run until complete
-            task = self.loop.create_task(self.visit(main_func))
-            return await task
-        return None
+        return await self.visit(node)
 
     def new_scope(self):
         return Scope(self.env_stack)
@@ -1470,26 +1472,44 @@ class LambdaFunction:
 async def execute_async(
     code: str,
     timeout: float = 30,
-    allowed_modules: List[str] = ['asyncio']
+    allowed_modules: List[str] = ['asyncio'],
+    namespace: Optional[Dict[str, Any]] = None  # Added namespace parameter
 ) -> AsyncExecutionResult:
     start_time = time.time()
     try:
+        # Parse the code into an AST
         ast_tree = ast.parse(textwrap.dedent(code))
+        
+        # Try to get the current event loop
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running event loop, create a new one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        # Create the interpreter with the namespace
         interpreter = ASTInterpreter(
             allowed_modules=allowed_modules,
-            restrict_os=True
+            restrict_os=True,
+            namespace=namespace  # Pass namespace to interpreter
         )
         
+        # Set the interpreter's loop to be the same as our current loop
+        interpreter.loop = loop
+        
+        # Define the execution function that runs in the same loop context
         async def run_execution():
             return await interpreter.execute_async(ast_tree)
-
+        
+        # Execute with timeout in the current loop
         result = await asyncio.wait_for(run_execution(), timeout=timeout)
+        
         return AsyncExecutionResult(
             result=result,
             error=None,
             execution_time=time.time() - start_time
         )
-
     except asyncio.TimeoutError as e:
         return AsyncExecutionResult(
             result=None,
