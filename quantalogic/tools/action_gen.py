@@ -1,4 +1,6 @@
 import asyncio
+from asyncio import TimeoutError
+from contextlib import AsyncExitStack
 from functools import partial
 from typing import Callable, Dict, List
 
@@ -6,10 +8,10 @@ import litellm
 import typer
 from loguru import logger
 
+from quantalogic.tools.tool import Tool, ToolArgument
+
 # Import the custom interpreter from python_interpreter.py
 from quantalogic.utils.python_interpreter import interpret_code
-
-from quantalogic.tools.tool import Tool, ToolArgument
 
 # Configure loguru to log to a file with rotation
 logger.add("action_gen.log", rotation="10 MB", level="DEBUG")
@@ -92,18 +94,29 @@ class AgentTool(Tool):
         
         logger.info(f"Generating text with model {self.model}, temperature {temperature}")
         try:
-            response = await litellm.acompletion(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=temperature,
-                max_tokens=1000  # Reasonable default for text generation
-            )
-            generated_text = response.choices[0].message.content.strip()
-            logger.debug(f"Generated text: {generated_text}")
-            return generated_text
+            # Use asyncio.timeout (Python 3.11+) or manually implement timeout
+            async with AsyncExitStack() as stack:
+                # Set a 30-second timeout for the API call
+                timeout_cm = asyncio.timeout(30)  # Use timeout context manager
+                await stack.enter_async_context(timeout_cm)
+                
+                logger.debug(f"Making API call to {self.model}")
+                response = await litellm.acompletion(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=temperature,
+                    max_tokens=1000  # Reasonable default for text generation
+                )
+                generated_text = response.choices[0].message.content.strip()
+                logger.debug(f"Generated text: {generated_text}")
+                return generated_text
+        except TimeoutError as e:
+            error_msg = f"API call to {self.model} timed out after 30 seconds"
+            logger.error(error_msg)
+            raise TimeoutError(error_msg) from e
         except Exception as e:
             logger.error(f"Failed to generate text with {self.model}: {str(e)}")
             raise RuntimeError(f"Text generation failed: {str(e)}")
@@ -141,10 +154,12 @@ Instructions:
 3. Define an async function named main() that solves the task.
 4. Use the pre-defined tool functions (e.g., add_tool, multiply_tool, concat_tool) directly by calling them with await and the appropriate arguments as specified in their descriptions.
 5. Do not redefine the tool functions within the program; assume they are already available in the namespace.
-6. Return the program as a string enclosed in triple quotes (\"\"\"program\"\"\")).
+6. Return the program as a single string enclosed in triple quotes (\"\"\"program\"\"\").
 7. Do not include asyncio.run(main()) or any code outside the main() function definition.
 8. Do not include explanatory text outside the program string.
-9. Express all string variables as multiline strings (\"\"\"\nstring\n\"\"\"), always start a string at the beginning of a line.
+9. Express all string variables as multiline strings (\"\"\"
+string
+\"\"\"), always start a string at the beginning of a line.
 10. Always print the result at the end of the program.
 11. Never call the main() function.
 
@@ -186,7 +201,15 @@ async def main():
     return generated_code
 
 # Async core logic for generate
-async def generate_core(task: str, model: str, max_tokens: int):
+async def generate_core(task: str, model: str, max_tokens: int) -> None:
+    """
+    Core logic to generate and execute a Python program based on a task description.
+
+    Args:
+        task (str): The task description to generate a program for.
+        model (str): The litellm model to use for generation.
+        max_tokens (int): Maximum number of tokens for the generated response.
+    """
     logger.info(f"Starting generate command for task: {task}")
     # Input validation
     if not task.strip():
@@ -238,9 +261,9 @@ async def generate_core(task: str, model: str, max_tokens: int):
         # Allowed modules for the interpreter
         allowed_modules = ["asyncio"]
 
-        # Execute the program using the custom interpreter
+        # Execute the program using the custom interpreter with namespace
         logger.debug("Interpreting generated code with ASTInterpreter")
-        result = interpret_code(program, allowed_modules=allowed_modules, restrict_os=True)
+        result = interpret_code(program, allowed_modules=allowed_modules, restrict_os=True, namespace=namespace)
 
         # Check if the result contains an async main() function and run it
         if isinstance(result, dict) and "main" in result and asyncio.iscoroutinefunction(result["main"]):
@@ -250,14 +273,13 @@ async def generate_core(task: str, model: str, max_tokens: int):
             logger.warning("No async main() function found in generated code")
             typer.echo(typer.style("Warning: No async main() function found", fg=typer.colors.YELLOW))
     except Exception as e:
-        logger.error(f"Execution error: {e}")
-        typer.echo(typer.style(f"Execution failed: {e}", fg=typer.colors.RED))
+        logger.error(f"Execution error: {str(e)}")
+        typer.echo(typer.style(f"Execution failed: {str(e)}", fg=typer.colors.RED))
     else:
         logger.info("Program executed successfully")
         typer.echo(typer.style("Execution completed successfully", fg=typer.colors.GREEN))
 
-# Synchronous callback to invoke async generate_core
-@app.callback(invoke_without_command=True)
+@app.command()
 def generate(
     task: str = typer.Argument(
         ...,
@@ -275,18 +297,18 @@ def generate(
         "-t",
         help="Maximum number of tokens for the generated response (default: 4000)"
     )
-):
-    """
-    Asynchronously generate a Python program based on a task description using specified tools and model.
-
-    Examples:
-        $ python action_gen.py "Add 5 and 7 and print the result"
-        $ python action_gen.py "Concatenate 'Hello' and 'World' and print it" --model gpt-4 --max-tokens 5000
-    """
-    asyncio.run(generate_core(task, model, max_tokens))
+) -> None:
+    """Generate and execute a Python program based on a task description"""
+    try:
+        # Run the async core logic within the existing event loop
+        asyncio.run(generate_core(task, model, max_tokens))
+    except Exception as e:
+        logger.error(f"Command failed: {str(e)}")
+        typer.echo(typer.style(f"Error: {str(e)}", fg=typer.colors.RED))
+        raise typer.Exit(code=1)
 
 # Entry point to start the app
-def main():
+def main() -> None:
     logger.debug("Starting script execution")
     app()
 
