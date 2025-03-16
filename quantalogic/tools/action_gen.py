@@ -63,6 +63,48 @@ class ConcatTool(Tool):
         logger.info(f"Concatenating '{kwargs['s1']}' and '{kwargs['s2']}'")
         return kwargs["s1"] + kwargs["s2"]
 
+class AgentTool(Tool):
+    def __init__(self, model: str = "gemini/gemini-2.0-flash"):
+        super().__init__(
+            name="agent_tool",
+            description="Generates text using a language model based on a system prompt and user prompt.",
+            arguments=[
+                ToolArgument(name="system_prompt", arg_type="string", description="System prompt to guide the model's behavior", required=True),
+                ToolArgument(name="prompt", arg_type="string", description="User prompt to generate a response for", required=True),
+                ToolArgument(name="temperature", arg_type="float", description="Temperature for generation (0 to 1)", required=True)
+            ],
+            return_type="string"
+        )
+        self.model = model
+    
+    async def async_execute(self, **kwargs) -> str:
+        system_prompt = kwargs["system_prompt"]
+        prompt = kwargs["prompt"]
+        temperature = float(kwargs["temperature"])
+        
+        # Validate temperature
+        if not 0 <= temperature <= 1:
+            logger.error(f"Temperature {temperature} is out of range (0-1)")
+            raise ValueError("Temperature must be between 0 and 1")
+        
+        logger.info(f"Generating text with model {self.model}, temperature {temperature}")
+        try:
+            response = await litellm.acompletion(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=temperature,
+                max_tokens=1000  # Reasonable default for text generation
+            )
+            generated_text = response.choices[0].message.content.strip()
+            logger.debug(f"Generated text: {generated_text}")
+            return generated_text
+        except Exception as e:
+            logger.error(f"Failed to generate text with {self.model}: {str(e)}")
+            raise RuntimeError(f"Text generation failed: {str(e)}")
+
 # Asynchronous function to generate the program
 async def generate_program(task_description: str, tools: List[Tool], model: str, max_tokens: int) -> str:
     """
@@ -101,6 +143,7 @@ Instructions:
 8. Do not include explanatory text outside the program string.
 9. Express all string variables as multiline strings (\"\"\"\nstring\n\"\"\"), always start a string at the beginning of a line.
 10. Always print the result at the end of the program.
+11. Never call the main() function.
 
 Example task: "Add 5 and 7 and print the result"
 Example output:
@@ -151,7 +194,12 @@ async def generate_core(task: str, model: str, max_tokens: int):
         raise typer.BadParameter("max-tokens must be a positive integer")
 
     # Initialize tools
-    tools = [AddTool(), MultiplyTool(), ConcatTool()]
+    tools = [
+        AddTool(),
+        MultiplyTool(),
+        ConcatTool(),
+        AgentTool(model=model)  # Include AgentTool with the specified model
+    ]
 
     # Generate the program
     try:
@@ -173,6 +221,7 @@ async def generate_core(task: str, model: str, max_tokens: int):
         add_tool_instance = AddTool()
         multiply_tool_instance = MultiplyTool()
         concat_tool_instance = ConcatTool()
+        agent_tool_instance = AgentTool(model=model)  # Instance with the specified model
 
         # Map function names to callables that invoke the tool instances
         namespace: Dict[str, Callable] = {
@@ -180,6 +229,7 @@ async def generate_core(task: str, model: str, max_tokens: int):
             "add_tool": partial(add_tool_instance.async_execute),
             "multiply_tool": partial(multiply_tool_instance.async_execute),
             "concat_tool": partial(concat_tool_instance.async_execute),
+            "agent_tool": partial(agent_tool_instance.async_execute),
         }
 
         logger.debug("Compiling and executing generated code")
