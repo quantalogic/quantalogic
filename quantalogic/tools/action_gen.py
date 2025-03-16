@@ -6,6 +6,9 @@ import litellm
 import typer
 from loguru import logger
 
+# Import the custom interpreter from python_interpreter.py
+from quantalogic.utils.python_interpreter import interpret_code
+
 from quantalogic.tools.tool import Tool, ToolArgument
 
 # Configure loguru to log to a file with rotation
@@ -214,7 +217,7 @@ async def generate_core(task: str, model: str, max_tokens: int):
     typer.echo(typer.style("Generated Python Program:", fg=typer.colors.GREEN, bold=True))
     typer.echo(program)
     
-    # Attempt to execute the program asynchronously
+    # Attempt to execute the program using the custom interpreter
     typer.echo("\n" + typer.style("Executing the program:", fg=typer.colors.GREEN, bold=True))
     try:
         # Create instances of tools
@@ -232,18 +235,20 @@ async def generate_core(task: str, model: str, max_tokens: int):
             "agent_tool": partial(agent_tool_instance.async_execute),
         }
 
-        logger.debug("Compiling and executing generated code")
-        compiled = compile(program, "<string>", "exec")
-        exec(compiled, namespace)
-        if "main" in namespace and asyncio.iscoroutinefunction(namespace["main"]):
+        # Allowed modules for the interpreter
+        allowed_modules = ["asyncio"]
+
+        # Execute the program using the custom interpreter
+        logger.debug("Interpreting generated code with ASTInterpreter")
+        result = interpret_code(program, allowed_modules=allowed_modules, restrict_os=True)
+
+        # Check if the result contains an async main() function and run it
+        if isinstance(result, dict) and "main" in result and asyncio.iscoroutinefunction(result["main"]):
             logger.debug("Running async main function")
-            await namespace["main"]()
+            await result["main"]()
         else:
             logger.warning("No async main() function found in generated code")
             typer.echo(typer.style("Warning: No async main() function found", fg=typer.colors.YELLOW))
-    except SyntaxError as e:
-        logger.error(f"Syntax error in generated code: {e}")
-        typer.echo(typer.style(f"Syntax error: {e}", fg=typer.colors.RED))
     except Exception as e:
         logger.error(f"Execution error: {e}")
         typer.echo(typer.style(f"Execution failed: {e}", fg=typer.colors.RED))

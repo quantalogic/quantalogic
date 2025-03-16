@@ -38,22 +38,32 @@ def has_await(node: ast.AST) -> bool:
 
 class ASTInterpreter:
     def __init__(
-        self, allowed_modules: List[str], env_stack: Optional[List[Dict[str, Any]]] = None, source: Optional[str] = None
+        self, 
+        allowed_modules: List[str], 
+        env_stack: Optional[List[Dict[str, Any]]] = None, 
+        source: Optional[str] = None,
+        restrict_os: bool = True  # New parameter to restrict OS access
     ) -> None:
         self.allowed_modules: List[str] = allowed_modules
         self.modules: Dict[str, Any] = {mod: __import__(mod) for mod in allowed_modules}
+        self.restrict_os: bool = restrict_os  # Store the restriction flag
         if env_stack is None:
             self.env_stack: List[Dict[str, Any]] = [{}]
             self.env_stack[0].update(self.modules)
             safe_builtins: Dict[str, Any] = dict(vars(builtins))
             safe_builtins["__import__"] = self.safe_import
-            safe_builtins.update({
+            # Base set of allowed built-ins
+            allowed_builtins = {
                 "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
                 "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
                 "type": type, "isinstance": isinstance, "issubclass": issubclass,
                 "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
                 "ValueError": ValueError, "TypeError": TypeError,
-            })
+            }
+            if not restrict_os:
+                # Add file-related built-ins only if OS restriction is off
+                allowed_builtins["open"] = open
+            safe_builtins.update(allowed_builtins)
             if "set" not in safe_builtins:
                 safe_builtins["set"] = set
             self.env_stack[0]["__builtins__"] = safe_builtins
@@ -63,13 +73,16 @@ class ASTInterpreter:
             if "__builtins__" not in self.env_stack[0]:
                 safe_builtins: Dict[str, Any] = dict(vars(builtins))
                 safe_builtins["__import__"] = self.safe_import
-                safe_builtins.update({
+                allowed_builtins = {
                     "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
                     "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
                     "type": type, "isinstance": isinstance, "issubclass": issubclass,
                     "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
                     "ValueError": ValueError, "TypeError": TypeError,
-                })
+                }
+                if not restrict_os:
+                    allowed_builtins["open"] = open
+                safe_builtins.update(allowed_builtins)
                 if "set" not in safe_builtins:
                     safe_builtins["set"] = set
                 self.env_stack[0]["__builtins__"] = safe_builtins
@@ -98,13 +111,20 @@ class ASTInterpreter:
         fromlist: Tuple[str, ...] = (),
         level: int = 0,
     ) -> Any:
+        # Define OS-related modules to block when restrict_os is True
+        os_related_modules = {"os", "sys", "subprocess", "shutil", "platform"}
+        if self.restrict_os and name in os_related_modules:
+            raise ImportError(f"Import Error: Module '{name}' is blocked due to OS restriction.")
         if name not in self.allowed_modules:
             raise ImportError(f"Import Error: Module '{name}' is not allowed. Only {self.allowed_modules} are permitted.")
         return self.modules[name]
 
     def spawn_from_env(self, env_stack: List[Dict[str, Any]]) -> "ASTInterpreter":
         new_interp = ASTInterpreter(
-            self.allowed_modules, env_stack, source="\n".join(self.source_lines) if self.source_lines else None
+            self.allowed_modules, 
+            env_stack, 
+            source="\n".join(self.source_lines) if self.source_lines else None,
+            restrict_os=self.restrict_os  # Pass the restriction flag
         )
         new_interp.loop = self.loop
         return new_interp
@@ -1364,8 +1384,8 @@ class LambdaFunction:
         return await new_interp.visit(self.node.body, wrap_exceptions=True)
 
 
-def interpret_ast(ast_tree: Any, allowed_modules: list[str], source: str = "") -> Any:
-    interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source)
+def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", restrict_os: bool = False) -> Any:
+    interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source, restrict_os=restrict_os)
 
     async def run_interpreter():
         result = await interpreter.visit(ast_tree, wrap_exceptions=True)
@@ -1384,10 +1404,10 @@ def interpret_ast(ast_tree: Any, allowed_modules: list[str], source: str = "") -
         loop.close()
 
 
-def interpret_code(source_code: str, allowed_modules: List[str]) -> Any:
+def interpret_code(source_code: str, allowed_modules: List[str], restrict_os: bool = False) -> Any:
     dedented_source = textwrap.dedent(source_code).strip()
     tree: ast.AST = ast.parse(dedented_source)
-    return interpret_ast(tree, allowed_modules, source=dedented_source)
+    return interpret_ast(tree, allowed_modules, source=dedented_source, restrict_os=restrict_os)
 
 
 if __name__ == "__main__":
@@ -1408,7 +1428,7 @@ result = example(1, 4, 5, 6, c=7, x=8)
 """
     print("Example 1 (function with decorator, defaults, *args, **kwargs):")
     try:
-        result_1: Any = interpret_code(source_code_1, allowed_modules=[])
+        result_1: Any = interpret_code(source_code_1, allowed_modules=[], restrict_os=True)
         print("Result:", result_1)
     except Exception as e:
         print("Interpreter error:", e)
@@ -1424,57 +1444,29 @@ result = await delay_square(5)
 """
     print("Example 2 (async function):")
     try:
-        result_2: Any = interpret_code(source_code_2, allowed_modules=["asyncio"])
+        result_2: Any = interpret_code(source_code_2, allowed_modules=["asyncio"], restrict_os=True)
         print("Result:", result_2)
     except Exception as e:
         print("Interpreter error:", e)
 
     source_code_3: str = """
-f = lambda x, y=2, *args, z=3, **kwargs: x + y + z + sum(args) + sum(kwargs.values())
-result = f(1, 4, 5, z=6, w=7)
+import os
+result = os.path.join("a", "b")
 """
-    print("Example 3 (lambda with defaults and kwargs):")
+    print("Example 3 (attempt to use os module with restrict_os=True):")
     try:
-        result_3: Any = interpret_code(source_code_3, allowed_modules=[])
+        result_3: Any = interpret_code(source_code_3, allowed_modules=["os"], restrict_os=True)
         print("Result:", result_3)
     except Exception as e:
         print("Interpreter error:", e)
 
     source_code_4: str = """
-def describe(x):
-    match x:
-        case 1:
-            return "One"
-        case [a, b]:
-            return f"List of {a} and {b}"
-        case {"key": value}:
-            return f"Dict with key={value}"
-        case _:
-            return "Unknown"
-
-result = describe([10, 20])
+with open("test.txt", "r") as f:
+    result = f.read()
 """
-    print("Example 4 (structural pattern matching):")
+    print("Example 4 (attempt to use open() with restrict_os=True):")
     try:
-        result_4: Any = interpret_code(source_code_4, allowed_modules=[])
+        result_4: Any = interpret_code(source_code_4, allowed_modules=[], restrict_os=True)
         print("Result:", result_4)
-    except Exception as e:
-        print("Interpreter error:", e)
-
-    source_code_5: str = """
-def risky():
-    raise ExceptionGroup("Problems", [ValueError("bad value"), TypeError("bad type")])
-
-try:
-    risky()
-except* ValueError as ve:
-    result = "Caught ValueError"
-except* TypeError as te:
-    result = "Caught TypeError"
-"""
-    print("Example 5 (exception groups with except*):")
-    try:
-        result_5: Any = interpret_code(source_code_5, allowed_modules=[])
-        print("Result:", result_5)
     except Exception as e:
         print("Interpreter error:", e)
