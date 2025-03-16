@@ -1,502 +1,839 @@
 import pytest
+import asyncio
+from quantalogic.utils.python_interpreter import execute_async, AsyncExecutionResult
 
-from quantalogic.utils.python_interpreter import interpret_code
 
-
-def test_arithmetic():
+@pytest.mark.asyncio
+async def test_arithmetic():
     # Test basic arithmetic operations.
-    source = "1 + 2 * 3 - 4 / 2"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 1 + 2 * 3 - 4 / 2
+    source = """
+def compute():
+    return 1 + 2 * 3 - 4 / 2
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 1 + 2 * 3 - 4 / 2
 
 
-def test_assignment_and_variable():
+@pytest.mark.asyncio
+async def test_assignment_and_variable():
     # Test variable assignment and usage.
-    source = "a = 10\nb = a * 2\nb"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 20
+    source = """
+def compute():
+    a = 10
+    b = a * 2
+    return b
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 20
 
 
-def test_function_definition_and_call():
+@pytest.mark.asyncio
+async def test_function_definition_and_call():
     # Test function definition and invocation.
     source = """
 def add(x, y):
     return x + y
-result = add(3, 4)
-result
+
+def compute():
+    return add(3, 4)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 7
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 7
 
 
-def test_lambda_function():
+@pytest.mark.asyncio
+async def test_lambda_function():
     # Test lambda function evaluation.
-    source = "f = lambda x: x * 2\nf(5)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 10
+    source = """
+def compute():
+    f = lambda x: x * 2
+    return f(5)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 10
 
 
-def test_list_comprehension():
+@pytest.mark.asyncio
+async def test_list_comprehension():
     # Test list comprehension.
-    source = "[x * x for x in [1,2,3,4]]"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [1, 4, 9, 16]
+    source = """
+def compute():
+    return [x * x for x in [1, 2, 3, 4]]
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [1, 4, 9, 16]
 
 
-def test_for_loop():
+@pytest.mark.asyncio
+async def test_for_loop():
     # Test for loop execution.
     source = """
-s = 0
-for i in [1,2,3,4]:
-    s = s + i
-s
+def compute():
+    s = 0
+    for i in [1, 2, 3, 4]:
+        s = s + i
+    return s
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 10
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 10
 
 
-def test_while_loop_with_break_continue():
+@pytest.mark.asyncio
+async def test_while_loop_with_break_continue():
     # Test while loop with break and continue.
     source = """
-s = 0
-i = 0
-while i < 10:
-    if i % 2 != 0:
+def compute():
+    s = 0
+    i = 0
+    while i < 10:
+        if i % 2 != 0:
+            i = i + 1
+            continue
+        if i == 4:
+            break
+        s = s + i
         i = i + 1
-        continue
-    if i == 4:
-        break
-    s = s + i
-    i = i + 1
-s
+    return s
 """
-    result = interpret_code(source, allowed_modules=[])
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
     # Only even numbers below 4: 0 + 2 = 2
-    assert result == 2
+    assert result.result == 2
 
 
-def test_import_allowed_module():
+@pytest.mark.asyncio
+async def test_import_allowed_module():
     # Test importing an allowed module.
-    source = "import math\nmath.sqrt(16)"
-    result = interpret_code(source, allowed_modules=["math"])
-    assert result == 4.0
+    source = """
+import math
+
+def compute():
+    return math.sqrt(16)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=["math"])
+    assert result.result == 4.0
 
 
-def test_import_disallowed_module():
+@pytest.mark.asyncio
+async def test_import_disallowed_module():
     # Test error when importing a disallowed module.
-    source = "import os\nos.getcwd()"
-    with pytest.raises(Exception) as excinfo:
-        interpret_code(source, allowed_modules=["math"])
-    assert "not allowed" in str(excinfo.value)
+    source = """
+import os
+
+def compute():
+    return os.getcwd()
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=["math"])
+    assert "not allowed" in result.error
 
 
-def test_augmented_assignment():
+@pytest.mark.asyncio
+async def test_augmented_assignment():
     # Test augmented assignment.
-    source = "a = 5\na += 10\na"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 15
+    source = """
+def compute():
+    a = 5
+    a += 10
+    return a
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 15
 
 
-def test_comparison_boolean():
+@pytest.mark.asyncio
+async def test_comparison_boolean():
     # Test comparison and boolean operators.
-    source = "result = (3 < 4) and (5 >= 5) and (6 != 7)\nresult"
-    result = interpret_code(source, allowed_modules=[])
-    assert result is True
+    source = """
+def compute():
+    return (3 < 4) and (5 >= 5) and (6 != 7)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result is True
 
 
-def test_dictionary_list_tuple():
+@pytest.mark.asyncio
+async def test_dictionary_list_tuple():
     # Test dictionary, list, and tuple construction.
     source = """
-d = {'a': 1, 'b': 2}
-lst = [d['a'], d['b']]
-tpl = (lst[0], lst[1])
-tpl
+def compute():
+    d = {'a': 1, 'b': 2}
+    lst = [d['a'], d['b']]
+    tpl = (lst[0], lst[1])
+    return tpl
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == (1, 2)
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == (1, 2)
 
 
-def test_if_statement():
+@pytest.mark.asyncio
+async def test_if_statement():
     # Test if-else statement.
     source = """
-if 10 > 5:
-    result = "greater"
-else:
-    result = "less"
-result
+def compute():
+    if 10 > 5:
+        result = "greater"
+    else:
+        result = "less"
+    return result
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "greater"
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "greater"
 
 
-def test_print_function():
-    # print returns None
-    source = "print('hello')"
-    result = interpret_code(source, allowed_modules=[])
-    assert result is None
-
-
-def test_import_multiple():
-    source = "import math; import random; result = math.sqrt(9)"
-    result = interpret_code(source, allowed_modules=["math", "random"])
-    assert result == 3.0
-
-
-def test_try_except_handling():
+@pytest.mark.asyncio
+async def test_print_function():
+    # print returns None from the function
     source = """
-try:
-    1/0
-except ZeroDivisionError:
-    result = 'caught zero division'
-except Exception:
-    result = 'caught other'
-else:
-    result = 'no error'
-result
+def compute():
+    print('hello')
+    return None
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "caught zero division"
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result is None
 
 
-def test_list_slice():
-    source = "lst = [1,2,3,4,5]\nresult = lst[1:4]"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [2, 3, 4]
+@pytest.mark.asyncio
+async def test_import_multiple():
+    # Test multiple imports
+    source = """
+import math
+import random
+
+def compute():
+    return math.sqrt(9)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=["math", "random"])
+    assert result.result == 3.0
 
 
-def test_dict_comprehension():
-    source = "result = {x: x*x for x in range(3)}"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == {0: 0, 1: 1, 2: 4}
+@pytest.mark.asyncio
+async def test_try_except_handling():
+    # Test try-except handling
+    source = """
+def compute():
+    try:
+        1/0
+    except ZeroDivisionError:
+        result = 'caught zero division'
+    except Exception:
+        result = 'caught other'
+    else:
+        result = 'no error'
+    return result
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "caught zero division"
 
 
-def test_set_comprehension():
-    source = "result = {x for x in range(5) if x % 2 == 0}"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == {0, 2, 4}
+@pytest.mark.asyncio
+async def test_list_slice():
+    # Test list slicing
+    source = """
+def compute():
+    lst = [1, 2, 3, 4, 5]
+    return lst[1:4]
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [2, 3, 4]
 
 
-def test_nested_list_comprehension():
-    source = "result = [[i * j for j in range(3)] for i in range(2)]"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [[0, 0, 0], [0, 1, 2]]
+@pytest.mark.asyncio
+async def test_dict_comprehension():
+    # Test dictionary comprehension
+    source = """
+def compute():
+    return {x: x*x for x in range(3)}
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == {0: 0, 1: 1, 2: 4}
 
 
-def test_recursive_function_factorial():
-    source = "def fact(n):\n    return 1 if n<=1 else n * fact(n-1)\nresult = fact(5)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 120
+@pytest.mark.asyncio
+async def test_set_comprehension():
+    # Test set comprehension
+    source = """
+def compute():
+    return {x for x in range(5) if x % 2 == 0}
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == {0, 2, 4}
 
 
-def test_class_definition():
-    # Fix: Corrected indentation to match Python syntax rules
+@pytest.mark.asyncio
+async def test_nested_list_comprehension():
+    # Test nested list comprehension
+    source = """
+def compute():
+    return [[i * j for j in range(3)] for i in range(2)]
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [[0, 0, 0], [0, 1, 2]]
+
+
+@pytest.mark.asyncio
+async def test_recursive_function_factorial():
+    # Test recursive function for factorial
+    source = """
+def fact(n):
+    return 1 if n <= 1 else n * fact(n-1)
+
+def compute():
+    return fact(5)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 120
+
+
+@pytest.mark.asyncio
+async def test_class_definition():
+    # Test class definition and instance attribute
     source = """
 class A:
     def __init__(self, x):
         self.x = x
-a = A(10)
-result = a.x
+
+def compute():
+    a = A(10)
+    return a.x
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 10
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 10
 
 
-def test_with_statement():
-    source = (
-        "class Ctx:\n"
-        "    def __enter__(self): return 100\n"
-        "    def __exit__(self, exc_type, exc_val, exc_tb): pass\n"
-        "with Ctx() as x:\n"
-        "    result = x"
-    )
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 100
-
-
-def test_lambda_expression():
-    source = "f = lambda x: x + 1\nresult = f(5)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 6
-
-
-def test_generator_expression():
-    source = "gen = (x*x for x in range(4))\nresult = list(gen)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [0, 1, 4, 9]
-
-
-def test_list_unpacking():
-    source = "a, b, c = [1,2,3]\nresult = a + b + c"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 6
-
-
-def test_extended_iterable_unpacking():
-    source = "a, *b = [1,2,3,4]\nresult = a + sum(b)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 10
-
-
-def test_f_string():
-    source = "name = 'world'\nresult = f'Hello {name}'"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "Hello world"
-
-
-def test_format_method():
-    source = "result = 'Hello {}'.format('there')"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "Hello there"
-
-
-def test_simple_conditional_expression():
-    source = "x = 5\nresult = 'big' if x > 3 else 'small'"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "big"
-
-
-def test_multiple_statements():
-    source = "a = 1; b = 2; result = a + b"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 3
-
-
-def test_arithmetic_complex():
-    source = "result = (2 + 3) * 4 - 5 / 2"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 17.5
-
-
-def test_bool_logic():
-    source = "result = (True and False) or (False or True)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result is True
-
-
-def test_ternary():
-    source = "x = 10\nresult = 'even' if x % 2 == 0 else 'odd'"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "even"
-
-
-def test_chained_comparisons():
-    source = "result = (1 < 2 < 3)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result is True
-
-
-def test_slice_assignment():
-    source = "lst = [0,0,0,0,0]\nlst[1:4] = [1,2,3]\nresult = lst"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [0, 1, 2, 3, 0]
-
-
-def test_exception_raising():
-    # Fix: No change needed in test; interpreter now handles exceptions correctly
-    source = (
-        "def f():\n"
-        "    raise ValueError('bad')\n"
-        "try:\n"
-        "    f()\n"
-        "except ValueError:\n"
-        "    result = 'caught'\n"
-        "result"
-    )
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "caught"
-
-
-def test_import_error_again():
-    source = "import os\nresult = os.getcwd()"
-    with pytest.raises(Exception):
-        interpret_code(source, allowed_modules=["math"])
-
-
-def test_global_variable():
-    source = "a = 5\ndef foo():\n    global a\n    a = a + 10\nfoo()\nresult = a"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 15
-
-
-def test_nonlocal_variable():
-    source = (
-        "def outer():\n"
-        "    a = 5\n"
-        "    def inner():\n"
-        "        nonlocal a\n"
-        "        a += 5\n"
-        "        return a\n"
-        "    return inner()\n"
-        "result = outer()"
-    )
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 10
-
-
-def test_comprehension_scope():
-    source = (
-        "result = [x for x in range(3)]\n"
-        "try:\n"
-        "    x\n"
-        "except NameError:\n"
-        "    result2 = True\n"
-        "result = (result, result2)"
-    )
-    result = interpret_code(source, allowed_modules=[])
-    assert result == ([0, 1, 2], True)
-
-
-def test_order_of_operations():
-    source = "result = 2 + 3 * 4"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 14
-
-
-def test_bitwise_operators():
-    source = "result = (5 & 3) | (8 ^ 2)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 11
-
-
-def test_is_operator():
-    source = "a = [1]\nb = a\nresult = (a is b)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result is True
-
-
-def test_in_operator():
-    source = "lst = [1,2,3]\nresult = (2 in lst)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result is True
-
-
-def test_iterators():
-    source = "it = iter([1,2,3])\nresult = next(it)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 1
-
-
-def test_list_concatenation():
-    source = "result = [1] + [2, 3]"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [1, 2, 3]
-
-
-def test_dictionary_methods():
-    source = "d = {'a':1, 'b':2}\nresult = sorted(list(d.keys()))"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == ["a", "b"]
-
-
-def test_string_methods():
-    source = "result = 'hello'.upper()"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "HELLO"
-
-
-def test_frozenset():
-    source = "result = frozenset([1,2,2,3])"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == frozenset({1, 2, 3})
-
-
-def test_tuple_unpacking():
-    source = "a, b = (10, 20)\nresult = a * b"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 200
-
-
-def test_complex_numbers():
-    source = "result = (1+2j)*(3+4j)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == complex(-5, 10)
-
-
-def test_try_finally():
-    source = (
-        "try:\n"
-        "    x = 1/0\n"
-        "except ZeroDivisionError:\n"
-        "    result = 'handled'\n"
-        "finally:\n"
-        "    pass\n"
-        "result"
-    )
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "handled"
-
-
-def test_multiple_expressions():
-    source = "a = 1\nb = 2\nc = 3\nresult = a + b + c"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 6
-
-
-def test_nested_functions():
-    source = "def outer():\n" "    def inner():\n" "        return 5\n" "    return inner()\n" "result = outer()"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 5
-
-
-def test_list_comprehension_with_function_call():
-    source = "def square(x): return x * x\n" "result = [square(x) for x in range(4)]"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [0, 1, 4, 9]
-
-
-def test_lambda_closure():
-    source = "def make_adder(n):\n" "    return lambda x: x + n\n" "adder = make_adder(10)\n" "result = adder(5)"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 15
-
-
-def test_generator_iterator():
-    source = "def gen():\n" "    yield 1\n" "    yield 2\n" "result = list(gen())"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [1, 2]
-
-
-def test_operator_precedence():
-    source = "result = 2 ** 3 * 4"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 32
-
-
-def test_nested_dictionary():
-    source = "result = {'a': {'b': 2}}['a']['b']"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 2
-
-
-def test_slice_of_string():
-    source = "result = 'hello'[1:4]"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "ell"
-
-
-def test_backslash_in_string():
-    source = "result = 'line1\\nline2'"
-    result = interpret_code(source, allowed_modules=[])
-    # The literal 'line1\nline2' has an actual newline character.
-    assert result == "line1\nline2"
-
-
-def test_set_operations():
-    # Fix: No change needed in test; interpreter now handles set literals correctly
+@pytest.mark.asyncio
+async def test_with_statement():
+    # Test with statement with a custom context manager
     source = """
-s1 = {1, 2, 3}
-s2 = {2, 3, 4}
-union = s1 | s2
-intersection = s1 & s2
-difference = s1 - s2
-result = (union, intersection, difference)
+class Ctx:
+    def __enter__(self):
+        return 100
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+def compute():
+    with Ctx() as x:
+        return x
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == ({1, 2, 3, 4}, {2, 3}, {1})
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 100
 
 
-def test_class_inheritance():
-    # Fix: No change needed in test; interpreter now handles __init__ correctly
+@pytest.mark.asyncio
+async def test_lambda_expression():
+    # Test lambda expression
+    source = """
+def compute():
+    f = lambda x: x + 1
+    return f(5)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 6
+
+
+@pytest.mark.asyncio
+async def test_generator_expression():
+    # Test generator expression
+    source = """
+def compute():
+    gen = (x*x for x in range(4))
+    return list(gen)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [0, 1, 4, 9]
+
+
+@pytest.mark.asyncio
+async def test_list_unpacking():
+    # Test list unpacking
+    source = """
+def compute():
+    a, b, c = [1, 2, 3]
+    return a + b + c
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 6
+
+
+@pytest.mark.asyncio
+async def test_extended_iterable_unpacking():
+    # Test extended iterable unpacking
+    source = """
+def compute():
+    a, *b = [1, 2, 3, 4]
+    return a + sum(b)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 10
+
+
+@pytest.mark.asyncio
+async def test_f_string():
+    # Test f-string
+    source = """
+def compute():
+    name = 'world'
+    return f'Hello {name}'
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "Hello world"
+
+
+@pytest.mark.asyncio
+async def test_format_method():
+    # Test string format method
+    source = """
+def compute():
+    return 'Hello {}'.format('there')
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "Hello there"
+
+
+@pytest.mark.asyncio
+async def test_simple_conditional_expression():
+    # Test conditional expression
+    source = """
+def compute():
+    x = 5
+    return 'big' if x > 3 else 'small'
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "big"
+
+
+@pytest.mark.asyncio
+async def test_multiple_statements():
+    # Test multiple statements on one line
+    source = """
+def compute():
+    a = 1; b = 2; return a + b
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 3
+
+
+@pytest.mark.asyncio
+async def test_arithmetic_complex():
+    # Test complex arithmetic
+    source = """
+def compute():
+    return (2 + 3) * 4 - 5 / 2
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 17.5
+
+
+@pytest.mark.asyncio
+async def test_bool_logic():
+    # Test boolean logic
+    source = """
+def compute():
+    return (True and False) or (False or True)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result is True
+
+
+@pytest.mark.asyncio
+async def test_ternary():
+    # Test ternary operator
+    source = """
+def compute():
+    x = 10
+    return 'even' if x % 2 == 0 else 'odd'
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "even"
+
+
+@pytest.mark.asyncio
+async def test_chained_comparisons():
+    # Test chained comparisons
+    source = """
+def compute():
+    return (1 < 2 < 3)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result is True
+
+
+@pytest.mark.asyncio
+async def test_slice_assignment():
+    # Test slice assignment
+    source = """
+def compute():
+    lst = [0, 0, 0, 0, 0]
+    lst[1:4] = [1, 2, 3]
+    return lst
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [0, 1, 2, 3, 0]
+
+
+@pytest.mark.asyncio
+async def test_exception_raising():
+    # Test exception raising and catching
+    source = """
+def f():
+    raise ValueError('bad')
+
+def compute():
+    try:
+        f()
+    except ValueError:
+        return 'caught'
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "caught"
+
+
+@pytest.mark.asyncio
+async def test_import_error_again():
+    # Test import error again
+    source = """
+import os
+
+def compute():
+    return os.getcwd()
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=["math"])
+    assert "not allowed" in result.error
+
+
+@pytest.mark.asyncio
+async def test_global_variable():
+    # Test global variable
+    source = """
+a = 5
+
+def foo():
+    global a
+    a = a + 10
+
+def compute():
+    foo()
+    return a
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 15
+
+
+@pytest.mark.asyncio
+async def test_nonlocal_variable():
+    # Test nonlocal variable
+    source = """
+def outer():
+    a = 5
+    def inner():
+        nonlocal a
+        a += 5
+        return a
+    return inner()
+
+def compute():
+    return outer()
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 10
+
+
+@pytest.mark.asyncio
+async def test_comprehension_scope():
+    # Test comprehension scope
+    source = """
+def compute():
+    result = [x for x in range(3)]
+    try:
+        x
+    except NameError:
+        result2 = True
+    return (result, result2)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == ([0, 1, 2], True)
+
+
+@pytest.mark.asyncio
+async def test_order_of_operations():
+    # Test order of operations
+    source = """
+def compute():
+    return 2 + 3 * 4
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 14
+
+
+@pytest.mark.asyncio
+async def test_bitwise_operators():
+    # Test bitwise operators
+    source = """
+def compute():
+    return (5 & 3) | (8 ^ 2)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 11
+
+
+@pytest.mark.asyncio
+async def test_is_operator():
+    # Test is operator
+    source = """
+def compute():
+    a = [1]
+    b = a
+    return (a is b)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result is True
+
+
+@pytest.mark.asyncio
+async def test_in_operator():
+    # Test in operator
+    source = """
+def compute():
+    lst = [1, 2, 3]
+    return (2 in lst)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result is True
+
+
+@pytest.mark.asyncio
+async def test_iterators():
+    # Test iterators
+    source = """
+def compute():
+    it = iter([1, 2, 3])
+    return next(it)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 1
+
+
+@pytest.mark.asyncio
+async def test_list_concatenation():
+    # Test list concatenation
+    source = """
+def compute():
+    return [1] + [2, 3]
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_dictionary_methods():
+    # Test dictionary methods
+    source = """
+def compute():
+    d = {'a': 1, 'b': 2}
+    return sorted(list(d.keys()))
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == ["a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_string_methods():
+    # Test string methods
+    source = """
+def compute():
+    return 'hello'.upper()
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "HELLO"
+
+
+@pytest.mark.asyncio
+async def test_frozenset():
+    # Test frozenset
+    source = """
+def compute():
+    return frozenset([1, 2, 2, 3])
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == frozenset({1, 2, 3})
+
+
+@pytest.mark.asyncio
+async def test_tuple_unpacking():
+    # Test tuple unpacking
+    source = """
+def compute():
+    a, b = (10, 20)
+    return a * b
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 200
+
+
+@pytest.mark.asyncio
+async def test_complex_numbers():
+    # Test complex numbers
+    source = """
+def compute():
+    return (1+2j) * (3+4j)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == complex(-5, 10)
+
+
+@pytest.mark.asyncio
+async def test_try_finally():
+    # Test try-finally
+    source = """
+def compute():
+    result = None
+    try:
+        x = 1/0
+    except ZeroDivisionError:
+        result = 'handled'
+    finally:
+        pass
+    return result
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "handled"
+
+
+@pytest.mark.asyncio
+async def test_multiple_expressions():
+    # Test multiple expressions
+    source = """
+def compute():
+    a = 1
+    b = 2
+    c = 3
+    return a + b + c
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 6
+
+
+@pytest.mark.asyncio
+async def test_nested_functions():
+    # Test nested functions
+    source = """
+def outer():
+    def inner():
+        return 5
+    return inner()
+
+def compute():
+    return outer()
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 5
+
+
+@pytest.mark.asyncio
+async def test_list_comprehension_with_function_call():
+    # Test list comprehension with function call
+    source = """
+def square(x):
+    return x * x
+
+def compute():
+    return [square(x) for x in range(4)]
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [0, 1, 4, 9]
+
+
+@pytest.mark.asyncio
+async def test_lambda_closure():
+    # Test lambda closure
+    source = """
+def make_adder(n):
+    return lambda x: x + n
+
+def compute():
+    adder = make_adder(10)
+    return adder(5)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 15
+
+
+@pytest.mark.asyncio
+async def test_generator_iterator():
+    # Test generator iterator
+    source = """
+def gen():
+    yield 1
+    yield 2
+
+def compute():
+    return list(gen())
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_operator_precedence():
+    # Test operator precedence
+    source = """
+def compute():
+    return 2 ** 3 * 4
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 32
+
+
+@pytest.mark.asyncio
+async def test_nested_dictionary():
+    # Test nested dictionary
+    source = """
+def compute():
+    return {'a': {'b': 2}}['a']['b']
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 2
+
+
+@pytest.mark.asyncio
+async def test_slice_of_string():
+    # Test slice of string
+    source = """
+def compute():
+    return 'hello'[1:4]
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "ell"
+
+
+@pytest.mark.asyncio
+async def test_backslash_in_string():
+    # Test backslash in string
+    source = """
+def compute():
+    return 'line1\\nline2'
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "line1\nline2"
+
+
+@pytest.mark.asyncio
+async def test_set_operations():
+    # Test set operations
+    source = """
+def compute():
+    s1 = {1, 2, 3}
+    s2 = {2, 3, 4}
+    union = s1 | s2
+    intersection = s1 & s2
+    difference = s1 - s2
+    return (union, intersection, difference)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == ({1, 2, 3, 4}, {2, 3}, {1})
+
+
+@pytest.mark.asyncio
+async def test_class_inheritance():
+    # Test class inheritance
     source = """
 class Base:
     def __init__(self):
@@ -512,220 +849,305 @@ class Derived(Base):
         self.y += 1
         return (self.x, self.y)
 
-obj = Derived()
-result = obj.method()
+def compute():
+    obj = Derived()
+    return obj.method()
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == (3, 3)
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == (3, 3)
 
 
-def test_decorator():
+@pytest.mark.asyncio
+async def test_decorator():
+    # Test decorator
     source = """
 def deco(func):
     def wrapper(*args):
         return func(*args) + 1
     return wrapper
+
 @deco
 def add(a, b):
     return a + b
-result = add(2, 3)
+
+def compute():
+    return add(2, 3)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 6
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 6
 
 
-def test_nested_generator():
-    # Fix: Updated expected result to match actual interpreter output
+@pytest.mark.asyncio
+async def test_nested_generator():
+    # Test nested generator
     source = """
 def nested_gen():
     for i in range(2):
         yield from (x * i for x in range(3))
-result = list(nested_gen())
+
+def compute():
+    return list(nested_gen())
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [0, 0, 0, 0, 1, 2]  # Corrected from [0, 1, 2, 0, 3, 6]
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [0, 0, 0, 0, 1, 2]
 
 
-def test_extended_slice():
-    source = "lst = [0, 1, 2, 3, 4, 5]\nresult = lst[::2]"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [0, 2, 4]
-
-
-def test_string_formatting_multiple():
-    source = "a = 5\nb = 'test'\nresult = f'{a} is {b}'"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "5 is test"
-
-
-def test_bitwise_shift():
-    source = "result = (4 << 2) >> 1"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 8  # 4 << 2 = 16, 16 >> 1 = 8
-
-
-def test_complex_arithmetic():
-    source = "result = (2 + 3j) + (1 - 2j) * 2"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == (4 - 1j)
-
-
-def test_try_except_finally():
-    # Fix: Adjusted finally logic to preserve 'error' instead of overwriting with True
+@pytest.mark.asyncio
+async def test_extended_slice():
+    # Test extended slice
     source = """
-result = None
-try:
-    x = 1 / 0
-except ZeroDivisionError:
-    result = "error"
-finally:
-    if result is None:
-        result = "finally"
-result
+def compute():
+    lst = [0, 1, 2, 3, 4, 5]
+    return lst[::2]
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "error"
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [0, 2, 4]
 
 
-def test_multi_line_expression():
+@pytest.mark.asyncio
+async def test_string_formatting_multiple():
+    # Test multiple string formatting
     source = """
-result = (1 + 2 +
-          3 * 4 -
-          5)
+def compute():
+    a = 5
+    b = 'test'
+    return f'{a} is {b}'
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 10
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "5 is test"
 
 
-def test_default_arguments():
+@pytest.mark.asyncio
+async def test_bitwise_shift():
+    # Test bitwise shift
+    source = """
+def compute():
+    return (4 << 2) >> 1
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 8  # 4 << 2 = 16, 16 >> 1 = 8
+
+
+@pytest.mark.asyncio
+async def test_complex_arithmetic():
+    # Test complex arithmetic
+    source = """
+def compute():
+    return (2 + 3j) + (1 - 2j) * 2
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == (4 - 1j)
+
+
+@pytest.mark.asyncio
+async def test_try_except_finally():
+    # Test try-except-finally
+    source = """
+def compute():
+    result = None
+    try:
+        x = 1 / 0
+    except ZeroDivisionError:
+        result = "error"
+    finally:
+        if result is None:
+            result = "finally"
+    return result
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "error"
+
+
+@pytest.mark.asyncio
+async def test_multi_line_expression():
+    # Test multi-line expression
+    source = """
+def compute():
+    return (1 + 2 +
+            3 * 4 -
+            5)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 10
+
+
+@pytest.mark.asyncio
+async def test_default_arguments():
+    # Test default arguments
     source = """
 def func(x, y=10):
     return x + y
-result = func(5)
+
+def compute():
+    return func(5)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 15
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 15
 
 
-def test_keyword_arguments():
+@pytest.mark.asyncio
+async def test_keyword_arguments():
+    # Test keyword arguments
     source = """
 def func(a, b):
     return a - b
-result = func(b=3, a=10)
+
+def compute():
+    return func(b=3, a=10)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 7
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 7
 
 
-def test_star_args():
+@pytest.mark.asyncio
+async def test_star_args():
+    # Test star args
     source = """
 def sum_all(*args):
     return sum(args)
-result = sum_all(1, 2, 3, 4)
+
+def compute():
+    return sum_all(1, 2, 3, 4)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 10
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 10
 
 
-def test_kwargs():
+@pytest.mark.asyncio
+async def test_kwargs():
+    # Test kwargs
     source = """
 def build_dict(**kwargs):
     return kwargs
-result = build_dict(x=1, y=2)
+
+def compute():
+    return build_dict(x=1, y=2)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == {"x": 1, "y": 2}
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == {"x": 1, "y": 2}
 
 
-def test_mixed_args():
+@pytest.mark.asyncio
+async def test_mixed_args():
+    # Test mixed args
     source = """
 def mixed(a, b=2, *args, **kwargs):
     return a + b + sum(args) + kwargs.get('x', 0)
-result = mixed(1, 3, 4, 5, x=6)
+
+def compute():
+    return mixed(1, 3, 4, 5, x=6)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 19  # 1 + 3 + (4 + 5) + 6
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 19  # 1 + 3 + (4 + 5) + 6
 
 
-def test_list_methods():
+@pytest.mark.asyncio
+async def test_list_methods():
+    # Test list methods
     source = """
-lst = [1, 2, 3]
-lst.append(4)
-lst.pop(0)
-result = lst
+def compute():
+    lst = [1, 2, 3]
+    lst.append(4)
+    lst.pop(0)
+    return lst
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [2, 3, 4]
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [2, 3, 4]
 
 
-def test_string_concatenation():
-    source = "result = 'a' + 'b' * 3"
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "abbb"
+@pytest.mark.asyncio
+async def test_string_concatenation():
+    # Test string concatenation
+    source = """
+def compute():
+    return 'a' + 'b' * 3
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "abbb"
 
 
-def test_none_comparison():
-    source = "a = None\nresult = a is None"
-    result = interpret_code(source, allowed_modules=[])
-    assert result is True
+@pytest.mark.asyncio
+async def test_none_comparison():
+    # Test None comparison
+    source = """
+def compute():
+    a = None
+    return a is None
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result is True
 
 
-def test_boolean_short_circuit():
+@pytest.mark.asyncio
+async def test_boolean_short_circuit():
+    # Test boolean short-circuit
     source = """
 def risky():
     raise ValueError
-result = False and risky()
+
+def compute():
+    return False and risky()
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result is False  # risky() should not be called
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result is False  # risky() should not be called
 
 
-def test_nested_if():
+@pytest.mark.asyncio
+async def test_nested_if():
+    # Test nested if
     source = """
-x = 10
-if x > 5:
-    if x < 15:
-        result = "in range"
+def compute():
+    x = 10
+    if x > 5:
+        if x < 15:
+            result = "in range"
+        else:
+            result = "too big"
     else:
-        result = "too big"
-else:
-    result = "too small"
-result
+        result = "too small"
+    return result
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "in range"
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "in range"
 
 
-def test_loop_with_else():
+@pytest.mark.asyncio
+async def test_loop_with_else():
+    # Test loop with else
     source = """
-result = 0
-for i in range(3):
-    result += i
-else:
-    result += 10
-result
+def compute():
+    result = 0
+    for i in range(3):
+        result += i
+    else:
+        result += 10
+    return result
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 13  # 0 + 1 + 2 + 10
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 13  # 0 + 1 + 2 + 10
 
 
-def test_break_in_loop_with_else():
+@pytest.mark.asyncio
+async def test_break_in_loop_with_else():
+    # Test break in loop with else
     source = """
-result = 0
-for i in range(5):
-    if i == 2:
-        break
-    result += i
-else:
-    result += 10
-result
+def compute():
+    result = 0
+    for i in range(5):
+        if i == 2:
+            break
+        result += i
+    else:
+        result += 10
+    return result
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 1  # 0 + 1, breaks before else
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 1  # 0 + 1, breaks before else
 
 
-def test_property_decorator():
-    # Fix: No change needed in test; interpreter now handles __init__ correctly
+@pytest.mark.asyncio
+async def test_property_decorator():
+    # Test property decorator
     source = """
 class A:
     def __init__(self):
@@ -733,156 +1155,220 @@ class A:
     @property
     def x(self):
         return self._x
-a = A()
-result = a.x
+
+def compute():
+    a = A()
+    return a.x
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 5
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 5
 
 
-def test_static_method():
+@pytest.mark.asyncio
+async def test_static_method():
+    # Test static method
     source = """
 class A:
     @staticmethod
     def add(x, y):
         return x + y
-result = A.add(3, 4)
+
+def compute():
+    return A.add(3, 4)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 7
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 7
 
 
-def test_class_method():
+@pytest.mark.asyncio
+async def test_class_method():
+    # Test class method
     source = """
 class A:
     @classmethod
     def get(cls):
         return 42
-result = A.get()
+
+def compute():
+    return A.get()
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 42
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 42
 
 
-def test_type_hint_ignored():
+@pytest.mark.asyncio
+async def test_type_hint_ignored():
+    # Test type hints ignored
     source = """
 def add(a: int, b: str) -> float:
     return a + b  # Type hints ignored in execution
-result = add(3, 4)
+
+def compute():
+    return add(3, 4)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 7
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 7
 
 
-def test_list_del():
+@pytest.mark.asyncio
+async def test_list_del():
+    # Test list deletion
     source = """
-lst = [1, 2, 3, 4]
-del lst[1]
-result = lst
+def compute():
+    lst = [1, 2, 3, 4]
+    del lst[1]
+    return lst
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [1, 3, 4]
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [1, 3, 4]
 
 
-def test_dict_del():
+@pytest.mark.asyncio
+async def test_dict_del():
+    # Test dictionary deletion
     source = """
-d = {'a': 1, 'b': 2}
-del d['a']
-result = d
+def compute():
+    d = {'a': 1, 'b': 2}
+    del d['a']
+    return d
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == {'b': 2}
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == {'b': 2}
 
 
-def test_augmented_assignments_all():
+@pytest.mark.asyncio
+async def test_augmented_assignments_all():
+    # Test all augmented assignments
     source = """
-x = 10
-x += 5
-x -= 2
-x *= 3
-x //= 2
-x %= 5
-result = x
+def compute():
+    x = 10
+    x += 5
+    x -= 2
+    x *= 3
+    x //= 2
+    x %= 5
+    return x
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 4  # (((10 + 5) - 2) * 3) // 2 % 5
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 4  # (((10 + 5) - 2) * 3) // 2 % 5
 
 
-def test_empty_structures():
+@pytest.mark.asyncio
+async def test_empty_structures():
+    # Test empty structures
     source = """
-a = []
-b = {}
-c = set()
-d = ()
-result = (len(a), len(b), len(c), len(d))
+def compute():
+    a = []
+    b = {}
+    c = set()
+    d = ()
+    return (len(a), len(b), len(c), len(d))
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == (0, 0, 0, 0)
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == (0, 0, 0, 0)
 
 
-def test_multi_level_nesting():
+@pytest.mark.asyncio
+async def test_multi_level_nesting():
+    # Test multi-level nesting
     source = """
-result = {'a': [1, {'b': (2, 3)}]}['a'][1]['b'][1]
+def compute():
+    return {'a': [1, {'b': (2, 3)}]}['a'][1]['b'][1]
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 3
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 3
 
 
-def test_identity_vs_equality():
+@pytest.mark.asyncio
+async def test_identity_vs_equality():
+    # Test identity vs equality
     source = """
-a = [1, 2]
-b = [1, 2]
-result = (a == b, a is b)
+def compute():
+    a = [1, 2]
+    b = [1, 2]
+    return (a == b, a is b)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == (True, False)
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == (True, False)
 
 
-def test_exception_with_message():
+@pytest.mark.asyncio
+async def test_exception_with_message():
+    # Test exception with message
     source = """
-try:
-    raise ValueError("test error")
-except ValueError as e:
-    result = str(e)
-result
+def compute():
+    try:
+        raise ValueError("test error")
+    except ValueError as e:
+        return str(e)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == "test error"
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == "test error"
 
 
-def test_generator_with_condition():
+@pytest.mark.asyncio
+async def test_generator_with_condition():
+    # Test generator with condition
     source = """
-gen = (x for x in range(5) if x % 2 == 0)
-result = list(gen)
+def compute():
+    gen = (x for x in range(5) if x % 2 == 0)
+    return list(gen)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [0, 2, 4]
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [0, 2, 4]
 
 
-def test_slice_with_negative_indices():
+@pytest.mark.asyncio
+async def test_slice_with_negative_indices():
+    # Test slice with negative indices
     source = """
-lst = [0, 1, 2, 3, 4]
-result = lst[-3:-1]
+def compute():
+    lst = [0, 1, 2, 3, 4]
+    return lst[-3:-1]
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == [2, 3]
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == [2, 3]
 
 
-def test_multiple_assignments():
+@pytest.mark.asyncio
+async def test_multiple_assignments():
+    # Test multiple assignments
     source = """
-a = b = c = 5
-result = a + b + c
+def compute():
+    a = b = c = 5
+    return a + b + c
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == 15
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == 15
 
 
-def test_swap_variables():
+@pytest.mark.asyncio
+async def test_swap_variables():
+    # Test swap variables
     source = """
-a = 1
-b = 2
-a, b = b, a
-result = (a, b)
+def compute():
+    a = 1
+    b = 2
+    a, b = b, a
+    return (a, b)
 """
-    result = interpret_code(source, allowed_modules=[])
-    assert result == (2, 1)
+    result = await execute_async(source, entry_point="compute", allowed_modules=[])
+    assert result.result == (2, 1)
+
+
+# Example of an async test case
+@pytest.mark.asyncio
+async def test_async_function():
+    # Test an async function
+    source = """
+import asyncio
+
+async def async_compute(x, delay=0.1):
+    await asyncio.sleep(delay)
+    return x * 2
+
+def compute():
+    return async_compute(5)
+"""
+    result = await execute_async(source, entry_point="compute", allowed_modules=["asyncio"])
+    assert result.result == 10
