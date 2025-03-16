@@ -6,7 +6,7 @@ import textwrap
 import time
 from asyncio import TimeoutError
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Callable, Type
 
 @dataclass
 class AsyncExecutionResult:
@@ -34,6 +34,7 @@ class WrappedException(Exception):
         self.lineno: int = lineno
         self.col: int = col
         self.context_line: str = context_line
+        self.message = str(original_exception)  # Correct variable name
 
 
 def has_await(node: ast.AST) -> bool:
@@ -118,6 +119,8 @@ class ASTInterpreter:
         self.loop = None
         self.current_class = None
         self.current_instance = None
+        self.current_exception = None
+        self.last_exception = None
 
     def safe_import(
         self,
@@ -571,13 +574,12 @@ class ASTInterpreter:
         # Handle calls on super objects
         if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Call) and isinstance(node.func.value.func, ast.Name) and node.func.value.func.id == 'super':
             # Handle super() calls
-            if self.current_class and self.current_instance:
-                base_class = (await self.visit(self.current_class.bases[0])) if self.current_class.bases else object
-                method = getattr(base_class, node.func.attr, None)
-                if method:
-                    args = [await self.visit(arg) for arg in node.args]
-                    return await method(self.current_instance, *args)
-
+            super_call = await self.visit(node.func.value, wrap_exceptions=wrap_exceptions)
+            instance = self.current_instance  # Use stored class instance
+            parent_class = super_call.__thisclass__
+            method = getattr(parent_class, node.func.attr)
+            # Pass instance explicitly as first argument
+            return await self._execute_function(method, [instance] + evaluated_args, kwargs)
         # Handle list with async iterables
         if func is list and len(evaluated_args) == 1 and hasattr(evaluated_args[0], '__aiter__'):
             return [val async for val in evaluated_args[0]]
@@ -588,20 +590,7 @@ class ASTInterpreter:
 
         # Special case for class instantiation and exceptions
         if inspect.isclass(func):
-            instance = func.__new__(func)
-            if instance is not None:
-                init_method = getattr(func, '__init__', None)
-                if init_method:
-                    if isinstance(init_method, Function):
-                        # Call custom __init__ with instance
-                        await init_method(instance, *evaluated_args, **kwargs)
-                    else:
-                        # Handle built-in exceptions and standard classes
-                        if issubclass(func, BaseException):
-                            # Create exception instance with arguments
-                            instance = func(*evaluated_args, **kwargs)
-                        else:
-                            init_method(instance, *evaluated_args, **kwargs)
+            instance = await self._create_class_instance(func, *evaluated_args, **kwargs)
             return instance
 
         # Handle super() with or without arguments
@@ -644,6 +633,31 @@ class ASTInterpreter:
             if asyncio.iscoroutine(result) and not is_await_context:
                 result = await result
         return result
+
+    async def _create_class_instance(self, cls: Type, *args, **kwargs):
+        if cls in (super, Exception, BaseException) or issubclass(cls, BaseException):
+            instance = cls.__new__(cls, *args, **kwargs)
+            if hasattr(instance, '__init__'):
+                init_method = instance.__init__.__func__ if hasattr(instance.__init__, '__func__') else instance.__init__
+                await self._execute_function(init_method, [instance] + list(args), kwargs)
+            return instance
+        instance = object.__new__(cls)
+        init_method = cls.__init__.__func__ if hasattr(cls.__init__, '__func__') else cls.__init__
+        await self._execute_function(init_method, [instance] + list(args), kwargs)
+        return instance
+
+    async def _execute_function(self, func: Callable, args: list, kwargs: dict) -> Any:
+        try:
+            if asyncio.iscoroutinefunction(func):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
+                if asyncio.iscoroutine(result):
+                    result = await result
+            return result
+        except Exception as e:
+            func_name = getattr(func, '__name__', str(func))
+            raise WrappedException(f"Error executing {func_name}: {str(e)}", e, 0, 0, "") from e
 
     async def visit_Await(self, node: ast.Await, wrap_exceptions: bool = True) -> Any:
         coro = await self.visit(node.value, is_await_context=True, wrap_exceptions=wrap_exceptions)
