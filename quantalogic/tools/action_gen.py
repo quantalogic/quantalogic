@@ -33,8 +33,11 @@ class AddTool(Tool):
         )
     
     async def async_execute(self, **kwargs) -> str:
+        logger.info(f"Starting tool execution: {self.name}")
         logger.info(f"Adding {kwargs['a']} and {kwargs['b']}")
-        return str(int(kwargs["a"]) + int(kwargs["b"]))
+        result = str(int(kwargs["a"]) + int(kwargs["b"]))
+        logger.info(f"Finished tool execution: {self.name}")
+        return result
 
 class MultiplyTool(Tool):
     def __init__(self):
@@ -49,8 +52,11 @@ class MultiplyTool(Tool):
         )
     
     async def async_execute(self, **kwargs) -> str:
+        logger.info(f"Starting tool execution: {self.name}")
         logger.info(f"Multiplying {kwargs['x']} and {kwargs['y']}")
-        return str(int(kwargs["x"]) * int(kwargs["y"]))
+        result = str(int(kwargs["x"]) * int(kwargs["y"]))
+        logger.info(f"Finished tool execution: {self.name}")
+        return result
 
 class ConcatTool(Tool):
     def __init__(self):
@@ -65,8 +71,11 @@ class ConcatTool(Tool):
         )
     
     async def async_execute(self, **kwargs) -> str:
+        logger.info(f"Starting tool execution: {self.name}")
         logger.info(f"Concatenating '{kwargs['s1']}' and '{kwargs['s2']}'")
-        return kwargs["s1"] + kwargs["s2"]
+        result = kwargs["s1"] + kwargs["s2"]
+        logger.info(f"Finished tool execution: {self.name}")
+        return result
 
 class AgentTool(Tool):
     def __init__(self, model: str = "gemini/gemini-2.0-flash"):
@@ -83,6 +92,7 @@ class AgentTool(Tool):
         self.model = model
     
     async def async_execute(self, **kwargs) -> str:
+        logger.info(f"Starting tool execution: {self.name}")
         system_prompt = kwargs["system_prompt"]
         prompt = kwargs["prompt"]
         temperature = float(kwargs["temperature"])
@@ -112,7 +122,9 @@ class AgentTool(Tool):
                 )
                 generated_text = response.choices[0].message.content.strip()
                 logger.debug(f"Generated text: {generated_text}")
-                return generated_text
+                result = generated_text
+                logger.info(f"Finished tool execution: {self.name}")
+                return result
         except TimeoutError as e:
             error_msg = f"API call to {self.model} timed out after 30 seconds"
             logger.error(error_msg)
