@@ -19,14 +19,11 @@ class ReturnException(Exception):
     def __init__(self, value: Any) -> None:
         self.value: Any = value
 
-
 class BreakException(Exception):
     pass
 
-
 class ContinueException(Exception):
     pass
-
 
 class WrappedException(Exception):
     def __init__(self, message: str, original_exception: Exception, lineno: int, col: int, context_line: str):
@@ -37,13 +34,11 @@ class WrappedException(Exception):
         self.context_line: str = context_line
         self.message = str(original_exception)  # Correct variable name
 
-
 def has_await(node: ast.AST) -> bool:
     for child in ast.walk(node):
         if isinstance(child, ast.Await):
             return True
     return False
-
 
 class ASTInterpreter:
     def __init__(
@@ -589,15 +584,18 @@ class ASTInterpreter:
             else:
                 kwargs[kw.arg] = await self.visit(kw.value, wrap_exceptions=wrap_exceptions)
 
+        # Special handling for str() on exceptions
+        if func is str and len(evaluated_args) == 1 and isinstance(evaluated_args[0], BaseException):
+            return str(evaluated_args[0])
+
         # Handle calls on super objects
         if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Call) and isinstance(node.func.value.func, ast.Name) and node.func.value.func.id == 'super':
-            # Handle super() calls
             super_call = await self.visit(node.func.value, wrap_exceptions=wrap_exceptions)
             instance = self.current_instance  # Use stored class instance
             parent_class = super_call.__thisclass__
             method = getattr(parent_class, node.func.attr)
-            # Pass instance explicitly as first argument
             return await self._execute_function(method, [instance] + evaluated_args, kwargs)
+
         # Handle list with async iterables
         if func is list and len(evaluated_args) == 1 and hasattr(evaluated_args[0], '__aiter__'):
             return [val async for val in evaluated_args[0]]
@@ -660,8 +658,10 @@ class ASTInterpreter:
                 await self._execute_function(init_method, [instance] + list(args), kwargs)
             return instance
         instance = object.__new__(cls)
+        self.current_instance = instance  # Set current_instance for super() calls
         init_method = cls.__init__.__func__ if hasattr(cls.__init__, '__func__') else cls.__init__
         await self._execute_function(init_method, [instance] + list(args), kwargs)
+        self.current_instance = None  # Reset after instantiation
         return instance
 
     async def _execute_function(self, func: Callable, args: list, kwargs: dict) -> Any:
@@ -684,7 +684,6 @@ class ASTInterpreter:
         
         try:
             # Set a 60-second timeout for any coroutine execution
-            # This prevents indefinite hanging if a coroutine never resolves
             return await asyncio.wait_for(coro, timeout=60)
         except TimeoutError as e:
             line_info = f"line {node.lineno}" if hasattr(node, "lineno") else "unknown line"
@@ -741,8 +740,12 @@ class ASTInterpreter:
         return set(elements)
 
     async def visit_Attribute(self, node: ast.Attribute, wrap_exceptions: bool = True) -> Any:
-        value: Any = await self.visit(node.value, wrap_exceptions=wrap_exceptions)
-        return getattr(value, node.attr)
+        value = await self.visit(node.value, wrap_exceptions=wrap_exceptions)
+        attr = node.attr
+        prop = getattr(type(value), attr, None)
+        if isinstance(prop, property) and isinstance(prop.fget, Function):
+            return await prop.fget(value)
+        return getattr(value, attr)
 
     async def visit_Subscript(self, node: ast.Subscript, wrap_exceptions: bool = True) -> Any:
         value: Any = await self.visit(node.value, wrap_exceptions=wrap_exceptions)
@@ -923,7 +926,6 @@ class ASTInterpreter:
         return result
 
     async def visit_ClassDef(self, node: ast.ClassDef, wrap_exceptions: bool = True) -> Any:
-        # Create class frame
         base_frame = {}
         self.env_stack.append(base_frame)
         bases = [await self.visit(base, wrap_exceptions=True) for base in node.bases]
@@ -933,7 +935,10 @@ class ASTInterpreter:
                 await self.visit(stmt, wrap_exceptions=True)
             class_dict = {k: v for k, v in self.env_stack[-1].items() if k not in ["__builtins__"]}
             cls = type(node.name, tuple(bases), class_dict)
-            # Store the class in parent scope
+            # Set defining_class for all Function instances in class_dict
+            for name, value in class_dict.items():
+                if isinstance(value, Function):
+                    value.defining_class = cls
             self.env_stack[-2][node.name] = cls
             return cls
         finally:
@@ -948,7 +953,13 @@ class ASTInterpreter:
                 await self.assign(item.optional_vars, val)
             try:
                 for stmt in node.body:
-                    await self.visit(stmt, wrap_exceptions=wrap_exceptions)
+                    try:
+                        await self.visit(stmt, wrap_exceptions=wrap_exceptions)
+                    except ReturnException as ret:
+                        ctx.__exit__(None, None, None)
+                        raise ret
+            except ReturnException as ret:
+                raise ret
             except Exception as e:
                 if not ctx.__exit__(type(e), e, None):
                     raise
@@ -1188,7 +1199,6 @@ class ASTInterpreter:
     def new_scope(self):
         return Scope(self.env_stack)
 
-
 class Scope:
     def __init__(self, env_stack):
         self.env_stack = env_stack
@@ -1198,7 +1208,6 @@ class Scope:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.env_stack.pop()
-
 
 class Function:
     def __init__(self, node: ast.FunctionDef, closure: List[Dict[str, Any]], interpreter: ASTInterpreter,
@@ -1330,7 +1339,6 @@ class Function:
         method.__self__ = instance  # Explicitly bind instance to method
         return method
 
-
 class AsyncFunction:
     def __init__(self, node: ast.AsyncFunctionDef, closure: List[Dict[str, Any]], interpreter: ASTInterpreter,
                  pos_kw_params: List[str], vararg_name: Optional[str], kwonly_params: List[str],
@@ -1397,7 +1405,6 @@ class AsyncFunction:
         except ReturnException as ret:
             return ret.value
 
-
 class LambdaFunction:
     def __init__(self, node: ast.Lambda, closure: List[Dict[str, Any]], interpreter: ASTInterpreter,
                  pos_kw_params: List[str], vararg_name: Optional[str], kwonly_params: List[str],
@@ -1456,7 +1463,6 @@ class LambdaFunction:
         new_env_stack.append(local_frame)
         new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
         return await new_interp.visit(self.node.body, wrap_exceptions=True)
-
 
 async def execute_async(
     code: str,
@@ -1540,7 +1546,6 @@ async def execute_async(
             execution_time=time.time() - start_time
         )
 
-
 def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
     interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source, restrict_os=restrict_os, namespace=namespace)
 
@@ -1567,12 +1572,10 @@ def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", r
         interpreter.loop = loop
         return asyncio.run_coroutine_threadsafe(run_interpreter(), loop).result()
 
-
 def interpret_code(source_code: str, allowed_modules: List[str], restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
     dedented_source = textwrap.dedent(source_code).strip()
     tree: ast.AST = ast.parse(dedented_source)
     return interpret_ast(tree, allowed_modules, source=dedented_source, restrict_os=restrict_os, namespace=namespace)
-
 
 if __name__ == "__main__":
     print("Script is running!")
@@ -1635,7 +1638,6 @@ with open("test.txt", "r") as f:
     except Exception as e:
         print("Interpreter error:", e)
 
-    # New example with execute_async and entry_point
     source_code_5: str = """
 def add(a, b):
     return a + b
