@@ -1,3 +1,4 @@
+# quantalogic/python_interpreter/visit_handlers.py
 import ast
 import asyncio
 import inspect
@@ -367,7 +368,10 @@ async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: boo
 
     # Special handling for str() on exceptions
     if func is str and len(evaluated_args) == 1 and isinstance(evaluated_args[0], BaseException):
-        return str(evaluated_args[0])
+        exc = evaluated_args[0]
+        if isinstance(exc, WrappedException):
+            return exc.message  # Return the original message for WrappedException
+        return str(exc)  # Default behavior for other exceptions
 
     # Handle calls on super objects
     if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Call) and isinstance(node.func.value.func, ast.Name) and node.func.value.func.id == 'super':
@@ -393,16 +397,12 @@ async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: boo
     # Handle super() with or without arguments
     if func is super:
         if len(evaluated_args) == 0:
-            for frame in reversed(self.env_stack):
-                if '__current_method__' in frame:
-                    method = frame['__current_method__']
-                    if hasattr(method, 'defining_class') and 'self' in frame:
-                        cls = method.defining_class
-                        obj = frame['self']
-                        result = super(cls, obj)
-                        break
+            if self.current_class and self.current_instance:
+                cls = self.env_stack[0][self.current_class.name]  # Get the class from the environment
+                obj = self.current_instance
+                result = super(cls, obj)
             else:
-                raise TypeError("super() without arguments requires a method context")
+                raise TypeError("super() without arguments requires a class instantiation context")
         elif len(evaluated_args) >= 2:
             cls, obj = evaluated_args[0], evaluated_args[1]
             result = super(cls, obj)
@@ -430,33 +430,6 @@ async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: boo
         if asyncio.iscoroutine(result) and not is_await_context:
             result = await result
     return result
-
-async def _create_class_instance(self: ASTInterpreter, cls: Type, *args, **kwargs):
-    if cls in (super, Exception, BaseException) or issubclass(cls, BaseException):
-        instance = cls.__new__(cls, *args, **kwargs)
-        if hasattr(instance, '__init__'):
-            init_method = instance.__init__.__func__ if hasattr(instance.__init__, '__func__') else instance.__init__
-            await self._execute_function(init_method, [instance] + list(args), kwargs)
-        return instance
-    instance = object.__new__(cls)
-    self.current_instance = instance  # Set current_instance for super() calls
-    init_method = cls.__init__.__func__ if hasattr(cls.__init__, '__func__') else cls.__init__
-    await self._execute_function(init_method, [instance] + list(args), kwargs)
-    self.current_instance = None  # Reset after instantiation
-    return instance
-
-async def _execute_function(self: ASTInterpreter, func: Callable, args: list, kwargs: dict) -> Any:
-    try:
-        if asyncio.iscoroutinefunction(func):
-            result = await func(*args, **kwargs)
-        else:
-            result = func(*args, **kwargs)
-            if asyncio.iscoroutine(result):
-                result = await result
-        return result
-    except Exception as e:
-        func_name = getattr(func, '__name__', str(func))
-        raise WrappedException(f"Error executing {func_name}: {str(e)}", e, 0, 0, "") from e
 
 async def visit_Await(self: ASTInterpreter, node: ast.Await, wrap_exceptions: bool = True) -> Any:
     coro = await self.visit(node.value, is_await_context=True, wrap_exceptions=wrap_exceptions)
@@ -486,54 +459,25 @@ async def visit_Return(self: ASTInterpreter, node: ast.Return, wrap_exceptions: 
     raise ReturnException(value)
 
 async def visit_Lambda(self: ASTInterpreter, node: ast.Lambda, wrap_exceptions: bool = True) -> Any:
-    """
-    Visit a Lambda node and return a callable that executes the lambda body asynchronously.
-    
-    Args:
-        node (ast.Lambda): The lambda expression AST node.
-        wrap_exceptions (bool): Whether to wrap exceptions in WrappedException.
-    
-    Returns:
-        Callable: An async callable representing the lambda function.
-    """
-    # Capture the current environment as a closure
     closure: List[Dict[str, Any]] = self.env_stack[:]
-    
-    # Extract lambda parameters
     pos_kw_params = [arg.arg for arg in node.args.args]
     vararg_name = node.args.vararg.arg if node.args.vararg else None
     kwonly_params = [arg.arg for arg in node.args.kwonlyargs]
     kwarg_name = node.args.kwarg.arg if node.args.kwarg else None
-    
-    # Evaluate default values for positional and keyword-only parameters
     pos_defaults_values = [await self.visit(default, wrap_exceptions=True) for default in node.args.defaults]
     num_pos_defaults = len(pos_defaults_values)
     pos_defaults = dict(zip(pos_kw_params[-num_pos_defaults:], pos_defaults_values)) if num_pos_defaults else {}
-    
     kw_defaults_values = [await self.visit(default, wrap_exceptions=True) if default else None for default in node.args.kw_defaults]
     kw_defaults = dict(zip(kwonly_params, kw_defaults_values))
     kw_defaults = {k: v for k, v in kw_defaults.items() if v is not None}
-    
-    # Create the LambdaFunction instance
+
     lambda_func = LambdaFunction(
         node, closure, self, pos_kw_params, vararg_name, kwonly_params, kwarg_name, pos_defaults, kw_defaults
     )
     
-    # Define the async wrapper for the lambda
     async def lambda_wrapper(*args, **kwargs):
-        """
-        Async wrapper to execute the lambda function.
-        
-        Args:
-            *args: Positional arguments passed to the lambda.
-            **kwargs: Keyword arguments passed to the lambda.
-        
-        Returns:
-            Any: The result of the lambda execution.
-        """
         return await lambda_func(*args, **kwargs)
     
-    # Return the async wrapper
     return lambda_wrapper
 
 async def visit_List(self: ASTInterpreter, node: ast.List, wrap_exceptions: bool = True) -> List[Any]:
@@ -611,18 +555,6 @@ async def visit_Try(self: ASTInterpreter, node: ast.Try, wrap_exceptions: bool =
         for stmt in node.finalbody:
             await self.visit(stmt, wrap_exceptions=True)
     return result
-
-async def _resolve_exception_type(self: ASTInterpreter, node: Optional[ast.AST]) -> Any:
-    if node is None:
-        return Exception
-    if isinstance(node, ast.Name):
-        exc_type = self.get_variable(node.id)
-        if exc_type in (Exception, ZeroDivisionError, ValueError, TypeError):
-            return exc_type
-        return exc_type
-    if isinstance(node, ast.Call):
-        return await self.visit(node, wrap_exceptions=True)
-    return None
 
 async def visit_TryStar(self: ASTInterpreter, node: ast.TryStar, wrap_exceptions: bool = True) -> Any:
     result: Any = None
@@ -759,7 +691,8 @@ async def visit_ClassDef(self: ASTInterpreter, node: ast.ClassDef, wrap_exceptio
         self.env_stack.pop()
         self.current_class = None
 
-async def visit_With(self: ASTInterpreter, node: ast.With, wrap_exceptions: bool = True):
+async def visit_With(self: ASTInterpreter, node: ast.With, wrap_exceptions: bool = True) -> Any:
+    result = None
     for item in node.items:
         ctx = await self.visit(item.context_expr, wrap_exceptions=wrap_exceptions)
         val = ctx.__enter__()
@@ -767,18 +700,16 @@ async def visit_With(self: ASTInterpreter, node: ast.With, wrap_exceptions: bool
             await self.assign(item.optional_vars, val)
         try:
             for stmt in node.body:
-                try:
-                    await self.visit(stmt, wrap_exceptions=wrap_exceptions)
-                except ReturnException as ret:
-                    ctx.__exit__(None, None, None)
-                    raise ret
+                result = await self.visit(stmt, wrap_exceptions=wrap_exceptions)
         except ReturnException as ret:
+            ctx.__exit__(None, None, None)
             raise ret
         except Exception as e:
             if not ctx.__exit__(type(e), e, None):
                 raise
         else:
             ctx.__exit__(None, None, None)
+    return result
 
 async def visit_AsyncWith(self: ASTInterpreter, node: ast.AsyncWith, wrap_exceptions: bool = True):
     for item in node.items:
