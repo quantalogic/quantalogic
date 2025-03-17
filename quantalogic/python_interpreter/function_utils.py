@@ -1,4 +1,4 @@
-# quantalogic/utils/function_utils.py
+# quantalogic/python_interpreter/function_utils.py
 import ast
 import asyncio
 from typing import Any, Dict, List, Optional
@@ -74,6 +74,11 @@ class Function:
 
         new_env_stack.append(local_frame)
         new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
+        
+        # Set class and instance context for methods to support super()
+        if self.defining_class and args:
+            new_interp.current_class = self.defining_class
+            new_interp.current_instance = args[0]
 
         if self.is_generator:
             async def generator():

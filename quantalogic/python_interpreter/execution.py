@@ -25,7 +25,11 @@ async def execute_async(
     allowed_modules: List[str] = ['asyncio'],
     namespace: Optional[Dict[str, Any]] = None
 ) -> AsyncExecutionResult:
+    """
+    Execute Python code asynchronously with support for generators and proper loop management.
+    """
     start_time = time.time()
+    loop_created = False
     try:
         # Parse the code into an AST
         ast_tree = ast.parse(textwrap.dedent(code))
@@ -37,6 +41,7 @@ async def execute_async(
             # No running event loop, create a new one
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            loop_created = True
         
         # Create the interpreter with the namespace
         interpreter = ASTInterpreter(
@@ -70,12 +75,14 @@ async def execute_async(
                 result = func(*args, **kwargs)
                 if asyncio.iscoroutine(result):
                     result = await result  # Ensure coroutines are awaited
-            # Additional check to handle nested coroutines from method calls
+            # Additional check to handle nested coroutines or generators
             if asyncio.iscoroutine(result):
                 result = await result
+            # Return generators/iterables directly without unwrapping
         else:
             result = module_result
         
+        # Preserve generators and iterables as-is
         return AsyncExecutionResult(
             result=result,
             error=None,
@@ -100,16 +107,21 @@ async def execute_async(
             error=f'{error_type}: {str(e)}',
             execution_time=time.time() - start_time
         )
+    finally:
+        # Clean up the event loop if we created it
+        if loop_created and not loop.is_closed():
+            loop.close()
 
 def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
+    """
+    Interpret an AST synchronously, handling generators and async results appropriately.
+    """
     interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source, restrict_os=restrict_os, namespace=namespace)
+    loop_created = False
 
     async def run_interpreter():
         result = await interpreter.visit(ast_tree, wrap_exceptions=True)
-        if asyncio.iscoroutine(result):
-            return await result
-        elif hasattr(result, '__aiter__'):
-            return [val async for val in result]
+        # Return generators and iterables directly
         return result
 
     # Use the current event loop if one is running, otherwise create a new one
@@ -118,16 +130,21 @@ def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", r
     except RuntimeError:  # No running event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        loop_created = True
         interpreter.loop = loop
         try:
             return loop.run_until_complete(run_interpreter())
         finally:
-            loop.close()
+            if not loop.is_closed():
+                loop.close()
     else:
         interpreter.loop = loop
         return asyncio.run_coroutine_threadsafe(run_interpreter(), loop).result()
 
 def interpret_code(source_code: str, allowed_modules: List[str], restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
+    """
+    Interpret source code synchronously, delegating to interpret_ast.
+    """
     dedented_source = textwrap.dedent(source_code).strip()
     tree: ast.AST = ast.parse(dedented_source)
     return interpret_ast(tree, allowed_modules, source=dedented_source, restrict_os=restrict_os, namespace=namespace)
