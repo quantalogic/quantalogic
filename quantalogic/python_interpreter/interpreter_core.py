@@ -8,8 +8,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from .exceptions import BreakException, ContinueException, ReturnException, WrappedException
 from .scope import Scope
 
-
-
 class ASTInterpreter:
     def __init__(
         self, 
@@ -222,8 +220,6 @@ class ASTInterpreter:
 
     def new_scope(self):
         return Scope(self.env_stack)
-
-    # Added missing methods
 
     async def _resolve_exception_type(self, node: Optional[ast.AST]) -> Any:
         """Resolve the exception type from an AST node."""

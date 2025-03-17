@@ -1,4 +1,4 @@
-# quantalogic/utils/execution.py
+# quantalogic/python_interpreter/execution.py
 import ast
 import asyncio
 import textwrap
@@ -65,7 +65,7 @@ async def execute_async(
             if isinstance(func, AsyncFunction) or asyncio.iscoroutinefunction(func):
                 result = await func(*args, **kwargs)
             elif isinstance(func, Function):
-                result = await func(*args, **kwargs)
+                result = await func(*args, **kwargs)  # Ensure await here to resolve coroutines
             else:
                 result = func(*args, **kwargs)
                 if asyncio.iscoroutine(result):
