@@ -726,9 +726,24 @@ class ASTInterpreter:
         kw_defaults = {k: v for k, v in kw_defaults.items() if v is not None}
 
         lambda_func = LambdaFunction(node, closure, self, pos_kw_params, vararg_name, kwonly_params, kwarg_name, pos_defaults, kw_defaults)
-        async def async_lambda(*args, **kwargs):
-            return await lambda_func(*args, **kwargs)
-        return async_lambda
+        
+        # Check if the lambda body contains await expressions
+        has_await_expr = has_await(node.body)
+        
+        if has_await_expr:
+            # If the lambda contains await, return an async function
+            async def async_lambda(*args, **kwargs):
+                return await lambda_func(*args, **kwargs)
+            return async_lambda
+        else:
+            # If no await, return a synchronous wrapper that runs the async call in the loop
+            def sync_lambda(*args, **kwargs):
+                coro = lambda_func(*args, **kwargs)
+                if self.loop is None:
+                    raise RuntimeError("No event loop available to execute lambda")
+                # Run the coroutine synchronously in the current loop
+                return self.loop.run_until_complete(coro) if not self.loop.is_running() else asyncio.run_coroutine_threadsafe(coro, self.loop).result()
+            return sync_lambda
 
     async def visit_List(self, node: ast.List, wrap_exceptions: bool = True) -> List[Any]:
         return [await self.visit(elt, wrap_exceptions=wrap_exceptions) for elt in node.elts]
@@ -1616,53 +1631,3 @@ def interpret_code(source_code: str, allowed_modules: List[str], restrict_os: bo
     dedented_source = textwrap.dedent(source_code).strip()
     tree: ast.AST = ast.parse(dedented_source)
     return interpret_ast(tree, allowed_modules, source=dedented_source, restrict_os=restrict_os, namespace=namespace)
-
-if __name__ == "__main__":
-    print("Script is running!")
-
-    source_code_1: str = """
-def my_decorator(func):
-    def wrapper(*args, **kwargs):
-        print("Decorated!")
-        return func(*args, **kwargs)
-    return wrapper
-
-@my_decorator
-def example(a, b=2, *args, c=3, **kwargs):
-    return a + b + c + sum(args) + sum(kwargs.values())
-
-result = example(1, 4, 5, 6, c=7, x=8)
-"""
-    print("Example 1 (function with decorator, defaults, *args, **kwargs):")
-    try:
-        result_1: Any = interpret_code(source_code_1, allowed_modules=[], restrict_os=True)
-        print("Result:", result_1)
-    except Exception as e:
-        print("Interpreter error:", e)
-
-    source_code_2: str = """
-import asyncio
-
-async def delay_square(x, delay=1):
-    await asyncio.sleep(delay)
-    return x * x
-
-result = await delay_square(5)
-"""
-    print("Example 2 (async function):")
-    try:
-        result_2: Any = interpret_code(source_code_2, allowed_modules=["asyncio"], restrict_os=True)
-        print("Result:", result_2)
-    except Exception as e:
-        print("Interpreter error:", e)
-
-    source_code_3: str = """
-import os
-result = os.path.join("a", "b")
-"""
-    print("Example 3 (attempt to use os module with restrict_os=True):")
-    try:
-        result_3: Any = interpret_code(source_code_3, allowed_modules=["os"], restrict_os=True)
-        print("Result:", result_3)
-    except Exception as e:
-        print("Interpreter error:", e)
