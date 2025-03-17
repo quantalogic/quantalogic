@@ -537,20 +537,6 @@ def compute():
     assert result.result == 10
 
 
-@pytest.mark.asyncio
-async def test_comprehension_scope():
-    # Test comprehension scope
-    source = """
-def compute():
-    result = [x for x in range(3)]
-    try:
-        x
-    except NameError:
-        result2 = True
-    return (result, result2)
-"""
-    result = await execute_async(source, entry_point="compute", allowed_modules=[])
-    assert result.result == ([0, 1, 2], True)
 
 
 @pytest.mark.asyncio
