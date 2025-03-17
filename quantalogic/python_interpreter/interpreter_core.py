@@ -2,23 +2,37 @@ import ast
 import asyncio
 import builtins
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+import threading
+import psutil  # New dependency for resource monitoring
+from typing import Any, Dict, List, Optional, Tuple, Callable
 
 from .exceptions import BreakException, ContinueException, ReturnException, WrappedException
 from .scope import Scope
 
 class ASTInterpreter:
     def __init__(
-        self, 
-        allowed_modules: List[str], 
-        env_stack: Optional[List[Dict[str, Any]]] = None, 
+        self,
+        allowed_modules: List[str],
+        env_stack: Optional[List[Dict[str, Any]]] = None,
         source: Optional[str] = None,
         restrict_os: bool = True,
-        namespace: Optional[Dict[str, Any]] = None
+        namespace: Optional[Dict[str, Any]] = None,
+        max_recursion_depth: int = 1000,  # Now configurable
+        max_operations: int = 10000000,   # Added operation limit
+        max_memory_mb: int = 1024,        # Added memory limit (1GB default)
+        sync_mode: bool = False           # Added for sync execution optimization
     ) -> None:
         self.allowed_modules: List[str] = allowed_modules
         self.modules: Dict[str, Any] = {mod: __import__(mod) for mod in allowed_modules}
         self.restrict_os: bool = restrict_os
+        self.sync_mode: bool = sync_mode
+        self.max_operations: int = max_operations
+        self.operations_count: int = 0
+        self.max_memory_mb: int = max_memory_mb
+        self.process = psutil.Process()  # For memory monitoring
+        self.type_hints: Dict[str, Any] = {}  # Added for type aliases
+        self.special_methods: Dict[str, Callable] = {}  # Added for special method dispatch
+
         if env_stack is None:
             self.env_stack: List[Dict[str, Any]] = [{}]
             self.env_stack[0].update(self.modules)
@@ -28,14 +42,13 @@ class ASTInterpreter:
                 "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
                 "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
                 "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
-                "ValueError": ValueError, "TypeError": TypeError,
-                "print": print, 
+                "ValueError": ValueError, "TypeError": TypeError, "print": print,
+                "input": lambda prompt="": input(prompt), "dir": lambda obj: [x for x in dir(obj) if not x.startswith('__')],
+                "getattr": self.safe_getattr, "vars": lambda obj=None: vars(obj) if obj else dict(self.env_stack[-1]),
             }
             if not restrict_os:
                 allowed_builtins["open"] = open
             safe_builtins.update(allowed_builtins)
-            if "set" not in safe_builtins:
-                safe_builtins["set"] = set
             self.env_stack[0]["__builtins__"] = safe_builtins
             self.env_stack[0].update(safe_builtins)
             self.env_stack[0]["logger"] = logging.getLogger(__name__)
@@ -44,20 +57,20 @@ class ASTInterpreter:
         else:
             self.env_stack = env_stack
             if "__builtins__" not in self.env_stack[0]:
+                # Same initialization as above for consistency
                 safe_builtins: Dict[str, Any] = dict(vars(builtins))
                 safe_builtins["__import__"] = self.safe_import
                 allowed_builtins = {
                     "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
                     "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
                     "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
-                    "ValueError": ValueError, "TypeError": TypeError,
-                    "print": print, 
+                    "ValueError": ValueError, "TypeError": TypeError, "print": print,
+                    "input": lambda prompt="": input(prompt), "dir": lambda obj: [x for x in dir(obj) if not x.startswith('__')],
+                    "getattr": self.safe_getattr, "vars": lambda obj=None: vars(obj) if obj else dict(self.env_stack[-1]),
                 }
                 if not restrict_os:
                     allowed_builtins["open"] = open
                 safe_builtins.update(allowed_builtins)
-                if "set" not in safe_builtins:
-                    safe_builtins["set"] = set
                 self.env_stack[0]["__builtins__"] = safe_builtins
                 self.env_stack[0].update(safe_builtins)
                 self.env_stack[0]["logger"] = logging.getLogger(__name__)
@@ -73,15 +86,16 @@ class ASTInterpreter:
                 if mod in os_related_modules:
                     self.allowed_modules.remove(mod)
 
-        self.source_lines: Optional[List[str]] = source.splitlines() if source is not None else None
+        self.source_lines: Optional[List[str]] = source.splitlines() if source else None
         self.var_cache: Dict[str, Any] = {}
         self.recursion_depth: int = 0
-        self.max_recursion_depth: int = 1000
+        self.max_recursion_depth: int = max_recursion_depth
         self.loop = None
         self.current_class = None
         self.current_instance = None
         self.current_exception = None
         self.last_exception = None
+        self.lock = threading.Lock()  # Added for thread safety
 
         if "decimal" in self.modules:
             dec = self.modules["decimal"]
@@ -96,14 +110,7 @@ class ASTInterpreter:
             handler = getattr(visit_handlers, handler_name)
             setattr(self, handler_name, handler.__get__(self, ASTInterpreter))
 
-    def safe_import(
-        self,
-        name: str,
-        globals: Optional[Dict[str, Any]] = None,
-        locals: Optional[Dict[str, Any]] = None,
-        fromlist: Tuple[str, ...] = (),
-        level: int = 0,
-    ) -> Any:
+    def safe_import(self, name: str, globals=None, locals=None, fromlist=(), level=0) -> Any:
         os_related_modules = {"os", "sys", "subprocess", "shutil", "platform"}
         if self.restrict_os and name in os_related_modules:
             raise ImportError(f"Import Error: Module '{name}' is blocked due to OS restriction.")
@@ -111,43 +118,54 @@ class ASTInterpreter:
             raise ImportError(f"Import Error: Module '{name}' is not allowed. Only {self.allowed_modules} are permitted.")
         return self.modules[name]
 
+    def safe_getattr(self, obj: Any, name: str, default: Any = None) -> Any:
+        if name.startswith('__') and name.endswith('__') and name not in ['__init__', '__call__']:
+            raise AttributeError(f"Access to dunder attribute '{name}' is restricted.")
+        return getattr(obj, name, default)
+
     def spawn_from_env(self, env_stack: List[Dict[str, Any]]) -> "ASTInterpreter":
         new_interp = ASTInterpreter(
-            self.allowed_modules, 
-            env_stack, 
+            self.allowed_modules,
+            env_stack,
             source="\n".join(self.source_lines) if self.source_lines else None,
-            restrict_os=self.restrict_os
+            restrict_os=self.restrict_os,
+            max_recursion_depth=self.max_recursion_depth,
+            max_operations=self.max_operations,
+            max_memory_mb=self.max_memory_mb,
+            sync_mode=self.sync_mode
         )
         new_interp.loop = self.loop
         new_interp.var_cache = self.var_cache.copy()
         return new_interp
 
     def get_variable(self, name: str) -> Any:
-        if name in self.var_cache:
-            return self.var_cache[name]
-        for frame in reversed(self.env_stack):
-            if name in frame:
-                self.var_cache[name] = frame[name]
-                return frame[name]
-        raise NameError(f"Name '{name}' is not defined.")
+        with self.lock:
+            if name in self.var_cache:
+                return self.var_cache[name]
+            for frame in reversed(self.env_stack):
+                if name in frame:
+                    self.var_cache[name] = frame[name]
+                    return frame[name]
+            raise NameError(f"Name '{name}' is not defined.")
 
     def set_variable(self, name: str, value: Any) -> None:
-        if "__global_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__global_names__"]:
-            self.env_stack[0][name] = value
-            if name in self.var_cache:
-                del self.var_cache[name]
-        elif "__nonlocal_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__nonlocal_names__"]:
-            for frame in reversed(self.env_stack[:-1]):
-                if name in frame:
-                    frame[name] = value
-                    if name in self.var_cache:
-                        del self.var_cache[name]
-                    return
-            raise NameError(f"Nonlocal name '{name}' not found in outer scope")
-        else:
-            self.env_stack[-1][name] = value
-            if name in self.var_cache:
-                del self.var_cache[name]
+        with self.lock:
+            if "__global_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__global_names__"]:
+                self.env_stack[0][name] = value
+                if name in self.var_cache:
+                    del self.var_cache[name]
+            elif "__nonlocal_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__nonlocal_names__"]:
+                for frame in reversed(self.env_stack[:-1]):
+                    if name in frame:
+                        frame[name] = value
+                        if name in self.var_cache:
+                            del self.var_cache[name]
+                        return
+                raise NameError(f"Nonlocal name '{name}' not found in outer scope")
+            else:
+                self.env_stack[-1][name] = value
+                if name in self.var_cache:
+                    del self.var_cache[name]
 
     async def assign(self, target: ast.AST, value: Any) -> None:
         if isinstance(target, ast.Name):
@@ -187,14 +205,25 @@ class ASTInterpreter:
             raise Exception("Unsupported assignment target type: " + str(type(target)))
 
     async def visit(self, node: ast.AST, is_await_context: bool = False, wrap_exceptions: bool = True) -> Any:
+        self.operations_count += 1
+        if self.operations_count > self.max_operations:
+            raise RuntimeError(f"Exceeded maximum operations ({self.max_operations})")
+        memory_usage = self.process.memory_info().rss / 1024 / 1024  # MB
+        if memory_usage > self.max_memory_mb:
+            raise MemoryError(f"Memory usage exceeded limit ({self.max_memory_mb} MB)")
+        
         self.recursion_depth += 1
         if self.recursion_depth > self.max_recursion_depth:
             raise RecursionError(f"Maximum recursion depth exceeded ({self.max_recursion_depth})")
+        
         method_name: str = "visit_" + node.__class__.__name__
         method = getattr(self, method_name, self.generic_visit)
         self.env_stack[0]["logger"].debug(f"Visiting {method_name} at line {getattr(node, 'lineno', 'unknown')}")
+        
         try:
-            if method_name == "visit_Call":
+            if self.sync_mode and not hasattr(node, 'await'):  # Optimize for sync code
+                result = method(node, wrap_exceptions=wrap_exceptions)
+            elif method_name == "visit_Call":
                 result = await method(node, is_await_context, wrap_exceptions)
             else:
                 result = await method(node, wrap_exceptions=wrap_exceptions)
@@ -207,18 +236,16 @@ class ASTInterpreter:
             self.recursion_depth -= 1
             if not wrap_exceptions:
                 raise
-            lineno = getattr(node, "lineno", None)
-            col = getattr(node, "col_offset", None)
-            lineno = lineno if lineno is not None else 1
-            col = col if col is not None else 0
+            lineno = getattr(node, "lineno", None) or 1
+            col = getattr(node, "col_offset", None) or 0
             context_line = self.source_lines[lineno - 1] if self.source_lines and 1 <= lineno <= len(self.source_lines) else ""
             raise WrappedException(
                 f"Error line {lineno}, col {col}:\n{context_line}\nDescription: {str(e)}", e, lineno, col, context_line
             ) from e
 
     async def generic_visit(self, node: ast.AST, wrap_exceptions: bool = True) -> Any:
-        lineno = getattr(node, "lineno", None)
-        context_line = self.source_lines[lineno - 1] if self.source_lines and lineno is not None and 1 <= lineno <= len(self.source_lines) else ""
+        lineno = getattr(node, "lineno", None) or 1
+        context_line = self.source_lines[lineno - 1] if self.source_lines and 1 <= lineno <= len(self.source_lines) else ""
         raise Exception(
             f"Unsupported AST node type: {node.__class__.__name__} at line {lineno}.\nContext: {context_line}"
         )
@@ -259,7 +286,9 @@ class ASTInterpreter:
 
     async def _execute_function(self, func: Any, args: list, kwargs: dict) -> Any:
         try:
-            if asyncio.iscoroutinefunction(func):
+            if self.sync_mode and not asyncio.iscoroutinefunction(func):
+                result = func(*args, **kwargs)
+            elif asyncio.iscoroutinefunction(func):
                 result = await func(*args, **kwargs)
             else:
                 result = func(*args, **kwargs)

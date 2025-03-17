@@ -51,6 +51,9 @@ async def visit_AugAssign(self: ASTInterpreter, node: ast.AugAssign, wrap_except
 
 async def visit_AnnAssign(self: ASTInterpreter, node: ast.AnnAssign, wrap_exceptions: bool = True) -> None:
     value = await self.visit(node.value, wrap_exceptions=wrap_exceptions) if node.value else None
+    annotation = await self.visit(node.annotation, wrap_exceptions=True)
+    if isinstance(node.target, ast.Name):
+        self.type_hints[node.target.id] = annotation
     if value is not None or node.simple:
         await self.assign(node.target, value)
 
