@@ -1,11 +1,14 @@
 # quantalogic/python_interpreter/interpreter_core.py
 import ast
+import asyncio
 import builtins
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from .exceptions import BreakException, ContinueException, ReturnException, WrappedException
 from .scope import Scope
+
+
 
 class ASTInterpreter:
     def __init__(
@@ -219,3 +222,47 @@ class ASTInterpreter:
 
     def new_scope(self):
         return Scope(self.env_stack)
+
+    # Added missing methods
+
+    async def _resolve_exception_type(self, node: Optional[ast.AST]) -> Any:
+        """Resolve the exception type from an AST node."""
+        if node is None:
+            return Exception
+        if isinstance(node, ast.Name):
+            exc_type = self.get_variable(node.id)
+            if exc_type in (Exception, ZeroDivisionError, ValueError, TypeError):
+                return exc_type
+            return exc_type
+        if isinstance(node, ast.Call):
+            return await self.visit(node, wrap_exceptions=True)
+        return None
+
+    async def _create_class_instance(self, cls: type, *args, **kwargs):
+        """Create an instance of a class, handling initialization."""
+        if cls in (super, Exception, BaseException) or issubclass(cls, BaseException):
+            instance = cls.__new__(cls, *args, **kwargs)
+            if hasattr(instance, '__init__'):
+                init_method = instance.__init__.__func__ if hasattr(instance.__init__, '__func__') else instance.__init__
+                await self._execute_function(init_method, [instance] + list(args), kwargs)
+            return instance
+        instance = object.__new__(cls)
+        self.current_instance = instance  # Set current_instance for super() calls
+        init_method = cls.__init__.__func__ if hasattr(cls.__init__, '__func__') else cls.__init__
+        await self._execute_function(init_method, [instance] + list(args), kwargs)
+        self.current_instance = None  # Reset after instantiation
+        return instance
+
+    async def _execute_function(self, func: Any, args: list, kwargs: dict) -> Any:
+        """Execute a function, handling both sync and async cases."""
+        try:
+            if asyncio.iscoroutinefunction(func):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
+                if asyncio.iscoroutine(result):
+                    result = await result
+            return result
+        except Exception as e:
+            func_name = getattr(func, '__name__', str(func))
+            raise WrappedException(f"Error executing {func_name}: {str(e)}", e, 0, 0, "") from e
