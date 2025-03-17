@@ -71,7 +71,7 @@ async def execute_async(
             if isinstance(func, AsyncFunction) or asyncio.iscoroutinefunction(func):
                 result = await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
             elif isinstance(func, Function):
-                result = await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
+                result = await func(*args, **kwargs)  # Direct await, no unnecessary wait_for
             else:
                 result = func(*args, **kwargs)
                 if asyncio.iscoroutine(result):
