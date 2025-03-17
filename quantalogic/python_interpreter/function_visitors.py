@@ -73,15 +73,14 @@ async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: boo
     if func is str and len(evaluated_args) == 1 and isinstance(evaluated_args[0], BaseException):
         exc = evaluated_args[0]
         if isinstance(exc, WrappedException) and hasattr(exc, 'original_exception'):
-            return str(exc.original_exception)
-        return str(exc.args[0]) if exc.args else str(exc)
+            inner_exc = exc.original_exception
+            return inner_exc.args[0] if inner_exc.args else str(inner_exc)
+        return exc.args[0] if exc.args else str(exc)
 
     if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Call) and isinstance(node.func.value.func, ast.Name) and node.func.value.func.id == 'super':
         super_call = await self.visit(node.func.value, wrap_exceptions=wrap_exceptions)
-        instance = self.current_instance
-        parent_class = super_call.__thisclass__
-        method = getattr(parent_class, node.func.attr)
-        return await self._execute_function(method, [instance] + evaluated_args, kwargs)
+        method = getattr(super_call, node.func.attr)  # Get bound method from super object
+        return await self._execute_function(method, evaluated_args, kwargs)
 
     if func is list and len(evaluated_args) == 1 and hasattr(evaluated_args[0], '__aiter__'):
         return [val async for val in evaluated_args[0]]
@@ -96,7 +95,7 @@ async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: boo
     if func is super:
         if len(evaluated_args) == 0:
             if self.current_class and self.current_instance:
-                cls = self.env_stack[0][self.current_class.name]
+                cls = self.current_class  # Now a type, set in _create_class_instance
                 obj = self.current_instance
                 result = super(cls, obj)
             else:
