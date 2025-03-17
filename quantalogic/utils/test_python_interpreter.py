@@ -1,6 +1,6 @@
 import asyncio
 
-from quantalogic.utils.python_interpreter import AsyncExecutionResult, execute_async
+from quantalogic.python_interpreter import AsyncExecutionResult, execute_async
 
 
 async def test_square_calculation() -> None:
