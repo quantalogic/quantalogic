@@ -20,6 +20,7 @@ class Function:
         self.kw_defaults = kw_defaults
         self.defining_class = None
         self.is_generator = any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
+        self.generator_state = None  # Added for generator protocol
 
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         new_env_stack: List[Dict[str, Any]] = self.closure[:]
@@ -79,7 +80,14 @@ class Function:
 
         if self.is_generator:
             async def generator():
+                nonlocal self
+                if self.generator_state is None:
+                    self.generator_state = {"closed": False, "pending_value": None}
+                
                 for body_stmt in self.node.body:
+                    if self.generator_state["closed"]:
+                        raise StopAsyncIteration
+                    
                     if isinstance(body_stmt, ast.For):
                         iter_obj = await new_interp.visit(body_stmt.iter, wrap_exceptions=True)
                         for item in iter_obj:
@@ -120,7 +128,11 @@ class Function:
                             yield value
                     else:
                         await new_interp.visit(body_stmt, wrap_exceptions=True)
-            return generator()
+            gen = generator()
+            gen.send = lambda value: asyncio.run_coroutine_threadsafe(self._send(gen, value), self.interpreter.loop).result()
+            gen.throw = lambda exc: asyncio.run_coroutine_threadsafe(self._throw(gen, exc), self.interpreter.loop).result()
+            gen.close = lambda: setattr(self.generator_state, "closed", True)
+            return gen
         else:
             last_value = None
             try:
@@ -130,6 +142,18 @@ class Function:
             except ReturnException as ret:
                 return ret.value
             return last_value
+
+    async def _send(self, gen, value):
+        try:
+            return await gen.asend(value)
+        except StopAsyncIteration:
+            raise
+
+    async def _throw(self, gen, exc):
+        try:
+            return await gen.athrow(exc)
+        except StopAsyncIteration:
+            raise
 
     def __get__(self, instance: Any, owner: Any):
         if instance is None:
@@ -218,6 +242,7 @@ class AsyncGeneratorFunction:
         self.kwarg_name = kwarg_name
         self.pos_defaults = pos_defaults
         self.kw_defaults = kw_defaults
+        self.generator_state = None
 
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         new_env_stack: List[Dict[str, Any]] = self.closure[:]
@@ -265,7 +290,14 @@ class AsyncGeneratorFunction:
         new_interp: ASTInterpreter = self.interpreter.spawn_from_env(new_env_stack)
 
         async def generator():
+            nonlocal self
+            if self.generator_state is None:
+                self.generator_state = {"closed": False, "pending_value": None}
+                
             for stmt in self.node.body:
+                if self.generator_state["closed"]:
+                    raise StopAsyncIteration
+                
                 if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Yield):
                     value = await new_interp.visit(stmt.value, wrap_exceptions=True)
                     yield value
@@ -276,7 +308,23 @@ class AsyncGeneratorFunction:
                 else:
                     await new_interp.visit(stmt, wrap_exceptions=True)
 
-        return generator()
+        gen = generator()
+        gen.send = lambda value: asyncio.run_coroutine_threadsafe(self._send(gen, value), self.interpreter.loop).result()
+        gen.throw = lambda exc: asyncio.run_coroutine_threadsafe(self._throw(gen, exc), self.interpreter.loop).result()
+        gen.close = lambda: setattr(self.generator_state, "closed", True)
+        return gen
+
+    async def _send(self, gen, value):
+        try:
+            return await gen.asend(value)
+        except StopAsyncIteration:
+            raise
+
+    async def _throw(self, gen, exc):
+        try:
+            return await gen.athrow(exc)
+        except StopAsyncIteration:
+            raise
 
 class LambdaFunction:
     def __init__(self, node: ast.Lambda, closure: List[Dict[str, Any]], interpreter: ASTInterpreter,

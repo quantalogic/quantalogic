@@ -16,17 +16,32 @@ class AsyncExecutionResult:
     execution_time: float
 
 def optimize_ast(tree: ast.AST) -> ast.AST:
-    """Perform basic constant folding on the AST."""
+    """Perform constant folding and basic optimizations on the AST."""
     class ConstantFolder(ast.NodeTransformer):
         def visit_BinOp(self, node):
             self.generic_visit(node)
             if isinstance(node.left, ast.Constant) and isinstance(node.right, ast.Constant):
                 left, right = node.left.value, node.right.value
-                if isinstance(node.op, ast.Add) and isinstance(left, (int, float)) and isinstance(right, (int, float)):
-                    return ast.Constant(value=left + right)
-                elif isinstance(node.op, ast.Mult) and isinstance(left, (int, float)) and isinstance(right, (int, float)):
-                    return ast.Constant(value=left * right)
+                if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+                    if isinstance(node.op, ast.Add):
+                        return ast.Constant(value=left + right)
+                    elif isinstance(node.op, ast.Sub):
+                        return ast.Constant(value=left - right)
+                    elif isinstance(node.op, ast.Mult):
+                        return ast.Constant(value=left * right)
+                    elif isinstance(node.op, ast.Div) and right != 0:
+                        return ast.Constant(value=left / right)
             return node
+
+        def visit_If(self, node):
+            self.generic_visit(node)
+            if isinstance(node.test, ast.Constant):
+                if node.test.value:
+                    return ast.Module(body=node.body, type_ignores=[])
+                else:
+                    return ast.Module(body=node.orelse, type_ignores=[])
+            return node
+
     return ConstantFolder().visit(tree)
 
 async def execute_async(
@@ -36,7 +51,8 @@ async def execute_async(
     kwargs: Optional[Dict[str, Any]] = None,
     timeout: float = 30,
     allowed_modules: List[str] = ['asyncio'],
-    namespace: Optional[Dict[str, Any]] = None
+    namespace: Optional[Dict[str, Any]] = None,
+    max_memory_mb: int = 1024
 ) -> AsyncExecutionResult:
     start_time = time.time()
     loop_created = False
@@ -53,7 +69,8 @@ async def execute_async(
         interpreter = ASTInterpreter(
             allowed_modules=allowed_modules,
             restrict_os=True,
-            namespace=namespace
+            namespace=namespace,
+            max_memory_mb=max_memory_mb
         )
         interpreter.loop = loop
         
@@ -71,7 +88,7 @@ async def execute_async(
             if isinstance(func, AsyncFunction) or asyncio.iscoroutinefunction(func):
                 result = await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
             elif isinstance(func, Function):
-                result = await func(*args, **kwargs)  # Direct await, no unnecessary wait_for
+                result = await func(*args, **kwargs)
             else:
                 result = func(*args, **kwargs)
                 if asyncio.iscoroutine(result):
@@ -79,7 +96,7 @@ async def execute_async(
             if asyncio.iscoroutine(result):
                 result = await asyncio.wait_for(result, timeout=timeout)
         else:
-            result = await interpreter.execute_async(ast_tree)  # Capture the module result
+            result = await interpreter.execute_async(ast_tree)
         
         return AsyncExecutionResult(
             result=result,

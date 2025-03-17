@@ -105,7 +105,14 @@ async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: boo
     if func is super:
         if len(evaluated_args) == 0:
             if not (self.current_class and self.current_instance):
-                raise TypeError("super() without arguments requires a class instantiation context")
+                # Infer from call stack if possible
+                for frame in reversed(self.env_stack):
+                    if 'self' in frame and '__current_method__' in frame:
+                        self.current_instance = frame['self']
+                        self.current_class = frame['self'].__class__
+                        break
+                if not (self.current_class and self.current_instance):
+                    raise TypeError("super() without arguments requires a class instantiation context")
             result = super(self.current_class, self.current_instance)
         elif len(evaluated_args) >= 2:
             cls, obj = evaluated_args[0], evaluated_args[1]
