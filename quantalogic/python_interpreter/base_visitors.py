@@ -1,5 +1,4 @@
 import ast
-import asyncio
 from typing import Any
 
 from .exceptions import WrappedException

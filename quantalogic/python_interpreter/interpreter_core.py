@@ -133,21 +133,21 @@ class ASTInterpreter:
 
     def set_variable(self, name: str, value: Any) -> None:
         if "__global_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__global_names__"]:
-            self.env_stack[0][name] = value  # Always update global scope for global variables
+            self.env_stack[0][name] = value
             if name in self.var_cache:
-                del self.var_cache[name]  # Invalidate cache to reflect global update
+                del self.var_cache[name]
         elif "__nonlocal_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__nonlocal_names__"]:
             for frame in reversed(self.env_stack[:-1]):
                 if name in frame:
                     frame[name] = value
                     if name in self.var_cache:
-                        del self.var_cache[name]  # Invalidate cache for nonlocal update
+                        del self.var_cache[name]
                     return
             raise NameError(f"Nonlocal name '{name}' not found in outer scope")
         else:
-            self.env_stack[-1][name] = value  # Local scope
+            self.env_stack[-1][name] = value
             if name in self.var_cache:
-                del self.var_cache[name]  # Invalidate cache for local update
+                del self.var_cache[name]
 
     async def assign(self, target: ast.AST, value: Any) -> None:
         if isinstance(target, ast.Name):
