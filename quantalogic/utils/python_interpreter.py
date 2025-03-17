@@ -713,38 +713,57 @@ class ASTInterpreter:
         raise ReturnException(value)
 
     async def visit_Lambda(self, node: ast.Lambda, wrap_exceptions: bool = True) -> Any:
+        """
+        Visit a Lambda node and return a callable that executes the lambda body asynchronously.
+        
+        Args:
+            node (ast.Lambda): The lambda expression AST node.
+            wrap_exceptions (bool): Whether to wrap exceptions in WrappedException.
+        
+        Returns:
+            Callable: An async callable representing the lambda function.
+        """
+        # Capture the current environment as a closure
         closure: List[Dict[str, Any]] = self.env_stack[:]
+        
+        # Extract lambda parameters
         pos_kw_params = [arg.arg for arg in node.args.args]
         vararg_name = node.args.vararg.arg if node.args.vararg else None
         kwonly_params = [arg.arg for arg in node.args.kwonlyargs]
         kwarg_name = node.args.kwarg.arg if node.args.kwarg else None
+        
+        # Evaluate default values for positional and keyword-only parameters
         pos_defaults_values = [await self.visit(default, wrap_exceptions=True) for default in node.args.defaults]
         num_pos_defaults = len(pos_defaults_values)
         pos_defaults = dict(zip(pos_kw_params[-num_pos_defaults:], pos_defaults_values)) if num_pos_defaults else {}
+        
         kw_defaults_values = [await self.visit(default, wrap_exceptions=True) if default else None for default in node.args.kw_defaults]
         kw_defaults = dict(zip(kwonly_params, kw_defaults_values))
         kw_defaults = {k: v for k, v in kw_defaults.items() if v is not None}
-
-        lambda_func = LambdaFunction(node, closure, self, pos_kw_params, vararg_name, kwonly_params, kwarg_name, pos_defaults, kw_defaults)
         
-        # Check if the lambda body contains await expressions
-        has_await_expr = has_await(node.body)
+        # Create the LambdaFunction instance
+        lambda_func = LambdaFunction(
+            node, closure, self, pos_kw_params, vararg_name, kwonly_params, kwarg_name, pos_defaults, kw_defaults
+        )
         
-        if has_await_expr:
-            # If the lambda contains await, return an async function
-            async def async_lambda(*args, **kwargs):
-                return await lambda_func(*args, **kwargs)
-            return async_lambda
-        else:
-            # If no await, return a synchronous wrapper that runs the async call in the loop
-            def sync_lambda(*args, **kwargs):
-                coro = lambda_func(*args, **kwargs)
-                if self.loop is None:
-                    raise RuntimeError("No event loop available to execute lambda")
-                # Run the coroutine synchronously in the current loop
-                return self.loop.run_until_complete(coro) if not self.loop.is_running() else asyncio.run_coroutine_threadsafe(coro, self.loop).result()
-            return sync_lambda
+        # Define the async wrapper for the lambda
+        async def lambda_wrapper(*args, **kwargs):
+            """
+            Async wrapper to execute the lambda function.
+            
+            Args:
+                *args: Positional arguments passed to the lambda.
+                **kwargs: Keyword arguments passed to the lambda.
+            
+            Returns:
+                Any: The result of the lambda execution.
+            """
+            return await lambda_func(*args, **kwargs)
+        
+        # Return the async wrapper
+        return lambda_wrapper
 
+        
     async def visit_List(self, node: ast.List, wrap_exceptions: bool = True) -> List[Any]:
         return [await self.visit(elt, wrap_exceptions=wrap_exceptions) for elt in node.elts]
 
