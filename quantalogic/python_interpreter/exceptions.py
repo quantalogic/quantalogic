@@ -29,11 +29,10 @@ class WrappedException(Exception):
         self.col: int = col
         self.context_line: str = context_line
         self.message = original_exception.args[0] if original_exception.args else str(original_exception)
-        # Change: Set self.message to just the exception message, not the full description,
-        # ensuring str() returns "test error" for ValueError("test error").
+        # Set self.message to the exception's message (e.g., "test error" for ValueError("test error"))
 
     def __str__(self):
-        return self.message  # Return only the message, not metadata, for cleaner stringification
+        return self.message  # Return only the exception message for clean stringification
 
 def has_await(node: ast.AST) -> bool:
     for child in ast.walk(node):
