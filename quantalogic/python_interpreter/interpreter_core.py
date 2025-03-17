@@ -1,4 +1,3 @@
-# quantalogic/python_interpreter/interpreter_core.py
 import ast
 import asyncio
 import builtins
@@ -28,7 +27,6 @@ class ASTInterpreter:
             allowed_builtins = {
                 "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
                 "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
-                "type": type, "isinstance": isinstance, "issubclass": issubclass,
                 "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
                 "ValueError": ValueError, "TypeError": TypeError,
                 "print": print, 
@@ -51,7 +49,6 @@ class ASTInterpreter:
                 allowed_builtins = {
                     "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
                     "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
-                    "type": type, "isinstance": isinstance, "issubclass": issubclass,
                     "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
                     "ValueError": ValueError, "TypeError": TypeError,
                     "print": print, 
@@ -76,10 +73,15 @@ class ASTInterpreter:
                 if mod in os_related_modules:
                     self.allowed_modules.remove(mod)
 
-        if source is not None:
-            self.source_lines: Optional[List[str]] = source.splitlines()
-        else:
-            self.source_lines = None
+        self.source_lines: Optional[List[str]] = source.splitlines() if source is not None else None
+        self.var_cache: Dict[str, Any] = {}
+        self.recursion_depth: int = 0
+        self.max_recursion_depth: int = 1000
+        self.loop = None
+        self.current_class = None
+        self.current_instance = None
+        self.current_exception = None
+        self.last_exception = None
 
         if "decimal" in self.modules:
             dec = self.modules["decimal"]
@@ -89,13 +91,6 @@ class ASTInterpreter:
             self.env_stack[0]["localcontext"] = dec.localcontext
             self.env_stack[0]["Context"] = dec.Context
 
-        self.loop = None
-        self.current_class = None  # Tracks the current class type (not AST node) for super()
-        self.current_instance = None
-        self.current_exception = None
-        self.last_exception = None
-
-        # Attach visitor methods
         from . import visit_handlers
         for handler_name in visit_handlers.__all__:
             handler = getattr(visit_handlers, handler_name)
@@ -124,25 +119,32 @@ class ASTInterpreter:
             restrict_os=self.restrict_os
         )
         new_interp.loop = self.loop
+        new_interp.var_cache = self.var_cache.copy()
         return new_interp
 
     def get_variable(self, name: str) -> Any:
+        if name in self.var_cache:
+            return self.var_cache[name]
         for frame in reversed(self.env_stack):
             if name in frame:
+                self.var_cache[name] = frame[name]
                 return frame[name]
         raise NameError(f"Name '{name}' is not defined.")
 
     def set_variable(self, name: str, value: Any) -> None:
-        if "__nonlocal_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__nonlocal_names__"]:
+        if "__global_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__global_names__"]:
+            self.env_stack[0][name] = value  # Always update global scope for global variables
+            self.var_cache[name] = value
+        elif "__nonlocal_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__nonlocal_names__"]:
             for frame in reversed(self.env_stack[:-1]):
                 if name in frame:
                     frame[name] = value
+                    self.var_cache[name] = value
                     return
             raise NameError(f"Nonlocal name '{name}' not found in outer scope")
-        elif "__global_names__" in self.env_stack[-1] and name in self.env_stack[-1]["__global_names__"]:
-            self.env_stack[0][name] = value
         else:
-            self.env_stack[-1][name] = value
+            self.env_stack[-1][name] = value  # Local scope
+            self.var_cache[name] = value
 
     async def assign(self, target: ast.AST, value: Any) -> None:
         if isinstance(target, ast.Name):
@@ -182,35 +184,38 @@ class ASTInterpreter:
             raise Exception("Unsupported assignment target type: " + str(type(target)))
 
     async def visit(self, node: ast.AST, is_await_context: bool = False, wrap_exceptions: bool = True) -> Any:
+        self.recursion_depth += 1
+        if self.recursion_depth > self.max_recursion_depth:
+            raise RecursionError(f"Maximum recursion depth exceeded ({self.max_recursion_depth})")
         method_name: str = "visit_" + node.__class__.__name__
         method = getattr(self, method_name, self.generic_visit)
+        self.env_stack[0]["logger"].debug(f"Visiting {method_name} at line {getattr(node, 'lineno', 'unknown')}")
         try:
             if method_name == "visit_Call":
                 result = await method(node, is_await_context, wrap_exceptions)
             else:
                 result = await method(node, wrap_exceptions=wrap_exceptions)
+            self.recursion_depth -= 1
             return result
         except (ReturnException, BreakException, ContinueException):
+            self.recursion_depth -= 1
             raise
         except Exception as e:
+            self.recursion_depth -= 1
             if not wrap_exceptions:
                 raise
             lineno = getattr(node, "lineno", None)
             col = getattr(node, "col_offset", None)
             lineno = lineno if lineno is not None else 1
             col = col if col is not None else 0
-            context_line = ""
-            if self.source_lines and 1 <= lineno <= len(self.source_lines):
-                context_line = self.source_lines[lineno - 1]
+            context_line = self.source_lines[lineno - 1] if self.source_lines and 1 <= lineno <= len(self.source_lines) else ""
             raise WrappedException(
                 f"Error line {lineno}, col {col}:\n{context_line}\nDescription: {str(e)}", e, lineno, col, context_line
             ) from e
 
     async def generic_visit(self, node: ast.AST, wrap_exceptions: bool = True) -> Any:
         lineno = getattr(node, "lineno", None)
-        context_line = ""
-        if self.source_lines and lineno is not None and 1 <= lineno <= len(self.source_lines):
-            context_line = self.source_lines[lineno - 1]
+        context_line = self.source_lines[lineno - 1] if self.source_lines and lineno is not None and 1 <= lineno <= len(self.source_lines) else ""
         raise Exception(
             f"Unsupported AST node type: {node.__class__.__name__} at line {lineno}.\nContext: {context_line}"
         )
@@ -222,7 +227,6 @@ class ASTInterpreter:
         return Scope(self.env_stack)
 
     async def _resolve_exception_type(self, node: Optional[ast.AST]) -> Any:
-        """Resolve the exception type from an AST node."""
         if node is None:
             return Exception
         if isinstance(node, ast.Name):
@@ -235,7 +239,6 @@ class ASTInterpreter:
         return None
 
     async def _create_class_instance(self, cls: type, *args, **kwargs):
-        """Create an instance of a class, handling initialization."""
         if cls in (super, Exception, BaseException) or issubclass(cls, BaseException):
             instance = cls.__new__(cls, *args, **kwargs)
             if hasattr(instance, '__init__'):
@@ -243,18 +246,15 @@ class ASTInterpreter:
                 await self._execute_function(init_method, [instance] + list(args), kwargs)
             return instance
         instance = object.__new__(cls)
-        self.current_instance = instance  # Set current_instance for super() calls
-        self.current_class = cls  # Set to the actual class type, not AST node, for super()
+        self.current_instance = instance
+        self.current_class = cls
         init_method = cls.__init__.__func__ if hasattr(cls.__init__, '__func__') else cls.__init__
         await self._execute_function(init_method, [instance] + list(args), kwargs)
-        self.current_instance = None  # Reset after instantiation
-        self.current_class = None  # Reset after instantiation
+        self.current_instance = None
+        self.current_class = None
         return instance
-        # Change: Set self.current_class to cls (the type) instead of relying on AST node,
-        # ensuring super() works correctly during __init__.
 
     async def _execute_function(self, func: Any, args: list, kwargs: dict) -> Any:
-        """Execute a function, handling both sync and async cases."""
         try:
             if asyncio.iscoroutinefunction(func):
                 result = await func(*args, **kwargs)

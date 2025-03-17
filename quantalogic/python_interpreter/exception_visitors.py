@@ -4,7 +4,6 @@ from typing import Any, Optional, Tuple
 from .exceptions import BaseExceptionGroup, ReturnException, WrappedException
 from .interpreter_core import ASTInterpreter
 
-
 async def visit_Try(self: ASTInterpreter, node: ast.Try, wrap_exceptions: bool = True) -> Any:
     result: Any = None
     try:
@@ -17,8 +16,11 @@ async def visit_Try(self: ASTInterpreter, node: ast.Try, wrap_exceptions: bool =
             if exc_type and isinstance(original_e, exc_type):
                 if handler.name:
                     self.set_variable(handler.name, original_e)
+                handler_result = None
                 for stmt in handler.body:
-                    result = await self.visit(stmt, wrap_exceptions=True)
+                    handler_result = await self.visit(stmt, wrap_exceptions=True)
+                if handler_result is not None:
+                    result = handler_result  # Use the last value from the handler if set
                 break
         else:
             raise

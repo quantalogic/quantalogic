@@ -4,7 +4,7 @@ import inspect
 from typing import Any, Dict, List
 
 from .exceptions import WrappedException
-from .function_utils import AsyncFunction, Function, LambdaFunction
+from .function_utils import AsyncFunction, Function, LambdaFunction, AsyncGeneratorFunction
 from .interpreter_core import ASTInterpreter
 
 async def visit_FunctionDef(self: ASTInterpreter, node: ast.FunctionDef, wrap_exceptions: bool = True) -> None:
@@ -24,10 +24,12 @@ async def visit_FunctionDef(self: ASTInterpreter, node: ast.FunctionDef, wrap_ex
     decorated_func = func
     for decorator in reversed(node.decorator_list):
         dec = await self.visit(decorator, wrap_exceptions=True)
+        if asyncio.iscoroutine(dec):
+            dec = await dec
         if dec in (staticmethod, classmethod, property):
             decorated_func = dec(func)
         else:
-            decorated_func = await dec(decorated_func)
+            decorated_func = await self._execute_function(dec, [decorated_func], {})
     self.set_variable(node.name, decorated_func)
 
 async def visit_AsyncFunctionDef(self: ASTInterpreter, node: ast.AsyncFunctionDef, wrap_exceptions: bool = True) -> None:
@@ -46,7 +48,30 @@ async def visit_AsyncFunctionDef(self: ASTInterpreter, node: ast.AsyncFunctionDe
     func = AsyncFunction(node, closure, self, pos_kw_params, vararg_name, kwonly_params, kwarg_name, pos_defaults, kw_defaults)
     for decorator in reversed(node.decorator_list):
         dec = await self.visit(decorator, wrap_exceptions=True)
-        func = await dec(func)
+        if asyncio.iscoroutine(dec):
+            dec = await dec
+        func = await self._execute_function(dec, [func], {})
+    self.set_variable(node.name, func)
+
+async def visit_AsyncGeneratorDef(self: ASTInterpreter, node: ast.AsyncFunctionDef, wrap_exceptions: bool = True) -> None:
+    closure: List[Dict[str, Any]] = self.env_stack[:]
+    pos_kw_params = [arg.arg for arg in node.args.args]
+    vararg_name = node.args.vararg.arg if node.args.vararg else None
+    kwonly_params = [arg.arg for arg in node.args.kwonlyargs]
+    kwarg_name = node.args.kwarg.arg if node.args.kwarg else None
+    pos_defaults_values = [await self.visit(default, wrap_exceptions=True) for default in node.args.defaults]
+    num_pos_defaults = len(pos_defaults_values)
+    pos_defaults = dict(zip(pos_kw_params[-num_pos_defaults:], pos_defaults_values)) if num_pos_defaults else {}
+    kw_defaults_values = [await self.visit(default, wrap_exceptions=True) if default else None for default in node.args.kw_defaults]
+    kw_defaults = dict(zip(kwonly_params, kw_defaults_values))
+    kw_defaults = {k: v for k, v in kw_defaults.items() if v is not None}
+
+    func = AsyncGeneratorFunction(node, closure, self, pos_kw_params, vararg_name, kwonly_params, kwarg_name, pos_defaults, kw_defaults)
+    for decorator in reversed(node.decorator_list):
+        dec = await self.visit(decorator, wrap_exceptions=True)
+        if asyncio.iscoroutine(dec):
+            dec = await dec
+        func = await self._execute_function(dec, [func], {})
     self.set_variable(node.name, func)
 
 async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: bool = False, wrap_exceptions: bool = True) -> Any:
@@ -77,9 +102,21 @@ async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: boo
             return inner_exc.args[0] if inner_exc.args else str(inner_exc)
         return exc.args[0] if exc.args else str(exc)
 
+    if func is super:
+        if len(evaluated_args) == 0:
+            if not (self.current_class and self.current_instance):
+                raise TypeError("super() without arguments requires a class instantiation context")
+            result = super(self.current_class, self.current_instance)
+        elif len(evaluated_args) >= 2:
+            cls, obj = evaluated_args[0], evaluated_args[1]
+            result = super(cls, obj)
+        else:
+            raise TypeError("super() requires class and instance arguments")
+        return result
+
     if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Call) and isinstance(node.func.value.func, ast.Name) and node.func.value.func.id == 'super':
         super_call = await self.visit(node.func.value, wrap_exceptions=wrap_exceptions)
-        method = getattr(super_call, node.func.attr)  # Get bound method from super object
+        method = getattr(super_call, node.func.attr)
         return await self._execute_function(method, evaluated_args, kwargs)
 
     if func is list and len(evaluated_args) == 1 and hasattr(evaluated_args[0], '__aiter__'):
@@ -91,21 +128,6 @@ async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: boo
     if inspect.isclass(func):
         instance = await self._create_class_instance(func, *evaluated_args, **kwargs)
         return instance
-
-    if func is super:
-        if len(evaluated_args) == 0:
-            if self.current_class and self.current_instance:
-                cls = self.current_class  # Now a type, set in _create_class_instance
-                obj = self.current_instance
-                result = super(cls, obj)
-            else:
-                raise TypeError("super() without arguments requires a class instantiation context")
-        elif len(evaluated_args) >= 2:
-            cls, obj = evaluated_args[0], evaluated_args[1]
-            result = super(cls, obj)
-        else:
-            raise TypeError("super() requires class and instance arguments")
-        return result
 
     if isinstance(func, (staticmethod, classmethod, property)):
         if isinstance(func, property):
@@ -121,6 +143,8 @@ async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: boo
             await func(*evaluated_args, **kwargs)
             return None
         result = await func(*evaluated_args, **kwargs)
+    elif isinstance(func, AsyncGeneratorFunction):
+        return func(*evaluated_args, **kwargs)
     else:
         result = func(*evaluated_args, **kwargs)
         if asyncio.iscoroutine(result) and not is_await_context:

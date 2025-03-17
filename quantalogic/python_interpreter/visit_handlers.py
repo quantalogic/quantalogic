@@ -1,5 +1,3 @@
-# quantalogic/python_interpreter/visit_handlers.py
-
 from .base_visitors import (
     visit_Module,
     visit_Expr,
@@ -56,6 +54,7 @@ from .control_flow_visitors import (
 from .function_visitors import (
     visit_FunctionDef,
     visit_AsyncFunctionDef,
+    visit_AsyncGeneratorDef,
     visit_Call,
     visit_Await,
     visit_Lambda,
@@ -91,22 +90,21 @@ from .misc_visitors import (
     visit_Yield,
     visit_YieldFrom,
     visit_Match,
-    _match_pattern,  # Include the helper method if needed externally
+    _match_pattern,
 )
 
-# Explicitly define __all__ with all visitor methods
 __all__ = [
     "visit_Import", "visit_ImportFrom", "visit_ListComp", "visit_Module", "visit_Expr",
     "visit_Constant", "visit_Name", "visit_BinOp", "visit_UnaryOp", "visit_Assign",
     "visit_AugAssign", "visit_AnnAssign", "visit_Compare", "visit_BoolOp", "visit_If",
     "visit_While", "visit_For", "visit_Break", "visit_Continue", "visit_FunctionDef",
-    "visit_AsyncFunctionDef", "visit_Call", "visit_Await", "visit_Return", "visit_Lambda",
-    "visit_List", "visit_Tuple", "visit_Dict", "visit_Set", "visit_Attribute",
-    "visit_Subscript", "visit_Slice", "visit_Index", "visit_Starred", "visit_Pass",
-    "visit_TypeIgnore", "visit_Try", "visit_TryStar", "visit_Nonlocal", "visit_JoinedStr",
-    "visit_FormattedValue", "visit_GeneratorExp", "visit_ClassDef", "visit_With",
-    "visit_AsyncWith", "visit_Raise", "visit_Global", "visit_IfExp", "visit_DictComp",
-    "visit_SetComp", "visit_Yield", "visit_YieldFrom", "visit_Match", "visit_Delete",
-    "visit_AsyncFor", "visit_Assert", "visit_NamedExpr",
-    # "_match_pattern",  # Uncomment if this helper needs to be exported
+    "visit_AsyncFunctionDef", "visit_AsyncGeneratorDef", "visit_Call", "visit_Await",
+    "visit_Return", "visit_Lambda", "visit_List", "visit_Tuple", "visit_Dict",
+    "visit_Set", "visit_Attribute", "visit_Subscript", "visit_Slice", "visit_Index",
+    "visit_Starred", "visit_Pass", "visit_TypeIgnore", "visit_Try", "visit_TryStar",
+    "visit_Nonlocal", "visit_JoinedStr", "visit_FormattedValue", "visit_GeneratorExp",
+    "visit_ClassDef", "visit_With", "visit_AsyncWith", "visit_Raise", "visit_Global",
+    "visit_IfExp", "visit_DictComp", "visit_SetComp", "visit_Yield", "visit_YieldFrom",
+    "visit_Match", "visit_Delete", "visit_AsyncFor", "visit_Assert", "visit_NamedExpr",
+    "_match_pattern",
 ]
