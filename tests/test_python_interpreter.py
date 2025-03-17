@@ -1,6 +1,7 @@
 import pytest
 import asyncio
-from quantalogic.utils.python_interpreter import execute_async, AsyncExecutionResult
+from quantalogic.python_interpreter import AsyncExecutionResult, execute_async
+
 
 
 @pytest.mark.asyncio
