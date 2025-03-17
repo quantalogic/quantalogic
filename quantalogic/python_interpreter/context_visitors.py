@@ -24,7 +24,8 @@ async def visit_With(self: ASTInterpreter, node: ast.With, wrap_exceptions: bool
             ctx.__exit__(None, None, None)
     return result
 
-async def visit_AsyncWith(self: ASTInterpreter, node: ast.AsyncWith, wrap_exceptions: bool = True):
+async def visit_AsyncWith(self: ASTInterpreter, node: ast.AsyncWith, wrap_exceptions: bool = True) -> Any:
+    result = None
     for item in node.items:
         ctx = await self.visit(item.context_expr, wrap_exceptions=wrap_exceptions)
         val = await ctx.__aenter__()
@@ -32,15 +33,13 @@ async def visit_AsyncWith(self: ASTInterpreter, node: ast.AsyncWith, wrap_except
             await self.assign(item.optional_vars, val)
         try:
             for stmt in node.body:
-                try:
-                    await self.visit(stmt, wrap_exceptions=wrap_exceptions)
-                except ReturnException as ret:
-                    await ctx.__aexit__(None, None, None)
-                    raise ret
+                result = await self.visit(stmt, wrap_exceptions=wrap_exceptions)
         except ReturnException as ret:
+            await ctx.__aexit__(None, None, None)
             raise ret
         except Exception as e:
             if not await ctx.__aexit__(type(e), e, None):
                 raise
         else:
             await ctx.__aexit__(None, None, None)
+    return result

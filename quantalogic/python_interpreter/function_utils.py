@@ -126,10 +126,10 @@ class Function:
             try:
                 for stmt in self.node.body:
                     last_value = await new_interp.visit(stmt, wrap_exceptions=True)
-                return last_value  # Return the last evaluated value
+                return last_value
             except ReturnException as ret:
                 return ret.value
-            return last_value  # Return last value if no return statement
+            return last_value
 
     def __get__(self, instance: Any, owner: Any):
         if instance is None:

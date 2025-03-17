@@ -3,7 +3,7 @@ import asyncio
 import textwrap
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Callable
+from typing import Any, Dict, List, Optional, Tuple
 
 from .interpreter_core import ASTInterpreter
 from .function_utils import Function, AsyncFunction
@@ -112,7 +112,7 @@ async def execute_async(
             loop.run_until_complete(asyncio.gather(*asyncio.all_tasks(loop), return_exceptions=True))
             loop.close()
 
-def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
+def interpret_ast(ast_tree: ast.AST, allowed_modules: List[str], source: str = "", restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
     ast_tree = optimize_ast(ast_tree)
     interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source, restrict_os=restrict_os, namespace=namespace)
     loop_created = False

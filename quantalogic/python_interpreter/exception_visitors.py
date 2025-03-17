@@ -10,7 +10,6 @@ async def visit_Try(self: ASTInterpreter, node: ast.Try, wrap_exceptions: bool =
         for stmt in node.body:
             result = await self.visit(stmt, wrap_exceptions=False)
     except ReturnException as ret:
-        # Propagate ReturnException raised from the try block
         raise ret
     except Exception as e:
         original_e = e.original_exception if isinstance(e, WrappedException) else e
@@ -24,10 +23,9 @@ async def visit_Try(self: ASTInterpreter, node: ast.Try, wrap_exceptions: bool =
                     for stmt in handler.body:
                         handler_result = await self.visit(stmt, wrap_exceptions=True)
                 except ReturnException as ret:
-                    # Propagate ReturnException raised from the handler
                     raise ret
                 if handler_result is not None:
-                    result = handler_result  # Use the last value from the handler if set
+                    result = handler_result
                 break
         else:
             raise
