@@ -90,7 +90,7 @@ class ASTInterpreter:
             self.env_stack[0]["Context"] = dec.Context
 
         self.loop = None
-        self.current_class = None
+        self.current_class = None  # Already present, used for super()
         self.current_instance = None
         self.current_exception = None
         self.last_exception = None

@@ -369,9 +369,9 @@ async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: boo
     # Special handling for str() on exceptions
     if func is str and len(evaluated_args) == 1 and isinstance(evaluated_args[0], BaseException):
         exc = evaluated_args[0]
-        if isinstance(exc, WrappedException):
-            return exc.message  # Return the original message for WrappedException
-        return str(exc)  # Default behavior for other exceptions
+        if isinstance(exc, WrappedException) and hasattr(exc, 'original_exception'):
+            return str(exc.original_exception)  # Return the message of the original exception
+        return str(exc.args[0]) if exc.args else str(exc)  # Extract message if available
 
     # Handle calls on super objects
     if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Call) and isinstance(node.func.value.func, ast.Name) and node.func.value.func.id == 'super':
