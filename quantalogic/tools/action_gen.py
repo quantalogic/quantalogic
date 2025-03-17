@@ -9,8 +9,8 @@ import litellm
 import typer
 from loguru import logger
 
+from quantalogic.python_interpreter import execute_async
 from quantalogic.tools.tool import Tool, ToolArgument
-from quantalogic.utils.python_interpreter import execute_async
 
 # Configure loguru to log to a file with rotation, matching original
 logger.add("action_gen.log", rotation="10 MB", level="DEBUG")
@@ -287,7 +287,7 @@ async def generate_core(task: str, model: str, max_tokens: int) -> None:
             timeout=30,
             entry_point="main",
             allowed_modules=["asyncio"],
-            namespace=namespace
+            namespace=namespace,
         )
         
         # Detailed error handling

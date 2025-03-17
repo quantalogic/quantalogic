@@ -90,7 +90,7 @@ class ASTInterpreter:
             self.env_stack[0]["Context"] = dec.Context
 
         self.loop = None
-        self.current_class = None  # Already present, used for super()
+        self.current_class = None  # Tracks the current class type (not AST node) for super()
         self.current_instance = None
         self.current_exception = None
         self.last_exception = None
@@ -244,10 +244,14 @@ class ASTInterpreter:
             return instance
         instance = object.__new__(cls)
         self.current_instance = instance  # Set current_instance for super() calls
+        self.current_class = cls  # Set to the actual class type, not AST node, for super()
         init_method = cls.__init__.__func__ if hasattr(cls.__init__, '__func__') else cls.__init__
         await self._execute_function(init_method, [instance] + list(args), kwargs)
         self.current_instance = None  # Reset after instantiation
+        self.current_class = None  # Reset after instantiation
         return instance
+        # Change: Set self.current_class to cls (the type) instead of relying on AST node,
+        # ensuring super() works correctly during __init__.
 
     async def _execute_function(self, func: Any, args: list, kwargs: dict) -> Any:
         """Execute a function, handling both sync and async cases."""
