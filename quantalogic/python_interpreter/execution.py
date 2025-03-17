@@ -65,11 +65,14 @@ async def execute_async(
             if isinstance(func, AsyncFunction) or asyncio.iscoroutinefunction(func):
                 result = await func(*args, **kwargs)
             elif isinstance(func, Function):
-                result = await func(*args, **kwargs)  # Ensure await here to resolve coroutines
+                result = await func(*args, **kwargs)
             else:
                 result = func(*args, **kwargs)
                 if asyncio.iscoroutine(result):
-                    result = await result
+                    result = await result  # Ensure coroutines are awaited
+            # Additional check to handle nested coroutines from method calls
+            if asyncio.iscoroutine(result):
+                result = await result
         else:
             result = module_result
         
