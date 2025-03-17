@@ -1,4 +1,3 @@
-# quantalogic/python_interpreter/exceptions.py
 import ast
 from typing import Any, List
 
@@ -29,10 +28,9 @@ class WrappedException(Exception):
         self.col: int = col
         self.context_line: str = context_line
         self.message = original_exception.args[0] if original_exception.args else str(original_exception)
-        # Set self.message to the exception's message (e.g., "test error" for ValueError("test error"))
 
     def __str__(self):
-        return self.message  # Return only the exception message for clean stringification
+        return f"Error line {self.lineno}, col {self.col}:\n{self.context_line}\nDescription: {self.message}"
 
 def has_await(node: ast.AST) -> bool:
     for child in ast.walk(node):

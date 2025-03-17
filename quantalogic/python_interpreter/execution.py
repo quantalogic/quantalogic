@@ -1,4 +1,3 @@
-# quantalogic/python_interpreter/execution.py
 import ast
 import asyncio
 import textwrap
@@ -16,6 +15,20 @@ class AsyncExecutionResult:
     error: Optional[str]
     execution_time: float
 
+def optimize_ast(tree: ast.AST) -> ast.AST:
+    """Perform basic constant folding on the AST."""
+    class ConstantFolder(ast.NodeTransformer):
+        def visit_BinOp(self, node):
+            self.generic_visit(node)
+            if isinstance(node.left, ast.Constant) and isinstance(node.right, ast.Constant):
+                left, right = node.left.value, node.right.value
+                if isinstance(node.op, ast.Add) and isinstance(left, (int, float)) and isinstance(right, (int, float)):
+                    return ast.Constant(value=left + right)
+                elif isinstance(node.op, ast.Mult) and isinstance(left, (int, float)) and isinstance(right, (int, float)):
+                    return ast.Constant(value=left * right)
+            return node
+    return ConstantFolder().visit(tree)
+
 async def execute_async(
     code: str,
     entry_point: Optional[str] = None,
@@ -25,42 +38,30 @@ async def execute_async(
     allowed_modules: List[str] = ['asyncio'],
     namespace: Optional[Dict[str, Any]] = None
 ) -> AsyncExecutionResult:
-    """
-    Execute Python code asynchronously with support for generators and proper loop management.
-    """
     start_time = time.time()
     loop_created = False
+    loop = None
     try:
-        # Parse the code into an AST
-        ast_tree = ast.parse(textwrap.dedent(code))
-        
-        # Try to get the current event loop
+        ast_tree = optimize_ast(ast.parse(textwrap.dedent(code)))
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            # No running event loop, create a new one
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop_created = True
         
-        # Create the interpreter with the namespace
         interpreter = ASTInterpreter(
             allowed_modules=allowed_modules,
             restrict_os=True,
             namespace=namespace
         )
-        
-        # Set the interpreter's loop to be the same as our current loop
         interpreter.loop = loop
         
-        # Define the execution function that runs in the same loop context
         async def run_execution():
             return await interpreter.execute_async(ast_tree)
         
-        # Execute the module with timeout
-        module_result = await asyncio.wait_for(run_execution(), timeout=timeout)
+        await asyncio.wait_for(run_execution(), timeout=timeout)
         
-        # If an entry_point is specified, execute that function
         if entry_point:
             func = interpreter.env_stack[0].get(entry_point)
             if not func:
@@ -68,21 +69,18 @@ async def execute_async(
             args = args or ()
             kwargs = kwargs or {}
             if isinstance(func, AsyncFunction) or asyncio.iscoroutinefunction(func):
-                result = await func(*args, **kwargs)
+                result = await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
             elif isinstance(func, Function):
-                result = await func(*args, **kwargs)
+                result = await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
             else:
                 result = func(*args, **kwargs)
                 if asyncio.iscoroutine(result):
-                    result = await result  # Ensure coroutines are awaited
-            # Additional check to handle nested coroutines or generators
+                    result = await asyncio.wait_for(result, timeout=timeout)
             if asyncio.iscoroutine(result):
-                result = await result
-            # Return generators/iterables directly without unwrapping
+                result = await asyncio.wait_for(result, timeout=timeout)
         else:
-            result = module_result
+            result = await interpreter.execute_async(ast_tree)  # Capture the module result
         
-        # Preserve generators and iterables as-is
         return AsyncExecutionResult(
             result=result,
             error=None,
@@ -108,26 +106,24 @@ async def execute_async(
             execution_time=time.time() - start_time
         )
     finally:
-        # Clean up the event loop if we created it
-        if loop_created and not loop.is_closed():
+        if loop_created and loop and not loop.is_closed():
+            for task in asyncio.all_tasks(loop):
+                task.cancel()
+            loop.run_until_complete(asyncio.gather(*asyncio.all_tasks(loop), return_exceptions=True))
             loop.close()
 
 def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
-    """
-    Interpret an AST synchronously, handling generators and async results appropriately.
-    """
+    ast_tree = optimize_ast(ast_tree)
     interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source, restrict_os=restrict_os, namespace=namespace)
     loop_created = False
 
     async def run_interpreter():
         result = await interpreter.visit(ast_tree, wrap_exceptions=True)
-        # Return generators and iterables directly
         return result
 
-    # Use the current event loop if one is running, otherwise create a new one
     try:
         loop = asyncio.get_running_loop()
-    except RuntimeError:  # No running event loop
+    except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop_created = True
@@ -142,9 +138,6 @@ def interpret_ast(ast_tree: Any, allowed_modules: List[str], source: str = "", r
         return asyncio.run_coroutine_threadsafe(run_interpreter(), loop).result()
 
 def interpret_code(source_code: str, allowed_modules: List[str], restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
-    """
-    Interpret source code synchronously, delegating to interpret_ast.
-    """
     dedented_source = textwrap.dedent(source_code).strip()
     tree: ast.AST = ast.parse(dedented_source)
     return interpret_ast(tree, allowed_modules, source=dedented_source, restrict_os=restrict_os, namespace=namespace)

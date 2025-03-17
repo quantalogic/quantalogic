@@ -28,6 +28,10 @@ async def visit_Assert(self: ASTInterpreter, node: ast.Assert, wrap_exceptions: 
 
 async def visit_Yield(self: ASTInterpreter, node: ast.Yield, wrap_exceptions: bool = True) -> Any:
     value = await self.visit(node.value, wrap_exceptions=wrap_exceptions) if node.value else None
+    self.recursion_depth += 1  # Treat yields as recursion for loop detection
+    if self.recursion_depth > self.max_recursion_depth:
+        raise RecursionError(f"Maximum recursion depth exceeded in yield ({self.max_recursion_depth})")
+    self.recursion_depth -= 1
     return value
 
 async def visit_YieldFrom(self: ASTInterpreter, node: ast.YieldFrom, wrap_exceptions: bool = True) -> Any:
