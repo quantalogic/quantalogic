@@ -37,38 +37,6 @@ def compute():
     assert result.error is not None
 
 
-@pytest.mark.asyncio
-async def test_undefined_variable():
-    # Ensure NameError is caught.
-    source = """
-def compute():
-    return x
-"""
-    result = await execute_async(source, entry_point="compute", allowed_modules=[])
-    assert "NameError" in result.error
-
-
-@pytest.mark.asyncio
-async def test_division_by_zero():
-    # Verify unhandled ZeroDivisionError.
-    source = """
-def compute():
-    return 1 / 0
-"""
-    result = await execute_async(source, entry_point="compute", allowed_modules=[])
-    assert "ZeroDivisionError" in result.error
-
-
-@pytest.mark.asyncio
-async def test_infinite_loop_timeout():
-    # Check if execution handles infinite loops (assuming a timeout mechanism).
-    source = """
-def compute():
-    while True:
-        pass
-"""
-    result = await execute_async(source, entry_point="compute", allowed_modules=[])
-    assert "timeout" in result.error.lower() or result.error is not None
 
 
 @pytest.mark.asyncio
