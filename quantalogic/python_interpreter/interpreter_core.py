@@ -3,11 +3,13 @@ import asyncio
 import builtins
 import logging
 import threading
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
 import psutil  # New dependency for resource monitoring
-from typing import Any, Dict, List, Optional, Tuple, Callable
 
 from .exceptions import BreakException, ContinueException, ReturnException, WrappedException
 from .scope import Scope
+
 
 class ASTInterpreter:
     def __init__(
@@ -36,44 +38,108 @@ class ASTInterpreter:
         if env_stack is None:
             self.env_stack: List[Dict[str, Any]] = [{}]
             self.env_stack[0].update(self.modules)
-            safe_builtins: Dict[str, Any] = dict(vars(builtins))
-            safe_builtins["__import__"] = self.safe_import
-            allowed_builtins = {
-                "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
-                "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
-                "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
-                "ValueError": ValueError, "TypeError": TypeError, "print": print,
-                "input": lambda prompt="": input(prompt), "dir": lambda obj: [x for x in dir(obj) if not x.startswith('__')],
-                "getattr": self.safe_getattr, "vars": lambda obj=None: vars(obj) if obj else dict(self.env_stack[-1]),
+
+            # Define a minimal safe_builtins with only essential types and constants
+            safe_builtins: Dict[str, Any] = {
+                # Essential built-in types and constants
+                'None': None,
+                'False': False,
+                'True': True,
+                'int': int,
+                'float': float,
+                'str': str,
+                'list': list,
+                'dict': dict,
+                'set': set,
+                'tuple': tuple,
+                'bool': bool,
+                'object': object,
+                'range': range,
+                # Add __name__ and __main__ to support the __main__ idiom
+                '__name__': '__main__',  # Simulate script execution context
             }
-            if not restrict_os:
-                allowed_builtins["open"] = open
+
+            # Define explicitly allowed built-in functions
+            allowed_builtins = {
+                "enumerate": enumerate,
+                "zip": zip,
+                "sum": sum,
+                "min": min,
+                "max": max,
+                "abs": abs,
+                "round": round,
+                "str": str,
+                "repr": repr,
+                "id": id,
+                "Exception": Exception,
+                "ZeroDivisionError": ZeroDivisionError,
+                "ValueError": ValueError,
+                "TypeError": TypeError,
+                "print": print,
+                "getattr": self.safe_getattr,
+                "vars": lambda obj=None: vars(obj) if obj else dict(self.env_stack[-1]),
+            }
+
+            # Update safe_builtins with allowed functions and restricted import
             safe_builtins.update(allowed_builtins)
+            safe_builtins["__import__"] = self.safe_import
+
+            # Set the restricted builtins in the environment
             self.env_stack[0]["__builtins__"] = safe_builtins
             self.env_stack[0].update(safe_builtins)
             self.env_stack[0]["logger"] = logging.getLogger(__name__)
+
+            # Add the provided namespace (e.g., tools) to the environment
             if namespace is not None:
                 self.env_stack[0].update(namespace)
         else:
             self.env_stack = env_stack
             if "__builtins__" not in self.env_stack[0]:
-                # Same initialization as above for consistency
-                safe_builtins: Dict[str, Any] = dict(vars(builtins))
-                safe_builtins["__import__"] = self.safe_import
-                allowed_builtins = {
-                    "enumerate": enumerate, "zip": zip, "sum": sum, "min": min, "max": max,
-                    "abs": abs, "round": round, "str": str, "repr": repr, "id": id,
-                    "Exception": Exception, "ZeroDivisionError": ZeroDivisionError,
-                    "ValueError": ValueError, "TypeError": TypeError, "print": print,
-                    "input": lambda prompt="": input(prompt), "dir": lambda obj: [x for x in dir(obj) if not x.startswith('__')],
-                    "getattr": self.safe_getattr, "vars": lambda obj=None: vars(obj) if obj else dict(self.env_stack[-1]),
+                # Define a minimal safe_builtins for consistency
+                safe_builtins: Dict[str, Any] = {
+                    'None': None,
+                    'False': False,
+                    'True': True,
+                    'int': int,
+                    'float': float,
+                    'str': str,
+                    'list': list,
+                    'dict': dict,
+                    'set': set,
+                    'tuple': tuple,
+                    'bool': bool,
+                    'object': object,
+                    'range': range,
+                    '__name__': '__main__',  # Ensure consistency for provided env_stack
                 }
-                if not restrict_os:
-                    allowed_builtins["open"] = open
+
+                allowed_builtins = {
+                    "enumerate": enumerate,
+                    "zip": zip,
+                    "sum": sum,
+                    "min": min,
+                    "max": max,
+                    "abs": abs,
+                    "round": round,
+                    "str": str,
+                    "repr": repr,
+                    "id": id,
+                    "Exception": Exception,
+                    "ZeroDivisionError": ZeroDivisionError,
+                    "ValueError": ValueError,
+                    "TypeError": TypeError,
+                    "print": print,
+                    "getattr": self.safe_getattr,
+                    "vars": lambda obj=None: vars(obj) if obj else dict(self.env_stack[-1]),
+                }
+
                 safe_builtins.update(allowed_builtins)
+                safe_builtins["__import__"] = self.safe_import
+
                 self.env_stack[0]["__builtins__"] = safe_builtins
                 self.env_stack[0].update(safe_builtins)
                 self.env_stack[0]["logger"] = logging.getLogger(__name__)
+
             if namespace is not None:
                 self.env_stack[0].update(namespace)
 
@@ -284,17 +350,12 @@ class ASTInterpreter:
         self.current_class = None
         return instance
 
-    async def _execute_function(self, func: Any, args: list, kwargs: dict) -> Any:
-        try:
-            if self.sync_mode and not asyncio.iscoroutinefunction(func):
-                result = func(*args, **kwargs)
-            elif asyncio.iscoroutinefunction(func):
-                result = await func(*args, **kwargs)
-            else:
-                result = func(*args, **kwargs)
-                if asyncio.iscoroutine(result):
-                    result = await result
+    async def _execute_function(self, func: Any, args: List[Any], kwargs: Dict[str, Any]):
+        if asyncio.iscoroutinefunction(func):
+            return await func(*args, **kwargs)
+        elif callable(func):
+            result = func(*args, **kwargs)
+            if asyncio.iscoroutine(result):
+                return await result
             return result
-        except Exception as e:
-            func_name = getattr(func, '__name__', str(func))
-            raise WrappedException(f"Error executing {func_name}: {str(e)}", e, 0, 0, "") from e
+        raise TypeError(f"Object {func} is not callable")
