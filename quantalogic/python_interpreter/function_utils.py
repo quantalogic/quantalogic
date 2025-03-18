@@ -79,36 +79,40 @@ class Function:
             new_interp.current_instance = args[0]
 
         if self.is_generator:
-            async def generator():
+            def generator():
                 nonlocal self
                 if self.generator_state is None:
                     self.generator_state = {"closed": False, "pending_value": None}
                 
                 for body_stmt in self.node.body:
                     if self.generator_state["closed"]:
-                        raise StopAsyncIteration
+                        raise StopIteration
                     
                     if isinstance(body_stmt, ast.For):
-                        iter_obj = await new_interp.visit(body_stmt.iter, wrap_exceptions=True)
+                        iter_obj = new_interp.visit(body_stmt.iter, wrap_exceptions=True)
+                        if asyncio.iscoroutine(iter_obj):
+                            iter_obj = asyncio.run_coroutine_threadsafe(iter_obj, self.interpreter.loop).result()
                         for item in iter_obj:
                             new_frame = new_interp.env_stack[-1].copy()
                             new_interp.env_stack.append(new_frame)
-                            await new_interp.assign(body_stmt.target, item)
+                            asyncio.run_coroutine_threadsafe(new_interp.assign(body_stmt.target, item), self.interpreter.loop).result()
                             try:
                                 for inner_stmt in body_stmt.body:
                                     if isinstance(inner_stmt, ast.Expr) and isinstance(inner_stmt.value, ast.YieldFrom):
-                                        sub_iterable = await new_interp.visit(inner_stmt.value, wrap_exceptions=True)
-                                        if hasattr(sub_iterable, '__aiter__'):
-                                            async for v in sub_iterable:
-                                                yield v
-                                        else:
-                                            for v in sub_iterable:
-                                                yield v
+                                        sub_iterable = new_interp.visit(inner_stmt.value, wrap_exceptions=True)
+                                        if asyncio.iscoroutine(sub_iterable):
+                                            sub_iterable = asyncio.run_coroutine_threadsafe(sub_iterable, self.interpreter.loop).result()
+                                        for v in sub_iterable:
+                                            yield v
                                     elif isinstance(inner_stmt, ast.Expr) and isinstance(inner_stmt.value, ast.Yield):
-                                        value = await new_interp.visit(inner_stmt.value, wrap_exceptions=True)
+                                        value = new_interp.visit(inner_stmt.value, wrap_exceptions=True)
+                                        if asyncio.iscoroutine(value):
+                                            value = asyncio.run_coroutine_threadsafe(value, self.interpreter.loop).result()
                                         yield value
                                     else:
-                                        await new_interp.visit(inner_stmt, wrap_exceptions=True)
+                                        result = new_interp.visit(inner_stmt, wrap_exceptions=True)
+                                        if asyncio.iscoroutine(result):
+                                            asyncio.run_coroutine_threadsafe(result, self.interpreter.loop).result()
                             except BreakException:
                                 new_interp.env_stack.pop()
                                 break
@@ -117,20 +121,22 @@ class Function:
                                 continue
                             new_interp.env_stack.pop()
                     elif isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, (ast.Yield, ast.YieldFrom)):
-                        value = await new_interp.visit(body_stmt.value, wrap_exceptions=True)
-                        if hasattr(value, '__aiter__'):
-                            async for v in value:
-                                yield v
-                        elif hasattr(value, '__iter__'):
+                        value = new_interp.visit(body_stmt.value, wrap_exceptions=True)
+                        if asyncio.iscoroutine(value):
+                            value = asyncio.run_coroutine_threadsafe(value, self.interpreter.loop).result()
+                        if isinstance(body_stmt.value, ast.YieldFrom):
                             for v in value:
                                 yield v
                         else:
                             yield value
                     else:
-                        await new_interp.visit(body_stmt, wrap_exceptions=True)
+                        result = new_interp.visit(body_stmt, wrap_exceptions=True)
+                        if asyncio.iscoroutine(result):
+                            asyncio.run_coroutine_threadsafe(result, self.interpreter.loop).result()
+            
             gen = generator()
-            gen.send = lambda value: asyncio.run_coroutine_threadsafe(self._send(gen, value), self.interpreter.loop).result()
-            gen.throw = lambda exc: asyncio.run_coroutine_threadsafe(self._throw(gen, exc), self.interpreter.loop).result()
+            gen.send = lambda value: self._send_sync(gen, value)
+            gen.throw = lambda exc: self._throw_sync(gen, exc)
             gen.close = lambda: setattr(self.generator_state, "closed", True)
             return gen
         else:
@@ -143,16 +149,16 @@ class Function:
                 return ret.value
             return last_value
 
-    async def _send(self, gen, value):
+    def _send_sync(self, gen, value):
         try:
-            return await gen.asend(value)
-        except StopAsyncIteration:
+            return next(gen) if value is None else gen.send(value)
+        except StopIteration:
             raise
 
-    async def _throw(self, gen, exc):
+    def _throw_sync(self, gen, exc):
         try:
-            return await gen.athrow(exc)
-        except StopAsyncIteration:
+            return gen.throw(exc)
+        except StopIteration:
             raise
 
     def __get__(self, instance: Any, owner: Any):
