@@ -22,7 +22,8 @@ class ASTInterpreter:
         max_recursion_depth: int = 1000,  # Now configurable
         max_operations: int = 10000000,   # Added operation limit
         max_memory_mb: int = 1024,        # Added memory limit (1GB default)
-        sync_mode: bool = False           # Added for sync execution optimization
+        sync_mode: bool = False,          # Added for sync execution optimization
+        safe_builtins: Optional[Dict[str, Any]] = None  # New customizable safe_builtins
     ) -> None:
         self.allowed_modules: List[str] = allowed_modules
         self.modules: Dict[str, Any] = {mod: __import__(mod) for mod in allowed_modules}
@@ -35,29 +36,38 @@ class ASTInterpreter:
         self.type_hints: Dict[str, Any] = {}  # Added for type aliases
         self.special_methods: Dict[str, Callable] = {}  # Added for special method dispatch
 
+        # Default safe_builtins if none provided
+        default_safe_builtins: Dict[str, Any] = {
+            'None': None,
+            'False': False,
+            'True': True,
+            'int': int,
+            'float': float,
+            'str': str,
+            'list': list,
+            'dict': dict,
+            'set': set,
+            'tuple': tuple,
+            'bool': bool,
+            'object': object,
+            'range': range,
+            'iter': iter,              # Added for test_iterators
+            'sorted': sorted,          # Added for test_dictionary_methods
+            'frozenset': frozenset,    # Added for test_frozenset
+            'super': super,            # Added for test_class_inheritance
+            'len': len,                # Added for test_empty_structures
+            'property': property,      # Added for test_property_decorator
+            'staticmethod': staticmethod,  # Added for test_static_method
+            'classmethod': classmethod,  # Added for test_class_method
+            '__name__': '__main__',    # Simulate script execution context
+        }
+
+        # Use provided safe_builtins or default
+        self.safe_builtins = safe_builtins if safe_builtins is not None else default_safe_builtins
+
         if env_stack is None:
             self.env_stack: List[Dict[str, Any]] = [{}]
             self.env_stack[0].update(self.modules)
-
-            # Define a minimal safe_builtins with only essential types and constants
-            safe_builtins: Dict[str, Any] = {
-                # Essential built-in types and constants
-                'None': None,
-                'False': False,
-                'True': True,
-                'int': int,
-                'float': float,
-                'str': str,
-                'list': list,
-                'dict': dict,
-                'set': set,
-                'tuple': tuple,
-                'bool': bool,
-                'object': object,
-                'range': range,
-                # Add __name__ and __main__ to support the __main__ idiom
-                '__name__': '__main__',  # Simulate script execution context
-            }
 
             # Define explicitly allowed built-in functions
             allowed_builtins = {
@@ -81,12 +91,12 @@ class ASTInterpreter:
             }
 
             # Update safe_builtins with allowed functions and restricted import
-            safe_builtins.update(allowed_builtins)
-            safe_builtins["__import__"] = self.safe_import
+            self.safe_builtins.update(allowed_builtins)
+            self.safe_builtins["__import__"] = self.safe_import
 
             # Set the restricted builtins in the environment
-            self.env_stack[0]["__builtins__"] = safe_builtins
-            self.env_stack[0].update(safe_builtins)
+            self.env_stack[0]["__builtins__"] = self.safe_builtins
+            self.env_stack[0].update(self.safe_builtins)
             self.env_stack[0]["logger"] = logging.getLogger(__name__)
 
             # Add the provided namespace (e.g., tools) to the environment
@@ -95,24 +105,7 @@ class ASTInterpreter:
         else:
             self.env_stack = env_stack
             if "__builtins__" not in self.env_stack[0]:
-                # Define a minimal safe_builtins for consistency
-                safe_builtins: Dict[str, Any] = {
-                    'None': None,
-                    'False': False,
-                    'True': True,
-                    'int': int,
-                    'float': float,
-                    'str': str,
-                    'list': list,
-                    'dict': dict,
-                    'set': set,
-                    'tuple': tuple,
-                    'bool': bool,
-                    'object': object,
-                    'range': range,
-                    '__name__': '__main__',  # Ensure consistency for provided env_stack
-                }
-
+                # Define explicitly allowed built-in functions
                 allowed_builtins = {
                     "enumerate": enumerate,
                     "zip": zip,
@@ -133,11 +126,13 @@ class ASTInterpreter:
                     "vars": lambda obj=None: vars(obj) if obj else dict(self.env_stack[-1]),
                 }
 
-                safe_builtins.update(allowed_builtins)
-                safe_builtins["__import__"] = self.safe_import
+                # Update safe_builtins with allowed functions and restricted import
+                self.safe_builtins.update(allowed_builtins)
+                self.safe_builtins["__import__"] = self.safe_import
 
-                self.env_stack[0]["__builtins__"] = safe_builtins
-                self.env_stack[0].update(safe_builtins)
+                # Set the restricted builtins in the environment
+                self.env_stack[0]["__builtins__"] = self.safe_builtins
+                self.env_stack[0].update(self.safe_builtins)
                 self.env_stack[0]["logger"] = logging.getLogger(__name__)
 
             if namespace is not None:
@@ -198,7 +193,8 @@ class ASTInterpreter:
             max_recursion_depth=self.max_recursion_depth,
             max_operations=self.max_operations,
             max_memory_mb=self.max_memory_mb,
-            sync_mode=self.sync_mode
+            sync_mode=self.sync_mode,
+            safe_builtins=self.safe_builtins  # Pass along the customized safe_builtins
         )
         new_interp.loop = self.loop
         new_interp.var_cache = self.var_cache.copy()
