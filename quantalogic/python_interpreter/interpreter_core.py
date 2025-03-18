@@ -52,6 +52,7 @@ class ASTInterpreter:
             'object': object,
             'range': range,
             'iter': iter,              # Added for test_iterators
+            'next': next,              # Added to fix test_iterators
             'sorted': sorted,          # Added for test_dictionary_methods
             'frozenset': frozenset,    # Added for test_frozenset
             'super': super,            # Added for test_class_inheritance
