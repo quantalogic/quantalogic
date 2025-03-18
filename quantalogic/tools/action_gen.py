@@ -130,7 +130,7 @@ class AgentTool(Tool):
             logger.error(f"Failed to generate text with {self.model}: {str(e)}")
             raise RuntimeError(f"Text generation failed: {str(e)}")
 
-# Asynchronous function to generate the program, matching original behavior
+# Asynchronous function to generate the program, matching original behavior with updated prompt
 async def generate_program(task_description: str, tools: List[Tool], model: str, max_tokens: int) -> str:
     """
     Asynchronously generate a Python program that solves a given task using a list of tools.
@@ -147,7 +147,7 @@ async def generate_program(task_description: str, tools: List[Tool], model: str,
     logger.debug(f"Generating program for task: {task_description}")
     tool_docstrings = "\n\n".join([tool.to_docstring() for tool in tools])
 
-    # Prompt matches the logs exactly
+    # Updated prompt with reinforced instruction to exclude __main__ block
     prompt = f"""
 You are a Python code generator. Your task is to create a Python program that solves the following task:
 "{task_description}"
@@ -163,16 +163,17 @@ Instructions:
 4. Use the pre-defined tool functions (e.g., add_tool, multiply_tool, concat_tool) directly by calling them with await and the appropriate arguments as specified in their descriptions.
 5. Do not redefine the tool functions within the program; assume they are already available in the namespace.
 6. Return the program as markdown code block.
-7. Do not include asyncio.run(main()) or any code outside the main() function definition.
+7. Strictly exclude asyncio.run(main()) or any code outside the main() function definition, including any 'if __name__ == "__main__":' block, as the runtime will handle execution of main().
 8. Do not include explanatory text outside the program string.
 9. Express all string variables as multiline strings
 string, always start a string at the beginning of a line.
 10. Always print the result at the end of the program.
-11. the main() must be called in __main__
 
 Example task: "Add 5 and 7 and print the result"
 Example output:
 ```python
+import asyncio
+
 async def main():
     result = await add_tool(a=5, b=7)
     print(result)
@@ -204,6 +205,16 @@ async def main():
     elif generated_code.startswith("```python") and generated_code.endswith("```"):
         generated_code = generated_code[9:-3].strip()
     
+    # Post-processing to remove any __main__ block if generated despite instructions
+    if "if __name__ == \"__main__\":" in generated_code:
+        lines = generated_code.splitlines()
+        main_end_idx = next(
+            (i for i in range(len(lines)) if "if __name__" in lines[i]),
+            len(lines)
+        )
+        generated_code = "\n".join(lines[:main_end_idx]).strip()
+        logger.warning("Removed unexpected __main__ block from generated code")
+
     return generated_code
 
 # Updated async core logic with improved interpreter usage
