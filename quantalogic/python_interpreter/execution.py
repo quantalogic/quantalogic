@@ -44,6 +44,34 @@ def optimize_ast(tree: ast.AST) -> ast.AST:
 
     return ConstantFolder().visit(tree)
 
+class ControlledEventLoop:
+    """Encapsulated event loop management to prevent unauthorized access"""
+    def __init__(self):
+        self._loop = None
+        self._created = False
+        self._lock = asyncio.Lock()
+
+    async def get_loop(self) -> asyncio.AbstractEventLoop:
+        async with self._lock:
+            if self._loop is None:
+                self._loop = asyncio.new_event_loop()
+                self._created = True
+            return self._loop
+
+    async def cleanup(self):
+        async with self._lock:
+            if self._created and self._loop and not self._loop.is_closed():
+                for task in asyncio.all_tasks(self._loop):
+                    task.cancel()
+                await asyncio.gather(*asyncio.all_tasks(self._loop), return_exceptions=True)
+                self._loop.close()
+                self._loop = None
+                self._created = False
+
+    async def run_task(self, coro, timeout: float) -> Any:
+        # Remove the loop parameter from wait_for since it's not needed in modern asyncio
+        return await asyncio.wait_for(coro, timeout=timeout)
+
 async def execute_async(
     code: str,
     entry_point: Optional[str] = None,
@@ -55,21 +83,20 @@ async def execute_async(
     max_memory_mb: int = 1024
 ) -> AsyncExecutionResult:
     start_time = time.time()
-    loop_created = False
-    loop = None
+    event_loop_manager = ControlledEventLoop()
+    
     try:
         ast_tree = optimize_ast(ast.parse(textwrap.dedent(code)))
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop_created = True
+        loop = await event_loop_manager.get_loop()
+        
+        # Remove direct asyncio access from builtins
+        safe_namespace = namespace.copy() if namespace else {}
+        safe_namespace.pop('asyncio', None)  # Prevent direct asyncio access
         
         interpreter = ASTInterpreter(
             allowed_modules=allowed_modules,
             restrict_os=True,
-            namespace=namespace,
+            namespace=safe_namespace,
             max_memory_mb=max_memory_mb
         )
         interpreter.loop = loop
@@ -77,7 +104,7 @@ async def execute_async(
         async def run_execution():
             return await interpreter.execute_async(ast_tree)
         
-        await asyncio.wait_for(run_execution(), timeout=timeout)
+        await event_loop_manager.run_task(run_execution(), timeout=timeout)
         
         if entry_point:
             func = interpreter.env_stack[0].get(entry_point)
@@ -86,15 +113,15 @@ async def execute_async(
             args = args or ()
             kwargs = kwargs or {}
             if isinstance(func, AsyncFunction) or asyncio.iscoroutinefunction(func):
-                result = await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
+                result = await event_loop_manager.run_task(func(*args, **kwargs), timeout=timeout)
             elif isinstance(func, Function):
                 result = await func(*args, **kwargs)
             else:
                 result = func(*args, **kwargs)
                 if asyncio.iscoroutine(result):
-                    result = await asyncio.wait_for(result, timeout=timeout)
+                    result = await event_loop_manager.run_task(result, timeout=timeout)
             if asyncio.iscoroutine(result):
-                result = await asyncio.wait_for(result, timeout=timeout)
+                result = await event_loop_manager.run_task(result, timeout=timeout)
         else:
             result = await interpreter.execute_async(ast_tree)
         
@@ -123,36 +150,33 @@ async def execute_async(
             execution_time=time.time() - start_time
         )
     finally:
-        if loop_created and loop and not loop.is_closed():
-            for task in asyncio.all_tasks(loop):
-                task.cancel()
-            loop.run_until_complete(asyncio.gather(*asyncio.all_tasks(loop), return_exceptions=True))
-            loop.close()
+        await event_loop_manager.cleanup()
 
 def interpret_ast(ast_tree: ast.AST, allowed_modules: List[str], source: str = "", restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
     ast_tree = optimize_ast(ast_tree)
-    interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source, restrict_os=restrict_os, namespace=namespace)
-    loop_created = False
-
+    event_loop_manager = ControlledEventLoop()
+    
+    # Remove asyncio from namespace
+    safe_namespace = namespace.copy() if namespace else {}
+    safe_namespace.pop('asyncio', None)
+    
+    interpreter = ASTInterpreter(allowed_modules=allowed_modules, source=source, restrict_os=restrict_os, namespace=safe_namespace)
+    
     async def run_interpreter():
+        loop = await event_loop_manager.get_loop()
+        interpreter.loop = loop
         result = await interpreter.visit(ast_tree, wrap_exceptions=True)
         return result
 
     try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop_created = True
         interpreter.loop = loop
-        try:
-            return loop.run_until_complete(run_interpreter())
-        finally:
-            if not loop.is_closed():
-                loop.close()
-    else:
-        interpreter.loop = loop
-        return asyncio.run_coroutine_threadsafe(run_interpreter(), loop).result()
+        result = loop.run_until_complete(run_interpreter())
+        return result
+    finally:
+        if not loop.is_closed():
+            loop.close()
 
 def interpret_code(source_code: str, allowed_modules: List[str], restrict_os: bool = False, namespace: Optional[Dict[str, Any]] = None) -> Any:
     dedented_source = textwrap.dedent(source_code).strip()
