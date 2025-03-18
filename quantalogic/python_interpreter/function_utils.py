@@ -5,6 +5,45 @@ from typing import Any, Dict, List, Optional
 from .interpreter_core import ASTInterpreter
 from .exceptions import ReturnException, BreakException, ContinueException
 
+class GeneratorWrapper:
+    def __init__(self, gen):
+        self.gen = gen
+        self.closed = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.closed:
+            raise StopIteration
+        try:
+            return next(self.gen)
+        except StopIteration:
+            self.closed = True
+            raise
+
+    def send(self, value):
+        if self.closed:
+            raise StopIteration
+        try:
+            return self.gen.send(value)
+        except StopIteration:
+            self.closed = True
+            raise
+
+    def throw(self, exc):
+        if self.closed:
+            raise StopIteration
+        try:
+            return self.gen.throw(exc)
+        except StopIteration:
+            self.closed = True
+            raise
+
+    def close(self):
+        self.closed = True
+        self.gen.close()
+
 class Function:
     def __init__(self, node: ast.FunctionDef, closure: List[Dict[str, Any]], interpreter: ASTInterpreter,
                  pos_kw_params: List[str], vararg_name: Optional[str], kwonly_params: List[str],
@@ -79,66 +118,19 @@ class Function:
             new_interp.current_instance = args[0]
 
         if self.is_generator:
-            def generator():
-                nonlocal self
-                if self.generator_state is None:
-                    self.generator_state = {"closed": False, "pending_value": None}
-                
+            async def generator():
                 for body_stmt in self.node.body:
-                    if self.generator_state["closed"]:
-                        raise StopIteration
-                    
-                    if isinstance(body_stmt, ast.For):
-                        iter_obj = new_interp.visit(body_stmt.iter, wrap_exceptions=True)
-                        if asyncio.iscoroutine(iter_obj):
-                            iter_obj = asyncio.run_coroutine_threadsafe(iter_obj, self.interpreter.loop).result()
-                        for item in iter_obj:
-                            new_frame = new_interp.env_stack[-1].copy()
-                            new_interp.env_stack.append(new_frame)
-                            asyncio.run_coroutine_threadsafe(new_interp.assign(body_stmt.target, item), self.interpreter.loop).result()
-                            try:
-                                for inner_stmt in body_stmt.body:
-                                    if isinstance(inner_stmt, ast.Expr) and isinstance(inner_stmt.value, ast.YieldFrom):
-                                        sub_iterable = new_interp.visit(inner_stmt.value, wrap_exceptions=True)
-                                        if asyncio.iscoroutine(sub_iterable):
-                                            sub_iterable = asyncio.run_coroutine_threadsafe(sub_iterable, self.interpreter.loop).result()
-                                        for v in sub_iterable:
-                                            yield v
-                                    elif isinstance(inner_stmt, ast.Expr) and isinstance(inner_stmt.value, ast.Yield):
-                                        value = new_interp.visit(inner_stmt.value, wrap_exceptions=True)
-                                        if asyncio.iscoroutine(value):
-                                            value = asyncio.run_coroutine_threadsafe(value, self.interpreter.loop).result()
-                                        yield value
-                                    else:
-                                        result = new_interp.visit(inner_stmt, wrap_exceptions=True)
-                                        if asyncio.iscoroutine(result):
-                                            asyncio.run_coroutine_threadsafe(result, self.interpreter.loop).result()
-                            except BreakException:
-                                new_interp.env_stack.pop()
-                                break
-                            except ContinueException:
-                                new_interp.env_stack.pop()
-                                continue
-                            new_interp.env_stack.pop()
-                    elif isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, (ast.Yield, ast.YieldFrom)):
-                        value = new_interp.visit(body_stmt.value, wrap_exceptions=True)
-                        if asyncio.iscoroutine(value):
-                            value = asyncio.run_coroutine_threadsafe(value, self.interpreter.loop).result()
-                        if isinstance(body_stmt.value, ast.YieldFrom):
-                            for v in value:
-                                yield v
-                        else:
-                            yield value
+                    if isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, ast.Yield):
+                        value = await new_interp.visit(body_stmt.value, wrap_exceptions=True)
+                        yield value
+                    elif isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, ast.YieldFrom):
+                        sub_iterable = await new_interp.visit(body_stmt.value, wrap_exceptions=True)
+                        for v in sub_iterable:
+                            yield v
                     else:
-                        result = new_interp.visit(body_stmt, wrap_exceptions=True)
-                        if asyncio.iscoroutine(result):
-                            asyncio.run_coroutine_threadsafe(result, self.interpreter.loop).result()
-            
+                        await new_interp.visit(body_stmt, wrap_exceptions=True)
             gen = generator()
-            gen.send = lambda value: self._send_sync(gen, value)
-            gen.throw = lambda exc: self._throw_sync(gen, exc)
-            gen.close = lambda: setattr(self.generator_state, "closed", True)
-            return gen
+            return GeneratorWrapper(gen)
         else:
             last_value = None
             try:
