@@ -22,17 +22,21 @@ Tools must be called using the following XML format, with NO additional text:
 
 #### Examples of Correct Tool Usage
 
-**Example 1 - Search Tool:**
+**Example 1 - Duck Duck Go search tool:**
 ```xml
 <action>
-<duckduckgo_tool>
-  <query>search query text</query>
-  <max_results>5</max_results>  <!-- Always include max_results for search -->
-</duckduckgo_tool>
+<duckduckgosearch>
+  <query>machine learning</query>
+  <max_results>20</max_results>
+  <search_type>images</search_type>
+  <region>us-en</region>
+  <safesearch>moderate</safesearch>
+  <timelimit>d</timelimit>
+</duckduckgosearch>
 </action>
 ```
 
-**Example 2 - Task Completion Tool:**
+**Example 3 - Task Completion Tool:**
 ```xml
 <action>
 <task_complete>
@@ -51,4 +55,4 @@ Tools must be called using the following XML format, with NO additional text:
 {% endif %}
 
 Don't invent tools that are not listed.
-
+- If the tool google_news_tool is used, return directly the output of the tool without any additional text.

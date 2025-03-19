@@ -37,6 +37,7 @@ from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
 from .models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
 from .AgentState import AgentState
+from .init_agents import init_agents
 
 # Configure logger
 logger.remove()
@@ -103,12 +104,44 @@ signal.signal(signal.SIGTERM, handle_sigterm)
 server_state = ServerState()
 agent_state = AgentState()
 
+async def load_initial_agents():
+    """Load initial agents from configuration."""
+    logger.info("Loading initial agents...")
+    for agent_dict in init_agents:
+        try:
+            # Convert tool configurations
+            tool_configs = []
+            for tool in agent_dict["tools"]:
+                tool_configs.append(ToolConfig(
+                    type=tool["type"],
+                    parameters=ToolParameters(**tool.get("parameters", {}))
+                ))
+            
+            # Create AgentConfig from dictionary
+            agent_config = AgentConfig(
+                id=agent_dict["id"],
+                name=agent_dict["name"],
+                description=agent_dict["description"],
+                expertise=agent_dict["expertise"],
+                model_name=agent_dict["model_name"],
+                tools=tool_configs
+            )
+            
+            success = await agent_state.create_agent(agent_config)
+            if success:
+                logger.info(f"Successfully loaded agent: {agent_config.name}")
+            else:
+                logger.error(f"Failed to load agent: {agent_config.name}")
+        except Exception as e:
+            logger.error(f"Failed to load agent {agent_dict.get('name', 'unknown')}: {str(e)}")
+
 # Initialize FastAPI app
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for FastAPI app."""
     try:
         # Setup signal handlers
+        await load_initial_agents()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(handle_shutdown(s)))
@@ -374,6 +407,15 @@ async def submit_chat(request: TaskSubmission) -> Dict[str, str]:
     # Start chat execution in background
     asyncio.create_task(agent_state.execute_chat(chat_id))
     return {"task_id": chat_id}
+
+@app.post("/api/agent/get_news")
+async def submit_chat(request: TaskSubmission) -> Dict[str, str]:
+    """Submit a new chat and return its ID."""
+    chat_id = await agent_state.submit_task(request)
+    # Start chat execution in background
+    asyncio.create_task(agent_state.get_news(chat_id))
+    return {"task_id": chat_id}
+
 
 @app.get("/api/agent/tasks/{task_id}")
 async def get_task_status(task_id: str) -> TaskStatus:

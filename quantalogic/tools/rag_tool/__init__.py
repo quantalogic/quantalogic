@@ -11,7 +11,8 @@ from loguru import logger
 # from .query_response import QueryResponse 
 #from .rag_tool_beta import RagToolBeta
 # from .Document_rag_hf import RagToolHf
-from .document_rag_sources import RagToolHf
+#from .document_rag_sources import RagToolHf
+from .document_rag_sources_ import RagToolHf
 
 # Define __all__ to control what is imported with `from ... import *`
 __all__ = [

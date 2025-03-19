@@ -474,6 +474,170 @@ class Agent(BaseModel):
         self._emit_event("chat_response", {"response": response_content})
         return response_content
 
+
+    def chat_news_specific(
+        self,
+        message: str,
+        streaming: bool = False,
+        clear_memory: bool = False,
+        auto_tool_call: bool = True,
+    ) -> str:
+        """Engage in a conversational chat_news_specific with the user (synchronous version).
+
+        Ideal for synchronous applications. For asynchronous contexts, use `async_chat_news_specific`.
+
+        Args:
+            message: The user's input message
+            streaming: Whether to stream the response
+            clear_memory: Whether to clear memory before starting
+            auto_tool_call: Whether to automatically execute detected tool calls and interpret results
+
+        Returns:
+            The assistant's response
+        """
+        logger.debug(f"chat_news_specificting synchronously with message: {message}, auto_tool_call: {auto_tool_call}")
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        return loop.run_until_complete(self.async_chat_news_specific(message, streaming, clear_memory, auto_tool_call))
+
+    async def async_chat_news_specific(
+        self,
+        message: str,
+        streaming: bool = False,
+        clear_memory: bool = False,
+        auto_tool_call: bool = True,
+    ) -> str:
+        """Engage in a conversational chat with the user (asynchronous version).
+
+        Ideal for asynchronous applications. For synchronous contexts, use `chat`.
+
+        Args:
+            message: The user's input message
+            streaming: Whether to stream the response
+            clear_memory: Whether to clear memory before starting
+            auto_tool_call: Whether to automatically execute detected tool calls and interpret results
+
+        Returns:
+            The assistant's response
+        """
+        logger.debug(f"Chatting asynchronously with message: {message}, auto_tool_call: {auto_tool_call}")
+        if clear_memory:
+            self.clear_memory()
+
+        # Prepare chat system prompt with tool information
+        tools_prompt = self._get_tools_names_prompt()
+        logger.debug(tools_prompt)
+        if self.tool_mode:
+            tools_prompt += f"\nPrioritized tool mode: {self.tool_mode}. Prefer tools related to {self.tool_mode} when applicable."
+
+        full_chat_prompt = self._render_template(
+            'chat_system_prompt.j2',
+            persona=self.chat_system_prompt,
+            tools_prompt=tools_prompt
+        )
+
+        if not self.memory.memory or self.memory.memory[0].role != "system":
+            self.memory.add(Message(role="system", content=full_chat_prompt))
+
+        self._emit_event("chat_start", {"message": message})
+
+        # Add user message to memory
+        self.memory.add(Message(role="user", content=message))
+        self._update_total_tokens(self.memory.memory, "")
+
+        # Iterative tool usage with auto-execution
+        current_prompt = message
+        response_content = ""
+        max_tool_iterations = 5  # Prevent infinite tool loops
+        tool_iteration = 0
+
+        while tool_iteration < max_tool_iterations:
+            try:
+                if streaming:
+                    content = ""
+                    # When streaming is enabled, the GenerativeModel._async_stream_response method
+                    # already emits the stream_chunk events, so we don't need to emit them again here
+                    async_stream = await self.model.async_generate_with_history(
+                        messages_history=self.memory.memory,
+                        prompt=current_prompt,
+                        streaming=True,
+                    )
+                    # Just collect the chunks without re-emitting events
+                    async for chunk in async_stream:
+                        content += chunk
+                    response = ResponseStats(
+                        response=content,
+                        usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+                        model=self.model.model,
+                        finish_reason="stop",
+                    )
+                else:
+                    response = await self.model.async_generate_with_history(
+                        messages_history=self.memory.memory,
+                        prompt=current_prompt,
+                        streaming=False,
+                    )
+                    content = response.response
+
+                self.total_tokens = response.usage.total_tokens if not streaming else self.total_tokens
+
+                # Observe response for tool calls
+                observation = await self._async_observe_response(content)
+                if observation.executed_tool and auto_tool_call: 
+                    print("observation.executed_tool : ", observation.executed_tool)
+                    # If any news tool is used, return immediately
+                    if "googlenews" in observation.executed_tool.lower() or \
+                       "duckduckgo" in observation.executed_tool.lower() or \
+                       "duckduckgosearch" in observation.executed_tool.lower(): 
+                        self._emit_event("chat_response", {"response": observation.next_prompt})
+                        return observation.next_prompt
+                    # Tool was executed; process result and continue
+                    current_prompt = observation.next_prompt
+                    
+                    # In chat mode, format the response with clear tool call visualization
+                    if not self.task_to_solve.strip():  # We're in chat mode
+                        # Format the response to clearly show the tool call and result
+                        # Use a format that task_runner.py can parse and display nicely
+                        
+                        # For a cleaner look, insert a special delimiter that task_runner.py can recognize
+                        # to separate tool call from result
+                        response_content = f"{content}\n\n__TOOL_RESULT_SEPARATOR__{observation.executed_tool}__\n{observation.next_prompt}"
+                    else:
+                        # In task mode, keep the original behavior
+                        response_content = observation.next_prompt
+                    
+                    tool_iteration += 1
+                    self.memory.add(Message(role="assistant", content=content))  # Original tool call
+                    self.memory.add(Message(role="user", content=observation.next_prompt))  # Tool result
+                    logger.debug(f"Tool executed: {observation.executed_tool}, iteration: {tool_iteration}")
+                elif not observation.executed_tool and "<action>" in content and auto_tool_call:
+                    # Detected malformed tool call attempt; provide feedback and exit loop
+                    response_content = (
+                        f"{content}\n\n⚠️ Error: Invalid tool call format detected. "
+                        "Please use the exact XML structure as specified in the system prompt:\n"
+                        "```xml\n<action>\n<tool_name>\n  <parameter_name>value</parameter_name>\n</tool_name>\n</action>\n```"
+                    )
+                    break
+                else:
+                    # No tool executed or auto_tool_call is False; final response
+                    response_content = content
+                    break
+
+            except Exception as e:
+                logger.error(f"Error during async chat: {str(e)}")
+                response_content = f"Error: {str(e)}"
+                break
+
+        self._update_session_memory(message, response_content)
+        self._emit_event("chat_response", {"response": response_content})
+        return response_content
+
+
+
     def _observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
         """Analyze the assistant's response and determine next steps (synchronous wrapper).
 
@@ -1314,21 +1478,45 @@ class Agent(BaseModel):
                                         
                                     required = "(required)" if param_info.get("required", False) else "(optional)"
                                     default = f" default: {param_info['default']}" if "default" in param_info else ""
-                                    param_desc = f"{param_name} {required}{default}"
+                                    param_type = param_info.get("type", "string")
+                                    param_desc = f"{param_name} ({param_type}) {required}{default}"
                                     params.append(param_desc)
                     except Exception as e:
                         logger.debug(f"Error parsing schema for {tool_name}: {str(e)}")
-                    
-                    # Special case for duckduckgo_tool
-                    if tool_name == "duckduckgo_tool" and not any(p.startswith("max_results ") for p in params):
-                        params.append("max_results (required) default: 5")
-                    
-                    # Special case for other search tools that might need max_results
-                    if "search" in tool_name.lower() and not any(p.startswith("max_results ") for p in params):
-                        params.append("max_results (optional) default: 5")
-                        
-                    param_str = ", ".join(params) if params else "No parameters required"
-                    tool_descriptions.append(f"{tool_name}: {param_str}")
+
+                    # Enhanced tool-specific parameter descriptions
+                    if tool_name == "googlenews":
+                        params = [
+                            "query (string, required) - The search query string",
+                            "language (string, optional) default: en - Language code (e.g., en, fr, es)",
+                            "period (string, optional) default: 7d - Time period (1d, 7d, 30d)",
+                            "max_results (integer, required) default: 5 - Number of results to return",
+                            "country (string, optional) default: US - Country code (e.g., US, GB, FR)",
+                            "sort_by (string, optional) default: relevance - Sort by (relevance, date)",
+                            "analyze (boolean, optional) default: False - Whether to analyze results"
+                        ]
+                    elif tool_name == "duckduckgosearch":
+                        params = [
+                            "query (string, required) - The search query string",
+                            "max_results (integer, required) default: 5 - Number of results to return",
+                            "time_period (string, optional) default: d - Time period (d: day, w: week, m: month)",
+                            "region (string, optional) default: wt-wt - Region code for search results"
+                        ]
+                    elif tool_name == "llm":
+                        params = [
+                            "system_prompt (string, required) - The persona or system prompt to guide the language model's behavior",
+                            "prompt (string, required) - The question to ask the language model. Supports interpolation with $var$ syntax",
+                            "temperature (float, required) default: 0.5 - Sampling temperature between 0.0 (no creativity) and 1.0 (full creativity)"
+                        ]
+                    elif tool_name == "task_complete":
+                        params = [
+                            "answer (string, required) - Your final answer or response to complete the task"
+                        ]
+                    elif "search" in tool_name.lower() and not params:
+                        params.append("max_results (integer, optional) default: 5 - Number of results to return")
+
+                    param_str = "\n  - ".join(params) if params else "No parameters required"
+                    tool_descriptions.append(f"{tool_name}:\n  - {param_str}")
                 except Exception as e:
                     logger.debug(f"Error processing tool {tool_name}: {str(e)}")
                     # Still include the tool in the list, but with minimal info

@@ -432,8 +432,7 @@ if __name__ == "__main__":
     tool = RagToolHf(
         persist_dir="./storage/multilingual_rag",
         document_paths=[
-            "./docs/test/F2015054.pdf",
-            "./docs/test/F2015055.pdf"
+            "./docs/test/Code_Civil.pdf",
         ],
         chunk_size=512,  
         chunk_overlap=50,

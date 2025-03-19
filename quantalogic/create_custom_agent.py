@@ -311,8 +311,7 @@ def create_custom_agent(
             ocr_model=params.get("ocr_model", "openai/gpt-4o-mini"),
             embed_model=params.get("embed_model", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
             document_paths=params.get("document_paths", [
-                "./docs/test/F2015054.pdf",
-                "./docs/test/F2015055.pdf"
+            "./docs/test/Code_Civil.pdf",
             ])
         ),
         
