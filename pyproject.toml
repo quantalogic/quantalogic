@@ -56,6 +56,7 @@ scikit-learn = "^1.6.1"
 numpy = "^2.2.4"
 selenium = "^4.29.0"
 webdriver-manager = "^4.0.2"
+asciinema = "^2.4.0"
 
 [tool.poetry.group.file-tools]
 optional = false
