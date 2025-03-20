@@ -14,6 +14,7 @@ class AsyncExecutionResult:
     result: Any
     error: Optional[str]
     execution_time: float
+    local_variables: Optional[Dict[str, Any]] = None  # Added to store local variables
 
 def optimize_ast(tree: ast.AST) -> ast.AST:
     """Perform constant folding and basic optimizations on the AST."""
@@ -113,22 +114,36 @@ async def execute_async(
             args = args or ()
             kwargs = kwargs or {}
             if isinstance(func, AsyncFunction) or asyncio.iscoroutinefunction(func):
-                result = await event_loop_manager.run_task(func(*args, **kwargs), timeout=timeout)
+                # Expect a tuple (result, local_vars) from AsyncFunction
+                execution_result = await event_loop_manager.run_task(func(*args, **kwargs), timeout=timeout)
+                if isinstance(execution_result, tuple) and len(execution_result) == 2:
+                    result, local_vars = execution_result
+                else:
+                    result, local_vars = execution_result, {}
             elif isinstance(func, Function):
                 result = await func(*args, **kwargs)
+                local_vars = {}  # Non-async functions don't yet support local var return
             else:
                 result = func(*args, **kwargs)
                 if asyncio.iscoroutine(result):
                     result = await event_loop_manager.run_task(result, timeout=timeout)
+                local_vars = {}
             if asyncio.iscoroutine(result):
                 result = await event_loop_manager.run_task(result, timeout=timeout)
         else:
             result = await interpreter.execute_async(ast_tree)
+            local_vars = {k: v for k, v in interpreter.env_stack[-1].items() if not k.startswith('__')}
+        
+        # Filter out internal variables if not already filtered
+        filtered_local_vars = local_vars if local_vars else {}
+        if not entry_point:  # Apply filtering only for module-level execution
+            filtered_local_vars = {k: v for k, v in local_vars.items() if not k.startswith('__')}
         
         return AsyncExecutionResult(
             result=result,
             error=None,
-            execution_time=time.time() - start_time
+            execution_time=time.time() - start_time,
+            local_variables=filtered_local_vars
         )
     except asyncio.TimeoutError as e:
         return AsyncExecutionResult(
