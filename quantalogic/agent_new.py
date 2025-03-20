@@ -1,10 +1,9 @@
 import ast
 import asyncio
-import os
 from functools import partial
-from typing import Dict, List
+from pathlib import Path
+from typing import Callable, Dict, List
 
-import jinja2
 import typer
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
@@ -13,261 +12,183 @@ from quantalogic.python_interpreter import execute_async
 from quantalogic.tools.action_gen import AddTool, AgentTool, ConcatTool, MultiplyTool, generate_program
 from quantalogic.tools.tool import Tool
 
-logger.add("react_agent.log", rotation="10 MB", level="DEBUG")
-app = typer.Typer()
+# Constants
+TEMPLATE_DIR = Path(__file__).parent / "prompts"
+LOG_FILE = "react_agent.log"
+DEFAULT_MODEL = "gemini/gemini-2.0-flash"
+MAX_TOKENS = 4000
 
-# Set up Jinja2 environment
-template_dir = os.path.join(os.path.dirname(__file__), "prompts")
-jinja_env = jinja2.Environment(
-    loader=jinja2.FileSystemLoader(template_dir),
-    trim_blocks=True,
-    lstrip_blocks=True
-)
+# Logger setup
+logger.add(LOG_FILE, rotation="10 MB", level="DEBUG")
+
+# Typer app
+app = typer.Typer(no_args_is_help=True)
+
+# Jinja2 environment
+jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
+
 
 class ReActAgent:
     def __init__(self, model: str, tools: List[Tool], max_iterations: int = 5):
         self.model = model
         self.tools = tools
         self.max_iterations = max_iterations
-        
-        # Prepare namespace with tool instances as in action_gen.py
-        self.tool_namespace: Dict[str, callable] = {"asyncio": asyncio}
+        self.tool_namespace: Dict[str, Callable] = self._build_tool_namespace()
+
+    def _build_tool_namespace(self) -> Dict[str, Callable]:
+        """Build namespace with tool instances."""
+        namespace = {"asyncio": asyncio}
         for tool in self.tools:
-            self.tool_namespace[tool.name] = partial(tool.async_execute)
+            namespace[tool.name] = partial(tool.async_execute)
+        return namespace
 
     async def generate_action(self, task: str, history: List[Dict[str, str]]) -> str:
-        """Generate a Python program as an action using the generate_program function from action_gen.py."""
+        """Generate a Python program as an action."""
         logger.info(f"Generating action for task: {task}")
-        
-        # Construct history string for context
-        history_str = "\n".join([f"[Step {i+1}] {h['thought']}\nAction:\n{h['action']}\nResult: {h['result']}" 
-                               for i, h in enumerate(history)]) if history else "No previous steps"
-        
-        # Get the directory of the current file and set up templates directory
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        templates_dir = os.path.join(current_dir, 'prompts')
-        
-        # Set up Jinja2 environment
-        env = Environment(loader=FileSystemLoader(templates_dir))
-        
-        # Render the task template
-        task_template = env.get_template('action_code/generate_action.j2')
-        enhanced_task = task_template.render(
-            task=task,
-            history_str=history_str
-        )
-        
-        # Use generate_program from action_gen.py
+        history_str = self._format_history(history)
+
         try:
+            task_prompt = jinja_env.get_template("action_code/generate_action.j2").render(
+                task=task, history_str=history_str
+            )
             program = await generate_program(
-                task_description=enhanced_task,
+                task_description=task_prompt,
                 tools=self.tools,
                 model=self.model,
-                max_tokens=4000  # Match action_gen.py default
+                max_tokens=MAX_TOKENS,
             )
             logger.debug(f"Generated program:\n{program}")
-            
-            # Format response using the response template
-            response_template = env.get_template('action_code/response_format.j2')
-            response = response_template.render(
-                task=task,
-                history_str=history_str,
-                program=program
+            return jinja_env.get_template("action_code/response_format.j2").render(
+                task=task, history_str=history_str, program=program
             )
-            
-            return response
         except Exception as e:
-            logger.error(f"Failed to generate action: {str(e)}")
-            # Use error template for formatting error response
-            error_template = env.get_template('action_code/error_format.j2')
-            return error_template.render(error=str(e))
+            logger.error(f"Action generation failed: {e}")
+            return jinja_env.get_template("action_code/error_format.j2").render(error=str(e))
 
     async def execute_action(self, code: str) -> str:
-        """Execute the generated code using the logic from action_gen.py's generate_core."""
+        """Execute the generated code and return formatted result."""
         logger.debug(f"Executing action:\n{code}")
         
-        # Validate program structure as in action_gen.py
-        try:
-            ast_tree = ast.parse(code)
-            has_async_main = any(
-                isinstance(node, ast.AsyncFunctionDef) and node.name == "main"
-                for node in ast.walk(ast_tree)
-            )
-            if not has_async_main:
-                logger.warning("Generated code lacks an async main() function")
-                return "Error: Generated code lacks an async main() function"
-        except SyntaxError as e:
-            logger.error(f"Syntax error in generated code: {str(e)}")
-            return f"Syntax error: {str(e)}"
+        if not self._validate_code(code):
+            return "Error: Generated code lacks an async main() function"
 
-        # Execute the program as in action_gen.py
         try:
-            execution_result = await execute_async(
+            result = await execute_async(
                 code=code,
                 timeout=30,
                 entry_point="main",
                 allowed_modules=["asyncio"],
                 namespace=self.tool_namespace,
             )
-            
-            # Detailed error handling as in action_gen.py
-            if execution_result.error:
-                if "SyntaxError" in execution_result.error:
-                    logger.error(f"Syntax error: {execution_result.error}")
-                    return f"Syntax error: {execution_result.error}"
-                elif "TimeoutError" in execution_result.error:
-                    logger.error(f"Timeout: {execution_result.error}")
-                    return f"Timeout: {execution_result.error}"
-                else:
-                    logger.error(f"Runtime error: {execution_result.error}")
-                    return f"Runtime error: {execution_result.error}"
-            else:
-                logger.info(f"Execution completed in {execution_result.execution_time:.2f} seconds")
-                
-                # Format the execution result using XML and CDATA
-                # First, filter out callable objects from local_variables
-                if execution_result.local_variables:
-                    non_callable_vars = {}
-                    for k, v in execution_result.local_variables.items():
-                        if not callable(v) and not k.startswith('__'):
-                            # For string values, limit the length to prevent overwhelming output
-                            if isinstance(v, str) and len(v) > 5000:
-                                non_callable_vars[k] = v[:5000] + '... (truncated)'
-                            else:
-                                non_callable_vars[k] = v
-                    
-                    # Format the result as XML with CDATA
-                    formatted_result = "<ExecutionResult>\n"
-                    formatted_result += f"  <ExecutionTime>{execution_result.execution_time:.2f} seconds</ExecutionTime>\n"
-                    
-                    if execution_result.result is not None:
-                        formatted_result += "  <Result><![CDATA[\n"
-                        formatted_result += f"{execution_result.result}\n"
-                        formatted_result += "  ]]></Result>\n"
-                    
-                    if execution_result.error is not None:
-                        formatted_result += "  <Error><![CDATA[\n"
-                        formatted_result += f"{execution_result.error}\n"
-                        formatted_result += "  ]]></Error>\n"
-                    
-                    # Add non-callable variables
-                    if non_callable_vars:
-                        formatted_result += "  <LocalVariables>\n"
-                        for k, v in non_callable_vars.items():
-                            formatted_result += f"    <Variable name=\"{k}\">\n"
-                            formatted_result += "      <![CDATA[\n"
-                            formatted_result += f"{v}\n"
-                            formatted_result += "      ]]>\n"
-                            formatted_result += "    </Variable>\n"
-                        formatted_result += "  </LocalVariables>\n"
-                    
-                    formatted_result += "</ExecutionResult>"
-                else:
-                    # If no local variables, create a simpler XML structure
-                    formatted_result = "<ExecutionResult>\n"
-                    formatted_result += f"  <ExecutionTime>{execution_result.execution_time:.2f} seconds</ExecutionTime>\n"
-                    
-                    if execution_result.result is not None:
-                        formatted_result += "  <Result><![CDATA[\n"
-                        formatted_result += f"{execution_result.result}\n"
-                        formatted_result += "  ]]></Result>\n"
-                    
-                    if execution_result.error is not None:
-                        formatted_result += "  <Error><![CDATA[\n"
-                        formatted_result += f"{execution_result.error}\n"
-                        formatted_result += "  ]]></Error>\n"
-                    
-                    formatted_result += "</ExecutionResult>"
-                    
-                logger.debug(f"Returning execution result: {formatted_result[:100]}..." if len(formatted_result) > 100 else formatted_result)
-                return formatted_result
-        except ValueError as e:
-            logger.error(f"Invalid code generated: {str(e)}")
-            return f"Invalid code: {str(e)}"
+            return self._format_execution_result(result)
+        except SyntaxError as e:
+            logger.error(f"Syntax error: {e}")
+            return f"Syntax error: {e}"
         except Exception as e:
-            logger.error(f"Unexpected execution error: {str(e)}")
-            return f"Unexpected error during execution: {str(e)}"
+            logger.error(f"Execution error: {e}")
+            return f"Execution error: {e}"
+
+    def _validate_code(self, code: str) -> bool:
+        """Validate that code has an async main function."""
+        try:
+            tree = ast.parse(code)
+            return any(isinstance(node, ast.AsyncFunctionDef) and node.name == "main" for node in ast.walk(tree))
+        except SyntaxError as e:
+            logger.error(f"Code validation failed: {e}")
+            return False
+
+    def _format_history(self, history: List[Dict[str, str]]) -> str:
+        """Format history into a readable string."""
+        return "\n".join(
+            f"[Step {i+1}] {h['thought']}\nAction:\n{h['action']}\nResult: {h['result']}"
+            for i, h in enumerate(history)
+        ) if history else "No previous steps"
+
+    def _format_execution_result(self, result) -> str:
+        """Format execution result as XML with CDATA."""
+        if result.error:
+            logger.error(f"Execution failed: {result.error}")
+            return f"Error: {result.error}"
+
+        non_callable_vars = {
+            k: (v[:5000] + "... (truncated)" if isinstance(v, str) and len(v) > 5000 else v)
+            for k, v in (result.local_variables or {}).items()
+            if not callable(v) and not k.startswith("__")
+        }
+
+        xml = [f"<ExecutionResult>\n  <ExecutionTime>{result.execution_time:.2f} seconds</ExecutionTime>"]
+        if result.result is not None:
+            xml.append("  <Result><![CDATA[\n" + str(result.result) + "\n  ]]></Result>")
+        if non_callable_vars:
+            xml.append("  <LocalVariables>")
+            for k, v in non_callable_vars.items():
+                xml.append(f"    <Variable name=\"{k}\">\n      <![CDATA[\n{v}\n      ]]>\n    </Variable>")
+            xml.append("  </LocalVariables>")
+        xml.append("</ExecutionResult>")
+        
+        formatted_result = "\n".join(xml)
+        logger.debug(f"Execution result: {formatted_result[:100]}..." if len(formatted_result) > 100 else formatted_result)
+        return formatted_result
 
     async def solve(self, task: str) -> List[Dict[str, str]]:
+        """Solve the task iteratively."""
         history = []
         for iteration in range(self.max_iterations):
-            logger.info(f"Starting iteration {iteration + 1} for task: {task}")
-            
-            # Generate reasoning and action
+            logger.info(f"Iteration {iteration + 1} for task: {task}")
             response = await self.generate_action(task, history)
-            logger.debug(f"Generated response:\n{response}")
             
-            # Parse response
             try:
-                thought_start = response.index("[Thought]") + 9
-                action_start = response.index("[Action]") + 8
-                thought = response[thought_start:action_start-8].strip()
-                
-                code_start = response.index("```python") + 9
-                code_end = response.index("```", code_start)
-                code = response[code_start:code_end].strip()
-            except ValueError:
-                logger.error("Invalid response format")
+                thought, code = self._parse_response(response)
+                result = await self.execute_action(code)
+                history.append({"thought": thought, "action": code, "result": result})
+                if "Error" not in result and result.strip():
+                    logger.info(f"Task solved after {iteration + 1} iterations")
+                    break
+            except ValueError as e:
+                logger.error(f"Response parsing failed: {e}")
                 break
-
-            # Execute the action
-            result = await self.execute_action(code)
-            
-            # Store step
-            step = {
-                "thought": thought,
-                "action": code,
-                "result": result
-            }
-            history.append(step)
-            
-            # Check if task appears solved (simplified condition)
-            if "Error" not in result and result.strip() and result != "No output":
-                logger.info(f"Task appears solved after {iteration + 1} iterations")
-                break
-                
         return history
 
+    def _parse_response(self, response: str) -> tuple[str, str]:
+        """Parse thought and code from response."""
+        thought_start = response.index("[Thought]") + 9
+        action_start = response.index("[Action]") + 8
+        code_start = response.index("```python") + 9
+        code_end = response.index("```", code_start)
+        return (
+            response[thought_start:action_start-8].strip(),
+            response[code_start:code_end].strip(),
+        )
+
+
 async def run_react_agent(task: str, model: str, max_iterations: int) -> None:
-    # Initialize tools as in action_gen.py
-    tools = [
-        AddTool(),
-        MultiplyTool(),
-        ConcatTool(),
-        AgentTool(model=model)
-    ]
+    """Run the ReAct agent."""
+    tools = [AddTool(), MultiplyTool(), ConcatTool(), AgentTool(model=model)]
     agent = ReActAgent(model=model, tools=tools, max_iterations=max_iterations)
     
     typer.echo(typer.style(f"Solving task: {task}", fg=typer.colors.GREEN, bold=True))
     history = await agent.solve(task)
-    
-    # Display results as in original agent_new.py
     for i, step in enumerate(history, 1):
         typer.echo(f"\n{typer.style(f'Step {i}', fg=typer.colors.BLUE, bold=True)}")
-        typer.echo(typer.style("[Thought]", fg=typer.colors.YELLOW))
-        typer.echo(step["thought"])
-        typer.echo(typer.style("[Action]", fg=typer.colors.YELLOW))
-        typer.echo(step["action"])
-        typer.echo(typer.style("[Result]", fg=typer.colors.YELLOW))
-        typer.echo(step["result"])
+        for key, color in [("thought", typer.colors.YELLOW), ("action", typer.colors.YELLOW), ("result", typer.colors.YELLOW)]:
+            typer.echo(typer.style(f"[{key.capitalize()}]", fg=color))
+            typer.echo(step[key])
+
 
 @app.command()
 def react(
     task: str = typer.Argument(..., help="The task to solve"),
-    model: str = typer.Option("gemini/gemini-2.0-flash", "--model", "-m", help="The litellm model to use"),
-    max_iterations: int = typer.Option(5, "--max-iterations", "-i", help="Maximum reasoning steps")
+    model: str = typer.Option(DEFAULT_MODEL, help="The litellm model to use"),
+    max_iterations: int = typer.Option(5, help="Maximum reasoning steps"),
 ) -> None:
-    """Solve a task using a ReAct Agent with code generation and execution"""
+    """Solve a task using a ReAct Agent."""
     try:
         asyncio.run(run_react_agent(task, model, max_iterations))
     except Exception as e:
-        logger.error(f"Agent failed: {str(e)}")
-        typer.echo(typer.style(f"Error: {str(e)}", fg=typer.colors.RED))
+        logger.error(f"Agent failed: {e}")
+        typer.echo(typer.style(f"Error: {e}", fg=typer.colors.RED))
         raise typer.Exit(code=1)
 
-def main() -> None:
-    logger.debug("Starting ReAct Agent")
-    app()
 
 if __name__ == "__main__":
-    main()
+    app()
