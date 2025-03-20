@@ -22,6 +22,7 @@
 
 import asyncio
 import os
+import subprocess
 from pathlib import Path
 from typing import Annotated, List, Optional, Union
 
@@ -36,6 +37,19 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from quantalogic.flow.flow import Nodes, Workflow
+
+
+def check_poppler():
+    """Check if Poppler is installed for PDF processing."""
+    try:
+        subprocess.run(["pdftoppm", "-v"], stdout=subprocess.DEVNULL)
+    except FileNotFoundError:
+        console.print(
+            "[bold red]Error:[/] Poppler not found. Install with: \n"
+            "  [blue]macOS:[/] brew install poppler\n"
+            "  [blue]Linux:[/] sudo apt-get install poppler-utils"
+        )
+        raise typer.Exit(1)
 
 # Initialize Typer app and rich console
 app = typer.Typer(help="Convert a file (PDF, text, or Markdown) to a LinkedIn post using LLMs")
