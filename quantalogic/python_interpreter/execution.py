@@ -69,7 +69,6 @@ class ControlledEventLoop:
                 self._created = False
 
     async def run_task(self, coro, timeout: float) -> Any:
-        # Remove the loop parameter from wait_for since it's not needed in modern asyncio
         return await asyncio.wait_for(coro, timeout=timeout)
 
 async def execute_async(
@@ -97,7 +96,8 @@ async def execute_async(
             allowed_modules=allowed_modules,
             restrict_os=True,
             namespace=safe_namespace,
-            max_memory_mb=max_memory_mb
+            max_memory_mb=max_memory_mb,
+            source=code  # Pass source code for better error context
         )
         interpreter.loop = loop
         
@@ -133,7 +133,7 @@ async def execute_async(
     except asyncio.TimeoutError as e:
         return AsyncExecutionResult(
             result=None,
-            error=f'{type(e).__name__}: {str(e)}',
+            error=f'TimeoutError: Execution exceeded {timeout} seconds',
             execution_time=time.time() - start_time
         )
     except WrappedException as e:
@@ -144,9 +144,12 @@ async def execute_async(
         )
     except Exception as e:
         error_type = type(getattr(e, 'original_exception', e)).__name__
+        error_msg = f'{error_type}: {str(e)}'
+        if hasattr(e, 'lineno') and hasattr(e, 'col_offset'):
+            error_msg += f' at line {e.lineno}, col {e.col_offset}'
         return AsyncExecutionResult(
             result=None,
-            error=f'{error_type}: {str(e)}',
+            error=error_msg,
             execution_time=time.time() - start_time
         )
     finally:
