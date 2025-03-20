@@ -26,6 +26,10 @@ from loguru import logger
 from pydantic import BaseModel
 from rich.console import Console
 
+import mimetypes
+import urllib.parse
+from pathlib import Path
+
 from quantalogic.agent import Agent
 from quantalogic.agent_config import (
     MODEL_NAME,
@@ -473,6 +477,79 @@ async def download_file(filename: str):
 @app.get("/api/agent/health")
 async def health_check() -> Dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/agent/files/content")
+async def get_file_content(file_path: str, raw: Optional[bool] = False) -> Response:
+    """Retrieve file content by path with support for various file types.
+    
+    Args:
+        file_path: URL-encoded path to the file
+        raw: If True, return raw file content instead of JSON response
+    
+    Returns:
+        File content with appropriate content type
+    """
+    try:
+        # Decode the URL-encoded path
+        decoded_path = urllib.parse.unquote(file_path)
+        path = Path(decoded_path)
+        
+        # Security check: Ensure the path is absolute and exists
+        if not path.is_absolute() or not path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"File not found: {decoded_path}"
+            )
+        
+        # Get the file's mime type
+        mime_type, _ = mimetypes.guess_type(str(path))
+        if mime_type is None:
+            mime_type = 'application/octet-stream'
+        
+        # Handle different content types
+        if raw:
+            # Return the file directly with proper mime type
+            return FileResponse(
+                path=str(path),
+                media_type=mime_type,
+                filename=path.name
+            )
+        
+        # For text-based files, return content in JSON
+        if mime_type.startswith(('text/', 'application/json', 'application/xml', 'application/javascript')):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                return JSONResponse({
+                    "status": "success",
+                    "path": str(path),
+                    "mime_type": mime_type,
+                    "content": content,
+                    "size": path.stat().st_size,
+                    "filename": path.name
+                })
+            except UnicodeDecodeError:
+                # If we can't read as text, treat as binary
+                return FileResponse(
+                    path=str(path),
+                    media_type=mime_type,
+                    filename=path.name
+                )
+        
+        # For binary files (PDF, images, etc), return file directly
+        return FileResponse(
+            path=str(path),
+            media_type=mime_type,
+            filename=path.name
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reading file content: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     config = uvicorn.Config(

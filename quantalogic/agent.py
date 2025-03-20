@@ -712,14 +712,8 @@ class Agent(BaseModel):
                     return self._handle_tool_execution_failure(response)
 
                 # Track files when write_file_tool or writefile is used
-                if (tool_name in ["write_file_tool", "writefile"]) and "file_path" in arguments_with_values:
-                    file_path = arguments_with_values["file_path"]
-                    if os.path.isabs(file_path):
-                        tracked_path = file_path
-                    else:
-                        tracked_path = os.path.abspath(os.path.join(os.getcwd(), file_path))
-                    if tracked_path not in self.tracked_files:
-                        self.tracked_files.append(tracked_path)
+                if (tool_name in ["write_file_tool", "writefile", "edit_whole_content", "replace_in_file", "replaceinfile", "EditWholeContent"]) and "file_path" in arguments_with_values:
+                    self._track_file(arguments_with_values["file_path"], tool_name)
 
                 variable_name = self.variable_store.add(response)
                 new_prompt = self._format_observation_response(response, executed_tool, variable_name, iteration)
@@ -1681,3 +1675,36 @@ class Agent(BaseModel):
         except Exception as e:
             logger.error(f"Error rendering template {template_name}: {str(e)}")
             raise
+
+    def _track_file(self, file_path: str, tool_name: str) -> None:
+        """Track files created or modified by tools.
+        
+        Args:
+            file_path: Path to the file to track
+            tool_name: Name of the tool that created/modified the file
+        """
+        try:
+            # Handle /tmp directory for write tools
+            if tool_name in ["write_file_tool", "writefile", "edit_whole_content", "replace_in_file", "replaceinfile", "EditWholeContent"]:
+                if not file_path.startswith("/tmp/"):
+                    file_path = os.path.join("/tmp", file_path.lstrip("/"))
+            
+            # For other tools, ensure we have absolute path
+            elif not os.path.isabs(file_path):
+                file_path = os.path.abspath(os.path.join(os.getcwd(), file_path))
+            
+            # Resolve any . or .. in the path
+            tracked_path = os.path.realpath(file_path)
+            
+            # For write tools, ensure path is in /tmp
+            if tool_name in ["write_file_tool", "writefile"] and not tracked_path.startswith("/tmp/"):
+                logger.warning(f"Attempted to track file outside /tmp: {tracked_path}")
+                return
+                
+            # Add to tracked files if not already present
+            if tracked_path not in self.tracked_files:
+                self.tracked_files.append(tracked_path)
+                logger.debug(f"Added {tracked_path} to tracked files")
+                
+        except Exception as e:
+            logger.error(f"Error tracking file {file_path}: {str(e)}")
