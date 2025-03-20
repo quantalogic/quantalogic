@@ -564,12 +564,12 @@ class AgentState:
             self._update_task_success(task_info, result, agent)
             
             # Create event for task completion
-            self._handle_event("task_solve_end", {
+            """ self._handle_event("task_solve_end", {
                 "task_id": task_id,
                 "agent_id": agent_id,
                 "message": "Task execution completed",
-                "result": result
-            })
+                "result": result,
+            }) """
             
         except Exception as e:
             self._update_task_failure(task_info, e)

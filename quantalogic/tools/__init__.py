@@ -32,6 +32,7 @@ from .tool import Tool, ToolArgument, create_tool
 from .unified_diff_tool import UnifiedDiffTool
 from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
+from .file_tracker_tool import FileTrackerTool
 
 # Define __all__ to control what gets imported with `from quantalogic.tools import *`
 __all__ = [
@@ -66,5 +67,6 @@ __all__ = [
     'UnifiedDiffTool',
     'WikipediaSearchTool',
     'WriteFileTool',
+    'FileTrackerTool',
     "create_tool"
 ]

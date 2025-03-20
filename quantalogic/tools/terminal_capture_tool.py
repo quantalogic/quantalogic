@@ -25,7 +25,7 @@ class TerminalCaptureTool(Tool):
 
     name: str = "terminal_capture_tool"
     description: str = "Captures terminal output as recordings or screenshots."
-    need_validation: bool = True
+    need_validation: bool = False
     arguments: list = [
         ToolArgument(
             name="capture_type",

@@ -82,6 +82,7 @@ TOOL_IMPORTS = {
     # File Tools
     "download_http_file": lambda: _import_tool("quantalogic.tools.utilities", "PrepareDownloadTool"),
     "write_file": lambda: _import_tool("quantalogic.tools.write_file_tool", "WriteFileTool"),
+    "file_tracker": lambda: _import_tool("quantalogic.tools.file_tracker_tool", "FileTrackerTool"),
     "edit_whole_content": lambda: _import_tool("quantalogic.tools", "EditWholeContentTool"),
     "read_file_block": lambda: _import_tool("quantalogic.tools", "ReadFileBlockTool"),
     "read_file": lambda: _import_tool("quantalogic.tools", "ReadFileTool"),
@@ -139,7 +140,7 @@ TOOL_IMPORTS = {
     "task_complete": lambda: _import_tool("quantalogic.tools.task_complete_tool", "TaskCompleteTool"),
     "input_question": lambda: _import_tool("quantalogic.tools.utilities", "InputQuestionTool"),
     "markitdown": lambda: _import_tool("quantalogic.tools.utilities", "MarkitdownTool"),
-    "read_html": lambda: _import_tool("quantalogic.tools.utilities", "ReadHTMLTool"),
+    "read_html": lambda: _import_tool("quantalogic.tools.read_html_tool", "ReadHTMLTool"),
     "oriented_llm_tool": lambda: _import_tool("quantalogic.tools.utilities", "OrientedLLMTool"),
     "presentation_llm": lambda: _import_tool("quantalogic.tools.presentation_tools", "PresentationLLMTool"),
     "sequence": lambda: _import_tool("quantalogic.tools.utilities", "SequenceTool"),
@@ -211,6 +212,7 @@ def create_custom_agent(
         "download_http_file": lambda _: create_tool_instance(TOOL_IMPORTS["download_http_file"]()),
         "duck_duck_go_search": lambda _: create_tool_instance(TOOL_IMPORTS["duck_duck_go_search"]()),
         "write_file": lambda _: create_tool_instance(TOOL_IMPORTS["write_file"]()),
+        "file_tracker": lambda _: create_tool_instance(TOOL_IMPORTS["file_tracker"]()),
         "task_complete": lambda _: create_tool_instance(TOOL_IMPORTS["task_complete"]()),
         "edit_whole_content": lambda _: create_tool_instance(TOOL_IMPORTS["edit_whole_content"]()),
         "execute_bash_command": lambda _: create_tool_instance(TOOL_IMPORTS["execute_bash_command"]()),
@@ -383,48 +385,3 @@ def create_custom_agent(
     except Exception as e:
         logger.error(f"Failed to create agent: {str(e)}")
         raise
-
-if __name__ == "__main__":
-    # Example usage
-    tools_config = [
-        {"type": "duck_duck_go_search", "parameters": {}},
-    ]
-    
-    agent = create_custom_agent(
-        model_name="openrouter/openai/gpt-4o-mini",
-        specific_expertise="General purpose assistant",
-        tools=tools_config
-    )
-    print(f"Created agent with {len(agent.tools.tool_names())} tools")
-    
-    # Display all tool names
-    print("Agent Tools:")
-    for tool_name in agent.tools.tool_names():
-        print(f"- {tool_name}")
-
-    # Set up event monitoring to track agent's lifecycle
-    # The event system provides:
-    # 1. Real-time observability into the agent's operations
-    # 2. Debugging and performance monitoring
-    # 3. Support for future analytics and optimization efforts
-    agent.event_emitter.on(
-        event=[
-            "task_complete",
-            "task_think_start",
-            "task_think_end",
-            "tool_execution_start",
-            "tool_execution_end",
-            "error_max_iterations_reached",
-            "memory_full",
-            "memory_compacted",
-            "memory_summary",
-        ],
-        listener=console_print_events,
-    )
-
-    # Enable token streaming for detailed output
-    agent.event_emitter.on(event=["stream_chunk"], listener=console_print_token)
-
-    # Solve task with streaming enabled
-    result = agent.solve_task("Who is the Prime Minister of France in 2025 ?", max_iterations=10, streaming=True)
-    print(result)

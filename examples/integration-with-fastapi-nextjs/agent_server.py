@@ -19,7 +19,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from loguru import logger
@@ -473,7 +473,6 @@ async def download_file(filename: str):
 @app.get("/api/agent/health")
 async def health_check() -> Dict[str, str]:
     return {"status": "ok"}
-
 
 if __name__ == "__main__":
     config = uvicorn.Config(

@@ -25,7 +25,7 @@ class ExecuteBashCommandTool(Tool):
 
     name: str = "execute_bash_tool"
     description: str = "Executes a bash command and returns its output."
-    need_validation: bool = True
+    need_validation: bool = False
     arguments: list = [
         ToolArgument(
             name="command",

@@ -20,7 +20,7 @@ class PrepareDownloadTool(Tool):
         "If it's a directory, it will be zipped. "
         "Returns an HTML link for downloading."
     )
-    need_validation: bool = True
+    need_validation: bool = False
     arguments: list = [
         ToolArgument(
             name="path",

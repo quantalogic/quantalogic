@@ -92,6 +92,7 @@ class Agent(BaseModel):
     _model_name: str = PrivateAttr(default="")
     chat_system_prompt: str  # Base persona prompt for chat mode
     tool_mode: Optional[str] = None  # Tool or toolset to prioritize in chat mode
+    tracked_files: list[str] = []  # List to track files created or modified during execution
 
     def __init__(
         self,
@@ -302,7 +303,11 @@ class Agent(BaseModel):
                 current_prompt = result.next_prompt
 
                 if result.executed_tool == "task_complete":
-                    self._emit_event("task_complete", {"response": result.answer})
+                    self._emit_event("task_complete", {
+                        "response": result.answer,
+                        "message": "Task execution completed",
+                        "tracked_files": self.tracked_files if self.tracked_files else []
+                    })
                     answer = result.answer or ""
                     done = True
 
@@ -317,7 +322,12 @@ class Agent(BaseModel):
                 answer = f"Error: {str(e)}"
                 done = True
 
-        self._emit_event("task_solve_end")
+        task_solve_end_data = {
+            "result": answer,
+            "message": "Task execution completed",
+            "tracked_files": self.tracked_files if self.tracked_files else []
+        }
+        self._emit_event("task_solve_end", task_solve_end_data)
         return answer
 
     def chat(
@@ -701,11 +711,22 @@ class Agent(BaseModel):
                 if not executed_tool:
                     return self._handle_tool_execution_failure(response)
 
+                # Track files when write_file_tool or writefile is used
+                if (tool_name in ["write_file_tool", "writefile"]) and "file_path" in arguments_with_values:
+                    file_path = arguments_with_values["file_path"]
+                    if os.path.isabs(file_path):
+                        tracked_path = file_path
+                    else:
+                        tracked_path = os.path.abspath(os.path.join(os.getcwd(), file_path))
+                    if tracked_path not in self.tracked_files:
+                        self.tracked_files.append(tracked_path)
+
                 variable_name = self.variable_store.add(response)
                 new_prompt = self._format_observation_response(response, executed_tool, variable_name, iteration)
 
                 # In chat mode, don't set answer; in task mode, set answer only for task_complete
                 is_task_complete_answer = executed_tool == "task_complete" and not is_chat_mode
+                
                 return ObserveResponseResult(
                     next_prompt=new_prompt,
                     executed_tool=executed_tool,
