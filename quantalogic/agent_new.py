@@ -6,6 +6,7 @@ from typing import Dict, List
 
 import jinja2
 import typer
+from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 
 from quantalogic.python_interpreter import execute_async
@@ -42,15 +43,19 @@ class ReActAgent:
         history_str = "\n".join([f"[Step {i+1}] {h['thought']}\nAction:\n{h['action']}\nResult: {h['result']}" 
                                for i, h in enumerate(history)]) if history else "No previous steps"
         
-        # Modify task description to include history and fit action_gen.py's expectations
-        enhanced_task = f"""
-Solve the following task: '{task}'
-Previous steps:
-{history_str}
-Generate a Python program with an async main() function that uses the available tools to take the next step toward solving the task.
-If previous steps indicate the task is solved, return the final result.
-Always print the result at the end of the program.
-"""
+        # Get the directory of the current file and set up templates directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        templates_dir = os.path.join(current_dir, 'prompts')
+        
+        # Set up Jinja2 environment
+        env = Environment(loader=FileSystemLoader(templates_dir))
+        
+        # Render the task template
+        task_template = env.get_template('action_code/generate_action.j2')
+        enhanced_task = task_template.render(
+            task=task,
+            history_str=history_str
+        )
         
         # Use generate_program from action_gen.py
         try:
@@ -62,31 +67,20 @@ Always print the result at the end of the program.
             )
             logger.debug(f"Generated program:\n{program}")
             
-            # Format response to match ReActAgent's expected output
-            response = f"""
-[Thought]
-Generated a Python program to take the next step toward solving: {task}
-Based on history: {history_str}
-
-[Action]
-```python
-{program}
-```
-"""
+            # Format response using the response template
+            response_template = env.get_template('action_code/response_format.j2')
+            response = response_template.render(
+                task=task,
+                history_str=history_str,
+                program=program
+            )
+            
             return response
         except Exception as e:
             logger.error(f"Failed to generate action: {str(e)}")
-            return f"""
-[Thought]
-Failed to generate a valid action due to: {str(e)}
-
-[Action]
-```python
-import asyncio
-async def main():
-    print("Error: Action generation failed")
-```
-"""
+            # Use error template for formatting error response
+            error_template = env.get_template('action_code/error_format.j2')
+            return error_template.render(error=str(e))
 
     async def execute_action(self, code: str) -> str:
         """Execute the generated code using the logic from action_gen.py's generate_core."""
@@ -129,13 +123,64 @@ async def main():
                     return f"Runtime error: {execution_result.error}"
             else:
                 logger.info(f"Execution completed in {execution_result.execution_time:.2f} seconds")
-                # Return stdout or result as in action_gen.py
-                if execution_result.stdout and execution_result.stdout.strip():
-                    return execution_result.stdout.strip()
-                elif execution_result.result is not None:
-                    return str(execution_result.result)
+                
+                # Format the execution result using XML and CDATA
+                # First, filter out callable objects from local_variables
+                if execution_result.local_variables:
+                    non_callable_vars = {}
+                    for k, v in execution_result.local_variables.items():
+                        if not callable(v) and not k.startswith('__'):
+                            # For string values, limit the length to prevent overwhelming output
+                            if isinstance(v, str) and len(v) > 5000:
+                                non_callable_vars[k] = v[:5000] + '... (truncated)'
+                            else:
+                                non_callable_vars[k] = v
+                    
+                    # Format the result as XML with CDATA
+                    formatted_result = "<ExecutionResult>\n"
+                    formatted_result += f"  <ExecutionTime>{execution_result.execution_time:.2f} seconds</ExecutionTime>\n"
+                    
+                    if execution_result.result is not None:
+                        formatted_result += "  <Result><![CDATA[\n"
+                        formatted_result += f"{execution_result.result}\n"
+                        formatted_result += "  ]]></Result>\n"
+                    
+                    if execution_result.error is not None:
+                        formatted_result += "  <Error><![CDATA[\n"
+                        formatted_result += f"{execution_result.error}\n"
+                        formatted_result += "  ]]></Error>\n"
+                    
+                    # Add non-callable variables
+                    if non_callable_vars:
+                        formatted_result += "  <LocalVariables>\n"
+                        for k, v in non_callable_vars.items():
+                            formatted_result += f"    <Variable name=\"{k}\">\n"
+                            formatted_result += "      <![CDATA[\n"
+                            formatted_result += f"{v}\n"
+                            formatted_result += "      ]]>\n"
+                            formatted_result += "    </Variable>\n"
+                        formatted_result += "  </LocalVariables>\n"
+                    
+                    formatted_result += "</ExecutionResult>"
                 else:
-                    return "No output"
+                    # If no local variables, create a simpler XML structure
+                    formatted_result = "<ExecutionResult>\n"
+                    formatted_result += f"  <ExecutionTime>{execution_result.execution_time:.2f} seconds</ExecutionTime>\n"
+                    
+                    if execution_result.result is not None:
+                        formatted_result += "  <Result><![CDATA[\n"
+                        formatted_result += f"{execution_result.result}\n"
+                        formatted_result += "  ]]></Result>\n"
+                    
+                    if execution_result.error is not None:
+                        formatted_result += "  <Error><![CDATA[\n"
+                        formatted_result += f"{execution_result.error}\n"
+                        formatted_result += "  ]]></Error>\n"
+                    
+                    formatted_result += "</ExecutionResult>"
+                    
+                logger.debug(f"Returning execution result: {formatted_result[:100]}..." if len(formatted_result) > 100 else formatted_result)
+                return formatted_result
         except ValueError as e:
             logger.error(f"Invalid code generated: {str(e)}")
             return f"Invalid code: {str(e)}"

@@ -175,7 +175,7 @@ class AsyncFunction:
         self.pos_defaults = pos_defaults
         self.kw_defaults = kw_defaults
 
-    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+    async def __call__(self, *args: Any, **kwargs: Any) -> tuple[Any, Dict[str, Any]]:
         new_env_stack: List[Dict[str, Any]] = self.closure[:]
         local_frame: Dict[str, Any] = {}
         local_frame[self.node.name] = self
@@ -223,9 +223,11 @@ class AsyncFunction:
         try:
             for stmt in self.node.body:
                 last_value = await new_interp.visit(stmt, wrap_exceptions=True)
-            return last_value
+            return last_value, {k: v for k, v in local_frame.items() if not k.startswith('__')}
         except ReturnException as ret:
-            return ret.value
+            return ret.value, {k: v for k, v in local_frame.items() if not k.startswith('__')}
+        finally:
+            new_env_stack.pop()
 
 class AsyncGeneratorFunction:
     def __init__(self, node: ast.AsyncFunctionDef, closure: List[Dict[str, Any]], interpreter: ASTInterpreter,
