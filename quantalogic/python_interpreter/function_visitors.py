@@ -95,6 +95,14 @@ async def visit_Call(self: ASTInterpreter, node: ast.Call, is_await_context: boo
         else:
             kwargs[kw.arg] = await self.visit(kw.value, wrap_exceptions=wrap_exceptions)
 
+    # Handle str() explicitly to avoid __new__ restriction
+    if func is str:
+        if len(evaluated_args) != 1:
+            raise TypeError(f"str() takes exactly one argument ({len(evaluated_args)} given)")
+        arg = evaluated_args[0]
+        return f"{arg}"  # Use f-string to safely convert to string
+
+    # Handle exceptions passed to str() (original behavior preserved)
     if func is str and len(evaluated_args) == 1 and isinstance(evaluated_args[0], BaseException):
         exc = evaluated_args[0]
         if isinstance(exc, WrappedException) and hasattr(exc, 'original_exception'):
