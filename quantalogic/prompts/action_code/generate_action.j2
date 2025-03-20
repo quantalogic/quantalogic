@@ -2,5 +2,7 @@ Solve the following task: '{{ task }}'
 Previous steps:
 {{ history_str }}
 Generate a Python program with an async main() function that uses the available tools to take the next step toward solving the task.
-If previous steps indicate the task is solved, return the final result.
-Always print the result at the end of the program.
+The main function must return a string:
+- If you believe the task is solved based on the previous steps and the current action, return "Task completed: [final answer]" where [final answer] is the solution.
+- Otherwise, return the intermediate result or any relevant information as a string.
+Ensure the program handles any necessary error checking and provides meaningful output.

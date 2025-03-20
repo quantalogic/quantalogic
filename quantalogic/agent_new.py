@@ -10,7 +10,7 @@ from loguru import logger
 
 from quantalogic.python_interpreter import execute_async
 from quantalogic.tools.action_gen import AddTool, AgentTool, ConcatTool, MultiplyTool, generate_program
-from quantalogic.tools.tool import Tool
+from quantalogic.tools.tool import Tool, create_tool
 
 # Constants
 TEMPLATE_DIR = Path(__file__).parent / "prompts"
@@ -26,6 +26,9 @@ app = typer.Typer(no_args_is_help=True)
 
 # Jinja2 environment
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
+
+
+
 
 
 class ReActAgent:
@@ -105,33 +108,42 @@ class ReActAgent:
         ) if history else "No previous steps"
 
     def _format_execution_result(self, result) -> str:
-        """Format execution result as XML with CDATA."""
+        """Format execution result as XML with CDATA, including completion status."""
         if result.error:
             logger.error(f"Execution failed: {result.error}")
             return f"Error: {result.error}"
+
+        result_value = result.result
+        completed = isinstance(result_value, str) and result_value.startswith("Task completed:")
+        final_answer = result_value[len("Task completed: "):].strip() if completed else None
+
+        xml = [f"<ExecutionResult>\n  <ExecutionTime>{result.execution_time:.2f} seconds</ExecutionTime>"]
+        if completed:
+            xml.append(f"  <Completed>true</Completed>")
+            xml.append(f"  <FinalAnswer><![CDATA[\n{final_answer}\n  ]]></FinalAnswer>")
+        else:
+            xml.append(f"  <Completed>false</Completed>")
+            if result_value is not None:
+                xml.append(f"  <Result><![CDATA[\n{str(result_value)}\n  ]]></Result>")
 
         non_callable_vars = {
             k: (v[:5000] + "... (truncated)" if isinstance(v, str) and len(v) > 5000 else v)
             for k, v in (result.local_variables or {}).items()
             if not callable(v) and not k.startswith("__")
         }
-
-        xml = [f"<ExecutionResult>\n  <ExecutionTime>{result.execution_time:.2f} seconds</ExecutionTime>"]
-        if result.result is not None:
-            xml.append("  <Result><![CDATA[\n" + str(result.result) + "\n  ]]></Result>")
         if non_callable_vars:
             xml.append("  <LocalVariables>")
             for k, v in non_callable_vars.items():
                 xml.append(f"    <Variable name=\"{k}\">\n      <![CDATA[\n{v}\n      ]]>\n    </Variable>")
             xml.append("  </LocalVariables>")
         xml.append("</ExecutionResult>")
-        
+
         formatted_result = "\n".join(xml)
         logger.debug(f"Execution result: {formatted_result[:100]}..." if len(formatted_result) > 100 else formatted_result)
         return formatted_result
 
     async def solve(self, task: str) -> List[Dict[str, str]]:
-        """Solve the task iteratively."""
+        """Solve the task iteratively with explicit stopping criteria."""
         history = []
         for iteration in range(self.max_iterations):
             logger.info(f"Iteration {iteration + 1} for task: {task}")
@@ -141,7 +153,7 @@ class ReActAgent:
                 thought, code = self._parse_response(response)
                 result = await self.execute_action(code)
                 history.append({"thought": thought, "action": code, "result": result})
-                if "Error" not in result and result.strip():
+                if "<Completed>true</Completed>" in result:
                     logger.info(f"Task solved after {iteration + 1} iterations")
                     break
             except ValueError as e:
@@ -162,7 +174,7 @@ class ReActAgent:
 
 
 async def run_react_agent(task: str, model: str, max_iterations: int) -> None:
-    """Run the ReAct agent."""
+    """Run the ReAct agent and present the final answer clearly."""
     tools = [AddTool(), MultiplyTool(), ConcatTool(), AgentTool(model=model)]
     agent = ReActAgent(model=model, tools=tools, max_iterations=max_iterations)
     
@@ -173,6 +185,16 @@ async def run_react_agent(task: str, model: str, max_iterations: int) -> None:
         for key, color in [("thought", typer.colors.YELLOW), ("action", typer.colors.YELLOW), ("result", typer.colors.YELLOW)]:
             typer.echo(typer.style(f"[{key.capitalize()}]", fg=color))
             typer.echo(step[key])
+    
+    # Present the final answer if the task was completed
+    if history and "<Completed>true</Completed>" in history[-1]["result"]:
+        start = history[-1]["result"].index("<FinalAnswer><![CDATA[") + len("<FinalAnswer><![CDATA[")
+        end = history[-1]["result"].index("]]></FinalAnswer>", start)
+        final_answer = history[-1]["result"][start:end].strip()
+        typer.echo(f"\n{typer.style('Final Answer', fg=typer.colors.GREEN, bold=True)}")
+        typer.echo(final_answer)
+    elif history:
+        typer.echo(typer.style("\nTask not completed within the maximum iterations.", fg=typer.colors.RED))
 
 
 @app.command()
