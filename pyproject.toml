@@ -10,7 +10,7 @@ packages = [{include = "quantalogic"}]
 [tool.poetry.dependencies]
 python = "<4.0,>=3.10"
 pydantic = "^2.10.4"
-litellm = "^1.61.0"
+litellm = "^1.59.0"
 rich = "^13.9.4"
 loguru = "^0.7.3"
 tenacity = "^9.0.0"
