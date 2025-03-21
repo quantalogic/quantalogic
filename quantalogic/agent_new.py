@@ -1,8 +1,9 @@
 import ast
 import asyncio
+import inspect
 from asyncio import TimeoutError
 from contextlib import AsyncExitStack
-from functools import partial
+from functools import partial, wraps
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -30,33 +31,55 @@ app = typer.Typer(no_args_is_help=True)
 # Jinja2 environment
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
 
-# region Tool Definitions (Simplified with create_tool)
+# region Enhanced Tool Definitions
+def logged_tool(verb: str):
+    """Decorator factory to add consistent logging to tool functions."""
+    def decorator(func):
+        @wraps(func)
+        async def wrapped(*args, **kwargs):
+            logger.info(f"Starting tool execution: {func.__name__}")
+            sig = inspect.signature(func)
+            bound_args = sig.bind(*args, **kwargs)
+            bound_args.apply_defaults()
+            args_str = ", ".join(f"{k}={v}" for k, v in bound_args.arguments.items())
+            logger.info(f"{verb} {args_str}")
+            result = await func(*args, **kwargs)
+            logger.info(f"Finished tool execution: {func.__name__}")
+            return result
+        return wrapped
+    return decorator
+
+def log_tool_method(func):
+    """Decorator to add logging to Tool class methods."""
+    @wraps(func)
+    async def wrapper(self, **kwargs):
+        logger.info(f"Starting tool execution: {self.name}")
+        try:
+            result = await func(self, **kwargs)
+            logger.info(f"Finished tool execution: {self.name}")
+            return result
+        except Exception as e:
+            logger.error(f"Tool {self.name} failed: {str(e)}")
+            raise
+    return wrapper
+
 @create_tool
+@logged_tool("Adding")
 async def add_tool(a: int, b: int) -> str:
     """Adds two numbers and returns the sum as a string."""
-    logger.info("Starting tool execution: add_tool")
-    logger.info(f"Adding {a} and {b}")
-    result = a + b
-    logger.info("Finished tool execution: add_tool")
-    return str(result)
+    return str(a + b)
 
 @create_tool
+@logged_tool("Multiplying")
 async def multiply_tool(x: int, y: int) -> str:
     """Multiplies two numbers and returns the product as a string."""
-    logger.info("Starting tool execution: multiply_tool")
-    logger.info(f"Multiplying {x} and {y}")
-    result = x * y
-    logger.info("Finished tool execution: multiply_tool")
-    return str(result)
+    return str(x * y)
 
 @create_tool
+@logged_tool("Concatenating")
 async def concat_tool(s1: str, s2: str) -> str:
     """Concatenates two strings and returns the result."""
-    logger.info("Starting tool execution: concat_tool")
-    logger.info(f"Concatenating '{s1}' and '{s2}'")
-    result = s1 + s2
-    logger.info("Finished tool execution: concat_tool")
-    return result
+    return s1 + s2
 
 class AgentTool(Tool):
     """Maintained as class due to complex initialization requirements"""
@@ -76,8 +99,8 @@ class AgentTool(Tool):
         )
         self.model = model
     
+    @log_tool_method
     async def async_execute(self, **kwargs) -> str:
-        logger.info(f"Starting tool execution: {self.name}")
         system_prompt = kwargs["system_prompt"]
         prompt = kwargs["prompt"]
         temperature = float(kwargs["temperature"])
@@ -103,7 +126,6 @@ class AgentTool(Tool):
                 )
                 generated_text = response.choices[0].message.content.strip()
                 logger.debug(f"Generated text: {generated_text[:100]}...")
-                logger.info(f"Finished tool execution: {self.name}")
                 return generated_text
         except TimeoutError as e:
             error_msg = f"API call to {self.model} timed out after 30 seconds"
@@ -114,7 +136,7 @@ class AgentTool(Tool):
             raise RuntimeError(f"Text generation failed: {str(e)}") from e
 # endregion
 
-# region Core Agent Functionality (Unchanged)
+# region Core Agent Functionality (Preserved with Original Implementation)
 def validate_xml(xml_string: str) -> bool:
     """Validate XML string against a simple implicit schema."""
     try:
@@ -324,7 +346,7 @@ class ReActAgent:
             raise ValueError(f"Failed to parse XML response: {e}")
 # endregion
 
-# region CLI Interface (Unchanged)
+# region Preserved CLI Interface
 async def run_react_agent(
     task: str,
     model: str,
