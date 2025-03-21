@@ -2,8 +2,24 @@ Solve the following task: '{{ task }}'
 This is step {{ current_step }} out of {{ max_iterations }} allowed steps.
 Previous steps:
 {{ history_str }}
+
 Generate a Python program with an async main() function that uses the available tools to take the next step toward solving the task.
-The main function must return a string:
-- If you believe the task is solved based on the previous steps and the current action, return "Task completed: [final answer]" where [final answer] is the solution.
-- Otherwise, return the intermediate result or any relevant information as a string.
-Ensure the program handles any necessary error checking and provides meaningful output.
+
+Essential Requirements:
+- Check context_vars for previous results: context_vars.get("variable_name")
+- Build upon previous steps when applicable
+- Return "Task completed: [final answer]" if solved
+- Return intermediate results otherwise
+- Handle potential errors in tool arguments
+- Maintain proper async/await patterns
+
+The program must:
+1. Use only the provided async tools
+2. Follow Python 3.10+ syntax
+3. Include type annotations for variables, give very explicit names to variables
+4. Output progress information
+
+Example Context Usage:
+previous_value = context_vars.get('intermediate_result')
+if previous_value:
+    next_step = await process_tool(input=previous_value)
