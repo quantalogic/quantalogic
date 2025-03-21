@@ -136,7 +136,7 @@ class AgentTool(Tool):
             raise RuntimeError(f"Text generation failed: {str(e)}") from e
 # endregion
 
-# region Core Agent Functionality (Preserved with Original Implementation)
+# region Core Agent Functionality
 def validate_xml(xml_string: str) -> bool:
     """Validate XML string against a simple implicit schema."""
     try:
@@ -184,10 +184,14 @@ class ReActAgent:
         self.model = model
         self.tools = tools
         self.max_iterations = max_iterations
+        self.context_vars = {}  # New context storage
         self.tool_namespace: Dict[str, Callable] = self._build_tool_namespace()
 
     def _build_tool_namespace(self) -> Dict[str, Callable]:
-        namespace = {"asyncio": asyncio}
+        namespace = {
+            "asyncio": asyncio,
+            "context_vars": self.context_vars  # Context injection
+        }
         for tool in self.tools:
             namespace[tool.name] = partial(tool.async_execute)
         return namespace
@@ -221,7 +225,7 @@ class ReActAgent:
         except Exception as e:
             return jinja_env.get_template("action_code/error_format.j2").render(error=str(e))
 
-    async def execute_action(self, code: str,timeout: int = 300) -> str:
+    async def execute_action(self, code: str, timeout: int = 300) -> str:
         if not self._validate_code(code):
             return etree.tostring(
                 etree.Element("ExecutionResult", status="Error", 
@@ -237,6 +241,11 @@ class ReActAgent:
                 allowed_modules=["asyncio"],
                 namespace=self.tool_namespace,
             )
+            if result.local_variables:
+                self.context_vars.update({
+                    k: v for k, v in result.local_variables.items()
+                    if not k.startswith('__') and not callable(v)
+                })
             return self._format_execution_result(result)
         except Exception as e:
             return etree.tostring(
