@@ -4,7 +4,7 @@ from asyncio import TimeoutError
 from contextlib import AsyncExitStack
 from functools import partial
 from pathlib import Path
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import litellm
 import typer
@@ -160,8 +160,6 @@ async def generate_program(task_description: str, tools: List[Tool], model: str,
     Returns:
         str: A string containing a complete Python program.
     """
-    # No additional imports needed
-
     logger.debug(f"Generating program for task: {task_description}")
     tool_docstrings = "\n\n".join([tool.to_docstring() for tool in tools])
 
@@ -226,14 +224,17 @@ class ReActAgent:
             namespace[tool.name] = partial(tool.async_execute)
         return namespace
 
-    async def generate_action(self, task: str, history: List[Dict[str, str]]) -> str:
+    async def generate_action(self, task: str, history: List[Dict[str, str]], current_step: int, max_iterations: int) -> str:
         """Generate a Python program as an action."""
-        logger.info(f"Generating action for task: {task}")
+        logger.info(f"Generating action for task: {task} at step {current_step} of {max_iterations}")
         history_str = self._format_history(history)
 
         try:
             task_prompt = jinja_env.get_template("action_code/generate_action.j2").render(
-                task=task, history_str=history_str
+                task=task,
+                history_str=history_str,
+                current_step=current_step,
+                max_iterations=max_iterations
             )
             program = await generate_program(
                 task_description=task_prompt,
@@ -323,26 +324,77 @@ class ReActAgent:
         logger.debug(f"Execution result: {formatted_result[:100]}..." if len(formatted_result) > 100 else formatted_result)
         return formatted_result
 
-    async def solve(self, task: str) -> List[Dict[str, str]]:
-        """Solve the task iteratively with explicit stopping criteria."""
+    async def is_task_complete(self, task: str, history: List[Dict[str, str]], result: str, success_criteria: Optional[str] = None) -> Tuple[bool, str]:
+        """Determine if the task is complete using a hybrid approach."""
+        # Check explicit completion signal
+        if "<Completed>true</Completed>" in result:
+            final_answer = self._extract_final_answer(result)
+            # Verify with LLM
+            verification_prompt = f"Does '{final_answer}' solve '{task}' given history:\n{self._format_history(history)}?"
+            try:
+                verification = await litellm.acompletion(
+                    model=self.model,
+                    messages=[{"role": "user", "content": verification_prompt}],
+                    temperature=0.1,
+                    max_tokens=100
+                )
+                response = verification.choices[0].message.content.lower()
+                if "yes" in response or "true" in response:
+                    logger.info(f"Task completion verified by LLM: {final_answer}")
+                    return True, final_answer
+            except Exception as e:
+                logger.error(f"Verification failed: {e}")
+                # Fallback to accepting the explicit signal if verification fails
+                return True, final_answer
+        
+        # Check optional success criteria (e.g., exact match or regex)
+        if success_criteria:
+            result_value = self._extract_result(result)
+            if result_value and success_criteria in result_value:  # Simple string match as a basic implementation
+                logger.info(f"Task completed based on success criteria: {result_value}")
+                return True, result_value
+        
+        return False, ""
+
+    def _extract_final_answer(self, result: str) -> str:
+        """Extract the final answer from the execution result."""
+        start = result.find("<FinalAnswer><![CDATA[") + len("<FinalAnswer><![CDATA[")
+        end = result.find("]]></FinalAnswer>", start)
+        return result[start:end].strip() if start != -1 and end != -1 else ""
+
+    def _extract_result(self, result: str) -> str:
+        """Extract the raw result value from the execution result."""
+        start = result.find("<Result><![CDATA[") + len("<Result><![CDATA[")
+        end = result.find("]]></Result>", start)
+        if start != -1 and end != -1:
+            return result[start:end].strip()
+        return self._extract_final_answer(result)  # Fallback to final answer if no raw result
+
+    async def solve(self, task: str, success_criteria: Optional[str] = None) -> List[Dict[str, str]]:
+        """Solve the task iteratively with enhanced completion criteria."""
         history = []
         for iteration in range(self.max_iterations):
-            logger.info(f"Iteration {iteration + 1} for task: {task}")
-            response = await self.generate_action(task, history)
+            current_step = iteration + 1  # Start from 1 for readability
+            logger.info(f"Iteration {current_step} for task: {task}")
+            response = await self.generate_action(task, history, current_step, self.max_iterations)
             
             try:
                 thought, code = self._parse_response(response)
                 result = await self.execute_action(code)
                 history.append({"thought": thought, "action": code, "result": result})
-                if "<Completed>true</Completed>" in result:
-                    logger.info(f"Task solved after {iteration + 1} iterations")
+                
+                # Evaluate completion
+                is_complete, final_answer = await self.is_task_complete(task, history, result, success_criteria)
+                if is_complete:
+                    logger.info(f"Task solved after {current_step} iterations")
+                    history[-1]["result"] += f"\n<FinalAnswer><![CDATA[\n{final_answer}\n]]></FinalAnswer>"
                     break
             except ValueError as e:
                 logger.error(f"Response parsing failed: {e}")
                 break
         return history
 
-    def _parse_response(self, response: str) -> tuple[str, str]:
+    def _parse_response(self, response: str) -> Tuple[str, str]:
         """Parse thought and code from response."""
         thought_start = response.index("[Thought]") + 9
         action_start = response.index("[Action]") + 8
@@ -354,13 +406,33 @@ class ReActAgent:
         )
 
 
-async def run_react_agent(task: str, model: str, max_iterations: int) -> None:
+async def run_react_agent(
+    task: str,
+    model: str,
+    max_iterations: int,
+    success_criteria: Optional[str] = None,
+    tools: Optional[List[Union[Tool, Callable]]] = None
+) -> None:
     """Run the ReAct agent and present the final answer clearly."""
-    tools = [AddTool(), MultiplyTool(), ConcatTool(), AgentTool(model=model)]
-    agent = ReActAgent(model=model, tools=tools, max_iterations=max_iterations)
+    # Default tools if none provided
+    default_tools = [AddTool(), MultiplyTool(), ConcatTool(), AgentTool(model=model)]
+    tools = tools if tools is not None else default_tools
+    
+    # Process the tools list: convert Callable to Tool using create_tool
+    processed_tools = []
+    for tool in tools:
+        if isinstance(tool, Tool):
+            processed_tools.append(tool)
+        elif callable(tool):
+            processed_tools.append(create_tool(tool))
+        else:
+            logger.warning(f"Invalid tool type: {type(tool)}. Skipping.")
+            typer.echo(typer.style(f"Warning: Invalid tool type {type(tool)} skipped.", fg=typer.colors.YELLOW))
+
+    agent = ReActAgent(model=model, tools=processed_tools, max_iterations=max_iterations)
     
     typer.echo(typer.style(f"Solving task: {task}", fg=typer.colors.GREEN, bold=True))
-    history = await agent.solve(task)
+    history = await agent.solve(task, success_criteria)
     for i, step in enumerate(history, 1):
         typer.echo(f"\n{typer.style(f'Step {i}', fg=typer.colors.BLUE, bold=True)}")
         for key, color in [("thought", typer.colors.YELLOW), ("action", typer.colors.YELLOW), ("result", typer.colors.YELLOW)]:
@@ -368,7 +440,7 @@ async def run_react_agent(task: str, model: str, max_iterations: int) -> None:
             typer.echo(step[key])
     
     # Present the final answer if the task was completed
-    if history and "<Completed>true</Completed>" in history[-1]["result"]:
+    if history and "<FinalAnswer><![CDATA[" in history[-1]["result"]:
         start = history[-1]["result"].index("<FinalAnswer><![CDATA[") + len("<FinalAnswer><![CDATA[")
         end = history[-1]["result"].index("]]></FinalAnswer>", start)
         final_answer = history[-1]["result"][start:end].strip()
@@ -383,10 +455,11 @@ def react(
     task: str = typer.Argument(..., help="The task to solve"),
     model: str = typer.Option(DEFAULT_MODEL, help="The litellm model to use"),
     max_iterations: int = typer.Option(5, help="Maximum reasoning steps"),
+    success_criteria: Optional[str] = typer.Option(None, help="Optional criteria to determine task completion (e.g., expected result)"),
 ) -> None:
     """Solve a task using a ReAct Agent."""
     try:
-        asyncio.run(run_react_agent(task, model, max_iterations))
+        asyncio.run(run_react_agent(task, model, max_iterations, success_criteria))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
         typer.echo(typer.style(f"Error: {e}", fg=typer.colors.RED))
