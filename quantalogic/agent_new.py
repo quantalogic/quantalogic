@@ -437,7 +437,7 @@ def react(
             SearchDefinitionNamesTool(),
             TaskCompleteTool(),
             WriteFileTool(),
-            LLMTool(model_name=model),
+            AgentTool(model=model)
         ]
         asyncio.run(run_react_agent(task, model, max_iterations, success_criteria, tools))
     except Exception as e:
