@@ -4,7 +4,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "loguru",
-#     "litellm",
+#     "litellm==1.61.0",
 #     "pydantic>=2.0",
 #     "anyio",
 #     "quantalogic>=0.35",
