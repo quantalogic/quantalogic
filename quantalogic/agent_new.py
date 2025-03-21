@@ -199,7 +199,7 @@ class ReActAgent:
         except Exception as e:
             return jinja_env.get_template("action_code/error_format.j2").render(error=str(e))
 
-    async def execute_action(self, code: str) -> str:
+    async def execute_action(self, code: str,timeout: int = 300) -> str:
         if not self._validate_code(code):
             return etree.tostring(
                 etree.Element("ExecutionResult", status="Error", 
@@ -210,7 +210,7 @@ class ReActAgent:
         try:
             result = await execute_async(
                 code=code,
-                timeout=30,
+                timeout=timeout,
                 entry_point="main",
                 allowed_modules=["asyncio"],
                 namespace=self.tool_namespace,
