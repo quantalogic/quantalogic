@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "loguru>=0.7.2",
-#     "litellm>=1.0.0",
+#     "litellm==1.61.0",
 #     "pydantic>=2.0.0",
 #     "asyncio",
 #     "jinja2>=3.1.0",
@@ -14,7 +14,8 @@
 #     "instructor>=0.5.2",
 #     "typer>=0.9.0",
 #     "rich>=13.0.0",
-#     "pyperclip>=1.8.2"
+#     "pyperclip>=1.8.2",
+#     "openai>=1.68.0"
 # ]
 # ///
 # System dependencies:

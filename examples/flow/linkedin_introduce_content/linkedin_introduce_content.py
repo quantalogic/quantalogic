@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "loguru>=0.7.2",
-#     "litellm>=1.0.0",
+#     "litellm==1.61.0",
 #     "pydantic>=2.0.0",
 #     "asyncio",
 #     "jinja2>=3.1.0",

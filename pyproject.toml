@@ -10,7 +10,7 @@ packages = [{include = "quantalogic"}]
 [tool.poetry.dependencies]
 python = "<4.0,>=3.10"
 pydantic = "^2.10.4"
-litellm = "^1.56.4"
+litellm = "^1.61.0"
 rich = "^13.9.4"
 loguru = "^0.7.3"
 tenacity = "^9.0.0"
@@ -48,6 +48,7 @@ pytest-asyncio = "^0.25.3"
 boto3 = "^1.34.0"
 botocore = "^1.29.123"
 psutil = "^7.0.0"
+openai = "^1.68.0"
 
 [tool.poetry.group.file-tools]
 optional = false
