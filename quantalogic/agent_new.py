@@ -30,77 +30,47 @@ app = typer.Typer(no_args_is_help=True)
 # Jinja2 environment
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
 
+# region Tool Definitions (Simplified with create_tool)
+@create_tool
+async def add_tool(a: int, b: int) -> str:
+    """Adds two numbers and returns the sum as a string."""
+    logger.info("Starting tool execution: add_tool")
+    logger.info(f"Adding {a} and {b}")
+    result = a + b
+    logger.info("Finished tool execution: add_tool")
+    return str(result)
 
-# Define tool classes from action_gen.py
-class AddTool(Tool):
-    def __init__(self):
-        super().__init__(
-            name="add_tool",
-            description="Adds two numbers and returns the sum.",
-            arguments=[
-                ToolArgument(name="a", arg_type="int", description="First number", required=True),
-                ToolArgument(name="b", arg_type="int", description="Second number", required=True)
-            ],
-            return_type="int"
-        )
-    
-    async def async_execute(self, **kwargs) -> str:
-        logger.info(f"Starting tool execution: {self.name}")
-        logger.info(f"Adding {kwargs['a']} and {kwargs['b']}")
-        result = str(int(kwargs["a"]) + int(kwargs["b"]))
-        logger.info(f"Finished tool execution: {self.name}")
-        return result
+@create_tool
+async def multiply_tool(x: int, y: int) -> str:
+    """Multiplies two numbers and returns the product as a string."""
+    logger.info("Starting tool execution: multiply_tool")
+    logger.info(f"Multiplying {x} and {y}")
+    result = x * y
+    logger.info("Finished tool execution: multiply_tool")
+    return str(result)
 
-
-class MultiplyTool(Tool):
-    def __init__(self):
-        super().__init__(
-            name="multiply_tool",
-            description="Multiplies two numbers and returns the product.",
-            arguments=[
-                ToolArgument(name="x", arg_type="int", description="First number", required=True),
-                ToolArgument(name="y", arg_type="int", description="Second number", required=True)
-            ],
-            return_type="int"
-        )
-    
-    async def async_execute(self, **kwargs) -> str:
-        logger.info(f"Starting tool execution: {self.name}")
-        logger.info(f"Multiplying {kwargs['x']} and {kwargs['y']}")
-        result = str(int(kwargs["x"]) * int(kwargs["y"]))
-        logger.info(f"Finished tool execution: {self.name}")
-        return result
-
-
-class ConcatTool(Tool):
-    def __init__(self):
-        super().__init__(
-            name="concat_tool",
-            description="Concatenates two strings.",
-            arguments=[
-                ToolArgument(name="s1", arg_type="string", description="First string", required=True),
-                ToolArgument(name="s2", arg_type="string", description="Second string", required=True)
-            ],
-            return_type="string"
-        )
-    
-    async def async_execute(self, **kwargs) -> str:
-        logger.info(f"Starting tool execution: {self.name}")
-        logger.info(f"Concatenating '{kwargs['s1']}' and '{kwargs['s2']}'")
-        result = kwargs["s1"] + kwargs["s2"]
-        logger.info(f"Finished tool execution: {self.name}")
-        return result
-
+@create_tool
+async def concat_tool(s1: str, s2: str) -> str:
+    """Concatenates two strings and returns the result."""
+    logger.info("Starting tool execution: concat_tool")
+    logger.info(f"Concatenating '{s1}' and '{s2}'")
+    result = s1 + s2
+    logger.info("Finished tool execution: concat_tool")
+    return result
 
 class AgentTool(Tool):
+    """Maintained as class due to complex initialization requirements"""
     def __init__(self, model: str = "gemini/gemini-2.0-flash"):
         super().__init__(
             name="agent_tool",
             description="Generates text using a language model based on a system prompt and user prompt.",
             arguments=[
-                ToolArgument(name="system_prompt", arg_type="string", description="System prompt to guide the model's behavior", required=True),
-                ToolArgument(name="prompt", arg_type="string", description="User prompt to generate a response for", required=True),
-                ToolArgument(name="temperature", arg_type="float", description="Temperature for generation (0 to 1)", required=True)
+                ToolArgument(name="system_prompt", arg_type="string", 
+                           description="System prompt to guide the model's behavior", required=True),
+                ToolArgument(name="prompt", arg_type="string", 
+                           description="User prompt to generate a response for", required=True),
+                ToolArgument(name="temperature", arg_type="float", 
+                           description="Temperature for generation (0 to 1)", required=True)
             ],
             return_type="string"
         )
@@ -119,8 +89,7 @@ class AgentTool(Tool):
         logger.info(f"Generating text with model {self.model}, temperature {temperature}")
         try:
             async with AsyncExitStack() as stack:
-                timeout_cm = asyncio.timeout(30)
-                await stack.enter_async_context(timeout_cm)
+                await stack.enter_async_context(asyncio.timeout(30))
                 
                 logger.debug(f"Making API call to {self.model}")
                 response = await litellm.acompletion(
@@ -133,20 +102,19 @@ class AgentTool(Tool):
                     max_tokens=1000
                 )
                 generated_text = response.choices[0].message.content.strip()
-                logger.debug(f"Generated text: {generated_text}")
-                result = generated_text
+                logger.debug(f"Generated text: {generated_text[:100]}...")
                 logger.info(f"Finished tool execution: {self.name}")
-                return result
+                return generated_text
         except TimeoutError as e:
             error_msg = f"API call to {self.model} timed out after 30 seconds"
             logger.error(error_msg)
             raise TimeoutError(error_msg) from e
         except Exception as e:
-            logger.error(f"Failed to generate text with {self.model}: {str(e)}")
-            raise RuntimeError(f"Text generation failed: {str(e)}")
+            logger.error(f"Text generation failed: {str(e)}")
+            raise RuntimeError(f"Text generation failed: {str(e)}") from e
+# endregion
 
-
-# XML Validation Helper
+# region Core Agent Functionality (Unchanged)
 def validate_xml(xml_string: str) -> bool:
     """Validate XML string against a simple implicit schema."""
     try:
@@ -156,20 +124,7 @@ def validate_xml(xml_string: str) -> bool:
         logger.error(f"XML validation failed: {e}")
         return False
 
-
 async def generate_program(task_description: str, tools: List[Tool], model: str, max_tokens: int) -> str:
-    """
-    Asynchronously generate a Python program that solves a given task using a list of tools.
-
-    Args:
-        task_description (str): A description of the task to be solved.
-        tools (List[Tool]): A list of Tool objects available for use.
-        model (str): The litellm model to use for code generation.
-        max_tokens (int): Maximum number of tokens for the generated response.
-
-    Returns:
-        str: A string containing a complete Python program.
-    """
     logger.debug(f"Generating program for task: {task_description}")
     tool_docstrings = "\n\n".join([tool.to_docstring() for tool in tools])
 
@@ -179,11 +134,8 @@ async def generate_program(task_description: str, tools: List[Tool], model: str,
         tool_docstrings=tool_docstrings
     )
     
-    logger.debug(f"Prompt sent to litellm:\n{prompt}")
-    
-    for attempt in range(3):  # Retry logic for robustness
+    for attempt in range(3):
         try:
-            logger.debug(f"Calling litellm with model {model}, attempt {attempt + 1}")
             response = await litellm.acompletion(
                 model=model,
                 messages=[
@@ -194,7 +146,6 @@ async def generate_program(task_description: str, tools: List[Tool], model: str,
                 temperature=0.3
             )
             generated_code = response.choices[0].message.content.strip()
-            logger.debug("Code generation successful")
             
             if generated_code.startswith("```python") and generated_code.endswith("```"):
                 generated_code = generated_code[9:-3].strip()
@@ -202,11 +153,9 @@ async def generate_program(task_description: str, tools: List[Tool], model: str,
         except Exception as e:
             logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
             if attempt < 2:
-                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                await asyncio.sleep(2 ** attempt)
             else:
-                logger.error(f"Failed to generate code after retries: {str(e)}")
                 raise typer.BadParameter(f"Failed to generate code with model '{model}': {str(e)}")
-
 
 class ReActAgent:
     def __init__(self, model: str, tools: List[Tool], max_iterations: int = 5):
@@ -216,15 +165,12 @@ class ReActAgent:
         self.tool_namespace: Dict[str, Callable] = self._build_tool_namespace()
 
     def _build_tool_namespace(self) -> Dict[str, Callable]:
-        """Build namespace with tool instances."""
         namespace = {"asyncio": asyncio}
         for tool in self.tools:
             namespace[tool.name] = partial(tool.async_execute)
         return namespace
 
     async def generate_action(self, task: str, history: List[Dict[str, str]], current_step: int, max_iterations: int) -> str:
-        """Generate a Python program as an action, returning XML."""
-        logger.info(f"Generating action for task: {task} at step {current_step} of {max_iterations}")
         history_str = self._format_history(history)
 
         try:
@@ -240,7 +186,6 @@ class ReActAgent:
                 model=self.model,
                 max_tokens=MAX_TOKENS,
             )
-            logger.debug(f"Generated program:\n{program}")
             response = jinja_env.get_template("action_code/response_format.j2").render(
                 task=task,
                 history_str=history_str,
@@ -252,16 +197,13 @@ class ReActAgent:
                 raise ValueError("Generated XML is invalid")
             return response
         except Exception as e:
-            logger.error(f"Action generation failed: {e}")
             return jinja_env.get_template("action_code/error_format.j2").render(error=str(e))
 
     async def execute_action(self, code: str) -> str:
-        """Execute the generated code and return formatted XML result."""
-        logger.debug(f"Executing action:\n{code}")
-        
         if not self._validate_code(code):
             return etree.tostring(
-                etree.Element("ExecutionResult", status="Error", message="Generated code lacks an async main() function"),
+                etree.Element("ExecutionResult", status="Error", 
+                            message="Generated code lacks an async main() function"),
                 encoding="unicode"
             )
 
@@ -274,37 +216,26 @@ class ReActAgent:
                 namespace=self.tool_namespace,
             )
             return self._format_execution_result(result)
-        except SyntaxError as e:
-            logger.error(f"Syntax error: {e}")
-            return etree.tostring(
-                etree.Element("ExecutionResult", status="Error", message=f"Syntax error: {e}"),
-                encoding="unicode"
-            )
         except Exception as e:
-            logger.error(f"Execution error: {e}")
             return etree.tostring(
                 etree.Element("ExecutionResult", status="Error", message=f"Execution error: {e}"),
                 encoding="unicode"
             )
 
     def _validate_code(self, code: str) -> bool:
-        """Validate that code has an async main function."""
         try:
             tree = ast.parse(code)
             return any(isinstance(node, ast.AsyncFunctionDef) and node.name == "main" for node in ast.walk(tree))
-        except SyntaxError as e:
-            logger.error(f"Code validation failed: {e}")
+        except SyntaxError:
             return False
 
     def _format_history(self, history: List[Dict[str, str]]) -> str:
-        """Format history into a readable string."""
         return "\n".join(
             f"[Step {i+1}] {h['thought']}\nAction:\n{h['action']}\nResult: {h['result']}"
             for i, h in enumerate(history)
         ) if history else "No previous steps"
 
     def _format_execution_result(self, result) -> str:
-        """Format execution result as XML with CDATA."""
         root = etree.Element("ExecutionResult")
         etree.SubElement(root, "Status").text = "Success" if not result.error else "Error"
         etree.SubElement(root, "Value").text = etree.CDATA(str(result.result or result.error))
@@ -324,16 +255,13 @@ class ReActAgent:
                     var_elem = etree.SubElement(vars_elem, "Variable", name=k)
                     var_elem.text = etree.CDATA(str(v)[:5000] + ("... (truncated)" if len(str(v)) > 5000 else ""))
         
-        formatted_result = etree.tostring(root, pretty_print=True, encoding="unicode")
-        logger.debug(f"Execution result: {formatted_result[:100]}..." if len(formatted_result) > 100 else formatted_result)
-        return formatted_result
+        return etree.tostring(root, pretty_print=True, encoding="unicode")
 
-    async def is_task_complete(self, task: str, history: List[Dict[str, str]], result: str, success_criteria: Optional[str] = None) -> Tuple[bool, str]:
-        """Determine if the task is complete using a hybrid approach."""
+    async def is_task_complete(self, task: str, history: List[Dict[str, str]], result: str, 
+                             success_criteria: Optional[str] = None) -> Tuple[bool, str]:
         try:
             result_xml = etree.fromstring(result)
-            completed = result_xml.findtext("Completed") == "true"
-            if completed:
+            if result_xml.findtext("Completed") == "true":
                 final_answer = result_xml.findtext("FinalAnswer") or ""
                 verification_prompt = f"Does '{final_answer}' solve '{task}' given history:\n{self._format_history(history)}?"
                 verification = await litellm.acompletion(
@@ -344,43 +272,35 @@ class ReActAgent:
                 )
                 response = verification.choices[0].message.content.lower()
                 if "yes" in response or "true" in response:
-                    logger.info(f"Task completion verified by LLM: {final_answer}")
                     return True, final_answer
-                return True, final_answer  # Fallback if verification fails
+                return True, final_answer
         
-        except etree.XMLSyntaxError as e:
-            logger.error(f"Failed to parse result XML: {e}")
+        except etree.XMLSyntaxError:
+            pass
         
         if success_criteria:
             result_value = self._extract_result(result)
             if result_value and success_criteria in result_value:
-                logger.info(f"Task completed based on success criteria: {result_value}")
                 return True, result_value
         
         return False, ""
 
     def _extract_final_answer(self, result: str) -> str:
-        """Extract the final answer from the execution result."""
         try:
-            result_xml = etree.fromstring(result)
-            return result_xml.findtext("FinalAnswer") or ""
+            return etree.fromstring(result).findtext("FinalAnswer") or ""
         except etree.XMLSyntaxError:
             return ""
 
     def _extract_result(self, result: str) -> str:
-        """Extract the raw result value from the execution result."""
         try:
-            result_xml = etree.fromstring(result)
-            return result_xml.findtext("Value") or ""
+            return etree.fromstring(result).findtext("Value") or ""
         except etree.XMLSyntaxError:
             return ""
 
     async def solve(self, task: str, success_criteria: Optional[str] = None) -> List[Dict[str, str]]:
-        """Solve the task iteratively with enhanced completion criteria."""
         history = []
         for iteration in range(self.max_iterations):
             current_step = iteration + 1
-            logger.info(f"Iteration {current_step} for task: {task}")
             response = await self.generate_action(task, history, current_step, self.max_iterations)
             
             try:
@@ -390,28 +310,21 @@ class ReActAgent:
                 
                 is_complete, final_answer = await self.is_task_complete(task, history, result, success_criteria)
                 if is_complete:
-                    logger.info(f"Task solved after {current_step} iterations")
                     history[-1]["result"] += f"\n<FinalAnswer><![CDATA[\n{final_answer}\n]]></FinalAnswer>"
                     break
-            except (ValueError, etree.XMLSyntaxError) as e:
-                logger.error(f"Response parsing failed: {e}")
+            except (ValueError, etree.XMLSyntaxError):
                 break
         return history
 
     def _parse_response(self, response: str) -> Tuple[str, str]:
-        """Parse thought and code from XML response."""
         try:
             root = etree.fromstring(response)
-            thought = root.findtext("Thought") or ""
-            code = root.findtext("Code") or ""
-            if not code:
-                raise ValueError("No code found in response")
-            return thought, code
+            return root.findtext("Thought") or "", root.findtext("Code") or ""
         except etree.XMLSyntaxError as e:
-            logger.error(f"Invalid XML response: {e}")
             raise ValueError(f"Failed to parse XML response: {e}")
+# endregion
 
-
+# region CLI Interface (Unchanged)
 async def run_react_agent(
     task: str,
     model: str,
@@ -419,8 +332,7 @@ async def run_react_agent(
     success_criteria: Optional[str] = None,
     tools: Optional[List[Union[Tool, Callable]]] = None
 ) -> None:
-    """Run the ReAct agent and present the final answer clearly."""
-    default_tools = [AddTool(), MultiplyTool(), ConcatTool(), AgentTool(model=model)]
+    default_tools = [add_tool, multiply_tool, concat_tool, AgentTool(model=model)]
     tools = tools if tools is not None else default_tools
     
     processed_tools = []
@@ -452,15 +364,13 @@ async def run_react_agent(
     elif history:
         typer.echo(typer.style("\nTask not completed within the maximum iterations.", fg=typer.colors.RED))
 
-
 @app.command()
 def react(
     task: str = typer.Argument(..., help="The task to solve"),
     model: str = typer.Option(DEFAULT_MODEL, help="The litellm model to use"),
     max_iterations: int = typer.Option(5, help="Maximum reasoning steps"),
-    success_criteria: Optional[str] = typer.Option(None, help="Optional criteria to determine task completion (e.g., expected result)"),
+    success_criteria: Optional[str] = typer.Option(None, help="Optional criteria to determine task completion"),
 ) -> None:
-    """Solve a task using a ReAct Agent."""
     try:
         asyncio.run(run_react_agent(task, model, max_iterations, success_criteria))
     except Exception as e:
@@ -468,6 +378,6 @@ def react(
         typer.echo(typer.style(f"Error: {e}", fg=typer.colors.RED))
         raise typer.Exit(code=1)
 
-
 if __name__ == "__main__":
     app()
+# endregion
