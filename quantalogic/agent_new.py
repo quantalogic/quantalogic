@@ -1,16 +1,18 @@
 import ast
 import asyncio
+from asyncio import TimeoutError
+from contextlib import AsyncExitStack
 from functools import partial
 from pathlib import Path
 from typing import Callable, Dict, List
 
+import litellm
 import typer
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 
 from quantalogic.python_interpreter import execute_async
-from quantalogic.tools.action_gen import AddTool, AgentTool, ConcatTool, MultiplyTool, generate_program
-from quantalogic.tools.tool import Tool, create_tool
+from quantalogic.tools.tool import Tool, ToolArgument, create_tool
 
 # Constants
 TEMPLATE_DIR = Path(__file__).parent / "prompts"
@@ -28,7 +30,186 @@ app = typer.Typer(no_args_is_help=True)
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
 
 
+# Define tool classes from action_gen.py
+class AddTool(Tool):
+    def __init__(self):
+        super().__init__(
+            name="add_tool",
+            description="Adds two numbers and returns the sum.",
+            arguments=[
+                ToolArgument(name="a", arg_type="int", description="First number", required=True),
+                ToolArgument(name="b", arg_type="int", description="Second number", required=True)
+            ],
+            return_type="int"
+        )
+    
+    async def async_execute(self, **kwargs) -> str:
+        logger.info(f"Starting tool execution: {self.name}")
+        logger.info(f"Adding {kwargs['a']} and {kwargs['b']}")
+        result = str(int(kwargs["a"]) + int(kwargs["b"]))
+        logger.info(f"Finished tool execution: {self.name}")
+        return result
 
+
+class MultiplyTool(Tool):
+    def __init__(self):
+        super().__init__(
+            name="multiply_tool",
+            description="Multiplies two numbers and returns the product.",
+            arguments=[
+                ToolArgument(name="x", arg_type="int", description="First number", required=True),
+                ToolArgument(name="y", arg_type="int", description="Second number", required=True)
+            ],
+            return_type="int"
+        )
+    
+    async def async_execute(self, **kwargs) -> str:
+        logger.info(f"Starting tool execution: {self.name}")
+        logger.info(f"Multiplying {kwargs['x']} and {kwargs['y']}")
+        result = str(int(kwargs["x"]) * int(kwargs["y"]))
+        logger.info(f"Finished tool execution: {self.name}")
+        return result
+
+
+class ConcatTool(Tool):
+    def __init__(self):
+        super().__init__(
+            name="concat_tool",
+            description="Concatenates two strings.",
+            arguments=[
+                ToolArgument(name="s1", arg_type="string", description="First string", required=True),
+                ToolArgument(name="s2", arg_type="string", description="Second string", required=True)
+            ],
+            return_type="string"
+        )
+    
+    async def async_execute(self, **kwargs) -> str:
+        logger.info(f"Starting tool execution: {self.name}")
+        logger.info(f"Concatenating '{kwargs['s1']}' and '{kwargs['s2']}'")
+        result = kwargs["s1"] + kwargs["s2"]
+        logger.info(f"Finished tool execution: {self.name}")
+        return result
+
+
+class AgentTool(Tool):
+    def __init__(self, model: str = "gemini/gemini-2.0-flash"):
+        super().__init__(
+            name="agent_tool",
+            description="Generates text using a language model based on a system prompt and user prompt.",
+            arguments=[
+                ToolArgument(name="system_prompt", arg_type="string", description="System prompt to guide the model's behavior", required=True),
+                ToolArgument(name="prompt", arg_type="string", description="User prompt to generate a response for", required=True),
+                ToolArgument(name="temperature", arg_type="float", description="Temperature for generation (0 to 1)", required=True)
+            ],
+            return_type="string"
+        )
+        self.model = model
+    
+    async def async_execute(self, **kwargs) -> str:
+        logger.info(f"Starting tool execution: {self.name}")
+        system_prompt = kwargs["system_prompt"]
+        prompt = kwargs["prompt"]
+        temperature = float(kwargs["temperature"])
+        
+        # Validate temperature
+        if not 0 <= temperature <= 1:
+            logger.error(f"Temperature {temperature} is out of range (0-1)")
+            raise ValueError("Temperature must be between 0 and 1")
+        
+        logger.info(f"Generating text with model {self.model}, temperature {temperature}")
+        try:
+            async with AsyncExitStack() as stack:
+                timeout_cm = asyncio.timeout(30)
+                await stack.enter_async_context(timeout_cm)
+                
+                logger.debug(f"Making API call to {self.model}")
+                response = await litellm.acompletion(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=temperature,
+                    max_tokens=1000
+                )
+                generated_text = response.choices[0].message.content.strip()
+                logger.debug(f"Generated text: {generated_text}")
+                result = generated_text
+                logger.info(f"Finished tool execution: {self.name}")
+                return result
+        except TimeoutError as e:
+            error_msg = f"API call to {self.model} timed out after 30 seconds"
+            logger.error(error_msg)
+            raise TimeoutError(error_msg) from e
+        except Exception as e:
+            logger.error(f"Failed to generate text with {self.model}: {str(e)}")
+            raise RuntimeError(f"Text generation failed: {str(e)}")
+
+
+# Function to generate program from action_gen.py
+async def generate_program(task_description: str, tools: List[Tool], model: str, max_tokens: int) -> str:
+    """
+    Asynchronously generate a Python program that solves a given task using a list of tools.
+
+    Args:
+        task_description (str): A description of the task to be solved.
+        tools (List[Tool]): A list of Tool objects available for use.
+        model (str): The litellm model to use for code generation.
+        max_tokens (int): Maximum number of tokens for the generated response.
+
+    Returns:
+        str: A string containing a complete Python program.
+    """
+    # No additional imports needed
+
+    logger.debug(f"Generating program for task: {task_description}")
+    tool_docstrings = "\n\n".join([tool.to_docstring() for tool in tools])
+
+    # Use the existing jinja environment to load the template
+    template = jinja_env.get_template("action_code/generate_program.j2")
+    
+    # Render the template with the provided variables
+    prompt = template.render(
+        task_description=task_description,
+        tool_docstrings=tool_docstrings
+    )
+    
+    logger.debug(f"Prompt sent to litellm:\n{prompt}")
+    
+    try:
+        logger.debug(f"Calling litellm with model {model}")
+        response = await litellm.acompletion(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You are a Python code generator."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=max_tokens,
+            temperature=0.3
+        )
+        generated_code = response.choices[0].message.content.strip()
+        logger.debug("Code generation successful")
+    except Exception as e:
+        logger.error(f"Failed to generate code: {str(e)}")
+        raise typer.BadParameter(f"Failed to generate code with model '{model}': {str(e)}")
+
+    # Clean up output
+    if generated_code.startswith('"""') and generated_code.endswith('"""'):
+        generated_code = generated_code[3:-3]
+    elif generated_code.startswith("```python") and generated_code.endswith("```"):
+        generated_code = generated_code[9:-3].strip()
+    
+    # Post-processing to remove any __main__ block if generated despite instructions
+    if "if __name__ == \"__main__\":" in generated_code:
+        lines = generated_code.splitlines()
+        main_end_idx = next(
+            (i for i in range(len(lines)) if "if __name__" in lines[i]),
+            len(lines)
+        )
+        generated_code = "\n".join(lines[:main_end_idx]).strip()
+        logger.warning("Removed unexpected __main__ block from generated code")
+
+    return generated_code
 
 
 class ReActAgent:
