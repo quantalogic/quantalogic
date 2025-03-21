@@ -10,6 +10,7 @@ import litellm
 import typer
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
+from lxml import etree
 
 from quantalogic.python_interpreter import execute_async
 from quantalogic.tools.tool import Tool, ToolArgument, create_tool
@@ -111,7 +112,6 @@ class AgentTool(Tool):
         prompt = kwargs["prompt"]
         temperature = float(kwargs["temperature"])
         
-        # Validate temperature
         if not 0 <= temperature <= 1:
             logger.error(f"Temperature {temperature} is out of range (0-1)")
             raise ValueError("Temperature must be between 0 and 1")
@@ -146,7 +146,17 @@ class AgentTool(Tool):
             raise RuntimeError(f"Text generation failed: {str(e)}")
 
 
-# Function to generate program from action_gen.py
+# XML Validation Helper
+def validate_xml(xml_string: str) -> bool:
+    """Validate XML string against a simple implicit schema."""
+    try:
+        etree.fromstring(xml_string)
+        return True
+    except etree.XMLSyntaxError as e:
+        logger.error(f"XML validation failed: {e}")
+        return False
+
+
 async def generate_program(task_description: str, tools: List[Tool], model: str, max_tokens: int) -> str:
     """
     Asynchronously generate a Python program that solves a given task using a list of tools.
@@ -163,10 +173,7 @@ async def generate_program(task_description: str, tools: List[Tool], model: str,
     logger.debug(f"Generating program for task: {task_description}")
     tool_docstrings = "\n\n".join([tool.to_docstring() for tool in tools])
 
-    # Use the existing jinja environment to load the template
     template = jinja_env.get_template("action_code/generate_program.j2")
-    
-    # Render the template with the provided variables
     prompt = template.render(
         task_description=task_description,
         tool_docstrings=tool_docstrings
@@ -174,40 +181,31 @@ async def generate_program(task_description: str, tools: List[Tool], model: str,
     
     logger.debug(f"Prompt sent to litellm:\n{prompt}")
     
-    try:
-        logger.debug(f"Calling litellm with model {model}")
-        response = await litellm.acompletion(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are a Python code generator."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=max_tokens,
-            temperature=0.3
-        )
-        generated_code = response.choices[0].message.content.strip()
-        logger.debug("Code generation successful")
-    except Exception as e:
-        logger.error(f"Failed to generate code: {str(e)}")
-        raise typer.BadParameter(f"Failed to generate code with model '{model}': {str(e)}")
-
-    # Clean up output
-    if generated_code.startswith('"""') and generated_code.endswith('"""'):
-        generated_code = generated_code[3:-3]
-    elif generated_code.startswith("```python") and generated_code.endswith("```"):
-        generated_code = generated_code[9:-3].strip()
-    
-    # Post-processing to remove any __main__ block if generated despite instructions
-    if "if __name__ == \"__main__\":" in generated_code:
-        lines = generated_code.splitlines()
-        main_end_idx = next(
-            (i for i in range(len(lines)) if "if __name__" in lines[i]),
-            len(lines)
-        )
-        generated_code = "\n".join(lines[:main_end_idx]).strip()
-        logger.warning("Removed unexpected __main__ block from generated code")
-
-    return generated_code
+    for attempt in range(3):  # Retry logic for robustness
+        try:
+            logger.debug(f"Calling litellm with model {model}, attempt {attempt + 1}")
+            response = await litellm.acompletion(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a Python code generator."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=0.3
+            )
+            generated_code = response.choices[0].message.content.strip()
+            logger.debug("Code generation successful")
+            
+            if generated_code.startswith("```python") and generated_code.endswith("```"):
+                generated_code = generated_code[9:-3].strip()
+            return generated_code
+        except Exception as e:
+            logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+            if attempt < 2:
+                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+            else:
+                logger.error(f"Failed to generate code after retries: {str(e)}")
+                raise typer.BadParameter(f"Failed to generate code with model '{model}': {str(e)}")
 
 
 class ReActAgent:
@@ -225,7 +223,7 @@ class ReActAgent:
         return namespace
 
     async def generate_action(self, task: str, history: List[Dict[str, str]], current_step: int, max_iterations: int) -> str:
-        """Generate a Python program as an action."""
+        """Generate a Python program as an action, returning XML."""
         logger.info(f"Generating action for task: {task} at step {current_step} of {max_iterations}")
         history_str = self._format_history(history)
 
@@ -243,19 +241,29 @@ class ReActAgent:
                 max_tokens=MAX_TOKENS,
             )
             logger.debug(f"Generated program:\n{program}")
-            return jinja_env.get_template("action_code/response_format.j2").render(
-                task=task, history_str=history_str, program=program
+            response = jinja_env.get_template("action_code/response_format.j2").render(
+                task=task,
+                history_str=history_str,
+                program=program,
+                current_step=current_step,
+                max_iterations=max_iterations
             )
+            if not validate_xml(response):
+                raise ValueError("Generated XML is invalid")
+            return response
         except Exception as e:
             logger.error(f"Action generation failed: {e}")
             return jinja_env.get_template("action_code/error_format.j2").render(error=str(e))
 
     async def execute_action(self, code: str) -> str:
-        """Execute the generated code and return formatted result."""
+        """Execute the generated code and return formatted XML result."""
         logger.debug(f"Executing action:\n{code}")
         
         if not self._validate_code(code):
-            return "Error: Generated code lacks an async main() function"
+            return etree.tostring(
+                etree.Element("ExecutionResult", status="Error", message="Generated code lacks an async main() function"),
+                encoding="unicode"
+            )
 
         try:
             result = await execute_async(
@@ -268,10 +276,16 @@ class ReActAgent:
             return self._format_execution_result(result)
         except SyntaxError as e:
             logger.error(f"Syntax error: {e}")
-            return f"Syntax error: {e}"
+            return etree.tostring(
+                etree.Element("ExecutionResult", status="Error", message=f"Syntax error: {e}"),
+                encoding="unicode"
+            )
         except Exception as e:
             logger.error(f"Execution error: {e}")
-            return f"Execution error: {e}"
+            return etree.tostring(
+                etree.Element("ExecutionResult", status="Error", message=f"Execution error: {e}"),
+                encoding="unicode"
+            )
 
     def _validate_code(self, code: str) -> bool:
         """Validate that code has an async main function."""
@@ -290,48 +304,38 @@ class ReActAgent:
         ) if history else "No previous steps"
 
     def _format_execution_result(self, result) -> str:
-        """Format execution result as XML with CDATA, including completion status."""
-        if result.error:
-            logger.error(f"Execution failed: {result.error}")
-            return f"Error: {result.error}"
-
-        result_value = result.result
-        completed = isinstance(result_value, str) and result_value.startswith("Task completed:")
-        final_answer = result_value[len("Task completed: "):].strip() if completed else None
-
-        xml = [f"<ExecutionResult>\n  <ExecutionTime>{result.execution_time:.2f} seconds</ExecutionTime>"]
-        if completed:
-            xml.append(f"  <Completed>true</Completed>")
-            xml.append(f"  <FinalAnswer><![CDATA[\n{final_answer}\n  ]]></FinalAnswer>")
+        """Format execution result as XML with CDATA."""
+        root = etree.Element("ExecutionResult")
+        etree.SubElement(root, "Status").text = "Success" if not result.error else "Error"
+        etree.SubElement(root, "Value").text = etree.CDATA(str(result.result or result.error))
+        etree.SubElement(root, "ExecutionTime").text = f"{result.execution_time:.2f} seconds"
+        
+        if not result.error and result.result and result.result.startswith("Task completed:"):
+            etree.SubElement(root, "Completed").text = "true"
+            final_answer = result.result[len("Task completed:"):].strip()
+            etree.SubElement(root, "FinalAnswer").text = etree.CDATA(final_answer)
         else:
-            xml.append(f"  <Completed>false</Completed>")
-            if result_value is not None:
-                xml.append(f"  <Result><![CDATA[\n{str(result_value)}\n  ]]></Result>")
-
-        non_callable_vars = {
-            k: (v[:5000] + "... (truncated)" if isinstance(v, str) and len(v) > 5000 else v)
-            for k, v in (result.local_variables or {}).items()
-            if not callable(v) and not k.startswith("__")
-        }
-        if non_callable_vars:
-            xml.append("  <LocalVariables>")
-            for k, v in non_callable_vars.items():
-                xml.append(f"    <Variable name=\"{k}\">\n      <![CDATA[\n{v}\n      ]]>\n    </Variable>")
-            xml.append("  </LocalVariables>")
-        xml.append("</ExecutionResult>")
-
-        formatted_result = "\n".join(xml)
+            etree.SubElement(root, "Completed").text = "false"
+        
+        if result.local_variables:
+            vars_elem = etree.SubElement(root, "Variables")
+            for k, v in result.local_variables.items():
+                if not callable(v) and not k.startswith("__"):
+                    var_elem = etree.SubElement(vars_elem, "Variable", name=k)
+                    var_elem.text = etree.CDATA(str(v)[:5000] + ("... (truncated)" if len(str(v)) > 5000 else ""))
+        
+        formatted_result = etree.tostring(root, pretty_print=True, encoding="unicode")
         logger.debug(f"Execution result: {formatted_result[:100]}..." if len(formatted_result) > 100 else formatted_result)
         return formatted_result
 
     async def is_task_complete(self, task: str, history: List[Dict[str, str]], result: str, success_criteria: Optional[str] = None) -> Tuple[bool, str]:
         """Determine if the task is complete using a hybrid approach."""
-        # Check explicit completion signal
-        if "<Completed>true</Completed>" in result:
-            final_answer = self._extract_final_answer(result)
-            # Verify with LLM
-            verification_prompt = f"Does '{final_answer}' solve '{task}' given history:\n{self._format_history(history)}?"
-            try:
+        try:
+            result_xml = etree.fromstring(result)
+            completed = result_xml.findtext("Completed") == "true"
+            if completed:
+                final_answer = result_xml.findtext("FinalAnswer") or ""
+                verification_prompt = f"Does '{final_answer}' solve '{task}' given history:\n{self._format_history(history)}?"
                 verification = await litellm.acompletion(
                     model=self.model,
                     messages=[{"role": "user", "content": verification_prompt}],
@@ -342,15 +346,14 @@ class ReActAgent:
                 if "yes" in response or "true" in response:
                     logger.info(f"Task completion verified by LLM: {final_answer}")
                     return True, final_answer
-            except Exception as e:
-                logger.error(f"Verification failed: {e}")
-                # Fallback to accepting the explicit signal if verification fails
-                return True, final_answer
+                return True, final_answer  # Fallback if verification fails
         
-        # Check optional success criteria (e.g., exact match or regex)
+        except etree.XMLSyntaxError as e:
+            logger.error(f"Failed to parse result XML: {e}")
+        
         if success_criteria:
             result_value = self._extract_result(result)
-            if result_value and success_criteria in result_value:  # Simple string match as a basic implementation
+            if result_value and success_criteria in result_value:
                 logger.info(f"Task completed based on success criteria: {result_value}")
                 return True, result_value
         
@@ -358,23 +361,25 @@ class ReActAgent:
 
     def _extract_final_answer(self, result: str) -> str:
         """Extract the final answer from the execution result."""
-        start = result.find("<FinalAnswer><![CDATA[") + len("<FinalAnswer><![CDATA[")
-        end = result.find("]]></FinalAnswer>", start)
-        return result[start:end].strip() if start != -1 and end != -1 else ""
+        try:
+            result_xml = etree.fromstring(result)
+            return result_xml.findtext("FinalAnswer") or ""
+        except etree.XMLSyntaxError:
+            return ""
 
     def _extract_result(self, result: str) -> str:
         """Extract the raw result value from the execution result."""
-        start = result.find("<Result><![CDATA[") + len("<Result><![CDATA[")
-        end = result.find("]]></Result>", start)
-        if start != -1 and end != -1:
-            return result[start:end].strip()
-        return self._extract_final_answer(result)  # Fallback to final answer if no raw result
+        try:
+            result_xml = etree.fromstring(result)
+            return result_xml.findtext("Value") or ""
+        except etree.XMLSyntaxError:
+            return ""
 
     async def solve(self, task: str, success_criteria: Optional[str] = None) -> List[Dict[str, str]]:
         """Solve the task iteratively with enhanced completion criteria."""
         history = []
         for iteration in range(self.max_iterations):
-            current_step = iteration + 1  # Start from 1 for readability
+            current_step = iteration + 1
             logger.info(f"Iteration {current_step} for task: {task}")
             response = await self.generate_action(task, history, current_step, self.max_iterations)
             
@@ -383,27 +388,28 @@ class ReActAgent:
                 result = await self.execute_action(code)
                 history.append({"thought": thought, "action": code, "result": result})
                 
-                # Evaluate completion
                 is_complete, final_answer = await self.is_task_complete(task, history, result, success_criteria)
                 if is_complete:
                     logger.info(f"Task solved after {current_step} iterations")
                     history[-1]["result"] += f"\n<FinalAnswer><![CDATA[\n{final_answer}\n]]></FinalAnswer>"
                     break
-            except ValueError as e:
+            except (ValueError, etree.XMLSyntaxError) as e:
                 logger.error(f"Response parsing failed: {e}")
                 break
         return history
 
     def _parse_response(self, response: str) -> Tuple[str, str]:
-        """Parse thought and code from response."""
-        thought_start = response.index("[Thought]") + 9
-        action_start = response.index("[Action]") + 8
-        code_start = response.index("```python") + 9
-        code_end = response.index("```", code_start)
-        return (
-            response[thought_start:action_start-8].strip(),
-            response[code_start:code_end].strip(),
-        )
+        """Parse thought and code from XML response."""
+        try:
+            root = etree.fromstring(response)
+            thought = root.findtext("Thought") or ""
+            code = root.findtext("Code") or ""
+            if not code:
+                raise ValueError("No code found in response")
+            return thought, code
+        except etree.XMLSyntaxError as e:
+            logger.error(f"Invalid XML response: {e}")
+            raise ValueError(f"Failed to parse XML response: {e}")
 
 
 async def run_react_agent(
@@ -414,11 +420,9 @@ async def run_react_agent(
     tools: Optional[List[Union[Tool, Callable]]] = None
 ) -> None:
     """Run the ReAct agent and present the final answer clearly."""
-    # Default tools if none provided
     default_tools = [AddTool(), MultiplyTool(), ConcatTool(), AgentTool(model=model)]
     tools = tools if tools is not None else default_tools
     
-    # Process the tools list: convert Callable to Tool using create_tool
     processed_tools = []
     for tool in tools:
         if isinstance(tool, Tool):
@@ -439,7 +443,6 @@ async def run_react_agent(
             typer.echo(typer.style(f"[{key.capitalize()}]", fg=color))
             typer.echo(step[key])
     
-    # Present the final answer if the task was completed
     if history and "<FinalAnswer><![CDATA[" in history[-1]["result"]:
         start = history[-1]["result"].index("<FinalAnswer><![CDATA[") + len("<FinalAnswer><![CDATA[")
         end = history[-1]["result"].index("]]></FinalAnswer>", start)
