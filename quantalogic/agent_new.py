@@ -14,6 +14,24 @@ from loguru import logger
 from lxml import etree
 
 from quantalogic.python_interpreter import execute_async
+from quantalogic.tools import (
+    DuckDuckGoSearchTool,
+    EditWholeContentTool,
+    ExecuteBashCommandTool,
+    GrepAppTool,
+    InputQuestionTool,
+    JinjaTool,
+    ListDirectoryTool,
+    LLMTool,
+    ReadFileBlockTool,
+    ReadFileTool,
+    ReadHTMLTool,
+    ReplaceInFileTool,
+    RipgrepTool,
+    SearchDefinitionNamesTool,
+    TaskCompleteTool,
+    WriteFileTool,
+)
 from quantalogic.tools.tool import Tool, ToolArgument, create_tool
 
 # Constants
@@ -403,7 +421,25 @@ def react(
     success_criteria: Optional[str] = typer.Option(None, help="Optional criteria to determine task completion"),
 ) -> None:
     try:
-        asyncio.run(run_react_agent(task, model, max_iterations, success_criteria))
+        tools = [
+            DuckDuckGoSearchTool(),
+            EditWholeContentTool(),
+            ExecuteBashCommandTool(),
+            GrepAppTool(),
+            InputQuestionTool(),
+            JinjaTool(),
+            ListDirectoryTool(),
+            ReadFileBlockTool(),
+            ReadFileTool(),
+            ReadHTMLTool(),
+            ReplaceInFileTool(),
+            RipgrepTool(),
+            SearchDefinitionNamesTool(),
+            TaskCompleteTool(),
+            WriteFileTool(),
+            LLMTool(model_name=model),
+        ]
+        asyncio.run(run_react_agent(task, model, max_iterations, success_criteria, tools))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
         typer.echo(typer.style(f"Error: {e}", fg=typer.colors.RED))
