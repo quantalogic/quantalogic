@@ -73,14 +73,14 @@ class RagToolHf_(Tool):
 
     name: str = "rag_tool_hf"
     description: str = (
-        "Specialized RAG tool for retrieving and analyzing legal sources "
+        "Specialized RAG tool for retrieving and analyzing  sources "
         "from documents with detailed source attribution."
     )
     arguments: List[ToolArgument] = [
         ToolArgument(
             name="query",
             arg_type="string",
-            description="Query to search for specific legal sources",
+            description="Query to search for specific  sources",
             required=True,
             example="Find articles related to environmental protection",
         ),
@@ -357,7 +357,7 @@ class RagToolHf_(Tool):
 
     def execute(self, query: str, max_sources: int = 5) -> str:
         """
-        Execute a search for legal sources and return a JSON string of law sources.
+        Execute a search for  sources and return a JSON string of law sources.
         
         Args:
             query: Search query for finding relevant law sources
@@ -370,7 +370,7 @@ class RagToolHf_(Tool):
             if not self.index:
                 raise ValueError("No index available. Please add documents first.")
 
-            logger.info(f"Searching for legal sources with query: {query}")
+            logger.info(f"Searching for  sources with query: {query}")
             
             query_engine = self.index.as_query_engine(
                 similarity_top_k=max_sources,
@@ -430,9 +430,9 @@ class RagToolHf_(Tool):
     def format_sources(self, sources: List[LawSource]) -> str:
         """Format a list of LawSource objects into a readable string."""
         if not sources:
-            return "No relevant legal sources found in the documents."
+            return "No relevant  sources found in the documents."
 
-        output = ["# Legal Sources Found\n"]
+        output = ["#  Sources Found\n"]
         current_file = None
         
         for source in sources:
