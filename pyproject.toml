@@ -8,7 +8,7 @@ packages = [{include = "quantalogic"}]
 
 # Core dependencies required for the base Agent and ToolManager
 [tool.poetry.dependencies]
-python = "<4.0,>=3.12"
+python = "<4.0,>=3.10"
 pydantic = "^2.10.4"
 litellm = "^1.56.4"
 rich = "^13.9.4"
