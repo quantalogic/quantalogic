@@ -167,7 +167,7 @@ def convert(
     # Create initial context for the workflow
     initial_context = {
         "pdf_path": input_pdf,
-        "model": "gemini/gemini-2.0-flash",
+        "model": model,
         "custom_system_prompt": system_prompt,
         "output_md": output_md
     }
