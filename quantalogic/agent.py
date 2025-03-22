@@ -93,6 +93,7 @@ class Agent(BaseModel):
     chat_system_prompt: str  # Base persona prompt for chat mode
     tool_mode: Optional[str] = None  # Tool or toolset to prioritize in chat mode
     tracked_files: list[str] = []  # List to track files created or modified during execution
+    agent_mode: str = "react"  # Default mode is ReAct
 
     def __init__(
         self,
@@ -109,6 +110,7 @@ class Agent(BaseModel):
         event_emitter: EventEmitter | None = None,
         chat_system_prompt: str | None = None,
         tool_mode: Optional[str] = None,
+        agent_mode: str = "react",
     ):
         """Initialize the agent with model, memory, tools, and configurations.
 
@@ -126,6 +128,7 @@ class Agent(BaseModel):
             event_emitter: EventEmitter instance for event handling
             chat_system_prompt: Optional base system prompt for chat mode persona
             tool_mode: Optional tool or toolset to prioritize in chat mode
+            agent_mode: Mode to use ("react" or "chat")
         """
         try:
             logger.debug("Initializing agent...")
@@ -142,8 +145,9 @@ class Agent(BaseModel):
             tools_markdown = tool_manager.to_markdown()
             logger.debug(f"Tools Markdown: {tools_markdown}")
 
+            logger.info(f"Agent mode: {agent_mode}")
             system_prompt_text = system_prompt(
-                tools=tools_markdown, environment=environment, expertise=specific_expertise
+                tools=tools_markdown, environment=environment, expertise=specific_expertise, agent_mode=agent_mode
             )
             logger.debug(f"System prompt: {system_prompt_text}")
 
@@ -180,6 +184,7 @@ class Agent(BaseModel):
                 max_tokens_working_memory=max_tokens_working_memory,
                 chat_system_prompt=chat_system_prompt,
                 tool_mode=tool_mode,
+                agent_mode=agent_mode,
             )
 
             self._model_name = model_name

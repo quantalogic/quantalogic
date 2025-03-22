@@ -101,32 +101,57 @@ class RagToolHf_(Tool):
         chunk_size: int = 512,
         chunk_overlap: int = 50,
         use_ocr_for_pdfs: bool = False,
-        ocr_model: str = "openai/gpt-4o-mini", # "gemini/gemini-2.0-flash",
-        embed_model: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2" # "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+        ocr_model: str = "openai/gpt-4o-mini",
+        embed_model: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+        force_reindex: bool = False
     ):
-        """Initialize the multilingual RAG tool."""
+        """Initialize the multilingual RAG tool.
+        
+        Args:
+            force_reindex: If True, forces reindexing even if embeddings exist
+        """
         super().__init__()
         self.name = name
         self.persist_dir = os.path.abspath(persist_dir)
         self.use_ocr_for_pdfs = use_ocr_for_pdfs
         self.ocr_model = ocr_model
         
-        # Clean up existing index if embedding model changed
+        # Check if we need to reindex
         chroma_persist_dir = os.path.join(self.persist_dir, "chroma")
-        if os.path.exists(chroma_persist_dir):
-            shutil.rmtree(chroma_persist_dir)
-            logger.info("Cleaned up existing index due to embedding model change")
+        embedding_config_path = os.path.join(self.persist_dir, "embedding_config.json")
+        needs_reindex = False
 
-        # Use paraphrase-multilingual-mpnet-base-v2 for better multilingual understanding
+        if os.path.exists(embedding_config_path):
+            try:
+                with open(embedding_config_path, 'r') as f:
+                    config = json.load(f)
+                if config.get('embed_model') != embed_model:
+                    logger.info(f"Embedding model changed from {config.get('embed_model')} to {embed_model}")
+                    needs_reindex = True
+            except Exception as e:
+                logger.warning(f"Failed to read embedding config: {e}")
+                needs_reindex = True
+        else:
+            needs_reindex = True
+
+        # Clean up only if needed
+        if (needs_reindex or force_reindex) and os.path.exists(chroma_persist_dir):
+            logger.info("Cleaning up existing index due to model change or forced reindex")
+            shutil.rmtree(chroma_persist_dir)
+            
+            # Save new embedding configuration
+            os.makedirs(os.path.dirname(embedding_config_path), exist_ok=True)
+            with open(embedding_config_path, 'w') as f:
+                json.dump({'embed_model': embed_model}, f)
+
+        # Initialize embedding model
         self.embed_model = HuggingFaceEmbedding(
             model_name=embed_model,
-            embed_batch_size=8  # Smaller batch size for better memory usage
+            embed_batch_size=8
         )
         
         # Configure ChromaDB
-        chroma_persist_dir = os.path.join(self.persist_dir, "chroma")
         os.makedirs(chroma_persist_dir, exist_ok=True)
-        
         chroma_client = chromadb.PersistentClient(path=chroma_persist_dir)
         collection = chroma_client.create_collection(
             name="multilingual_collection",
@@ -139,16 +164,16 @@ class RagToolHf_(Tool):
         Settings.embed_model = self.embed_model
         Settings.chunk_size = chunk_size
         Settings.chunk_overlap = chunk_overlap
-        Settings.num_output = 1024  # Increased output length
+        Settings.num_output = 1024
         
         self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
         
-        # Initialize text splitter with better PDF handling
+        # Initialize text splitter
         self.text_splitter = SentenceSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             paragraph_separator="\n\n",
-            tokenizer=lambda x: x.replace("\n", " ").split(" ")  # Better handling of PDF line breaks
+            tokenizer=lambda x: x.replace("\n", " ").split(" ")
         )
         
         # Initialize or load index
@@ -454,8 +479,15 @@ class RagToolHf(RagToolHf_):
         embed_model: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
         bm25_weight: float = 0.3,  # Weight for BM25 scores in hybrid ranking
         embedding_weight: float = 0.7,  # Weight for embedding scores in hybrid ranking
+        force_reindex: bool = False
     ):
-        """Initialize the hybrid RAG tool with both BM25 and embeddings capabilities."""
+        """Initialize the hybrid RAG tool with both BM25 and embeddings capabilities.
+        
+        Args:
+            bm25_weight: Weight for BM25 scores in hybrid ranking (0.0-1.0)
+            embedding_weight: Weight for embedding scores in hybrid ranking (0.0-1.0)
+            force_reindex: If True, forces reindexing even if embeddings exist
+        """
         super().__init__(
             name=name,
             persist_dir=persist_dir,
@@ -465,47 +497,49 @@ class RagToolHf(RagToolHf_):
             use_ocr_for_pdfs=use_ocr_for_pdfs,
             ocr_model=ocr_model,
             embed_model=embed_model,
+            force_reindex=force_reindex
         )
         
         self.bm25_weight = bm25_weight
         self.embedding_weight = embedding_weight
         
-        # Initialize BM25 index
+        # Initialize BM25 index and document store
         self.bm25_index = None
         self.document_store = []
         
-        # Initialize or build indices
+        # Build BM25 index if we have documents
         if document_paths:
             self._build_hybrid_index(document_paths)
 
     def _build_hybrid_index(self, document_paths: List[str]):
-        """Build both BM25 and embedding indices."""
-        # Load documents
-        documents = self._load_documents(document_paths)
-        
-        # Store documents and their text for BM25
-        self.document_store = []
-        tokenized_corpus = []
-        
-        for doc in documents:
-            # Process text for BM25
-            text = doc.text.lower()  # Normalize text
-            tokens = text.split()  # Simple tokenization, could be enhanced
+        """Build BM25 index and optionally rebuild embedding index."""
+        # Load documents if needed
+        if not self.document_store:
+            documents = self._load_documents(document_paths)
             
-            # Store document info
-            self.document_store.append({
-                'text': doc.text,
-                'metadata': doc.metadata,
-                'tokens': tokens
-            })
+            # Store documents and their text for BM25
+            tokenized_corpus = []
             
-            tokenized_corpus.append(tokens)
+            for doc in documents:
+                # Process text for BM25
+                text = doc.text.lower()
+                tokens = text.split()
+                
+                # Store document info
+                self.document_store.append({
+                    'text': doc.text,
+                    'metadata': doc.metadata,
+                    'tokens': tokens
+                })
+                
+                tokenized_corpus.append(tokens)
+            
+            # Create BM25 index
+            self.bm25_index = BM25Okapi(tokenized_corpus)
         
-        # Create BM25 index
-        self.bm25_index = BM25Okapi(tokenized_corpus)
-        
-        # Create embedding index (using parent class method)
-        self._create_index(document_paths)
+        # Rebuild embedding index if needed
+        if self.force_reindex or not self.index:
+            self._create_index(document_paths)
 
     def _normalize_scores(self, scores: List[float]) -> List[float]:
         """Normalize scores to range [0, 1] using min-max scaling."""
@@ -668,7 +702,8 @@ if __name__ == "__main__":
     hybrid_tool = RagToolHf(
         persist_dir="./storage/hybrid_multilingual_rag",
         document_paths=[
-            "./docs/test/Code_Civil.pdf",
+            "./docs/test/code_civile.md",
+            "./docs/test/code_procedure.md"
         ],
         chunk_size=512,
         chunk_overlap=50,

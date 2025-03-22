@@ -1,7 +1,7 @@
-"""LLM Tool for generating answers to questions using a language model."""
+"""Legal-oriented LLM Tool for generating answers using retrieved legal context."""
 
 import asyncio
-from typing import Callable
+from typing import Callable, Dict, List, Optional, Union
 
 from loguru import logger
 from pydantic import ConfigDict, Field
@@ -13,22 +13,24 @@ from quantalogic.tools.tool import Tool, ToolArgument
 
 
 class OrientedLLMTool(Tool):
-    """Tool to generate answers using a specified language model."""
+    """Advanced LLM tool specialized for legal analysis and response generation."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
 
-    name: str = Field(default="oriented_llm_tool")
+    name: str = Field(default="legal_llm_tool")
     description: str = Field(
         default=(
-            "An advanced language model tool that generates contextually aware and role-specific responses. "
+            "A specialized legal language model tool that generates expert legal analysis and responses. "
             "Features:\n"
-            "- Role-based responses: Adapts to specific personas or expertise areas\n"
-            "- Context awareness: Maintains conversation context for more relevant responses\n"
-            "- Structured system prompts: Uses well-defined prompts for consistent behavior\n"
-            "\nNote: This tool operates in isolation and requires:\n"
-            "- Explicit context in prompts\n"
-            "- Variable interpolation (e.g., $var1$)\n"
-            "- All necessary information provided in the prompt"
+            "- Legal expertise: Specialized in legal analysis and interpretation\n"
+            "- Context integration: Utilizes retrieved legal documents and precedents\n"
+            "- Multi-jurisdictional: Handles multiple legal systems and languages\n"
+            "- Citation support: Properly cites legal sources and precedents\n"
+            "\nCapabilities:\n"
+            "- Legal document analysis\n"
+            "- Statutory interpretation\n"
+            "- Case law analysis\n"
+            "- Regulatory compliance guidance"
         )
     )
     arguments: list = Field(
@@ -36,55 +38,49 @@ class OrientedLLMTool(Tool):
             ToolArgument(
                 name="role",
                 arg_type="string",
-                description="The specific role or persona the LLM should adopt (e.g., 'python_expert', 'data_scientist', 'technical_writer')",
-                required=False,
-                default="general_assistant",
-                example="python_expert",
-            ),
-            ToolArgument(
-                name="context",
-                arg_type="string",
-                description="Previous context or relevant information to consider for the response",
-                required=False,
-                default=None,
-                example="Previously discussed Python best practices and PEP8 guidelines",
-            ),
-            ToolArgument(
-                name="system_prompt",
-                arg_type="string",
-                description="Structured guidelines for the model's behavior and response format",
+                description="Legal specialization (e.g., 'commercial_law', 'environmental_law', 'constitutional_law')",
                 required=True,
-                example=(
-                    "You are an expert Python developer with deep knowledge of best practices.\n"
-                    "Follow these guidelines:\n"
-                    "1. Provide clear, concise explanations\n"
-                    "2. Include relevant code examples\n"
-                    "3. Reference official documentation when appropriate\n"
-                    "4. Highlight potential pitfalls and edge cases"
-                ),
+                default="general_legal_expert",
+            ),
+            ToolArgument(
+                name="legal_context",
+                arg_type="string",
+                description="Retrieved legal documents, precedents, and relevant context from RAG tool",
+                required=True,
+            ),
+            ToolArgument(
+                name="jurisdiction",
+                arg_type="string",
+                description="Relevant legal jurisdiction(s) for analysis",
+                required=True,
+                default="general",
+            ),
+            ToolArgument(
+                name="query_type",
+                arg_type="string",
+                description="Type of legal analysis needed (e.g., 'interpretation', 'compliance', 'comparison')",
+                required=True,
+                default="interpretation",
             ),
             ToolArgument(
                 name="prompt",
                 arg_type="string",
-                description="The main question or task for the language model",
+                description="Specific legal question or analysis request",
                 required=True,
-                example="What are the best practices for handling exceptions in Python?",
             ),
             ToolArgument(
                 name="temperature",
-                arg_type="string",
-                description='Sampling temperature between "0.0" (precise) and "1.0" (creative)',
-                required=True,
-                default="0.5",
-                example="0.7",
+                arg_type="float",
+                description="Response precision (0.0 for strict legal interpretation, 1.0 for creative analysis)",
+                required=False,
+                default="0.3",
             ),
         ]
     )
 
     model_name: str = Field(..., description="The name of the language model to use")
-    role: str = Field(default="general_assistant", description="The specific role or persona for the LLM")
-    context: str | None = Field(default=None, description="Previous context or relevant information")
-    system_prompt: str | None = Field(default=None, description="Structured guidelines for model behavior")
+    role: str = Field(default="general_legal_expert", description="The specific role or persona for the LLM")
+    jurisdiction: str = Field(default="general", description="The relevant jurisdiction for the LLM")
     on_token: Callable | None = Field(default=None, exclude=True)
     generative_model: GenerativeModel | None = Field(default=None, exclude=True)
     event_emitter: EventEmitter | None = Field(default=None, exclude=True)
@@ -92,154 +88,196 @@ class OrientedLLMTool(Tool):
     def __init__(
         self,
         model_name: str,
-        role: str = "general_assistant",
-        context: str | None = None,
-        system_prompt: str | None = None,
-        on_token: Callable | None = None,
-        name: str = "oriented_llm_tool",
-        generative_model: GenerativeModel | None = None,
-        event_emitter: EventEmitter | None = None,
+        name: str = "legal_llm_tool",
+        role: str = "general_legal_expert",
+        jurisdiction: str = "general",
+        on_token: Optional[Callable] = None,
+        event_emitter: Optional[EventEmitter] = None,
     ):
-        """Initialize the OrientedLLMTool with model configuration and optional callback.
+        """Initialize the Legal LLM Tool.
 
         Args:
-            model_name (str): The name of the language model to use.
-            system_prompt (str, optional): Default system prompt for the model.
-            on_token (Callable, optional): Callback function for streaming tokens.
-            name (str): Name of the tool instance. Defaults to "llm_tool".
-            generative_model (GenerativeModel, optional): Pre-initialized generative model.
+            model_name: Name of the language model
+            role: Legal specialization role
+            jurisdiction: Default jurisdiction
+            on_token: Optional callback for token streaming
+            event_emitter: Optional event emitter for streaming
         """
-        # Use dict to pass validated data to parent constructor
         super().__init__(
-            **{
-                "model_name": model_name,
-                "role": role,
-                "context": context,
-                "system_prompt": system_prompt,
-                "on_token": on_token,
-                "name": name,
-                "generative_model": generative_model,
-                "event_emitter": event_emitter,
-            }
+            model_name=model_name,
+            name=name,
+            role=role,
+            jurisdiction=jurisdiction,
+            on_token=on_token,
+            event_emitter=event_emitter,
         )
         
-        # Initialize the generative model
+        self.model_name = model_name
+        self.role = role
+        self.jurisdiction = jurisdiction
+        self.on_token = on_token
+        self.event_emitter = event_emitter
+        self.generative_model = None
+        
+        # Initialize the model
         self.model_post_init(None)
 
     def model_post_init(self, __context):
-        """Initialize the generative model after model initialization."""
+        """Initialize the generative model with legal-specific configuration."""
         if self.generative_model is None:
             self.generative_model = GenerativeModel(
                 model=self.model_name,
                 event_emitter=self.event_emitter
             )
-            logger.debug(f"Initialized OrientedLLMTool with model: {self.model_name}")
+            logger.debug(f"Initialized Legal LLM Tool with model: {self.model_name}")
 
-        # Only set up event listener if on_token is provided
         if self.on_token is not None:
-            logger.debug(f"Setting up event listener for OrientedLLMTool with model: {self.model_name}")
             self.generative_model.event_emitter.on("stream_chunk", self.on_token)
 
-    async def async_execute(
-        self, role: str | None = None, context: str | None = None,
-        system_prompt: str | None = None, prompt: str | None = None,
-        temperature: str | None = None
+    def _build_legal_system_prompt(
+        self,
+        role: str,
+        jurisdiction: str,
+        query_type: str,
+        legal_context: Union[str, Dict, List]
     ) -> str:
-        """Execute the tool to generate an answer asynchronously.
-
-        This method provides a native asynchronous implementation, utilizing the generative model's
-        asynchronous capabilities for improved performance in async contexts.
+        """Build a specialized legal system prompt.
 
         Args:
-            system_prompt (str, optional): The system prompt to guide the model.
-            prompt (str, optional): The question to be answered.
-            temperature (str, optional): Sampling temperature. Defaults to "0.7".
+            role: Legal specialization role
+            jurisdiction: Relevant jurisdiction
+            query_type: Type of legal analysis
+            legal_context: Retrieved legal context from RAG
 
         Returns:
-            str: The generated answer.
+            Structured system prompt for legal analysis
+        """
+        # Format legal context if it's not a string
+        if not isinstance(legal_context, str):
+            legal_context = str(legal_context)
 
-        Raises:
-            ValueError: If temperature is not a valid float between 0 and 1.
-            Exception: If there's an error during response generation.
+        system_prompt = f"""You are an expert legal advisor specialized in {role}.
+Jurisdiction: {jurisdiction}
+Analysis Type: {query_type}
+
+Your task is to provide a well-reasoned legal analysis based on the following context:
+
+{legal_context}
+
+Guidelines:
+1. Base your analysis strictly on provided legal sources
+2. Cite specific articles, sections, and precedents
+3. Consider jurisdictional context and limitations
+4. Highlight any legal uncertainties or ambiguities
+5. Provide clear, actionable conclusions
+
+Format your response as follows:
+1. Legal Analysis
+2. Relevant Citations
+3. Key Considerations
+4. Conclusion
+
+Remember: If a legal point is not supported by the provided context, acknowledge the limitation."""
+
+        return system_prompt
+
+    async def async_execute(
+        self,
+        prompt: str,
+        legal_context: Union[str, Dict, List],
+        role: Optional[str] = None,
+        jurisdiction: Optional[str] = None,
+        query_type: str = "interpretation",
+        temperature: float = 0.3
+    ) -> str:
+        """Execute legal analysis asynchronously.
+
+        Args:
+            prompt: Legal question or analysis request
+            legal_context: Retrieved legal documents and context
+            role: Optional override for legal specialization
+            jurisdiction: Optional override for jurisdiction
+            query_type: Type of legal analysis needed
+            temperature: Response precision (0.0-1.0)
+
+        Returns:
+            Detailed legal analysis and response
         """
         try:
-            temp = float(temperature)
-            if not (0.0 <= temp <= 1.0):
-                raise ValueError("Temperature must be between 0 and 1.")
-        except ValueError as ve:
-            logger.error(f"Invalid temperature value: {temperature}")
-            raise ValueError(f"Invalid temperature value: {temperature}") from ve
+            if not (0.0 <= temperature <= 1.0):
+                raise ValueError("Temperature must be between 0 and 1")
 
-        # Use provided values or fall back to instance defaults
-        used_role = role if role is not None else self.role
-        used_context = context if context is not None else self.context
-        used_system_prompt = system_prompt if system_prompt is not None else self.system_prompt
+            used_role = role or self.role
+            used_jurisdiction = jurisdiction or self.jurisdiction
 
-        # Build enhanced system prompt with role and context
-        final_system_prompt = f"Role: {used_role}\n"
-        if used_context:
-            final_system_prompt += f"Context: {used_context}\n"
-        final_system_prompt += f"Instructions: {used_system_prompt}"
+            system_prompt = self._build_legal_system_prompt(
+                used_role,
+                used_jurisdiction,
+                query_type,
+                legal_context
+            )
 
-        # Prepare the messages history
-        messages_history = [
-            Message(role="system", content=final_system_prompt),
-        ]
+            messages = [
+                Message(role="system", content=system_prompt),
+                Message(role="user", content=prompt)
+            ]
 
-        is_streaming = self.on_token is not None
-
-        # Set the model's temperature
-        if self.generative_model:
-            self.generative_model.temperature = temp
-
-            # Generate the response asynchronously using the generative model
-            try:
+            if self.generative_model:
+                self.generative_model.temperature = temperature
+                
+                is_streaming = self.on_token is not None
                 result = await self.generative_model.async_generate_with_history(
-                    messages_history=messages_history, prompt=prompt, streaming=is_streaming
+                    messages_history=messages,
+                    prompt=prompt,
+                    streaming=is_streaming
                 )
 
                 if is_streaming:
                     response = ""
                     async for chunk in result:
                         response += chunk
-                        # Note: on_token is handled via the event emitter set in model_post_init
                 else:
                     response = result.response
 
-                logger.debug(f"Generated async response: {response}")
+                logger.info(f"Generated legal analysis for {query_type} query in {used_jurisdiction} jurisdiction")
                 return response
-            except Exception as e:
-                logger.error(f"Error generating async response: {e}")
-                raise Exception(f"Error generating async response: {e}") from e
-        else:
-            raise ValueError("Generative model not initialized")
+            else:
+                raise ValueError("Generative model not initialized")
+
+        except Exception as e:
+            logger.error(f"Error in legal analysis: {str(e)}")
+            raise
+
+    def execute(self, *args, **kwargs) -> str:
+        """Synchronous wrapper for async_execute."""
+        return asyncio.run(self.async_execute(*args, **kwargs))
 
 
 if __name__ == "__main__":
     # Example usage of OrientedLLMTool
     tool = OrientedLLMTool(model_name="openrouter/openai/gpt-4o-mini")
-    system_prompt = 'Answer the question as truthfully as possible using the provided context, and if the answer is not contained within the context, say "I don\'t know".'
+    legal_context = "Retrieved legal documents and context from RAG tool"
     question = "What is the meaning of life?"
-    temperature = "0.7"
+    temperature = 0.7
 
     # Synchronous execution
-    answer = tool.execute(system_prompt=system_prompt, prompt=question, temperature=temperature)
+    answer = tool.execute(prompt=question, legal_context=legal_context, temperature=temperature)
     print("Synchronous Answer:")
     print(answer)
 
     # Asynchronous execution with streaming
     pirate = OrientedLLMTool(
-        model_name="openrouter/openai/gpt-4o-mini", system_prompt="You are a pirate.", on_token=console_print_token
+        model_name="openrouter/openai/gpt-4o-mini", on_token=console_print_token
     )
     pirate_answer = asyncio.run(
-        pirate.async_execute(system_prompt=system_prompt, prompt=question, temperature=temperature)
+        pirate.async_execute(prompt=question, legal_context=legal_context, temperature=temperature)
     )
     print("\nAsynchronous Pirate Answer:")
     print(f"Answer: {pirate_answer}")
 
     # Display tool configuration in Markdown
     custom_tool = OrientedLLMTool(
-        model_name="openrouter/openai/gpt-4o-mini", system_prompt="You are a pirate.", on_token=console_print_token
+        model_name="openrouter/openai/gpt-4o-mini", on_token=console_print_token
     )
     print("\nTool Configuration:")
     print(custom_tool.to_markdown())

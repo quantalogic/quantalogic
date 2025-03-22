@@ -158,7 +158,8 @@ def create_custom_agent(
     max_tokens_working_memory: Optional[int] = None,
     specific_expertise: str = "",
     tools: Optional[list[dict[str, Any]]] = None,
-    memory: Optional[AgentMemory] = None
+    memory: Optional[AgentMemory] = None,
+    agent_mode: str = "react"
 ) -> Agent:
     """Create an agent with lazy-loaded tools and graceful error handling.
 
@@ -312,9 +313,7 @@ def create_custom_agent(
             use_ocr_for_pdfs=params.get("use_ocr_for_pdfs", False),
             ocr_model=params.get("ocr_model", "openai/gpt-4o-mini"),
             embed_model=params.get("embed_model", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
-            document_paths=params.get("document_paths", [
-            "./docs/test/Code_Civil.pdf",
-            ])
+            document_paths=params.get("document_paths", [])
         ),
         
         "vscode_server_tool": lambda _: create_tool_instance(TOOL_IMPORTS["vscode_server_tool"]())
@@ -381,6 +380,7 @@ def create_custom_agent(
             max_tokens_working_memory=max_tokens_working_memory,
             specific_expertise=specific_expertise,
             memory=memory if memory else AgentMemory(),
+            agent_mode=agent_mode
         )
     except Exception as e:
         logger.error(f"Failed to create agent: {str(e)}")
