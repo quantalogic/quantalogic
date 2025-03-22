@@ -11,7 +11,7 @@ from quantalogic.python_interpreter import execute_async
 from quantalogic.tools import Tool
 
 from .constants import MAX_TOKENS, TEMPLATE_DIR
-from .utils import format_execution_result, validate_code, validate_xml
+from .utils import format_execution_result, validate_code, validate_xml, format_result_xml
 
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
 
@@ -125,10 +125,25 @@ class ReActAgent:
             )
 
     def _format_history(self, history: List[Dict[str, str]]) -> str:
-        return "\n".join(
-            f"[Step {i+1}] {h['thought']}\nAction:\n{h['action']}\nResult: {h['result']}"
-            for i, h in enumerate(history)
-        ) if history else "No previous steps"
+        """
+        Formats the history of steps into a readable string for the LLM.
+
+        Args:
+            history (List[Dict[str, str]]): The list of previous steps, each containing 'thought', 'action', and 'result'.
+
+        Returns:
+            str: A formatted string representing the history.
+        """
+        formatted_steps = []
+        for i, h in enumerate(history):
+            step_str = (
+                f"[Step {i+1}]\n"
+                f"Thought: {h['thought']}\n"
+                f"Action:\n{h['action']}\n"
+                f"Result:\n{format_result_xml(h['result'])}"
+            )
+            formatted_steps.append(step_str)
+        return "\n\n".join(formatted_steps) if formatted_steps else "No previous steps"
 
     async def is_task_complete(self, task: str, history: List[Dict[str, str]], result: str, 
                              success_criteria: Optional[str] = None) -> Tuple[bool, str]:
