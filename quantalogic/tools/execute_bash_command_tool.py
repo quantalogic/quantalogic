@@ -29,7 +29,7 @@ class ExecuteBashCommandTool(Tool):
 
     name: str = "execute_bash_tool"
     description: str = "Executes a bash command and returns its output. All commands are executed in /tmp for security."
-    need_validation: bool = False
+    need_validation: bool = True
     arguments: list = [
         ToolArgument(
             name="command",
@@ -101,6 +101,7 @@ class ExecuteBashCommandTool(Tool):
         command: str,
         timeout_seconds: int,
         env_vars: Dict[str, str],
+        cwd: Optional[str] = None,
     ) -> str:
         """Execute command on Windows platform."""
         try:
@@ -115,7 +116,7 @@ class ExecuteBashCommandTool(Tool):
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                cwd="/tmp",  # Force /tmp directory
+                cwd="/tmp",  # cwd, Force /tmp directory
                 env=env_vars,
                 text=True,
                 encoding="utf-8",
