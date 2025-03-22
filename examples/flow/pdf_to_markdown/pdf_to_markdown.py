@@ -66,7 +66,7 @@ async def convert_node(
             custom_system_prompt = (
                 "Convert the PDF page to a clean, well-formatted Markdown document. "
                 "Preserve structure, headings, and any code or mathematical notation. "
-                "For the images and chart, create a literal description what is visible"
+                "For the images and chart, create a literal description what is visible. "
                 "Return only pure Markdown content, excluding any metadata or non-Markdown elements."
             )
 

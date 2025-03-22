@@ -58,6 +58,10 @@ class ToolDefinition(BaseModel):
         default=False,
         description="When True, requires user confirmation before execution. Useful for tools that perform potentially destructive operations.",
     )
+    need_post_process: bool = Field(
+        default=True,
+        description="When True, requires user confirmation before execution. Useful for tools that perform potentially destructive operations.",
+    )
     need_variables: bool = Field(
         default=False,
         description="When True, provides access to the agent's variable store. Required for tools that need to interpolate variables (e.g., Jinja templates).",

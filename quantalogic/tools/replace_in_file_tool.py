@@ -64,7 +64,7 @@ class ReplaceInFileTool(Tool):
         "Returns the updated content or an error."
         "⚠️ THIS TOOL MUST BE USED IN PRIORITY TO UPDATE AN EXISTING FILE."
     )
-    need_validation: bool = False
+    need_validation: bool = True
 
     SIMILARITY_THRESHOLD: float = 0.85
 

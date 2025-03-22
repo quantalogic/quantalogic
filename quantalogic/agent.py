@@ -23,6 +23,7 @@ from quantalogic.utils import get_environment
 from quantalogic.utils.ask_user_validation import console_ask_for_user_validation
 from quantalogic.xml_parser import ToleranceXMLParser
 from quantalogic.xml_tool_parser import ToolParser
+import uuid
 
 # Maximum ratio occupancy of the occupied memory
 MAX_OCCUPANCY = 90.0
@@ -78,7 +79,7 @@ class Agent(BaseModel):
     config: AgentConfig
     task_to_solve: str
     task_to_solve_summary: str = ""
-    ask_for_user_validation: Callable[[str, str], Awaitable[bool]] = console_ask_for_user_validation
+    ask_for_user_validation: Callable[[str, str], bool] = console_ask_for_user_validation
     last_tool_call: dict[str, Any] = {}  # Stores the last tool call information
     total_tokens: int = 0  # Total tokens in the conversation
     current_iteration: int = 0
@@ -91,6 +92,8 @@ class Agent(BaseModel):
     _model_name: str = PrivateAttr(default="")
     chat_system_prompt: str  # Base persona prompt for chat mode
     tool_mode: Optional[str] = None  # Tool or toolset to prioritize in chat mode
+    tracked_files: list[str] = []  # List to track files created or modified during execution
+    agent_mode: str = "react"  # Default mode is ReAct
 
     def __init__(
         self,
@@ -98,7 +101,7 @@ class Agent(BaseModel):
         memory: AgentMemory = AgentMemory(),
         variable_store: VariableMemory = VariableMemory(),
         tools: list[Tool] = [TaskCompleteTool()],
-        ask_for_user_validation: Callable[[str, str], Awaitable[bool]] = console_ask_for_user_validation,
+        ask_for_user_validation: Callable[[str, str], bool] = console_ask_for_user_validation,
         task_to_solve: str = "",
         specific_expertise: str = "General AI assistant with coding and problem-solving capabilities",
         get_environment: Callable[[], str] = get_environment,
@@ -107,6 +110,7 @@ class Agent(BaseModel):
         event_emitter: EventEmitter | None = None,
         chat_system_prompt: str | None = None,
         tool_mode: Optional[str] = None,
+        agent_mode: str = "react",
     ):
         """Initialize the agent with model, memory, tools, and configurations.
 
@@ -124,6 +128,7 @@ class Agent(BaseModel):
             event_emitter: EventEmitter instance for event handling
             chat_system_prompt: Optional base system prompt for chat mode persona
             tool_mode: Optional tool or toolset to prioritize in chat mode
+            agent_mode: Mode to use ("react" or "chat")
         """
         try:
             logger.debug("Initializing agent...")
@@ -140,8 +145,9 @@ class Agent(BaseModel):
             tools_markdown = tool_manager.to_markdown()
             logger.debug(f"Tools Markdown: {tools_markdown}")
 
+            logger.info(f"Agent mode: {agent_mode}")
             system_prompt_text = system_prompt(
-                tools=tools_markdown, environment=environment, expertise=specific_expertise
+                tools=tools_markdown, environment=environment, expertise=specific_expertise, agent_mode=agent_mode
             )
             logger.debug(f"System prompt: {system_prompt_text}")
 
@@ -151,7 +157,7 @@ class Agent(BaseModel):
                 system_prompt=system_prompt_text,
             )
 
-            chat_system_prompt = chat_system_prompt or (
+            chat_system_prompt = chat_system_prompt or specific_expertise or (
                 "You are a friendly, helpful AI assistant. Engage in natural conversation, "
                 "answer questions, and use tools when explicitly requested or when they enhance your response."
             )
@@ -178,6 +184,7 @@ class Agent(BaseModel):
                 max_tokens_working_memory=max_tokens_working_memory,
                 chat_system_prompt=chat_system_prompt,
                 tool_mode=tool_mode,
+                agent_mode=agent_mode,
             )
 
             self._model_name = model_name
@@ -301,7 +308,11 @@ class Agent(BaseModel):
                 current_prompt = result.next_prompt
 
                 if result.executed_tool == "task_complete":
-                    self._emit_event("task_complete", {"response": result.answer})
+                    self._emit_event("task_complete", {
+                        "response": result.answer,
+                        "message": "Task execution completed",
+                        "tracked_files": self.tracked_files if self.tracked_files else []
+                    })
                     answer = result.answer or ""
                     done = True
 
@@ -316,7 +327,12 @@ class Agent(BaseModel):
                 answer = f"Error: {str(e)}"
                 done = True
 
-        self._emit_event("task_solve_end")
+        task_solve_end_data = {
+            "result": answer,
+            "message": "Task execution completed",
+            "tracked_files": self.tracked_files if self.tracked_files else []
+        }
+        self._emit_event("task_solve_end", task_solve_end_data)
         return answer
 
     def chat(
@@ -374,6 +390,7 @@ class Agent(BaseModel):
 
         # Prepare chat system prompt with tool information
         tools_prompt = self._get_tools_names_prompt()
+        logger.debug(tools_prompt)
         if self.tool_mode:
             tools_prompt += f"\nPrioritized tool mode: {self.tool_mode}. Prefer tools related to {self.tool_mode} when applicable."
 
@@ -472,6 +489,170 @@ class Agent(BaseModel):
         self._emit_event("chat_response", {"response": response_content})
         return response_content
 
+
+    def chat_news_specific(
+        self,
+        message: str,
+        streaming: bool = False,
+        clear_memory: bool = False,
+        auto_tool_call: bool = True,
+    ) -> str:
+        """Engage in a conversational chat_news_specific with the user (synchronous version).
+
+        Ideal for synchronous applications. For asynchronous contexts, use `async_chat_news_specific`.
+
+        Args:
+            message: The user's input message
+            streaming: Whether to stream the response
+            clear_memory: Whether to clear memory before starting
+            auto_tool_call: Whether to automatically execute detected tool calls and interpret results
+
+        Returns:
+            The assistant's response
+        """
+        logger.debug(f"chat_news_specificting synchronously with message: {message}, auto_tool_call: {auto_tool_call}")
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        return loop.run_until_complete(self.async_chat_news_specific(message, streaming, clear_memory, auto_tool_call))
+
+    async def async_chat_news_specific(
+        self,
+        message: str,
+        streaming: bool = False,
+        clear_memory: bool = False,
+        auto_tool_call: bool = True,
+    ) -> str:
+        """Engage in a conversational chat with the user (asynchronous version).
+
+        Ideal for asynchronous applications. For synchronous contexts, use `chat`.
+
+        Args:
+            message: The user's input message
+            streaming: Whether to stream the response
+            clear_memory: Whether to clear memory before starting
+            auto_tool_call: Whether to automatically execute detected tool calls and interpret results
+
+        Returns:
+            The assistant's response
+        """
+        logger.debug(f"Chatting asynchronously with message: {message}, auto_tool_call: {auto_tool_call}")
+        if clear_memory:
+            self.clear_memory()
+
+        # Prepare chat system prompt with tool information
+        tools_prompt = self._get_tools_names_prompt()
+        logger.debug(tools_prompt)
+        if self.tool_mode:
+            tools_prompt += f"\nPrioritized tool mode: {self.tool_mode}. Prefer tools related to {self.tool_mode} when applicable."
+
+        full_chat_prompt = self._render_template(
+            'chat_system_prompt.j2',
+            persona=self.chat_system_prompt,
+            tools_prompt=tools_prompt
+        )
+
+        if not self.memory.memory or self.memory.memory[0].role != "system":
+            self.memory.add(Message(role="system", content=full_chat_prompt))
+
+        self._emit_event("chat_start", {"message": message})
+
+        # Add user message to memory
+        self.memory.add(Message(role="user", content=message))
+        self._update_total_tokens(self.memory.memory, "")
+
+        # Iterative tool usage with auto-execution
+        current_prompt = message
+        response_content = ""
+        max_tool_iterations = 5  # Prevent infinite tool loops
+        tool_iteration = 0
+
+        while tool_iteration < max_tool_iterations:
+            try:
+                if streaming:
+                    content = ""
+                    # When streaming is enabled, the GenerativeModel._async_stream_response method
+                    # already emits the stream_chunk events, so we don't need to emit them again here
+                    async_stream = await self.model.async_generate_with_history(
+                        messages_history=self.memory.memory,
+                        prompt=current_prompt,
+                        streaming=True,
+                    )
+                    # Just collect the chunks without re-emitting events
+                    async for chunk in async_stream:
+                        content += chunk
+                    response = ResponseStats(
+                        response=content,
+                        usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+                        model=self.model.model,
+                        finish_reason="stop",
+                    )
+                else:
+                    response = await self.model.async_generate_with_history(
+                        messages_history=self.memory.memory,
+                        prompt=current_prompt,
+                        streaming=False,
+                    )
+                    content = response.response
+
+                self.total_tokens = response.usage.total_tokens if not streaming else self.total_tokens
+
+                # Observe response for tool calls
+                observation = await self._async_observe_response(content)
+                if observation.executed_tool and auto_tool_call: 
+                    print("observation.executed_tool : ", observation.executed_tool)
+                    # If any news tool is used, return immediately
+                    if "googlenews" in observation.executed_tool.lower() or \
+                       "duckduckgo" in observation.executed_tool.lower() or \
+                       "duckduckgosearch" in observation.executed_tool.lower(): 
+                        self._emit_event("chat_response", {"response": observation.next_prompt})
+                        return observation.next_prompt
+                    # Tool was executed; process result and continue
+                    current_prompt = observation.next_prompt
+                    
+                    # In chat mode, format the response with clear tool call visualization
+                    if not self.task_to_solve.strip():  # We're in chat mode
+                        # Format the response to clearly show the tool call and result
+                        # Use a format that task_runner.py can parse and display nicely
+                        
+                        # For a cleaner look, insert a special delimiter that task_runner.py can recognize
+                        # to separate tool call from result
+                        response_content = f"{content}\n\n__TOOL_RESULT_SEPARATOR__{observation.executed_tool}__\n{observation.next_prompt}"
+                    else:
+                        # In task mode, keep the original behavior
+                        response_content = observation.next_prompt
+                    
+                    tool_iteration += 1
+                    self.memory.add(Message(role="assistant", content=content))  # Original tool call
+                    self.memory.add(Message(role="user", content=observation.next_prompt))  # Tool result
+                    logger.debug(f"Tool executed: {observation.executed_tool}, iteration: {tool_iteration}")
+                elif not observation.executed_tool and "<action>" in content and auto_tool_call:
+                    # Detected malformed tool call attempt; provide feedback and exit loop
+                    response_content = (
+                        f"{content}\n\n⚠️ Error: Invalid tool call format detected. "
+                        "Please use the exact XML structure as specified in the system prompt:\n"
+                        "```xml\n<action>\n<tool_name>\n  <parameter_name>value</parameter_name>\n</tool_name>\n</action>\n```"
+                    )
+                    break
+                else:
+                    # No tool executed or auto_tool_call is False; final response
+                    response_content = content
+                    break
+
+            except Exception as e:
+                logger.error(f"Error during async chat: {str(e)}")
+                response_content = f"Error: {str(e)}"
+                break
+
+        self._update_session_memory(message, response_content)
+        self._emit_event("chat_response", {"response": response_content})
+        return response_content
+
+
+
     def _observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
         """Analyze the assistant's response and determine next steps (synchronous wrapper).
 
@@ -535,11 +716,16 @@ class Agent(BaseModel):
                 if not executed_tool:
                     return self._handle_tool_execution_failure(response)
 
+                # Track files when write_file_tool or writefile is used
+                if (tool_name in ["write_file_tool", "writefile", "edit_whole_content", "replace_in_file", "replaceinfile", "EditWholeContent"]) and "file_path" in arguments_with_values:
+                    self._track_file(arguments_with_values["file_path"], tool_name)
+
                 variable_name = self.variable_store.add(response)
                 new_prompt = self._format_observation_response(response, executed_tool, variable_name, iteration)
 
                 # In chat mode, don't set answer; in task mode, set answer only for task_complete
                 is_task_complete_answer = executed_tool == "task_complete" and not is_chat_mode
+                
                 return ObserveResponseResult(
                     next_prompt=new_prompt,
                     executed_tool=executed_tool,
@@ -586,12 +772,12 @@ class Agent(BaseModel):
             logger.info(f"Tool '{tool_name}' requires validation.")
             validation_id = str(uuid.uuid4())
             logger.info(f"Validation ID: {validation_id}")
-
+            
             self._emit_event(
                 "tool_execute_validation_start",
                 {
                     "validation_id": validation_id,
-                    "tool_name": tool_name,
+                    "tool_name": tool_name, 
                     "arguments": arguments_with_values
                 },
             )
@@ -602,7 +788,7 @@ class Agent(BaseModel):
                 + "\n".join([f"    <{key}>{value}</{key}>" for key, value in arguments_with_values.items()])
                 + "\n</arguments>\nYes or No"
             )
-            permission_granted = await self.ask_for_user_validation(validation_id=validation_id, question=question_validation)
+            permission_granted = await self.ask_for_user_validation(validation_id, question_validation)
 
             self._emit_event(
                 "tool_execute_validation_end",
@@ -639,13 +825,14 @@ class Agent(BaseModel):
                 response = tool.execute(**converted_args)
                 
             # Post-process tool response if needed
-            response = self._post_process_tool_response(tool_name, response)
+            if (tool.need_post_process):
+                response = self._post_process_tool_response(tool_name, response) 
                     
             executed_tool = tool.name
         except Exception as e:
             response = f"Error executing tool: {tool_name}: {str(e)}\n"
             executed_tool = ""
-
+ 
         self._emit_event(
             "tool_execution_end", {"tool_name": tool_name, "arguments": arguments_with_values, "response": response}
         )
@@ -1311,21 +1498,45 @@ class Agent(BaseModel):
                                         
                                     required = "(required)" if param_info.get("required", False) else "(optional)"
                                     default = f" default: {param_info['default']}" if "default" in param_info else ""
-                                    param_desc = f"{param_name} {required}{default}"
+                                    param_type = param_info.get("type", "string")
+                                    param_desc = f"{param_name} ({param_type}) {required}{default}"
                                     params.append(param_desc)
                     except Exception as e:
                         logger.debug(f"Error parsing schema for {tool_name}: {str(e)}")
-                    
-                    # Special case for duckduckgo_tool
-                    if tool_name == "duckduckgo_tool" and not any(p.startswith("max_results ") for p in params):
-                        params.append("max_results (required) default: 5")
-                    
-                    # Special case for other search tools that might need max_results
-                    if "search" in tool_name.lower() and not any(p.startswith("max_results ") for p in params):
-                        params.append("max_results (optional) default: 5")
-                        
-                    param_str = ", ".join(params) if params else "No parameters required"
-                    tool_descriptions.append(f"{tool_name}: {param_str}")
+
+                    # Enhanced tool-specific parameter descriptions
+                    if tool_name == "googlenews":
+                        params = [
+                            "query (string, required) - The search query string",
+                            "language (string, optional) default: en - Language code (e.g., en, fr, es)",
+                            "period (string, optional) default: 7d - Time period (1d, 7d, 30d)",
+                            "max_results (integer, required) default: 5 - Number of results to return",
+                            "country (string, optional) default: US - Country code (e.g., US, GB, FR)",
+                            "sort_by (string, optional) default: relevance - Sort by (relevance, date)",
+                            "analyze (boolean, optional) default: False - Whether to analyze results"
+                        ]
+                    elif tool_name == "duckduckgosearch":
+                        params = [
+                            "query (string, required) - The search query string",
+                            "max_results (integer, required) default: 5 - Number of results to return",
+                            "time_period (string, optional) default: d - Time period (d: day, w: week, m: month)",
+                            "region (string, optional) default: wt-wt - Region code for search results"
+                        ]
+                    elif tool_name == "llm":
+                        params = [
+                            "system_prompt (string, required) - The persona or system prompt to guide the language model's behavior",
+                            "prompt (string, required) - The question to ask the language model. Supports interpolation with $var$ syntax",
+                            "temperature (float, required) default: 0.5 - Sampling temperature between 0.0 (no creativity) and 1.0 (full creativity)"
+                        ]
+                    elif tool_name == "task_complete":
+                        params = [
+                            "answer (string, required) - Your final answer or response to complete the task"
+                        ]
+                    elif "search" in tool_name.lower() and not params:
+                        params.append("max_results (integer, optional) default: 5 - Number of results to return")
+
+                    param_str = "\n  - ".join(params) if params else "No parameters required"
+                    tool_descriptions.append(f"{tool_name}:\n  - {param_str}")
                 except Exception as e:
                     logger.debug(f"Error processing tool {tool_name}: {str(e)}")
                     # Still include the tool in the list, but with minimal info
@@ -1469,3 +1680,36 @@ class Agent(BaseModel):
         except Exception as e:
             logger.error(f"Error rendering template {template_name}: {str(e)}")
             raise
+
+    def _track_file(self, file_path: str, tool_name: str) -> None:
+        """Track files created or modified by tools.
+        
+        Args:
+            file_path: Path to the file to track
+            tool_name: Name of the tool that created/modified the file
+        """
+        try:
+            # Handle /tmp directory for write tools
+            if tool_name in ["write_file_tool", "writefile", "edit_whole_content", "replace_in_file", "replaceinfile", "EditWholeContent"]:
+                if not file_path.startswith("/tmp/"):
+                    file_path = os.path.join("/tmp", file_path.lstrip("/"))
+            
+            # For other tools, ensure we have absolute path
+            elif not os.path.isabs(file_path):
+                file_path = os.path.abspath(os.path.join(os.getcwd(), file_path))
+            
+            # Resolve any . or .. in the path
+            tracked_path = os.path.realpath(file_path)
+            
+            # For write tools, ensure path is in /tmp
+            if tool_name in ["write_file_tool", "writefile"] and not tracked_path.startswith("/tmp/"):
+                logger.warning(f"Attempted to track file outside /tmp: {tracked_path}")
+                return
+                
+            # Add to tracked files if not already present
+            if tracked_path not in self.tracked_files:
+                self.tracked_files.append(tracked_path)
+                logger.debug(f"Added {tracked_path} to tracked files")
+                
+        except Exception as e:
+            logger.error(f"Error tracking file {file_path}: {str(e)}")

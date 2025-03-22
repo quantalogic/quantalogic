@@ -95,6 +95,7 @@ class GoogleNewsTool(Tool):
     """
 
     name: str = "google_news_tool"
+    need_post_process: bool = False
     description: str = (
         "Advanced news retrieval and analysis tool with support for sentiment analysis, "
         "keyword extraction, and article summarization."
@@ -295,6 +296,8 @@ class GoogleNewsTool(Tool):
                 }
                 processed_articles.append(processed_article)
 
+
+            logger.info(f"Fetched {len(processed_articles)} articles for query: {query}")
             # Return pretty-printed JSON string, matching DuckDuckGo tool format
             return json.dumps(processed_articles, indent=4, ensure_ascii=False)
 

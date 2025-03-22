@@ -11,6 +11,7 @@ from .csv_processor_tool import CSVProcessorTool
 from .download_file_tool import PrepareDownloadTool
 from .mermaid_validator_tool import MermaidValidatorTool
 from .vscode_tool import VSCodeServerTool
+from .llm_tool import OrientedLLMTool
 
 # Define __all__ to control what is imported with `from ... import *`
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     'PrepareDownloadTool',
     'MermaidValidatorTool',
     'VSCodeServerTool',
+    'OrientedLLMTool',
 ]
 
 # Optional: Add logging for import confirmation

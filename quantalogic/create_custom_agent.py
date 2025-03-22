@@ -10,11 +10,15 @@ from quantalogic.console_print_token import console_print_token
 from quantalogic.event_emitter import EventEmitter
 from quantalogic.tools.tool import Tool
 
-# Configure loguru to output debug messages
+# Configure loguru to output only INFO and above
 logger.remove()  # Remove default handler
-logger.add(sink=lambda msg: print(msg, end=""), level="DEBUG")  # Add a new handler that prints to console
+logger.add(
+    sink=lambda msg: print(msg, end=""),
+    level="INFO",
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+)
 
-
+# Helper function to import tool classes
 def _import_tool(module_path: str, class_name: str) -> Type[Tool]:
     """
     Import a tool class from a module path using standard Python imports.
@@ -78,6 +82,7 @@ TOOL_IMPORTS = {
     # File Tools
     "download_http_file": lambda: _import_tool("quantalogic.tools.utilities", "PrepareDownloadTool"),
     "write_file": lambda: _import_tool("quantalogic.tools.write_file_tool", "WriteFileTool"),
+    "file_tracker": lambda: _import_tool("quantalogic.tools.file_tracker_tool", "FileTrackerTool"),
     "edit_whole_content": lambda: _import_tool("quantalogic.tools", "EditWholeContentTool"),
     "read_file_block": lambda: _import_tool("quantalogic.tools", "ReadFileBlockTool"),
     "read_file": lambda: _import_tool("quantalogic.tools", "ReadFileTool"),
@@ -128,14 +133,15 @@ TOOL_IMPORTS = {
     # Product Hunt Tools
     "product_hunt_tool": lambda: _import_tool("quantalogic.tools.product_hunt", "ProductHuntTool"),
     
-    # RAG Tools
-    "rag_tool": lambda: _import_tool("quantalogic.tools.rag_tool", "RagTool"),
+    # RAG Tools 
+    "rag_tool_hf": lambda: _import_tool("quantalogic.tools.rag_tool", "RagToolHf"),
     
     # Utility Tools
     "task_complete": lambda: _import_tool("quantalogic.tools.task_complete_tool", "TaskCompleteTool"),
     "input_question": lambda: _import_tool("quantalogic.tools.utilities", "InputQuestionTool"),
     "markitdown": lambda: _import_tool("quantalogic.tools.utilities", "MarkitdownTool"),
-    "read_html": lambda: _import_tool("quantalogic.tools.utilities", "ReadHTMLTool"),
+    "read_html": lambda: _import_tool("quantalogic.tools.read_html_tool", "ReadHTMLTool"),
+    "oriented_llm_tool": lambda: _import_tool("quantalogic.tools.utilities", "OrientedLLMTool"),
     "presentation_llm": lambda: _import_tool("quantalogic.tools.presentation_tools", "PresentationLLMTool"),
     "sequence": lambda: _import_tool("quantalogic.tools.utilities", "SequenceTool"),
     "csv_processor": lambda: _import_tool("quantalogic.tools.utilities", "CSVProcessorTool"),
@@ -152,7 +158,8 @@ def create_custom_agent(
     max_tokens_working_memory: Optional[int] = None,
     specific_expertise: str = "",
     tools: Optional[list[dict[str, Any]]] = None,
-    memory: Optional[AgentMemory] = None
+    memory: Optional[AgentMemory] = None,
+    agent_mode: str = "react"
 ) -> Agent:
     """Create an agent with lazy-loaded tools and graceful error handling.
 
@@ -169,6 +176,8 @@ def create_custom_agent(
     Returns:
         Agent: Configured agent instance
     """
+    logger.info("Creating custom agent with model: {}".format(model_name))
+    logger.info("tools: {}".format(tools))
     # Create storage directory for RAG
     storage_dir = os.path.join(os.path.dirname(__file__), "storage", "rag")
     os.makedirs(storage_dir, exist_ok=True)
@@ -188,8 +197,9 @@ def create_custom_agent(
     tool_configs = {
         # LLM Tools with shared parameters
         "llm": lambda params: create_tool_instance(TOOL_IMPORTS["llm"](), **get_llm_params(params)),
+        "oriented_llm_tool": lambda params: create_tool_instance(TOOL_IMPORTS["oriented_llm_tool"](), **get_llm_params(params)),
         "llm_vision": lambda params: create_tool_instance(TOOL_IMPORTS["llm_vision"](),
-            model_name=params.get("vision_model_name") or vision_model_name,
+            model_name=params.get("vision_model_name") or "gpt-4-vision",
             on_token=console_print_token if not no_stream else None,
             event_emitter=event_emitter
         ) if vision_model_name else None,
@@ -203,6 +213,7 @@ def create_custom_agent(
         "download_http_file": lambda _: create_tool_instance(TOOL_IMPORTS["download_http_file"]()),
         "duck_duck_go_search": lambda _: create_tool_instance(TOOL_IMPORTS["duck_duck_go_search"]()),
         "write_file": lambda _: create_tool_instance(TOOL_IMPORTS["write_file"]()),
+        "file_tracker": lambda _: create_tool_instance(TOOL_IMPORTS["file_tracker"]()),
         "task_complete": lambda _: create_tool_instance(TOOL_IMPORTS["task_complete"]()),
         "edit_whole_content": lambda _: create_tool_instance(TOOL_IMPORTS["edit_whole_content"]()),
         "execute_bash_command": lambda _: create_tool_instance(TOOL_IMPORTS["execute_bash_command"]()),
@@ -296,11 +307,12 @@ def create_custom_agent(
         "nasa_apod_tool": lambda _: create_tool_instance(TOOL_IMPORTS["nasa_apod_tool"]()),
         "product_hunt_tool": lambda _: create_tool_instance(TOOL_IMPORTS["product_hunt_tool"]()),
         
-        # RAG tool
-        "rag_tool": lambda params: create_tool_instance(TOOL_IMPORTS["rag_tool"](),
-            vector_store=params.get("vector_store", "chroma"),
-            embedding_model=params.get("embedding_model", "openai"),
-            persist_dir=storage_dir,
+        # Multilingual RAG tool
+        "rag_tool_hf": lambda params: create_tool_instance(TOOL_IMPORTS["rag_tool_hf"](),
+            persist_dir=params.get("persist_dir", "./storage/multilingual_rag"),
+            use_ocr_for_pdfs=params.get("use_ocr_for_pdfs", False),
+            ocr_model=params.get("ocr_model", "openai/gpt-4o-mini"),
+            embed_model=params.get("embed_model", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
             document_paths=params.get("document_paths", [])
         ),
         
@@ -357,26 +369,6 @@ def create_custom_agent(
             else:
                 logger.warning(f"Unknown tool type: {tool_type} - Skipping")
 
-    # Add download tool if any write tool is present
-    if has_write_tool:
-        try:
-            # Get the tool class first
-            download_tool_class = TOOL_IMPORTS["download_file_tool"]()
-            if download_tool_class:
-                # Create an instance with the name 'download'
-                download_tool = create_tool_instance(download_tool_class, name="download")
-                if download_tool:
-                    agent_tools.append(download_tool)
-                    logger.info("Added download tool automatically due to write tool presence")
-                else:
-                    logger.warning("Failed to instantiate download tool")
-            else:
-                logger.warning("Download tool class not found")
-        except ImportError as e:
-            logger.warning(f"Failed to load download tool: Required library missing - {str(e)}")
-        except Exception as e:
-            logger.error(f"Failed to add download tool: {str(e)}")
-
 
     # Create and return the agent
     try:
@@ -388,52 +380,8 @@ def create_custom_agent(
             max_tokens_working_memory=max_tokens_working_memory,
             specific_expertise=specific_expertise,
             memory=memory if memory else AgentMemory(),
+            agent_mode=agent_mode
         )
     except Exception as e:
         logger.error(f"Failed to create agent: {str(e)}")
         raise
-
-if __name__ == "__main__":
-    # Example usage
-    tools_config = [
-        {"type": "duck_duck_go_search", "parameters": {}},
-    ]
-    
-    agent = create_custom_agent(
-        model_name="openrouter/openai/gpt-4o-mini",
-        specific_expertise="General purpose assistant",
-        tools=tools_config
-    )
-    print(f"Created agent with {len(agent.tools.tool_names())} tools")
-    
-    # Display all tool names
-    print("Agent Tools:")
-    for tool_name in agent.tools.tool_names():
-        print(f"- {tool_name}")
-
-    # Set up event monitoring to track agent's lifecycle
-    # The event system provides:
-    # 1. Real-time observability into the agent's operations
-    # 2. Debugging and performance monitoring
-    # 3. Support for future analytics and optimization efforts
-    agent.event_emitter.on(
-        event=[
-            "task_complete",
-            "task_think_start",
-            "task_think_end",
-            "tool_execution_start",
-            "tool_execution_end",
-            "error_max_iterations_reached",
-            "memory_full",
-            "memory_compacted",
-            "memory_summary",
-        ],
-        listener=console_print_events,
-    )
-
-    # Enable token streaming for detailed output
-    agent.event_emitter.on(event=["stream_chunk"], listener=console_print_token)
-
-    # Solve task with streaming enabled
-    result = agent.solve_task("Who is the Prime Minister of France in 2025 ?", max_iterations=10, streaming=True)
-    print(result)
