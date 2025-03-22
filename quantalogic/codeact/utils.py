@@ -1,10 +1,10 @@
 import ast
 import inspect
+import xml.etree.ElementTree as ET
 from functools import wraps
 
 from loguru import logger
 from lxml import etree
-import xml.etree.ElementTree as ET
 
 
 def logged_tool(verb: str):
@@ -99,6 +99,8 @@ def format_result_xml(result_xml: str) -> str:
         value = root.findtext("Value", default="N/A")
         execution_time = root.findtext("ExecutionTime", default="N/A")
         completed = root.findtext("Completed", default="N/A")
+        # Capitalize completed value to match Python convention
+        completed = "True" if completed == "true" else "False" if completed == "false" else completed
         final_answer = root.findtext("FinalAnswer", default=None)
         
         result_lines = [

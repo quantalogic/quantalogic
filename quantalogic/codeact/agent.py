@@ -11,7 +11,7 @@ from quantalogic.python_interpreter import execute_async
 from quantalogic.tools import Tool
 
 from .constants import MAX_TOKENS, TEMPLATE_DIR
-from .utils import format_execution_result, validate_code, validate_xml, format_result_xml
+from .utils import format_execution_result, format_result_xml, validate_code, validate_xml
 
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
 
@@ -68,7 +68,7 @@ class ReActAgent:
         return namespace
 
     async def generate_action(self, task: str, history: List[Dict[str, str]], current_step: int, max_iterations: int) -> str:
-        history_str = self._format_history(history)
+        history_str = self._format_history(history, max_iterations)
 
         try:
             task_prompt = jinja_env.get_template("action_code/generate_action.j2").render(
@@ -124,12 +124,13 @@ class ReActAgent:
                 encoding="unicode"
             )
 
-    def _format_history(self, history: List[Dict[str, str]]) -> str:
+    def _format_history(self, history: List[Dict[str, str]], max_iterations: int) -> str:
         """
         Formats the history of steps into a readable string for the LLM.
 
         Args:
             history (List[Dict[str, str]]): The list of previous steps, each containing 'thought', 'action', and 'result'.
+            max_iterations (int): The maximum number of allowed iterations, for step numbering.
 
         Returns:
             str: A formatted string representing the history.
@@ -137,13 +138,13 @@ class ReActAgent:
         formatted_steps = []
         for i, h in enumerate(history):
             step_str = (
-                f"[Step {i+1}]\n"
-                f"Thought: {h['thought']}\n"
-                f"Action:\n{h['action']}\n"
+                f"===== Step {i + 1} of {max_iterations} max =====\n"
+                f"Thought:\n{h['thought']}\n\n"
+                f"Action:\n{h['action']}\n\n"
                 f"Result:\n{format_result_xml(h['result'])}"
             )
             formatted_steps.append(step_str)
-        return "\n\n".join(formatted_steps) if formatted_steps else "No previous steps"
+        return "\n".join(formatted_steps) if formatted_steps else "No previous steps"
 
     async def is_task_complete(self, task: str, history: List[Dict[str, str]], result: str, 
                              success_criteria: Optional[str] = None) -> Tuple[bool, str]:
@@ -151,7 +152,7 @@ class ReActAgent:
             result_xml = etree.fromstring(result)
             if result_xml.findtext("Completed") == "true":
                 final_answer = result_xml.findtext("FinalAnswer") or ""
-                verification_prompt = f"Does '{final_answer}' solve '{task}' given history:\n{self._format_history(history)}?"
+                verification_prompt = f"Does '{final_answer}' solve '{task}' given history:\n{self._format_history(history, self.max_iterations)}?"
                 verification = await litellm.acompletion(
                     model=self.model,
                     messages=[{"role": "user", "content": verification_prompt}],
