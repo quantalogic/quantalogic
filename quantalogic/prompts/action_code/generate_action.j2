@@ -12,6 +12,7 @@ Essential Requirements:
 - Return intermediate results otherwise
 - Handle potential errors in tool arguments
 - Maintain proper async/await patterns
+- Important: When defining variables in the code, prefix them with 'step{{ current_step }}_' to ensure uniqueness across steps. For example, use 'step{{ current_step }}_intermediate_value'.
 
 The program must:
 1. Use only the provided async tools
@@ -20,6 +21,6 @@ The program must:
 4. Output progress information
 
 Example Context Usage:
-previous_value = context_vars.get('intermediate_result')
+previous_value = context_vars.get('step1_intermediate_result')
 if previous_value:
     next_step = await process_tool(input=previous_value)
