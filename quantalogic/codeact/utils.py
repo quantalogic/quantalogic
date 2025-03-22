@@ -4,6 +4,7 @@ from functools import wraps
 
 from loguru import logger
 from lxml import etree
+import xml.etree.ElementTree as ET
 
 
 def logged_tool(verb: str):
@@ -80,3 +81,47 @@ def format_execution_result(result) -> str:
                 var_elem.text = etree.CDATA(str(v)[:5000] + ("... (truncated)" if len(str(v)) > 5000 else ""))
     
     return etree.tostring(root, pretty_print=True, encoding="unicode")
+
+
+def format_result_xml(result_xml: str) -> str:
+    """
+    Formats the XML result into a readable string for the history.
+
+    Args:
+        result_xml (str): The XML string containing the execution result.
+
+    Returns:
+        str: A formatted string with key information extracted from the XML.
+    """
+    try:
+        root = ET.fromstring(result_xml)
+        status = root.findtext("Status", default="N/A")
+        value = root.findtext("Value", default="N/A")
+        execution_time = root.findtext("ExecutionTime", default="N/A")
+        completed = root.findtext("Completed", default="N/A")
+        final_answer = root.findtext("FinalAnswer", default=None)
+        
+        result_lines = [
+            f"- Status: {status}",
+            f"- Value: {value}",
+            f"- Execution Time: {execution_time}",
+            f"- Completed: {completed}"
+        ]
+        if final_answer:
+            result_lines.append(f"- Final Answer: {final_answer}")
+        
+        variables = []
+        vars_elem = root.find("Variables")
+        if vars_elem is not None:
+            for var in vars_elem.findall("Variable"):
+                name = var.get("name", "unknown")
+                value = var.text.strip() if var.text else "N/A"
+                variables.append(f"  - {name}: {value}")
+        if variables:
+            result_lines.append("- Variables:")
+            result_lines.extend(variables)
+        
+        return "\n".join(result_lines)
+    except ET.ParseError:
+        logger.error(f"Failed to parse result XML: {result_xml}")
+        return result_xml  # Fallback to raw result if parsing fails
