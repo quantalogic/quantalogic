@@ -6,10 +6,11 @@ from loguru import logger
 
 from quantalogic.tools import create_tool
 
-from .agent import (
+from .agent import Agent  # Import only Agent from agent.py
+from .constants import DEFAULT_MODEL, LOG_FILE
+from .events import (  # Import events from events.py
     ActionExecutedEvent,
     ActionGeneratedEvent,
-    Agent,
     ErrorOccurredEvent,
     StepCompletedEvent,
     StepStartedEvent,
@@ -21,7 +22,6 @@ from .agent import (
     ToolExecutionErrorEvent,
     ToolExecutionStartedEvent,
 )
-from .constants import DEFAULT_MODEL, LOG_FILE
 from .tools_manager import Tool, get_default_tools
 from .utils import XMLResultHandler
 
@@ -132,7 +132,8 @@ async def run_react_agent(
     personality: Optional[str] = None,
     backstory: Optional[str] = None,
     sop: Optional[str] = None,
-    debug: bool = False
+    debug: bool = False,
+    streaming: bool = False  # New parameter for enabling streaming
 ) -> None:
     """Run the Agent with detailed event monitoring."""
     # Configure logging: disable stderr output unless debug is enabled
@@ -173,7 +174,8 @@ async def run_react_agent(
     ])
     
     typer.echo(typer.style(f"Starting task: {task}", fg=typer.colors.GREEN, bold=True))
-    history = await agent.solve(task, success_criteria)
+    # Pass the streaming flag to the solve method
+    history = await agent.solve(task, success_criteria, streaming=streaming)
 
 @app.command()
 def react(
@@ -184,13 +186,15 @@ def react(
     personality: Optional[str] = typer.Option(None, help="Agent personality (e.g., 'witty')"),
     backstory: Optional[str] = typer.Option(None, help="Agent backstory"),
     sop: Optional[str] = typer.Option(None, help="Standard operating procedure"),
-    debug: bool = typer.Option(False, help="Enable debug logging to stderr")
+    debug: bool = typer.Option(False, help="Enable debug logging to stderr"),
+    streaming: bool = typer.Option(False, help="Enable streaming output for real-time token generation")
 ) -> None:
     """CLI command to run the Agent with detailed event monitoring."""
     try:
         asyncio.run(run_react_agent(
             task, model, max_iterations, success_criteria,
-            personality=personality, backstory=backstory, sop=sop, debug=debug
+            personality=personality, backstory=backstory, sop=sop, debug=debug,
+            streaming=streaming  # Pass the streaming flag
         ))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
