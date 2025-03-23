@@ -104,7 +104,6 @@ class Executor:
             )
         
         self.tool_namespace["context_vars"] = context_vars
-        start = time.perf_counter()
         try:
             result = await execute_async(
                 code=code, timeout=timeout, entry_point="main",
@@ -286,6 +285,10 @@ class Agent:
         """Multi-step task solving using the ReAct framework."""
         system_prompt = self._build_system_prompt()
         return await self.solve_agent.solve(task, success_criteria, system_prompt=system_prompt)
+
+    def sync_solve(self, task: str, success_criteria: Optional[str] = None, timeout: int = 300) -> List[Dict]:
+        """Synchronous wrapper for solve."""
+        return asyncio.run(self.solve(task, success_criteria, timeout))
 
     def add_observer(self, observer: Callable, event_types: List[str]) -> 'Agent':
         """Add an observer to both chat and solve agents."""
