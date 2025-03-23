@@ -19,6 +19,7 @@ from .events import (
     TaskCompletedEvent,
     TaskStartedEvent,
     ThoughtGeneratedEvent,
+    StepStartedEvent,
 )
 from .tools_manager import get_default_tools
 from .utils import XMLResultHandler, validate_code, validate_xml
@@ -207,6 +208,7 @@ class ReActAgent:
         await self._notify_observers(TaskStartedEvent(event_type="TaskStarted", task_description=task))
 
         for step in range(1, max_iters + 1):
+            await self._notify_observers(StepStartedEvent(event_type="StepStarted", step_number=step))
             try:
                 response = await self.generate_action(task, history, step, max_iters, system_prompt)
                 thought, code = XMLResultHandler.parse_response(response)
@@ -258,6 +260,7 @@ class Agent:
         self.personality = personality
         self.backstory = backstory
         self.sop = sop
+        self._observers: List[Tuple[Callable, List[str]]] = []
 
     def _build_system_prompt(self) -> str:
         """Builds a system prompt based on personality, backstory, and SOP."""
@@ -277,6 +280,8 @@ class Agent:
             # Use provided tools or fall back to default tools
             chat_tools = tools if tools is not None else self.default_tools
             chat_agent = ReActAgent(model=self.model, tools=chat_tools, max_iterations=1)
+            for observer, event_types in self._observers:
+                chat_agent.add_observer(observer, event_types)
             history = await chat_agent.solve(message, system_prompt=system_prompt)
             return self._extract_response(history)
         else:
@@ -305,6 +310,8 @@ class Agent:
             tools=solve_tools,
             max_iterations=max_iterations if max_iterations is not None else self.max_iterations
         )
+        for observer, event_types in self._observers:
+            solve_agent.add_observer(observer, event_types)
         return await solve_agent.solve(task, success_criteria, system_prompt=system_prompt, max_iterations=max_iterations)
 
     def sync_solve(self, task: str, success_criteria: Optional[str] = None, timeout: int = 300) -> List[Dict]:
@@ -312,9 +319,8 @@ class Agent:
         return asyncio.run(self.solve(task, success_criteria, timeout=timeout))
 
     def add_observer(self, observer: Callable, event_types: List[str]) -> 'Agent':
-        """Add an observer to both chat and solve agents."""
-        # Note: Observers are added to new agents created per call, so this method is less effective now.
-        # Consider calling add_observer on the returned agent from solve/chat if needed.
+        """Add an observer to be applied to agents created in chat and solve."""
+        self._observers.append((observer, event_types))
         return self
 
     def list_tools(self) -> List[str]:
