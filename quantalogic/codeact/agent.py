@@ -217,13 +217,28 @@ class ReActAgent:
         return result_xml
 
     def _format_history(self, history: List[Dict], max_iterations: int) -> str:
-        """Format the history, truncating to fit within max_history_tokens."""
+        """Format the history with available variables, truncating to fit within max_history_tokens."""
         included_steps = []
         total_tokens = 0
         for step in reversed(history):  # Start from most recent
+            # Extract variables from context_vars updated after this step
+            # Note: We simulate the state of context_vars at this step by looking at the result
+            try:
+                root = etree.fromstring(step['result'])
+                vars_elem = root.find("Variables")
+                available_vars = (
+                    [var.get('name') for var in vars_elem.findall("Variable")]
+                    if vars_elem is not None else []
+                )
+            except etree.XMLSyntaxError:
+                available_vars = []
+
             step_str = (
                 f"===== Step {step['step_number']} of {max_iterations} max =====\n"
-                f"Thought:\n{step['thought']}\n\nAction:\n{step['action']}\n\nResult:\n{XMLResultHandler.format_result_summary(step['result'])}"
+                f"Thought:\n{step['thought']}\n\n"
+                f"Action:\n{step['action']}\n\n"
+                f"Result:\n{XMLResultHandler.format_result_summary(step['result'])}\n"
+                f"Available variables: {', '.join(available_vars) or 'None'}"
             )
             step_tokens = len(step_str.split())  # Approximate token count
             if total_tokens + step_tokens > self.max_history_tokens:
@@ -322,6 +337,8 @@ class Agent:
         self.sop = sop
         self.max_history_tokens = max_history_tokens
         self._observers: List[Tuple[Callable, List[str]]] = []
+        # New attribute to store context_vars from the last solve call
+        self.last_solve_context_vars: Dict = {}
 
     def _build_system_prompt(self) -> str:
         """Builds a system prompt based on personality, backstory, and SOP."""
@@ -378,7 +395,14 @@ class Agent:
         solve_agent.executor.tools.append(RetrieveStepTool(solve_agent.history_store))
         for observer, event_types in self._observers:
             solve_agent.add_observer(observer, event_types)
-        return await solve_agent.solve(task, success_criteria, system_prompt=system_prompt, max_iterations=max_iterations)
+        
+        # Execute the task and get the history
+        history = await solve_agent.solve(task, success_criteria, system_prompt=system_prompt, max_iterations=max_iterations)
+        
+        # Store a copy of the final context_vars
+        self.last_solve_context_vars = solve_agent.context_vars.copy()
+        
+        return history
 
     def sync_solve(self, task: str, success_criteria: Optional[str] = None, timeout: int = 300) -> List[Dict]:
         """Synchronous wrapper for solve."""
@@ -394,9 +418,13 @@ class Agent:
         return [tool.name for tool in self.default_tools]
 
     def get_context_vars(self) -> Dict:
-        """Return the current context variables."""
-        # Since context_vars are now per-agent instance, this method is less useful unless stored elsewhere.
-        return {}
+        """Return the context variables from the last solve call.
+        
+        Returns:
+            Dict: A dictionary of context variables from the most recent multi-step task execution.
+                  Returns an empty dictionary if no solve call has been made.
+        """
+        return self.last_solve_context_vars
 
     def _extract_response(self, history: List[Dict]) -> str:
         """Extract a clean response from the history."""
