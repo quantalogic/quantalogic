@@ -6,11 +6,19 @@ from loguru import logger
 
 from quantalogic.tools import create_tool
 
-from .agent import ReActAgent
+from .agent import ReActAgent, AgentEvent  # Updated import to include AgentEvent
 from .constants import DEFAULT_MODEL
 from .tools_manager import Tool, get_default_tools
 
 app = typer.Typer(no_args_is_help=True)
+
+
+async def progress_monitor(event: AgentEvent) -> None:
+    """Example observer to monitor the agent's progress."""
+    typer.echo(typer.style(f"Progress - Step {event.step_number}:", fg=typer.colors.CYAN, bold=True))
+    typer.echo(f"Thought: {event.thought}")
+    if event.is_complete:
+        typer.echo(typer.style(f"Task completed with answer: {event.final_answer}", fg=typer.colors.GREEN, bold=True))
 
 
 async def run_react_agent(
@@ -33,6 +41,9 @@ async def run_react_agent(
             typer.echo(typer.style(f"Warning: Invalid tool type {type(tool)} skipped.", fg=typer.colors.YELLOW))
 
     agent = ReActAgent(model=model, tools=processed_tools, max_iterations=max_iterations)
+    
+    # Add the progress monitor as an observer
+    agent.add_observer(progress_monitor)
     
     typer.echo(typer.style(f"Solving task: {task}", fg=typer.colors.GREEN, bold=True))
     history = await agent.solve(task, success_criteria)
