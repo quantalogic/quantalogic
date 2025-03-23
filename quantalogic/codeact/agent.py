@@ -29,7 +29,7 @@ jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True,
 async def generate_program(task_description: str, tools: List[Tool], model: str, max_tokens: int) -> str:
     """Generate a Python program using the specified model."""
     tool_docstrings = "\n\n".join(tool.to_docstring() for tool in tools)
-    prompt = jinja_env.get_template("action_code/generate_program.j2").render(
+    prompt = jinja_env.get_template("generate_program.j2").render(
         task_description=task_description,
         tool_docstrings=tool_docstrings
     )
@@ -83,11 +83,11 @@ class ReActAgent:
         history_str = self._format_history(history)
         try:
             start = time.perf_counter()
-            task_prompt = jinja_env.get_template("action_code/generate_action.j2").render(
+            task_prompt = jinja_env.get_template("generate_action.j2").render(
                 task=task, history_str=history_str, current_step=step, max_iterations=self.max_iterations
             )
             program = await generate_program(task_prompt, self.tools, self.model, MAX_TOKENS)
-            response = jinja_env.get_template("action_code/response_format.j2").render(
+            response = jinja_env.get_template("response_format.j2").render(
                 task=task, history_str=history_str, program=program, 
                 current_step=step, max_iterations=self.max_iterations
             )
@@ -107,7 +107,7 @@ class ReActAgent:
             await self._notify_observers(ErrorOccurredEvent(
                 event_type="ErrorOccurred", error_message=str(e), step_number=step
             ))
-            return jinja_env.get_template("action_code/error_format.j2").render(error=str(e))
+            return jinja_env.get_template("error_format.j2").render(error=str(e))
 
     async def execute_action(self, code: str, timeout: int = 300) -> str:
         if not validate_code(code):
