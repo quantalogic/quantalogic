@@ -23,8 +23,9 @@ from .events import (
     ToolExecutionErrorEvent,
     ToolExecutionStartedEvent,
 )
+from .llm_util import litellm_completion
 from .tools_manager import RetrieveStepTool, get_default_tools
-from .utils import XMLResultHandler, litellm_completion, validate_code, validate_xml
+from .utils import XMLResultHandler, validate_code, validate_xml
 
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
 
