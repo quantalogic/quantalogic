@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -69,3 +70,9 @@ class ToolExecutionErrorEvent(Event):
     step_number: int
     tool_name: str
     error: str  # Error message if execution fails
+
+
+# In quantalogic/codeact/events.py
+class StreamTokenEvent(Event):
+    token: str
+    step_number: Optional[int] = None
