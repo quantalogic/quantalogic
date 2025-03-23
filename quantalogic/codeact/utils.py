@@ -1,47 +1,43 @@
 import ast
 import inspect
-import xml.etree.ElementTree as ET
 from functools import wraps
+from typing import Any, Callable, Dict
 
 from loguru import logger
 from lxml import etree
 
-
-def logged_tool(verb: str):
-    """Decorator factory to add consistent logging to tool functions."""
-    def decorator(func):
+def log_async_tool(verb: str):
+    """Decorator factory for consistent async tool logging."""
+    def decorator(func: Callable) -> Callable:
         @wraps(func)
-        async def wrapped(*args, **kwargs):
-            logger.info(f"Starting tool execution: {func.__name__}")
+        async def wrapper(*args, **kwargs):
+            logger.info(f"Starting tool: {func.__name__}")
             sig = inspect.signature(func)
             bound_args = sig.bind(*args, **kwargs)
             bound_args.apply_defaults()
-            args_str = ", ".join(f"{k}={v}" for k, v in bound_args.arguments.items())
-            logger.info(f"{verb} {args_str}")
+            logger.info(f"{verb} {', '.join(f'{k}={v}' for k, v in bound_args.arguments.items())}")
             result = await func(*args, **kwargs)
-            logger.info(f"Finished tool execution: {func.__name__}")
+            logger.info(f"Finished tool: {func.__name__}")
             return result
-        return wrapped
+        return wrapper
     return decorator
 
-
-def log_tool_method(func):
-    """Decorator to add logging to Tool class methods."""
+def log_tool_method(func: Callable) -> Callable:
+    """Decorator for logging Tool class methods."""
     @wraps(func)
     async def wrapper(self, **kwargs):
-        logger.info(f"Starting tool execution: {self.name}")
+        logger.info(f"Starting tool: {self.name}")
         try:
             result = await func(self, **kwargs)
-            logger.info(f"Finished tool execution: {self.name}")
+            logger.info(f"Finished tool: {self.name}")
             return result
         except Exception as e:
-            logger.error(f"Tool {self.name} failed: {str(e)}")
+            logger.error(f"Tool {self.name} failed: {e}")
             raise
     return wrapper
 
-
 def validate_xml(xml_string: str) -> bool:
-    """Validate XML string against a simple implicit schema."""
+    """Validate XML string."""
     try:
         etree.fromstring(xml_string)
         return True
@@ -49,81 +45,64 @@ def validate_xml(xml_string: str) -> bool:
         logger.error(f"XML validation failed: {e}")
         return False
 
-
 def validate_code(code: str) -> bool:
-    """Check if code contains an async main() function."""
+    """Check if code has an async main() function."""
     try:
         tree = ast.parse(code)
-        return any(isinstance(node, ast.AsyncFunctionDef) and node.name == "main" for node in ast.walk(tree))
+        return any(isinstance(node, ast.AsyncFunctionDef) and node.name == "main" 
+                  for node in ast.walk(tree))
     except SyntaxError:
         return False
 
+def format_xml_element(tag: str, value: Any, **attribs) -> etree.Element:
+    """Create an XML element with optional CDATA and attributes."""
+    elem = etree.Element(tag, **attribs)
+    elem.text = etree.CDATA(str(value)) if value is not None else None
+    return elem
 
 def format_execution_result(result) -> str:
-    """Format execution result as XML string."""
+    """Format execution result as XML."""
     root = etree.Element("ExecutionResult")
-    etree.SubElement(root, "Status").text = "Success" if not result.error else "Error"
-    etree.SubElement(root, "Value").text = etree.CDATA(str(result.result or result.error))
-    etree.SubElement(root, "ExecutionTime").text = f"{result.execution_time:.2f} seconds"
+    root.append(format_xml_element("Status", "Success" if not result.error else "Error"))
+    root.append(format_xml_element("Value", result.result or result.error))
+    root.append(format_xml_element("ExecutionTime", f"{result.execution_time:.2f} seconds"))
+
+    completed = result.result and result.result.startswith("Task completed:")
+    root.append(format_xml_element("Completed", str(completed).lower()))
     
-    if not result.error and result.result and result.result.startswith("Task completed:"):
-        etree.SubElement(root, "Completed").text = "true"
+    if completed:
         final_answer = result.result[len("Task completed:"):].strip()
-        etree.SubElement(root, "FinalAnswer").text = etree.CDATA(final_answer)
-    else:
-        etree.SubElement(root, "Completed").text = "false"
-    
+        root.append(format_xml_element("FinalAnswer", final_answer))
+
     if result.local_variables:
         vars_elem = etree.SubElement(root, "Variables")
         for k, v in result.local_variables.items():
             if not callable(v) and not k.startswith("__"):
-                var_elem = etree.SubElement(vars_elem, "Variable", name=k)
-                var_elem.text = etree.CDATA(str(v)[:5000] + ("... (truncated)" if len(str(v)) > 5000 else ""))
-    
+                vars_elem.append(format_xml_element("Variable", str(v)[:5000] + 
+                                                  ("... (truncated)" if len(str(v)) > 5000 else ""), 
+                                                  name=k))
+
     return etree.tostring(root, pretty_print=True, encoding="unicode")
 
-
-def format_result_xml(result_xml: str) -> str:
-    """
-    Formats the XML result into a readable string for the history.
-
-    Args:
-        result_xml (str): The XML string containing the execution result.
-
-    Returns:
-        str: A formatted string with key information extracted from the XML.
-    """
+def format_result_summary(result_xml: str) -> str:
+    """Format XML result into a readable summary."""
     try:
-        root = ET.fromstring(result_xml)
-        status = root.findtext("Status", default="N/A")
-        value = root.findtext("Value", default="N/A")
-        execution_time = root.findtext("ExecutionTime", default="N/A")
-        completed = root.findtext("Completed", default="N/A")
-        # Capitalize completed value to match Python convention
-        completed = "True" if completed == "true" else "False" if completed == "false" else completed
-        final_answer = root.findtext("FinalAnswer", default=None)
-        
-        result_lines = [
-            f"- Status: {status}",
-            f"- Value: {value}",
-            f"- Execution Time: {execution_time}",
-            f"- Completed: {completed}"
+        root = etree.fromstring(result_xml)
+        lines = [
+            f"- Status: {root.findtext('Status', 'N/A')}",
+            f"- Value: {root.findtext('Value', 'N/A')}",
+            f"- Execution Time: {root.findtext('ExecutionTime', 'N/A')}",
+            f"- Completed: {root.findtext('Completed', 'N/A').capitalize()}"
         ]
-        if final_answer:
-            result_lines.append(f"- Final Answer: {final_answer}")
+        if final_answer := root.findtext("FinalAnswer"):
+            lines.append(f"- Final Answer: {final_answer}")
+
+        if vars_elem := root.find("Variables"):
+            lines.append("- Variables:")
+            lines.extend(f"  - {var.get('name', 'unknown')}: {var.text.strip() or 'N/A'}" 
+                        for var in vars_elem.findall("Variable"))
         
-        variables = []
-        vars_elem = root.find("Variables")
-        if vars_elem is not None:
-            for var in vars_elem.findall("Variable"):
-                name = var.get("name", "unknown")
-                value = var.text.strip() if var.text else "N/A"
-                variables.append(f"  - {name}: {value}")
-        if variables:
-            result_lines.append("- Variables:")
-            result_lines.extend(variables)
-        
-        return "\n".join(result_lines)
-    except ET.ParseError:
-        logger.error(f"Failed to parse result XML: {result_xml}")
-        return result_xml  # Fallback to raw result if parsing fails
+        return "\n".join(lines)
+    except etree.XMLSyntaxError:
+        logger.error(f"Failed to parse XML: {result_xml}")
+        return result_xml
