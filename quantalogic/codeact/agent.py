@@ -5,7 +5,6 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import litellm
 from jinja2 import Environment, FileSystemLoader
-from loguru import logger
 from lxml import etree
 
 from quantalogic.python_interpreter import execute_async
@@ -22,7 +21,7 @@ from .events import (
     ThoughtGeneratedEvent,
 )
 from .tools_manager import get_default_tools
-from .utils import format_execution_result, format_result_summary, validate_code, validate_xml
+from .utils import XMLResultHandler, validate_code, validate_xml
 
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
 
@@ -53,70 +52,58 @@ async def generate_program(task_description: str, tools: List[Tool], model: str,
             else:
                 raise Exception(f"Code generation failed with {model}: {e}")
 
-class ReActAgent:
-    def __init__(self, model: str, tools: List[Tool], max_iterations: int = 5):
+class Reasoner:
+    """Handles action generation using the language model."""
+    def __init__(self, model: str, tools: List[Tool]):
         self.model = model
         self.tools = tools
-        self.max_iterations = max_iterations
-        self.context_vars: Dict = {}
-        self.tool_namespace = self._build_tool_namespace()
-        self._observers: List[Tuple[Callable, List[str]]] = []
 
-    def _build_tool_namespace(self) -> Dict:
-        return {
-            "asyncio": asyncio,
-            "context_vars": self.context_vars,
-            **{tool.name: partial(tool.async_execute) for tool in self.tools}
-        }
-
-    def add_observer(self, observer: Callable, event_types: List[str]) -> 'ReActAgent':
-        self._observers.append((observer, event_types))
-        return self
-
-    async def _notify_observers(self, event):
-        await asyncio.gather(
-            *(observer(event) for observer, types in self._observers if event.event_type in types),
-            return_exceptions=True
-        )
-
-    async def generate_action(self, task: str, history: List[Dict], step: int) -> str:
-        history_str = self._format_history(history)
+    async def generate_action(self, task: str, history_str: str, step: int, max_iterations: int, system_prompt: Optional[str] = None) -> str:
+        """Generate an action based on task and history."""
         try:
-            start = time.perf_counter()
             task_prompt = jinja_env.get_template("generate_action.j2").render(
-                task=task, history_str=history_str, current_step=step, max_iterations=self.max_iterations
+                task=task if not system_prompt else f"{system_prompt}\nTask: {task}",
+                history_str=history_str,
+                current_step=step,
+                max_iterations=max_iterations
             )
             program = await generate_program(task_prompt, self.tools, self.model, MAX_TOKENS)
             response = jinja_env.get_template("response_format.j2").render(
-                task=task, history_str=history_str, program=program, 
-                current_step=step, max_iterations=self.max_iterations
+                task=task,
+                history_str=history_str,
+                program=program,
+                current_step=step,
+                max_iterations=max_iterations
             )
             if not validate_xml(response):
                 raise ValueError("Invalid XML generated")
-            
-            thought, code = self._parse_response(response)
-            gen_time = time.perf_counter() - start
-            await self._notify_observers(ThoughtGeneratedEvent(
-                event_type="ThoughtGenerated", step_number=step, thought=thought, generation_time=gen_time
-            ))
-            await self._notify_observers(ActionGeneratedEvent(
-                event_type="ActionGenerated", step_number=step, action_code=code, generation_time=gen_time
-            ))
             return response
         except Exception as e:
-            await self._notify_observers(ErrorOccurredEvent(
-                event_type="ErrorOccurred", error_message=str(e), step_number=step
-            ))
             return jinja_env.get_template("error_format.j2").render(error=str(e))
 
-    async def execute_action(self, code: str, timeout: int = 300) -> str:
+class Executor:
+    """Manages action execution and context updates."""
+    def __init__(self, tools: List[Tool]):
+        self.tools = tools
+        self.tool_namespace = self._build_tool_namespace()
+
+    def _build_tool_namespace(self) -> Dict:
+        """Build the namespace for tool execution."""
+        return {
+            "asyncio": asyncio,
+            "context_vars": {},  # Updated dynamically
+            **{tool.name: partial(tool.async_execute) for tool in self.tools}
+        }
+
+    async def execute_action(self, code: str, context_vars: Dict, timeout: int = 300) -> str:
+        """Execute the generated code and return the result."""
         if not validate_code(code):
             return etree.tostring(
-                etree.Element("ExecutionResult", status="Error", 
-                            message="Code lacks async main()"),
+                etree.Element("ExecutionResult", status="Error", message="Code lacks async main()"),
                 encoding="unicode"
             )
         
+        self.tool_namespace["context_vars"] = context_vars
         start = time.perf_counter()
         try:
             result = await execute_async(
@@ -124,37 +111,79 @@ class ReActAgent:
                 allowed_modules=["asyncio"], namespace=self.tool_namespace
             )
             if result.local_variables:
-                self.context_vars.update({
+                context_vars.update({
                     k: v for k, v in result.local_variables.items()
                     if not k.startswith('__') and not callable(v)
                 })
-            result_xml = format_execution_result(result)
-            await self._notify_observers(ActionExecutedEvent(
-                event_type="ActionExecuted", step_number=len(self.context_vars) + 1,
-                result_xml=result_xml, execution_time=time.perf_counter() - start
-            ))
-            return result_xml
+            return XMLResultHandler.format_execution_result(result)
         except Exception as e:
             return etree.tostring(
                 etree.Element("ExecutionResult", status="Error", message=f"Execution error: {e}"),
                 encoding="unicode"
             )
 
+class ReActAgent:
+    """Core agent implementing the ReAct framework with modular components."""
+    def __init__(self, model: str, tools: List[Tool], max_iterations: int = 5):
+        self.reasoner = Reasoner(model, tools)
+        self.executor = Executor(tools)
+        self.max_iterations = max_iterations
+        self.context_vars: Dict = {}
+        self._observers: List[Tuple[Callable, List[str]]] = []
+
+    def add_observer(self, observer: Callable, event_types: List[str]) -> 'ReActAgent':
+        """Add an observer for specific event types."""
+        self._observers.append((observer, event_types))
+        return self
+
+    async def _notify_observers(self, event):
+        """Notify all subscribed observers of an event."""
+        await asyncio.gather(
+            *(observer(event) for observer, types in self._observers if event.event_type in types),
+            return_exceptions=True
+        )
+
+    async def generate_action(self, task: str, history: List[Dict], step: int, system_prompt: Optional[str] = None) -> str:
+        """Generate an action using the Reasoner."""
+        history_str = self._format_history(history)
+        start = time.perf_counter()
+        response = await self.reasoner.generate_action(task, history_str, step, self.max_iterations, system_prompt)
+        thought, code = XMLResultHandler.parse_response(response)
+        gen_time = time.perf_counter() - start
+        await self._notify_observers(ThoughtGeneratedEvent(
+            event_type="ThoughtGenerated", step_number=step, thought=thought, generation_time=gen_time
+        ))
+        await self._notify_observers(ActionGeneratedEvent(
+            event_type="ActionGenerated", step_number=step, action_code=code, generation_time=gen_time
+        ))
+        return response
+
+    async def execute_action(self, code: str, step: int, timeout: int = 300) -> str:
+        """Execute an action using the Executor."""
+        start = time.perf_counter()
+        result_xml = await self.executor.execute_action(code, self.context_vars, timeout)
+        execution_time = time.perf_counter() - start
+        await self._notify_observers(ActionExecutedEvent(
+            event_type="ActionExecuted", step_number=step, result_xml=result_xml, execution_time=execution_time
+        ))
+        return result_xml
+
     def _format_history(self, history: List[Dict]) -> str:
+        """Format the history for use in prompts."""
         return "\n".join(
             f"===== Step {i + 1} of {self.max_iterations} max =====\n"
-            f"Thought:\n{h['thought']}\n\nAction:\n{h['action']}\n\nResult:\n{format_result_summary(h['result'])}"
+            f"Thought:\n{h['thought']}\n\nAction:\n{h['action']}\n\nResult:\n{XMLResultHandler.format_result_summary(h['result'])}"
             for i, h in enumerate(history)
         ) or "No previous steps"
 
-    async def is_task_complete(self, task: str, history: List[Dict], result: str, 
-                             success_criteria: Optional[str]) -> Tuple[bool, str]:
+    async def is_task_complete(self, task: str, history: List[Dict], result: str, success_criteria: Optional[str]) -> Tuple[bool, str]:
+        """Check if the task is complete based on the result."""
         try:
-            result_xml = etree.fromstring(result)
-            if result_xml.findtext("Completed") == "true":
-                final_answer = result_xml.findtext("FinalAnswer") or ""
+            root = etree.fromstring(result)
+            if root.findtext("Completed") == "true":
+                final_answer = root.findtext("FinalAnswer") or ""
                 verification = await litellm.acompletion(
-                    model=self.model,
+                    model=self.reasoner.model,
                     messages=[{
                         "role": "user",
                         "content": f"Does '{final_answer}' solve '{task}' given history:\n{self._format_history(history)}?"
@@ -168,33 +197,20 @@ class ReActAgent:
         except etree.XMLSyntaxError:
             pass
 
-        if success_criteria and (result_value := self._extract_result(result)) and success_criteria in result_value:
+        if success_criteria and (result_value := XMLResultHandler.extract_result_value(result)) and success_criteria in result_value:
             return True, result_value
         return False, ""
 
-    def _extract_result(self, result: str) -> str:
-        try:
-            return etree.fromstring(result).findtext("Value") or ""
-        except etree.XMLSyntaxError:
-            return ""
-
-    def _parse_response(self, response: str) -> Tuple[str, str]:
-        try:
-            root = etree.fromstring(response)
-            return root.findtext("Thought") or "", root.findtext("Code") or ""
-        except etree.XMLSyntaxError as e:
-            raise ValueError(f"Failed to parse XML: {e}")
-
     async def solve(self, task: str, success_criteria: Optional[str] = None, system_prompt: Optional[str] = None) -> List[Dict]:
+        """Solve a task using the ReAct framework."""
         history = []
         await self._notify_observers(TaskStartedEvent(event_type="TaskStarted", task_description=task))
 
         for step in range(1, self.max_iterations + 1):
             try:
-                # Pass system_prompt to generate_action if provided
-                response = await self.generate_action(task if not system_prompt else f"{system_prompt}\nTask: {task}", history, step)
-                thought, code = self._parse_response(response)
-                result = await self.execute_action(code)
+                response = await self.generate_action(task, history, step, system_prompt)
+                thought, code = XMLResultHandler.parse_response(response)
+                result = await self.execute_action(code, step)
                 history.append({"thought": thought, "action": code, "result": result})
 
                 is_complete, final_answer = await self.is_task_complete(task, history, result, success_criteria)
@@ -242,7 +258,6 @@ class Agent:
         self.personality = personality
         self.backstory = backstory
         self.sop = sop
-        # Initialize ReActAgent with max_iterations=1 for chat, full max_iterations for solve
         self.chat_agent = ReActAgent(model=self.model, tools=self.tools, max_iterations=1)
         self.solve_agent = ReActAgent(model=self.model, tools=self.tools, max_iterations=self.max_iterations)
 
@@ -284,7 +299,7 @@ class Agent:
 
     def get_context_vars(self) -> Dict:
         """Return the current context variables."""
-        return self.solve_agent.context_vars  # Use solve_agent's context as it persists across steps
+        return self.solve_agent.context_vars
 
     def _extract_response(self, history: List[Dict]) -> str:
         """Extract a clean response from the history."""

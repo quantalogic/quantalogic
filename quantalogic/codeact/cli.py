@@ -9,9 +9,8 @@ from quantalogic.tools import create_tool
 from .agent import (
     ActionExecutedEvent,
     ActionGeneratedEvent,
-    Agent,  # Import the new high-level Agent class
+    Agent,
     ErrorOccurredEvent,
-    ReActAgent,
     StepCompletedEvent,
     TaskCompletedEvent,
     TaskStartedEvent,
@@ -22,36 +21,32 @@ from .tools_manager import Tool, get_default_tools
 
 app = typer.Typer(no_args_is_help=True)
 
-# Observer to display detailed progress for each Pydantic-based event type
-async def detailed_progress_monitor(event: Union[
-    TaskStartedEvent, ThoughtGeneratedEvent, ActionGeneratedEvent, ActionExecutedEvent, 
-    StepCompletedEvent, ErrorOccurredEvent, TaskCompletedEvent
-]) -> None:
-    """Observer that displays detailed progress for various agent events."""
-    if isinstance(event, TaskStartedEvent):
+class ProgressMonitor:
+    """Handles progress monitoring for agent events."""
+    async def on_task_started(self, event: TaskStartedEvent):
         typer.echo(typer.style(f"Task Started: {event.task_description}", fg=typer.colors.GREEN, bold=True))
         typer.echo(f"Timestamp: {event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
         typer.echo("-" * 50)
 
-    elif isinstance(event, ThoughtGeneratedEvent):
+    async def on_thought_generated(self, event: ThoughtGeneratedEvent):
         typer.echo(typer.style(f"Step {event.step_number} - Thought Generated:", fg=typer.colors.CYAN, bold=True))
         typer.echo(f"Thought: {event.thought}")
         typer.echo(f"Generation Time: {event.generation_time:.2f} seconds")
         typer.echo("-" * 50)
 
-    elif isinstance(event, ActionGeneratedEvent):
+    async def on_action_generated(self, event: ActionGeneratedEvent):
         typer.echo(typer.style(f"Step {event.step_number} - Action Generated:", fg=typer.colors.BLUE, bold=True))
         typer.echo(f"Action Code:\n{event.action_code}")
         typer.echo(f"Generation Time: {event.generation_time:.2f} seconds")
         typer.echo("-" * 50)
 
-    elif isinstance(event, ActionExecutedEvent):
+    async def on_action_executed(self, event: ActionExecutedEvent):
         typer.echo(typer.style(f"Step {event.step_number} - Action Executed:", fg=typer.colors.MAGENTA, bold=True))
         typer.echo(f"Result:\n{event.result_xml}")
         typer.echo(f"Execution Time: {event.execution_time:.2f} seconds")
         typer.echo("-" * 50)
 
-    elif isinstance(event, StepCompletedEvent):
+    async def on_step_completed(self, event: StepCompletedEvent):
         typer.echo(typer.style(f"Step {event.step_number} - Completed:", fg=typer.colors.YELLOW, bold=True))
         typer.echo(f"Thought: {event.thought}")
         typer.echo(f"Action: {event.action}")
@@ -60,19 +55,36 @@ async def detailed_progress_monitor(event: Union[
             typer.echo(typer.style(f"Task completed with answer: {event.final_answer}", fg=typer.colors.GREEN, bold=True))
         typer.echo("-" * 50)
 
-    elif isinstance(event, ErrorOccurredEvent):
+    async def on_error_occurred(self, event: ErrorOccurredEvent):
         typer.echo(typer.style(f"Error Occurred{' at Step ' + str(event.step_number) if event.step_number else ''}:", fg=typer.colors.RED, bold=True))
         typer.echo(f"Message: {event.error_message}")
         typer.echo(f"Timestamp: {event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
         typer.echo("-" * 50)
 
-    elif isinstance(event, TaskCompletedEvent):
+    async def on_task_completed(self, event: TaskCompletedEvent):
         typer.echo(typer.style("Task Completed:", fg=typer.colors.GREEN if event.reason == "success" else typer.colors.RED, bold=True))
         if event.final_answer:
             typer.echo(f"Final Answer: {event.final_answer}")
         typer.echo(f"Reason: {event.reason}")
         typer.echo(f"Timestamp: {event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
         typer.echo("-" * 50)
+
+    async def __call__(self, event):
+        """Dispatch events to their respective handlers."""
+        if isinstance(event, TaskStartedEvent):
+            await self.on_task_started(event)
+        elif isinstance(event, ThoughtGeneratedEvent):
+            await self.on_thought_generated(event)
+        elif isinstance(event, ActionGeneratedEvent):
+            await self.on_action_generated(event)
+        elif isinstance(event, ActionExecutedEvent):
+            await self.on_action_executed(event)
+        elif isinstance(event, StepCompletedEvent):
+            await self.on_step_completed(event)
+        elif isinstance(event, ErrorOccurredEvent):
+            await self.on_error_occurred(event)
+        elif isinstance(event, TaskCompletedEvent):
+            await self.on_task_completed(event)
 
 async def run_react_agent(
     task: str,
@@ -84,7 +96,7 @@ async def run_react_agent(
     backstory: Optional[str] = None,
     sop: Optional[str] = None
 ) -> None:
-    """Run the Agent with detailed event monitoring using Pydantic-based events."""
+    """Run the Agent with detailed event monitoring."""
     tools = tools if tools is not None else get_default_tools(model)
     
     processed_tools = []
@@ -97,7 +109,6 @@ async def run_react_agent(
             logger.warning(f"Invalid tool type: {type(tool)}. Skipping.")
             typer.echo(typer.style(f"Warning: Invalid tool type {type(tool)} skipped.", fg=typer.colors.YELLOW))
 
-    # Use the new Agent class instead of ReActAgent directly
     agent = Agent(
         model=model,
         tools=processed_tools,
@@ -107,22 +118,15 @@ async def run_react_agent(
         sop=sop
     )
     
-    # Subscribe the observer to all event types
-    event_types = [
-        "TaskStarted",
-        "ThoughtGenerated",
-        "ActionGenerated",
-        "ActionExecuted",
-        "StepCompleted",
-        "ErrorOccurred",
-        "TaskCompleted"
-    ]
-    agent.add_observer(detailed_progress_monitor, event_types)
+    progress_monitor = ProgressMonitor()
+    agent.add_observer(progress_monitor, [
+        "TaskStarted", "ThoughtGenerated", "ActionGenerated", "ActionExecuted",
+        "StepCompleted", "ErrorOccurred", "TaskCompleted"
+    ])
     
     typer.echo(typer.style(f"Starting task: {task}", fg=typer.colors.GREEN, bold=True))
     history = await agent.solve(task, success_criteria)
     
-    # Final summary (optional, since TaskCompletedEvent already covers this)
     if history and "<FinalAnswer><![CDATA[" in history[-1]["result"]:
         start = history[-1]["result"].index("<FinalAnswer><![CDATA[") + len("<FinalAnswer><![CDATA[")
         end = history[-1]["result"].index("]]></FinalAnswer>", start)
