@@ -51,3 +51,21 @@ class TaskCompletedEvent(Event):
 
 class StepStartedEvent(Event):
     step_number: int
+
+
+class ToolExecutionStartedEvent(Event):
+    step_number: int
+    tool_name: str
+    parameters_summary: dict  # Summary of tool parameters (e.g., {"param1": "value1"})
+
+
+class ToolExecutionCompletedEvent(Event):
+    step_number: int
+    tool_name: str
+    result_summary: str  # Summary of the execution result
+
+
+class ToolExecutionErrorEvent(Event):
+    step_number: int
+    tool_name: str
+    error: str  # Error message if execution fails
