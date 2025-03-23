@@ -101,7 +101,7 @@ class XMLResultHandler:
             if final_answer := root.findtext("FinalAnswer"):
                 lines.append(f"- Final Answer: {final_answer}")
 
-            if vars_elem := root.find("Variables"):
+            if (vars_elem := root.find("Variables")) is not None:
                 lines.append("- Variables:")
                 lines.extend(f"  - {var.get('name', 'unknown')}: {var.text.strip() or 'N/A'}" 
                             for var in vars_elem.findall("Variable"))
