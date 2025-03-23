@@ -29,6 +29,9 @@ app = typer.Typer(no_args_is_help=True)
 
 class ProgressMonitor:
     """Handles progress monitoring for agent events."""
+    def __init__(self):
+        self._token_buffer = ""  # Buffer to accumulate streaming tokens
+
     async def on_task_started(self, event: TaskStartedEvent):
         typer.echo(typer.style(f"Task Started: {event.task_description}", fg=typer.colors.GREEN, bold=True))
         typer.echo(f"Timestamp: {event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -90,11 +93,28 @@ class ProgressMonitor:
         typer.echo(f"Error: {event.error}")
 
     async def on_stream_token(self, event: StreamTokenEvent):
-        """Handle streaming token events for real-time output."""
-        if event.step_number is not None:
-            typer.echo(f"Stream Token (Step {event.step_number}): {event.token}", nl=False)
-        else:
-            typer.echo(f"Stream Token: {event.token}", nl=False)
+        """Handle streaming token events for real-time output with buffering."""
+        self._token_buffer += event.token
+        # Check for natural breakpoints to flush the buffer
+        if "\n" in event.token or event.token.strip() in [".", ";", ":", "{", "}", "]", ")"]:
+            # Print the accumulated buffer with proper formatting
+            lines = self._token_buffer.split("\n")
+            for line in lines[:-1]:  # Print all complete lines
+                if line.strip():
+                    typer.echo(f"{line}", nl=False)
+                    typer.echo("")  # Add newline after each complete line
+            # Keep the last incomplete line in the buffer
+            self._token_buffer = lines[-1]
+        # Flush buffer if it gets too long (e.g., > 100 chars)
+        if len(self._token_buffer) > 100:
+            typer.echo(f"{self._token_buffer}", nl=False)
+            self._token_buffer = ""
+
+    async def flush_buffer(self):
+        """Flush any remaining tokens in the buffer."""
+        if self._token_buffer.strip():
+            typer.echo(f"{self._token_buffer}")
+            self._token_buffer = ""
 
     async def __call__(self, event):
         """Dispatch events to their respective handlers."""
@@ -104,6 +124,7 @@ class ProgressMonitor:
             await self.on_thought_generated(event)
         elif isinstance(event, ActionGeneratedEvent):
             await self.on_action_generated(event)
+            await self.flush_buffer()  # Flush after action is fully generated
         elif isinstance(event, ActionExecutedEvent):
             await self.on_action_executed(event)
         elif isinstance(event, StepCompletedEvent):
@@ -112,6 +133,7 @@ class ProgressMonitor:
             await self.on_error_occurred(event)
         elif isinstance(event, TaskCompletedEvent):
             await self.on_task_completed(event)
+            await self.flush_buffer()  # Flush at task completion
         elif isinstance(event, StepStartedEvent):
             await self.on_step_started(event)
         elif isinstance(event, ToolExecutionStartedEvent):
