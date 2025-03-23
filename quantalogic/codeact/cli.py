@@ -15,9 +15,11 @@ from .agent import (
     TaskCompletedEvent,
     TaskStartedEvent,
     ThoughtGeneratedEvent,
+    StepStartedEvent,
 )
-from .constants import DEFAULT_MODEL
+from .constants import DEFAULT_MODEL, LOG_FILE
 from .tools_manager import Tool, get_default_tools
+from .utils import XMLResultHandler
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -41,18 +43,14 @@ class ProgressMonitor:
         typer.echo("-" * 50)
 
     async def on_action_executed(self, event: ActionExecutedEvent):
+        summary = XMLResultHandler.format_result_summary(event.result_xml)
         typer.echo(typer.style(f"Step {event.step_number} - Action Executed:", fg=typer.colors.MAGENTA, bold=True))
-        typer.echo(f"Result:\n{event.result_xml}")
+        typer.echo(f"Result Summary:\n{summary}")
         typer.echo(f"Execution Time: {event.execution_time:.2f} seconds")
         typer.echo("-" * 50)
 
     async def on_step_completed(self, event: StepCompletedEvent):
-        typer.echo(typer.style(f"Step {event.step_number} - Completed:", fg=typer.colors.YELLOW, bold=True))
-        typer.echo(f"Thought: {event.thought}")
-        typer.echo(f"Action: {event.action}")
-        typer.echo(f"Result: {event.result}")
-        if event.is_complete:
-            typer.echo(typer.style(f"Task completed with answer: {event.final_answer}", fg=typer.colors.GREEN, bold=True))
+        typer.echo(typer.style(f"Step {event.step_number} - Completed", fg=typer.colors.YELLOW, bold=True))
         typer.echo("-" * 50)
 
     async def on_error_occurred(self, event: ErrorOccurredEvent):
@@ -62,11 +60,17 @@ class ProgressMonitor:
         typer.echo("-" * 50)
 
     async def on_task_completed(self, event: TaskCompletedEvent):
-        typer.echo(typer.style("Task Completed:", fg=typer.colors.GREEN if event.reason == "success" else typer.colors.RED, bold=True))
         if event.final_answer:
-            typer.echo(f"Final Answer: {event.final_answer}")
-        typer.echo(f"Reason: {event.reason}")
+            typer.echo(typer.style("Task Completed Successfully:", fg=typer.colors.GREEN, bold=True))
+            typer.echo(f"Final Answer:\n{event.final_answer}")
+        else:
+            typer.echo(typer.style("Task Did Not Complete Successfully:", fg=typer.colors.RED, bold=True))
+            typer.echo(f"Reason: {event.reason}")
         typer.echo(f"Timestamp: {event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        typer.echo("-" * 50)
+
+    async def on_step_started(self, event: StepStartedEvent):
+        typer.echo(typer.style(f"Starting Step {event.step_number}", fg=typer.colors.YELLOW, bold=True))
         typer.echo("-" * 50)
 
     async def __call__(self, event):
@@ -85,6 +89,8 @@ class ProgressMonitor:
             await self.on_error_occurred(event)
         elif isinstance(event, TaskCompletedEvent):
             await self.on_task_completed(event)
+        elif isinstance(event, StepStartedEvent):
+            await self.on_step_started(event)
 
 async def run_react_agent(
     task: str,
@@ -94,9 +100,16 @@ async def run_react_agent(
     tools: Optional[List[Union[Tool, Callable]]] = None,
     personality: Optional[str] = None,
     backstory: Optional[str] = None,
-    sop: Optional[str] = None
+    sop: Optional[str] = None,
+    debug: bool = False
 ) -> None:
     """Run the Agent with detailed event monitoring."""
+    # Configure logging: disable stderr output unless debug is enabled
+    logger.remove()  # Remove default handler
+    if debug:
+        logger.add(typer.stderr, level="INFO")
+    logger.add(LOG_FILE, level="INFO")  # Always log to file
+
     tools = tools if tools is not None else get_default_tools(model)
     
     processed_tools = []
@@ -119,22 +132,15 @@ async def run_react_agent(
     )
     
     progress_monitor = ProgressMonitor()
-    agent.add_observer(progress_monitor, [
+    # Use solve with tools enabled for multi-step tasks
+    solve_agent = agent  # Store reference to add observer
+    solve_agent.add_observer(progress_monitor, [
         "TaskStarted", "ThoughtGenerated", "ActionGenerated", "ActionExecuted",
-        "StepCompleted", "ErrorOccurred", "TaskCompleted"
+        "StepCompleted", "ErrorOccurred", "TaskCompleted", "StepStarted"
     ])
     
     typer.echo(typer.style(f"Starting task: {task}", fg=typer.colors.GREEN, bold=True))
     history = await agent.solve(task, success_criteria)
-    
-    if history and "<FinalAnswer><![CDATA[" in history[-1]["result"]:
-        start = history[-1]["result"].index("<FinalAnswer><![CDATA[") + len("<FinalAnswer><![CDATA[")
-        end = history[-1]["result"].index("]]></FinalAnswer>", start)
-        final_answer = history[-1]["result"][start:end].strip()
-        typer.echo(f"\n{typer.style('Final Answer', fg=typer.colors.GREEN, bold=True)}")
-        typer.echo(final_answer)
-    elif history:
-        typer.echo(typer.style("\nTask did not complete successfully.", fg=typer.colors.RED))
 
 @app.command()
 def react(
@@ -144,11 +150,15 @@ def react(
     success_criteria: Optional[str] = typer.Option(None, help="Optional criteria to determine task completion"),
     personality: Optional[str] = typer.Option(None, help="Agent personality (e.g., 'witty')"),
     backstory: Optional[str] = typer.Option(None, help="Agent backstory"),
-    sop: Optional[str] = typer.Option(None, help="Standard operating procedure")
+    sop: Optional[str] = typer.Option(None, help="Standard operating procedure"),
+    debug: bool = typer.Option(False, help="Enable debug logging to stderr")
 ) -> None:
     """CLI command to run the Agent with detailed event monitoring."""
     try:
-        asyncio.run(run_react_agent(task, model, max_iterations, success_criteria, personality=personality, backstory=backstory, sop=sop))
+        asyncio.run(run_react_agent(
+            task, model, max_iterations, success_criteria,
+            personality=personality, backstory=backstory, sop=sop, debug=debug
+        ))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
         typer.echo(typer.style(f"Error: {e}", fg=typer.colors.RED))
