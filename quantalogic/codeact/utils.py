@@ -1,8 +1,9 @@
 import ast
 import inspect
 from functools import wraps
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
+import litellm
 from loguru import logger
 from lxml import etree
 
@@ -23,6 +24,7 @@ def log_async_tool(verb: str):
         return wrapper
     return decorator
 
+
 def log_tool_method(func: Callable) -> Callable:
     """Decorator for logging Tool class methods."""
     @wraps(func)
@@ -37,6 +39,7 @@ def log_tool_method(func: Callable) -> Callable:
             raise
     return wrapper
 
+
 def validate_xml(xml_string: str) -> bool:
     """Validate XML string."""
     try:
@@ -45,6 +48,7 @@ def validate_xml(xml_string: str) -> bool:
     except etree.XMLSyntaxError as e:
         logger.error(f"XML validation failed: {e}")
         return False
+
 
 def validate_code(code: str) -> bool:
     """Check if code has an async main() function."""
@@ -55,11 +59,13 @@ def validate_code(code: str) -> bool:
     except SyntaxError:
         return False
 
+
 def format_xml_element(tag: str, value: Any, **attribs) -> etree.Element:
     """Create an XML element with optional CDATA and attributes."""
     elem = etree.Element(tag, **attribs)
     elem.text = etree.CDATA(str(value)) if value is not None else None
     return elem
+
 
 class XMLResultHandler:
     """Utility class for handling XML formatting and parsing."""
@@ -128,3 +134,76 @@ class XMLResultHandler:
             return etree.fromstring(result).findtext("Value") or ""
         except etree.XMLSyntaxError:
             return ""
+
+
+async def litellm_completion(
+    model: str,
+    messages: List[dict],
+    max_tokens: int,
+    temperature: float,
+    stream: bool = False,
+    step: Optional[int] = None,
+    notify_event: Optional[Callable] = None,
+    **kwargs
+) -> str:
+    """
+    A wrapper for litellm.acompletion that supports streaming and non-streaming modes.
+    
+    Args:
+        model (str): The model to use (e.g., "gemini/gemini-2.0-flash").
+        messages (List[dict]): The conversation history as a list of message dictionaries.
+        max_tokens (int): Maximum number of tokens to generate.
+        temperature (float): Sampling temperature for the model.
+        stream (bool): If True, stream tokens; if False, return the full response.
+        step (Optional[int]): Step number for event tracking (used in streaming mode).
+        notify_event (Optional[Callable]): Callback to trigger events during streaming.
+        **kwargs: Additional arguments to pass to litellm.acompletion.
+
+    Returns:
+        str: The generated response (full text in both modes).
+
+    Raises:
+        ValueError: If notify_event is missing when stream=True.
+        Exception: If the completion request fails.
+    """
+    from .events import StreamTokenEvent  # Local import to avoid circular dependency
+
+    if stream:
+        if notify_event is None:
+            raise ValueError("notify_event callback is required when streaming is enabled.")
+        
+        full_response = ""
+        try:
+            response = await litellm.acompletion(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True,
+                **kwargs
+            )
+            async for chunk in response:
+                if chunk.choices[0].delta.content:
+                    token = chunk.choices[0].delta.content
+                    full_response += token
+                    await notify_event(StreamTokenEvent(
+                        event_type="StreamToken",
+                        token=token,
+                        step_number=step
+                    ))
+            return full_response
+        except Exception as e:
+            raise Exception(f"Streaming completion failed: {e}")
+    else:
+        try:
+            response = await litellm.acompletion(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=False,
+                **kwargs
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            raise Exception(f"Completion failed: {e}")

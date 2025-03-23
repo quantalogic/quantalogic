@@ -13,6 +13,7 @@ from .agent import (
     ErrorOccurredEvent,
     StepCompletedEvent,
     StepStartedEvent,
+    StreamTokenEvent,
     TaskCompletedEvent,
     TaskStartedEvent,
     ThoughtGeneratedEvent,
@@ -88,6 +89,13 @@ class ProgressMonitor:
         typer.echo(typer.style(f"Tool {event.tool_name} encountered an error at step {event.step_number}", fg=typer.colors.RED))
         typer.echo(f"Error: {event.error}")
 
+    async def on_stream_token(self, event: StreamTokenEvent):
+        """Handle streaming token events for real-time output."""
+        if event.step_number is not None:
+            typer.echo(f"Stream Token (Step {event.step_number}): {event.token}", nl=False)
+        else:
+            typer.echo(f"Stream Token: {event.token}", nl=False)
+
     async def __call__(self, event):
         """Dispatch events to their respective handlers."""
         if isinstance(event, TaskStartedEvent):
@@ -112,6 +120,8 @@ class ProgressMonitor:
             await self.on_tool_execution_completed(event)
         elif isinstance(event, ToolExecutionErrorEvent):
             await self.on_tool_execution_error(event)
+        elif isinstance(event, StreamTokenEvent):
+            await self.on_stream_token(event)
 
 async def run_react_agent(
     task: str,
@@ -158,7 +168,8 @@ async def run_react_agent(
     solve_agent.add_observer(progress_monitor, [
         "TaskStarted", "ThoughtGenerated", "ActionGenerated", "ActionExecuted",
         "StepCompleted", "ErrorOccurred", "TaskCompleted", "StepStarted",
-        "ToolExecutionStarted", "ToolExecutionCompleted", "ToolExecutionError"
+        "ToolExecutionStarted", "ToolExecutionCompleted", "ToolExecutionError",
+        "StreamToken"  # Added to observe streaming tokens
     ])
     
     typer.echo(typer.style(f"Starting task: {task}", fg=typer.colors.GREEN, bold=True))

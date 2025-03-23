@@ -25,12 +25,19 @@ from .events import (
     ToolExecutionStartedEvent,
 )
 from .tools_manager import RetrieveStepTool, get_default_tools
-from .utils import XMLResultHandler, validate_code, validate_xml
+from .utils import XMLResultHandler, litellm_completion, validate_code, validate_xml
 
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
 
-async def generate_program(task_description: str, tools: List[Tool], model: str, max_tokens: int) -> str:
-    """Generate a Python program using the specified model."""
+async def generate_program(
+    task_description: str,
+    tools: List[Tool],
+    model: str,
+    max_tokens: int,
+    step: int,
+    notify_event: Callable
+) -> str:
+    """Generate a Python program using the specified model with streaming support."""
     tool_docstrings = "\n\n".join(tool.to_docstring() for tool in tools)
     prompt = jinja_env.get_template("generate_program.j2").render(
         task_description=task_description,
@@ -39,16 +46,19 @@ async def generate_program(task_description: str, tools: List[Tool], model: str,
 
     for attempt in range(3):
         try:
-            response = await litellm.acompletion(
+            response = await litellm_completion(
                 model=model,
                 messages=[
                     {"role": "system", "content": "You are a Python code generator."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=max_tokens,
-                temperature=0.3
+                temperature=0.3,
+                stream=True,  # Enable streaming for real-time token events
+                step=step,
+                notify_event=notify_event
             )
-            code = response.choices[0].message.content.strip()
+            code = response.strip()
             return code[9:-3].strip() if code.startswith("```python") and code.endswith("```") else code
         except Exception as e:
             if attempt < 2:
@@ -62,8 +72,16 @@ class Reasoner:
         self.model = model
         self.tools = tools
 
-    async def generate_action(self, task: str, history_str: str, step: int, max_iterations: int, system_prompt: Optional[str] = None) -> str:
-        """Generate an action based on task and history."""
+    async def generate_action(
+        self,
+        task: str,
+        history_str: str,
+        step: int,
+        max_iterations: int,
+        system_prompt: Optional[str] = None,
+        notify_event: Callable = None
+    ) -> str:
+        """Generate an action based on task and history with streaming support."""
         try:
             task_prompt = jinja_env.get_template("generate_action.j2").render(
                 task=task if not system_prompt else f"{system_prompt}\nTask: {task}",
@@ -71,7 +89,7 @@ class Reasoner:
                 current_step=step,
                 max_iterations=max_iterations
             )
-            program = await generate_program(task_prompt, self.tools, self.model, max_tokens=MAX_GENERATE_PROGRAM_TOKENS)  
+            program = await generate_program(task_prompt, self.tools, self.model, MAX_GENERATE_PROGRAM_TOKENS, step, notify_event)
             response = jinja_env.get_template("response_format.j2").render(
                 task=task,
                 history_str=history_str,
@@ -193,7 +211,7 @@ class ReActAgent:
         """Generate an action using the Reasoner."""
         history_str = self._format_history(history, max_iterations)
         start = time.perf_counter()
-        response = await self.reasoner.generate_action(task, history_str, step, max_iterations, system_prompt)
+        response = await self.reasoner.generate_action(task, history_str, step, max_iterations, system_prompt, self._notify_observers)
         thought, code = XMLResultHandler.parse_response(response)
         gen_time = time.perf_counter() - start
         await self._notify_observers(ThoughtGeneratedEvent(
@@ -222,7 +240,6 @@ class ReActAgent:
         total_tokens = 0
         for step in reversed(history):  # Start from most recent
             # Extract variables from context_vars updated after this step
-            # Note: We simulate the state of context_vars at this step by looking at the result
             try:
                 root = etree.fromstring(step['result'])
                 vars_elem = root.find("Variables")
@@ -253,16 +270,17 @@ class ReActAgent:
             root = etree.fromstring(result)
             if root.findtext("Completed") == "true":
                 final_answer = root.findtext("FinalAnswer") or ""
-                verification = await litellm.acompletion(
+                verification = await litellm_completion(
                     model=self.reasoner.model,
                     messages=[{
                         "role": "user",
                         "content": f"Does '{final_answer}' solve '{task}' given history:\n{self._format_history(history, self.max_iterations)}?"
                     }],
+                    max_tokens=100,
                     temperature=0.1,
-                    max_tokens=100
+                    stream=False  # Non-streaming for quick verification
                 )
-                if "yes" in verification.choices[0].message.content.lower():
+                if "yes" in verification.lower():
                     return True, final_answer
                 return True, final_answer
         except etree.XMLSyntaxError:
@@ -365,16 +383,17 @@ class Agent:
             history = await chat_agent.solve(message, system_prompt=system_prompt)
             return self._extract_response(history)
         else:
-            response = await litellm.acompletion(
+            response = await litellm_completion(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": message}
                 ],
+                max_tokens=max_tokens,
                 temperature=temperature,
-                max_tokens=max_tokens
+                stream=False  # Non-streaming for simple chat
             )
-            return response.choices[0].message.content.strip()
+            return response.strip()
 
     def sync_chat(self, message: str, timeout: int = 30) -> str:
         """Synchronous wrapper for chat."""
@@ -418,12 +437,7 @@ class Agent:
         return [tool.name for tool in self.default_tools]
 
     def get_context_vars(self) -> Dict:
-        """Return the context variables from the last solve call.
-        
-        Returns:
-            Dict: A dictionary of context variables from the most recent multi-step task execution.
-                  Returns an empty dictionary if no solve call has been made.
-        """
+        """Return the context variables from the last solve call."""
         return self.last_solve_context_vars
 
     def _extract_response(self, history: List[Dict]) -> str:
