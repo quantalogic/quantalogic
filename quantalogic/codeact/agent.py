@@ -1,8 +1,7 @@
 import asyncio
+import time
 from functools import partial
 from typing import Callable, Dict, List, Optional, Tuple
-import time
-from .utils import format_result_summary, format_execution_result
 
 import litellm
 from jinja2 import Environment, FileSystemLoader
@@ -14,11 +13,16 @@ from quantalogic.tools import Tool
 
 from .constants import MAX_TOKENS, TEMPLATE_DIR
 from .events import (
-    ActionExecutedEvent, ActionGeneratedEvent, ErrorOccurredEvent, 
-    StepCompletedEvent, TaskCompletedEvent, TaskStartedEvent, 
-    ThoughtGeneratedEvent
+    ActionExecutedEvent,
+    ActionGeneratedEvent,
+    ErrorOccurredEvent,
+    StepCompletedEvent,
+    TaskCompletedEvent,
+    TaskStartedEvent,
+    ThoughtGeneratedEvent,
 )
-from .utils import validate_code, validate_xml
+from .tools_manager import get_default_tools
+from .utils import format_execution_result, format_result_summary, validate_code, validate_xml
 
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
 
@@ -181,13 +185,14 @@ class ReActAgent:
         except etree.XMLSyntaxError as e:
             raise ValueError(f"Failed to parse XML: {e}")
 
-    async def solve(self, task: str, success_criteria: Optional[str] = None) -> List[Dict]:
+    async def solve(self, task: str, success_criteria: Optional[str] = None, system_prompt: Optional[str] = None) -> List[Dict]:
         history = []
         await self._notify_observers(TaskStartedEvent(event_type="TaskStarted", task_description=task))
 
         for step in range(1, self.max_iterations + 1):
             try:
-                response = await self.generate_action(task, history, step)
+                # Pass system_prompt to generate_action if provided
+                response = await self.generate_action(task if not system_prompt else f"{system_prompt}\nTask: {task}", history, step)
                 thought, code = self._parse_response(response)
                 result = await self.execute_action(code)
                 history.append({"thought": thought, "action": code, "result": result})
@@ -219,3 +224,80 @@ class ReActAgent:
                 reason="max_iterations_reached" if len(history) == self.max_iterations else "error"
             ))
         return history
+
+class Agent:
+    """High-level interface for the Quantalogic Agent, providing chat and solve functionalities."""
+    def __init__(
+        self,
+        model: str = "gemini/gemini-2.0-flash",
+        tools: Optional[List[Tool]] = None,
+        max_iterations: int = 5,
+        personality: Optional[str] = None,
+        backstory: Optional[str] = None,
+        sop: Optional[str] = None
+    ):
+        self.model = model
+        self.tools = tools if tools is not None else get_default_tools(model)
+        self.max_iterations = max_iterations
+        self.personality = personality
+        self.backstory = backstory
+        self.sop = sop
+        # Initialize ReActAgent with max_iterations=1 for chat, full max_iterations for solve
+        self.chat_agent = ReActAgent(model=self.model, tools=self.tools, max_iterations=1)
+        self.solve_agent = ReActAgent(model=self.model, tools=self.tools, max_iterations=self.max_iterations)
+
+    def _build_system_prompt(self) -> str:
+        """Builds a system prompt based on personality, backstory, and SOP."""
+        prompt = "You are an AI assistant."
+        if self.personality:
+            prompt += f" You have a {self.personality} personality."
+        if self.backstory:
+            prompt += f" Your backstory is: {self.backstory}"
+        if self.sop:
+            prompt += f" Follow this standard operating procedure: {self.sop}"
+        return prompt
+
+    async def chat(self, message: str, timeout: int = 30) -> str:
+        """Single-step interaction with automatic tool usage."""
+        system_prompt = self._build_system_prompt()
+        history = await self.chat_agent.solve(message, system_prompt=system_prompt)
+        return self._extract_response(history)
+
+    def sync_chat(self, message: str, timeout: int = 30) -> str:
+        """Synchronous wrapper for chat."""
+        return asyncio.run(self.chat(message, timeout))
+
+    async def solve(self, task: str, success_criteria: Optional[str] = None, timeout: int = 300) -> List[Dict]:
+        """Multi-step task solving using the ReAct framework."""
+        system_prompt = self._build_system_prompt()
+        return await self.solve_agent.solve(task, success_criteria, system_prompt=system_prompt)
+
+    def add_observer(self, observer: Callable, event_types: List[str]) -> 'Agent':
+        """Add an observer to both chat and solve agents."""
+        self.chat_agent.add_observer(observer, event_types)
+        self.solve_agent.add_observer(observer, event_types)
+        return self
+
+    def list_tools(self) -> List[str]:
+        """Return a list of available tool names."""
+        return [tool.name for tool in self.tools]
+
+    def get_context_vars(self) -> Dict:
+        """Return the current context variables."""
+        return self.solve_agent.context_vars  # Use solve_agent's context as it persists across steps
+
+    def _extract_response(self, history: List[Dict]) -> str:
+        """Extract a clean response from the history."""
+        if not history:
+            return "No response generated."
+        last_result = history[-1]["result"]
+        try:
+            root = etree.fromstring(last_result)
+            if root.findtext("Status") == "Success":
+                value = root.findtext("Value") or ""
+                final_answer = root.findtext("FinalAnswer")
+                return final_answer.strip() if final_answer else value.strip()
+            else:
+                return f"Error: {root.findtext('Value') or 'Unknown error'}"
+        except etree.XMLSyntaxError:
+            return last_result
