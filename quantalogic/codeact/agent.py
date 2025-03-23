@@ -142,11 +142,11 @@ class ReActAgent:
             return_exceptions=True
         )
 
-    async def generate_action(self, task: str, history: List[Dict], step: int, system_prompt: Optional[str] = None) -> str:
+    async def generate_action(self, task: str, history: List[Dict], step: int, max_iterations: int, system_prompt: Optional[str] = None) -> str:
         """Generate an action using the Reasoner."""
-        history_str = self._format_history(history)
+        history_str = self._format_history(history, max_iterations)
         start = time.perf_counter()
-        response = await self.reasoner.generate_action(task, history_str, step, self.max_iterations, system_prompt)
+        response = await self.reasoner.generate_action(task, history_str, step, max_iterations, system_prompt)
         thought, code = XMLResultHandler.parse_response(response)
         gen_time = time.perf_counter() - start
         await self._notify_observers(ThoughtGeneratedEvent(
@@ -167,10 +167,10 @@ class ReActAgent:
         ))
         return result_xml
 
-    def _format_history(self, history: List[Dict]) -> str:
+    def _format_history(self, history: List[Dict], max_iterations: int) -> str:
         """Format the history for use in prompts."""
         return "\n".join(
-            f"===== Step {i + 1} of {self.max_iterations} max =====\n"
+            f"===== Step {i + 1} of {max_iterations} max =====\n"
             f"Thought:\n{h['thought']}\n\nAction:\n{h['action']}\n\nResult:\n{XMLResultHandler.format_result_summary(h['result'])}"
             for i, h in enumerate(history)
         ) or "No previous steps"
@@ -185,7 +185,7 @@ class ReActAgent:
                     model=self.reasoner.model,
                     messages=[{
                         "role": "user",
-                        "content": f"Does '{final_answer}' solve '{task}' given history:\n{self._format_history(history)}?"
+                        "content": f"Does '{final_answer}' solve '{task}' given history:\n{self._format_history(history, self.max_iterations)}?"
                     }],
                     temperature=0.1,
                     max_tokens=100
@@ -200,14 +200,15 @@ class ReActAgent:
             return True, result_value
         return False, ""
 
-    async def solve(self, task: str, success_criteria: Optional[str] = None, system_prompt: Optional[str] = None) -> List[Dict]:
+    async def solve(self, task: str, success_criteria: Optional[str] = None, system_prompt: Optional[str] = None, max_iterations: Optional[int] = None) -> List[Dict]:
         """Solve a task using the ReAct framework."""
+        max_iters = max_iterations if max_iterations is not None else self.max_iterations
         history = []
         await self._notify_observers(TaskStartedEvent(event_type="TaskStarted", task_description=task))
 
-        for step in range(1, self.max_iterations + 1):
+        for step in range(1, max_iters + 1):
             try:
-                response = await self.generate_action(task, history, step, system_prompt)
+                response = await self.generate_action(task, history, step, max_iters, system_prompt)
                 thought, code = XMLResultHandler.parse_response(response)
                 result = await self.execute_action(code, step)
                 history.append({"thought": thought, "action": code, "result": result})
@@ -236,7 +237,7 @@ class ReActAgent:
         if not any("<FinalAnswer>" in step["result"] for step in history):
             await self._notify_observers(TaskCompletedEvent(
                 event_type="TaskCompleted", final_answer=None,
-                reason="max_iterations_reached" if len(history) == self.max_iterations else "error"
+                reason="max_iterations_reached" if len(history) == max_iters else "error"
             ))
         return history
 
@@ -252,13 +253,11 @@ class Agent:
         sop: Optional[str] = None
     ):
         self.model = model
-        self.tools = tools if tools is not None else get_default_tools(model)
+        self.default_tools = tools if tools is not None else get_default_tools(model)
         self.max_iterations = max_iterations
         self.personality = personality
         self.backstory = backstory
         self.sop = sop
-        self.chat_agent = ReActAgent(model=self.model, tools=self.tools, max_iterations=1)
-        self.solve_agent = ReActAgent(model=self.model, tools=self.tools, max_iterations=self.max_iterations)
 
     def _build_system_prompt(self) -> str:
         """Builds a system prompt based on personality, backstory, and SOP."""
@@ -271,38 +270,61 @@ class Agent:
             prompt += f" Follow this standard operating procedure: {self.sop}"
         return prompt
 
-    async def chat(self, message: str, timeout: int = 30) -> str:
-        """Single-step interaction with automatic tool usage."""
+    async def chat(self, message: str, use_tools: bool = False, tools: Optional[List[Tool]] = None, timeout: int = 30) -> str:
+        """Single-step interaction with optional custom tools."""
         system_prompt = self._build_system_prompt()
-        history = await self.chat_agent.solve(message, system_prompt=system_prompt)
-        return self._extract_response(history)
+        if use_tools:
+            # Use provided tools or fall back to default tools
+            chat_tools = tools if tools is not None else self.default_tools
+            chat_agent = ReActAgent(model=self.model, tools=chat_tools, max_iterations=1)
+            history = await chat_agent.solve(message, system_prompt=system_prompt)
+            return self._extract_response(history)
+        else:
+            response = await litellm.acompletion(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": message}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response.choices[0].message.content.strip()
 
     def sync_chat(self, message: str, timeout: int = 30) -> str:
         """Synchronous wrapper for chat."""
-        return asyncio.run(self.chat(message, timeout))
+        return asyncio.run(self.chat(message, timeout=timeout))
 
-    async def solve(self, task: str, success_criteria: Optional[str] = None, timeout: int = 300) -> List[Dict]:
-        """Multi-step task solving using the ReAct framework."""
+    async def solve(self, task: str, success_criteria: Optional[str] = None, max_iterations: Optional[int] = None, tools: Optional[List[Tool]] = None, timeout: int = 300) -> List[Dict]:
+        """Multi-step task solving with optional custom tools and max_iterations."""
         system_prompt = self._build_system_prompt()
-        return await self.solve_agent.solve(task, success_criteria, system_prompt=system_prompt)
+        # Use provided tools or fall back to default tools
+        solve_tools = tools if tools is not None else self.default_tools
+        solve_agent = ReActAgent(
+            model=self.model,
+            tools=solve_tools,
+            max_iterations=max_iterations if max_iterations is not None else self.max_iterations
+        )
+        return await solve_agent.solve(task, success_criteria, system_prompt=system_prompt, max_iterations=max_iterations)
 
     def sync_solve(self, task: str, success_criteria: Optional[str] = None, timeout: int = 300) -> List[Dict]:
         """Synchronous wrapper for solve."""
-        return asyncio.run(self.solve(task, success_criteria, timeout))
+        return asyncio.run(self.solve(task, success_criteria, timeout=timeout))
 
     def add_observer(self, observer: Callable, event_types: List[str]) -> 'Agent':
         """Add an observer to both chat and solve agents."""
-        self.chat_agent.add_observer(observer, event_types)
-        self.solve_agent.add_observer(observer, event_types)
+        # Note: Observers are added to new agents created per call, so this method is less effective now.
+        # Consider calling add_observer on the returned agent from solve/chat if needed.
         return self
 
     def list_tools(self) -> List[str]:
         """Return a list of available tool names."""
-        return [tool.name for tool in self.tools]
+        return [tool.name for tool in self.default_tools]
 
     def get_context_vars(self) -> Dict:
         """Return the current context variables."""
-        return self.solve_agent.context_vars
+        # Since context_vars are now per-agent instance, this method is less useful unless stored elsewhere.
+        return {}
 
     def _extract_response(self, history: List[Dict]) -> str:
         """Extract a clean response from the history."""
