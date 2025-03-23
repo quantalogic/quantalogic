@@ -2,7 +2,6 @@ import asyncio
 import time
 from typing import Callable, Dict, List, Optional, Tuple
 
-import litellm
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from lxml import etree
@@ -35,7 +34,8 @@ async def generate_program(
     model: str,
     max_tokens: int,
     step: int,
-    notify_event: Callable
+    notify_event: Callable,
+    streaming: bool = False  # New parameter for streaming
 ) -> str:
     """Generate a Python program using the specified model with streaming support."""
     tool_docstrings = "\n\n".join(tool.to_docstring() for tool in tools)
@@ -54,7 +54,7 @@ async def generate_program(
                 ],
                 max_tokens=max_tokens,
                 temperature=0.3,
-                stream=True,  # Enable streaming for real-time token events
+                stream=streaming,  # Use streaming flag
                 step=step,
                 notify_event=notify_event
             )
@@ -79,7 +79,8 @@ class Reasoner:
         step: int,
         max_iterations: int,
         system_prompt: Optional[str] = None,
-        notify_event: Callable = None
+        notify_event: Callable = None,
+        streaming: bool = False  # New parameter for streaming
     ) -> str:
         """Generate an action based on task and history with streaming support."""
         try:
@@ -89,7 +90,7 @@ class Reasoner:
                 current_step=step,
                 max_iterations=max_iterations
             )
-            program = await generate_program(task_prompt, self.tools, self.model, MAX_GENERATE_PROGRAM_TOKENS, step, notify_event)
+            program = await generate_program(task_prompt, self.tools, self.model, MAX_GENERATE_PROGRAM_TOKENS, step, notify_event, streaming=streaming)
             response = jinja_env.get_template("response_format.j2").render(
                 task=task,
                 history_str=history_str,
@@ -207,11 +208,19 @@ class ReActAgent:
             return_exceptions=True
         )
 
-    async def generate_action(self, task: str, history: List[Dict], step: int, max_iterations: int, system_prompt: Optional[str] = None) -> str:
+    async def generate_action(
+        self,
+        task: str,
+        history: List[Dict],
+        step: int,
+        max_iterations: int,
+        system_prompt: Optional[str] = None,
+        streaming: bool = False  # New parameter for streaming
+    ) -> str:
         """Generate an action using the Reasoner."""
         history_str = self._format_history(history, max_iterations)
         start = time.perf_counter()
-        response = await self.reasoner.generate_action(task, history_str, step, max_iterations, system_prompt, self._notify_observers)
+        response = await self.reasoner.generate_action(task, history_str, step, max_iterations, system_prompt, self._notify_observers, streaming=streaming)
         thought, code = XMLResultHandler.parse_response(response)
         gen_time = time.perf_counter() - start
         await self._notify_observers(ThoughtGeneratedEvent(
@@ -290,7 +299,14 @@ class ReActAgent:
             return True, result_value
         return False, ""
 
-    async def solve(self, task: str, success_criteria: Optional[str] = None, system_prompt: Optional[str] = None, max_iterations: Optional[int] = None) -> List[Dict]:
+    async def solve(
+        self,
+        task: str,
+        success_criteria: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+        max_iterations: Optional[int] = None,
+        streaming: bool = False  # New parameter for streaming
+    ) -> List[Dict]:
         """Solve a task using the ReAct framework."""
         max_iters = max_iterations if max_iterations is not None else self.max_iterations
         history = []
@@ -300,7 +316,7 @@ class ReActAgent:
         for step in range(1, max_iters + 1):
             await self._notify_observers(StepStartedEvent(event_type="StepStarted", step_number=step))
             try:
-                response = await self.generate_action(task, history, step, max_iters, system_prompt)
+                response = await self.generate_action(task, history, step, max_iters, system_prompt, streaming=streaming)
                 thought, code = XMLResultHandler.parse_response(response)
                 result = await self.execute_action(code, step)
                 step_data = {"step_number": step, "thought": thought, "action": code, "result": result}
@@ -369,8 +385,17 @@ class Agent:
             prompt += f" Follow this standard operating procedure: {self.sop}"
         return prompt
 
-    async def chat(self, message: str, use_tools: bool = False, tools: Optional[List[Tool]] = None, timeout: int = 30, max_tokens: int = MAX_TOKENS, temperature: float = 0.7) -> str:
-        """Single-step interaction with optional custom tools."""
+    async def chat(
+        self,
+        message: str,
+        use_tools: bool = False,
+        tools: Optional[List[Tool]] = None,
+        timeout: int = 30,
+        max_tokens: int = MAX_TOKENS,
+        temperature: float = 0.7,
+        streaming: bool = False  # New parameter for streaming
+    ) -> str:
+        """Single-step interaction with optional custom tools and streaming."""
         system_prompt = self._build_system_prompt()
         if use_tools:
             # Use provided tools or fall back to default tools, adding RetrieveStepTool
@@ -380,7 +405,7 @@ class Agent:
             chat_agent.executor.tools.append(RetrieveStepTool(chat_agent.history_store))
             for observer, event_types in self._observers:
                 chat_agent.add_observer(observer, event_types)
-            history = await chat_agent.solve(message, system_prompt=system_prompt)
+            history = await chat_agent.solve(message, system_prompt=system_prompt, streaming=streaming)
             return self._extract_response(history)
         else:
             response = await litellm_completion(
@@ -391,7 +416,8 @@ class Agent:
                 ],
                 max_tokens=max_tokens,
                 temperature=temperature,
-                stream=False  # Non-streaming for simple chat
+                stream=streaming,  # Use streaming flag
+                notify_event=self._notify_observers if streaming else None
             )
             return response.strip()
 
@@ -399,8 +425,16 @@ class Agent:
         """Synchronous wrapper for chat."""
         return asyncio.run(self.chat(message, timeout=timeout))
 
-    async def solve(self, task: str, success_criteria: Optional[str] = None, max_iterations: Optional[int] = None, tools: Optional[List[Tool]] = None, timeout: int = 300) -> List[Dict]:
-        """Multi-step task solving with optional custom tools and max_iterations."""
+    async def solve(
+        self,
+        task: str,
+        success_criteria: Optional[str] = None,
+        max_iterations: Optional[int] = None,
+        tools: Optional[List[Tool]] = None,
+        timeout: int = 300,
+        streaming: bool = False  # New parameter for streaming
+    ) -> List[Dict]:
+        """Multi-step task solving with optional custom tools, max_iterations, and streaming."""
         system_prompt = self._build_system_prompt()
         # Use provided tools or fall back to default tools
         solve_tools = tools if tools is not None else self.default_tools
@@ -415,8 +449,8 @@ class Agent:
         for observer, event_types in self._observers:
             solve_agent.add_observer(observer, event_types)
         
-        # Execute the task and get the history
-        history = await solve_agent.solve(task, success_criteria, system_prompt=system_prompt, max_iterations=max_iterations)
+        # Execute the task and get the history with streaming support
+        history = await solve_agent.solve(task, success_criteria, system_prompt=system_prompt, max_iterations=max_iterations, streaming=streaming)
         
         # Store a copy of the final context_vars
         self.last_solve_context_vars = solve_agent.context_vars.copy()
@@ -455,3 +489,10 @@ class Agent:
                 return f"Error: {root.findtext('Value') or 'Unknown error'}"
         except etree.XMLSyntaxError:
             return last_result
+
+    async def _notify_observers(self, event):
+        """Notify all subscribed observers of an event."""
+        await asyncio.gather(
+            *(observer(event) for observer, types in self._observers if event.event_type in types),
+            return_exceptions=True
+        )
