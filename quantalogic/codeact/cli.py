@@ -9,6 +9,7 @@ from quantalogic.tools import create_tool
 from .agent import (
     ActionExecutedEvent,
     ActionGeneratedEvent,
+    Agent,  # Import the new high-level Agent class
     ErrorOccurredEvent,
     ReActAgent,
     StepCompletedEvent,
@@ -78,9 +79,12 @@ async def run_react_agent(
     model: str,
     max_iterations: int,
     success_criteria: Optional[str] = None,
-    tools: Optional[List[Union[Tool, Callable]]] = None
+    tools: Optional[List[Union[Tool, Callable]]] = None,
+    personality: Optional[str] = None,
+    backstory: Optional[str] = None,
+    sop: Optional[str] = None
 ) -> None:
-    """Run the ReActAgent with detailed event monitoring using Pydantic-based events."""
+    """Run the Agent with detailed event monitoring using Pydantic-based events."""
     tools = tools if tools is not None else get_default_tools(model)
     
     processed_tools = []
@@ -93,7 +97,15 @@ async def run_react_agent(
             logger.warning(f"Invalid tool type: {type(tool)}. Skipping.")
             typer.echo(typer.style(f"Warning: Invalid tool type {type(tool)} skipped.", fg=typer.colors.YELLOW))
 
-    agent = ReActAgent(model=model, tools=processed_tools, max_iterations=max_iterations)
+    # Use the new Agent class instead of ReActAgent directly
+    agent = Agent(
+        model=model,
+        tools=processed_tools,
+        max_iterations=max_iterations,
+        personality=personality,
+        backstory=backstory,
+        sop=sop
+    )
     
     # Subscribe the observer to all event types
     event_types = [
@@ -126,10 +138,13 @@ def react(
     model: str = typer.Option(DEFAULT_MODEL, help="The litellm model to use"),
     max_iterations: int = typer.Option(5, help="Maximum reasoning steps"),
     success_criteria: Optional[str] = typer.Option(None, help="Optional criteria to determine task completion"),
+    personality: Optional[str] = typer.Option(None, help="Agent personality (e.g., 'witty')"),
+    backstory: Optional[str] = typer.Option(None, help="Agent backstory"),
+    sop: Optional[str] = typer.Option(None, help="Standard operating procedure")
 ) -> None:
-    """CLI command to run the ReActAgent with detailed event monitoring."""
+    """CLI command to run the Agent with detailed event monitoring."""
     try:
-        asyncio.run(run_react_agent(task, model, max_iterations, success_criteria))
+        asyncio.run(run_react_agent(task, model, max_iterations, success_criteria, personality=personality, backstory=backstory, sop=sop))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
         typer.echo(typer.style(f"Error: {e}", fg=typer.colors.RED))
