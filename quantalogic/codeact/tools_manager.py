@@ -87,6 +87,33 @@ class AgentTool(Tool):
             )
             return response.choices[0].message.content.strip()
 
+class RetrieveStepTool(Tool):
+    """Tool to retrieve information from a specific previous step."""
+    def __init__(self, history_store: List[dict]):
+        super().__init__(
+            name="retrieve_step",
+            description="Retrieve the thought, action, and result from a specific step.",
+            arguments=[
+                ToolArgument(name="step_number", arg_type="int", 
+                            description="The step number to retrieve (1-based)", required=True)
+            ],
+            return_type="string"
+        )
+        self.history_store = history_store
+
+    @log_tool_method
+    async def async_execute(self, **kwargs) -> str:
+        step_number = kwargs["step_number"]
+        if step_number < 1 or step_number > len(self.history_store):
+            return f"Error: Step {step_number} does not exist."
+        step = self.history_store[step_number - 1]
+        return (
+            f"Step {step_number}:\n"
+            f"Thought: {step['thought']}\n"
+            f"Action: {step['action']}\n"
+            f"Result: {step['result']}"
+        )
+
 def get_default_tools(model: str) -> List[Tool]:
     """Return list of default tools."""
     return [

@@ -12,10 +12,13 @@ from .agent import (
     Agent,
     ErrorOccurredEvent,
     StepCompletedEvent,
+    StepStartedEvent,
     TaskCompletedEvent,
     TaskStartedEvent,
     ThoughtGeneratedEvent,
-    StepStartedEvent,
+    ToolExecutionStartedEvent,
+    ToolExecutionCompletedEvent,
+    ToolExecutionErrorEvent,
 )
 from .constants import DEFAULT_MODEL, LOG_FILE
 from .tools_manager import Tool, get_default_tools
@@ -73,6 +76,18 @@ class ProgressMonitor:
         typer.echo(typer.style(f"Starting Step {event.step_number}", fg=typer.colors.YELLOW, bold=True))
         typer.echo("-" * 50)
 
+    async def on_tool_execution_started(self, event: ToolExecutionStartedEvent):
+        typer.echo(typer.style(f"Tool {event.tool_name} started execution at step {event.step_number}", fg=typer.colors.CYAN))
+        typer.echo(f"Parameters: {event.parameters_summary}")
+
+    async def on_tool_execution_completed(self, event: ToolExecutionCompletedEvent):
+        typer.echo(typer.style(f"Tool {event.tool_name} completed execution at step {event.step_number}", fg=typer.colors.GREEN))
+        typer.echo(f"Result: {event.result_summary}")
+
+    async def on_tool_execution_error(self, event: ToolExecutionErrorEvent):
+        typer.echo(typer.style(f"Tool {event.tool_name} encountered an error at step {event.step_number}", fg=typer.colors.RED))
+        typer.echo(f"Error: {event.error}")
+
     async def __call__(self, event):
         """Dispatch events to their respective handlers."""
         if isinstance(event, TaskStartedEvent):
@@ -91,6 +106,12 @@ class ProgressMonitor:
             await self.on_task_completed(event)
         elif isinstance(event, StepStartedEvent):
             await self.on_step_started(event)
+        elif isinstance(event, ToolExecutionStartedEvent):
+            await self.on_tool_execution_started(event)
+        elif isinstance(event, ToolExecutionCompletedEvent):
+            await self.on_tool_execution_completed(event)
+        elif isinstance(event, ToolExecutionErrorEvent):
+            await self.on_tool_execution_error(event)
 
 async def run_react_agent(
     task: str,
@@ -136,7 +157,8 @@ async def run_react_agent(
     solve_agent = agent  # Store reference to add observer
     solve_agent.add_observer(progress_monitor, [
         "TaskStarted", "ThoughtGenerated", "ActionGenerated", "ActionExecuted",
-        "StepCompleted", "ErrorOccurred", "TaskCompleted", "StepStarted"
+        "StepCompleted", "ErrorOccurred", "TaskCompleted", "StepStarted",
+        "ToolExecutionStarted", "ToolExecutionCompleted", "ToolExecutionError"
     ])
     
     typer.echo(typer.style(f"Starting task: {task}", fg=typer.colors.GREEN, bold=True))

@@ -1,27 +1,30 @@
 import asyncio
 import time
-from functools import partial
 from typing import Callable, Dict, List, Optional, Tuple
 
 import litellm
 from jinja2 import Environment, FileSystemLoader
+from loguru import logger
 from lxml import etree
 
 from quantalogic.python_interpreter import execute_async
 from quantalogic.tools import Tool
 
-from .constants import MAX_TOKENS, TEMPLATE_DIR
+from .constants import MAX_GENERATE_PROGRAM_TOKENS, MAX_HISTORY_TOKENS, MAX_TOKENS, TEMPLATE_DIR
 from .events import (
     ActionExecutedEvent,
     ActionGeneratedEvent,
     ErrorOccurredEvent,
     StepCompletedEvent,
+    StepStartedEvent,
     TaskCompletedEvent,
     TaskStartedEvent,
     ThoughtGeneratedEvent,
-    StepStartedEvent,
+    ToolExecutionCompletedEvent,
+    ToolExecutionErrorEvent,
+    ToolExecutionStartedEvent,
 )
-from .tools_manager import get_default_tools
+from .tools_manager import RetrieveStepTool, get_default_tools
 from .utils import XMLResultHandler, validate_code, validate_xml
 
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), trim_blocks=True, lstrip_blocks=True)
@@ -68,7 +71,7 @@ class Reasoner:
                 current_step=step,
                 max_iterations=max_iterations
             )
-            program = await generate_program(task_prompt, self.tools, self.model, MAX_TOKENS)
+            program = await generate_program(task_prompt, self.tools, self.model, max_tokens=MAX_GENERATE_PROGRAM_TOKENS)  
             response = jinja_env.get_template("response_format.j2").render(
                 task=task,
                 history_str=history_str,
@@ -84,27 +87,68 @@ class Reasoner:
 
 class Executor:
     """Manages action execution and context updates."""
-    def __init__(self, tools: List[Tool]):
+    def __init__(self, tools: List[Tool], notify_event: Callable):
         self.tools = tools
+        self.notify_event = notify_event  # Callback to notify observers
         self.tool_namespace = self._build_tool_namespace()
 
     def _build_tool_namespace(self) -> Dict:
-        """Build the namespace for tool execution."""
+        """Build the namespace with wrapped tool functions that trigger events."""
+        def wrap_tool(tool):
+            async def wrapped_tool(**kwargs):
+                # Get the current step from the namespace
+                current_step = self.tool_namespace.get('current_step', None)
+                # Summarize parameters to keep events lightweight
+                parameters_summary = {
+                    k: str(v)[:100] + "..." if len(str(v)) > 100 else str(v)
+                    for k, v in kwargs.items()
+                }
+                # Trigger start event
+                await self.notify_event(ToolExecutionStartedEvent(
+                    event_type="ToolExecutionStarted",
+                    step_number=current_step,
+                    tool_name=tool.name,
+                    parameters_summary=parameters_summary
+                ))
+                try:
+                    result = await tool.async_execute(**kwargs)
+                    # Summarize result
+                    result_summary = str(result)[:100] + "..." if len(str(result)) > 100 else str(result)
+                    # Trigger completion event
+                    await self.notify_event(ToolExecutionCompletedEvent(
+                        event_type="ToolExecutionCompleted",
+                        step_number=current_step,
+                        tool_name=tool.name,
+                        result_summary=result_summary
+                    ))
+                    return result
+                except Exception as e:
+                    # Trigger error event
+                    await self.notify_event(ToolExecutionErrorEvent(
+                        event_type="ToolExecutionError",
+                        step_number=current_step,
+                        tool_name=tool.name,
+                        error=str(e)
+                    ))
+                    raise
+            return wrapped_tool
+
         return {
             "asyncio": asyncio,
             "context_vars": {},  # Updated dynamically
-            **{tool.name: partial(tool.async_execute) for tool in self.tools}
+            **{tool.name: wrap_tool(tool) for tool in self.tools}
         }
 
-    async def execute_action(self, code: str, context_vars: Dict, timeout: int = 300) -> str:
-        """Execute the generated code and return the result."""
+    async def execute_action(self, code: str, context_vars: Dict, step: int, timeout: int = 300) -> str:
+        """Execute the generated code and return the result, setting the step number."""
+        self.tool_namespace["context_vars"] = context_vars
+        self.tool_namespace['current_step'] = step  # Set step for tools to access
         if not validate_code(code):
             return etree.tostring(
                 etree.Element("ExecutionResult", status="Error", message="Code lacks async main()"),
                 encoding="unicode"
             )
         
-        self.tool_namespace["context_vars"] = context_vars
         try:
             result = await execute_async(
                 code=code, timeout=timeout, entry_point="main",
@@ -124,12 +168,14 @@ class Executor:
 
 class ReActAgent:
     """Core agent implementing the ReAct framework with modular components."""
-    def __init__(self, model: str, tools: List[Tool], max_iterations: int = 5):
+    def __init__(self, model: str, tools: List[Tool], max_iterations: int = 5, max_history_tokens: int = 2000):
         self.reasoner = Reasoner(model, tools)
-        self.executor = Executor(tools)
+        self.executor = Executor(tools, notify_event=self._notify_observers)
         self.max_iterations = max_iterations
+        self.max_history_tokens = max_history_tokens  # Limit history token size
         self.context_vars: Dict = {}
         self._observers: List[Tuple[Callable, List[str]]] = []
+        self.history_store: List[Dict] = []  # Persistent storage for all steps
 
     def add_observer(self, observer: Callable, event_types: List[str]) -> 'ReActAgent':
         """Add an observer for specific event types."""
@@ -156,12 +202,14 @@ class ReActAgent:
         await self._notify_observers(ActionGeneratedEvent(
             event_type="ActionGenerated", step_number=step, action_code=code, generation_time=gen_time
         ))
+        if not response.endswith("</Code>"):
+            logger.warning(f"Response might be truncated at step {step}")
         return response
 
     async def execute_action(self, code: str, step: int, timeout: int = 300) -> str:
-        """Execute an action using the Executor."""
+        """Execute an action using the Executor, passing the step number."""
         start = time.perf_counter()
-        result_xml = await self.executor.execute_action(code, self.context_vars, timeout)
+        result_xml = await self.executor.execute_action(code, self.context_vars, step, timeout)
         execution_time = time.perf_counter() - start
         await self._notify_observers(ActionExecutedEvent(
             event_type="ActionExecuted", step_number=step, result_xml=result_xml, execution_time=execution_time
@@ -169,12 +217,20 @@ class ReActAgent:
         return result_xml
 
     def _format_history(self, history: List[Dict], max_iterations: int) -> str:
-        """Format the history for use in prompts."""
-        return "\n".join(
-            f"===== Step {i + 1} of {max_iterations} max =====\n"
-            f"Thought:\n{h['thought']}\n\nAction:\n{h['action']}\n\nResult:\n{XMLResultHandler.format_result_summary(h['result'])}"
-            for i, h in enumerate(history)
-        ) or "No previous steps"
+        """Format the history, truncating to fit within max_history_tokens."""
+        included_steps = []
+        total_tokens = 0
+        for step in reversed(history):  # Start from most recent
+            step_str = (
+                f"===== Step {step['step_number']} of {max_iterations} max =====\n"
+                f"Thought:\n{step['thought']}\n\nAction:\n{step['action']}\n\nResult:\n{XMLResultHandler.format_result_summary(step['result'])}"
+            )
+            step_tokens = len(step_str.split())  # Approximate token count
+            if total_tokens + step_tokens > self.max_history_tokens:
+                break
+            included_steps.append(step_str)
+            total_tokens += step_tokens
+        return "\n".join(reversed(included_steps)) or "No previous steps"
 
     async def is_task_complete(self, task: str, history: List[Dict], result: str, success_criteria: Optional[str]) -> Tuple[bool, str]:
         """Check if the task is complete based on the result."""
@@ -205,6 +261,7 @@ class ReActAgent:
         """Solve a task using the ReAct framework."""
         max_iters = max_iterations if max_iterations is not None else self.max_iterations
         history = []
+        self.history_store = []  # Reset for each new task
         await self._notify_observers(TaskStartedEvent(event_type="TaskStarted", task_description=task))
 
         for step in range(1, max_iters + 1):
@@ -213,7 +270,9 @@ class ReActAgent:
                 response = await self.generate_action(task, history, step, max_iters, system_prompt)
                 thought, code = XMLResultHandler.parse_response(response)
                 result = await self.execute_action(code, step)
-                history.append({"thought": thought, "action": code, "result": result})
+                step_data = {"step_number": step, "thought": thought, "action": code, "result": result}
+                history.append(step_data)
+                self.history_store.append(step_data)  # Store every step persistently
 
                 is_complete, final_answer = await self.is_task_complete(task, history, result, success_criteria)
                 if is_complete:
@@ -252,7 +311,8 @@ class Agent:
         max_iterations: int = 5,
         personality: Optional[str] = None,
         backstory: Optional[str] = None,
-        sop: Optional[str] = None
+        sop: Optional[str] = None,
+        max_history_tokens: int = MAX_HISTORY_TOKENS
     ):
         self.model = model
         self.default_tools = tools if tools is not None else get_default_tools(model)
@@ -260,6 +320,7 @@ class Agent:
         self.personality = personality
         self.backstory = backstory
         self.sop = sop
+        self.max_history_tokens = max_history_tokens
         self._observers: List[Tuple[Callable, List[str]]] = []
 
     def _build_system_prompt(self) -> str:
@@ -273,13 +334,15 @@ class Agent:
             prompt += f" Follow this standard operating procedure: {self.sop}"
         return prompt
 
-    async def chat(self, message: str, use_tools: bool = False, tools: Optional[List[Tool]] = None, timeout: int = 30) -> str:
+    async def chat(self, message: str, use_tools: bool = False, tools: Optional[List[Tool]] = None, timeout: int = 30, max_tokens: int = MAX_TOKENS, temperature: float = 0.7) -> str:
         """Single-step interaction with optional custom tools."""
         system_prompt = self._build_system_prompt()
         if use_tools:
-            # Use provided tools or fall back to default tools
+            # Use provided tools or fall back to default tools, adding RetrieveStepTool
             chat_tools = tools if tools is not None else self.default_tools
-            chat_agent = ReActAgent(model=self.model, tools=chat_tools, max_iterations=1)
+            chat_agent = ReActAgent(model=self.model, tools=chat_tools, max_iterations=1, max_history_tokens=self.max_history_tokens)
+            # Add RetrieveStepTool after instantiation
+            chat_agent.executor.tools.append(RetrieveStepTool(chat_agent.history_store))
             for observer, event_types in self._observers:
                 chat_agent.add_observer(observer, event_types)
             history = await chat_agent.solve(message, system_prompt=system_prompt)
@@ -291,8 +354,8 @@ class Agent:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": message}
                 ],
-                temperature=0.7,
-                max_tokens=1000
+                temperature=temperature,
+                max_tokens=max_tokens
             )
             return response.choices[0].message.content.strip()
 
@@ -308,8 +371,11 @@ class Agent:
         solve_agent = ReActAgent(
             model=self.model,
             tools=solve_tools,
-            max_iterations=max_iterations if max_iterations is not None else self.max_iterations
+            max_iterations=max_iterations if max_iterations is not None else self.max_iterations,
+            max_history_tokens=self.max_history_tokens
         )
+        # Add RetrieveStepTool after instantiation
+        solve_agent.executor.tools.append(RetrieveStepTool(solve_agent.history_store))
         for observer, event_types in self._observers:
             solve_agent.add_observer(observer, event_types)
         return await solve_agent.solve(task, success_criteria, system_prompt=system_prompt, max_iterations=max_iterations)
