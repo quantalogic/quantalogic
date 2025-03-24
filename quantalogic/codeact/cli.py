@@ -225,3 +225,8 @@ def react(
 
 if __name__ == "__main__":
     app()
+
+
+# Example how to use the CLI
+# python -m quantalogic.codeact.cli "Write a poem, then evaluate the quality, in French, afficher le poem et la critique. Tout doit être Français. Si le poême n'est pas de bonne qualité, ré-écrit le poême"    --streaming
+
