@@ -117,10 +117,19 @@ class RetrieveStepTool(Tool):
 def get_default_tools(model: str) -> List[Tool]:
     """Return list of default tools."""
     return [
-        EditWholeContentTool(), ExecuteBashCommandTool(), GrepAppTool(),
-        InputQuestionTool(), JinjaTool(), ListDirectoryTool(),
-        ReadFileBlockTool(), ReadFileTool(), ReadHTMLTool(),
-        ReplaceInFileTool(), RipgrepTool(), SearchDefinitionNamesTool(),
-        TaskCompleteTool(), WriteFileTool(), AgentTool(model=model),
-        add_tool, multiply_tool, concat_tool
+        #EditWholeContentTool(), 
+        #ExecuteBashCommandTool(), 
+        GrepAppTool(),
+        InputQuestionTool(), 
+        JinjaTool(), 
+        ListDirectoryTool(),
+        ReadFileBlockTool(), 
+        ReadFileTool(), 
+        ReadHTMLTool(),
+        #ReplaceInFileTool(), 
+        # RipgrepTool(), 
+        # SearchDefinitionNamesTool(),
+        #TaskCompleteTool(), 
+        WriteFileTool(), 
+        AgentTool(model=model),
     ]
