@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import timezone, datetime  # noqa: I001
 from typing import Dict, List
 
 import networkx as nx
@@ -127,7 +127,7 @@ def generate_markdown_report(
     md.append(f"**Database Type**: {db_metadata['dialect'].capitalize()}\n")
     md.append(f"**Database Name**: {db_metadata['name']}\n")
     md.append(f"**Total Tables**: {len(db_metadata['tables'])}\n")
-    md.append(f"**Generated At**: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n")
+    md.append(f"**Generated At**: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n")
 
     # ERD Section
     md.append("## Entity Relationship Diagram\n")
