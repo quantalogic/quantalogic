@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "loguru>=0.7.2",
-#     "litellm>=1.0.0",
+#     "litellm==1.61.0",
 #     "pydantic>=2.0.0",
 #     "asyncio",
 #     "jinja2>=3.1.0",
@@ -14,7 +14,8 @@
 #     "instructor>=0.5.2",
 #     "typer>=0.9.0",
 #     "rich>=13.0.0",
-#     "pyperclip>=1.8.2"
+#     "pyperclip>=1.8.2",
+#     "openai>=1.68.0"
 # ]
 # ///
 # System dependencies:
@@ -22,6 +23,7 @@
 
 import asyncio
 import os
+import subprocess
 from pathlib import Path
 from typing import Annotated, List, Optional, Union
 
@@ -36,6 +38,19 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from quantalogic.flow.flow import Nodes, Workflow
+
+
+def check_poppler():
+    """Check if Poppler is installed for PDF processing."""
+    try:
+        subprocess.run(["pdftoppm", "-v"], stdout=subprocess.DEVNULL)
+    except FileNotFoundError:
+        console.print(
+            "[bold red]Error:[/] Poppler not found. Install with: \n"
+            "  [blue]macOS:[/] brew install poppler\n"
+            "  [blue]Linux:[/] sudo apt-get install poppler-utils"
+        )
+        raise typer.Exit(1)
 
 # Initialize Typer app and rich console
 app = typer.Typer(help="Convert a file (PDF, text, or Markdown) to a LinkedIn post using LLMs")

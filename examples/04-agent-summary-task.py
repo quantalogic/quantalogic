@@ -13,14 +13,14 @@ import os
 from quantalogic import Agent
 from quantalogic.console_print_events import console_print_events
 from quantalogic.console_print_token import console_print_token
-from quantalogic.tools import LLMTool, MarkitdownTool, ReadHTMLTool
+from quantalogic.tools import LLMTool, ReadHTMLTool
 
 # MODEL_NAME = "gpt-4o-mini"
 MODEL_NAME = "openrouter/openai/gpt-4o-mini"
 
 # Verify API key is set - prevents runtime errors and ensures proper authentication
-if not os.environ.get("OPENAI_API_KEY"):
-    raise ValueError("OPENAI_API_KEY environment variable is not set")
+if not os.environ.get("OPENROUTER_API_KEY"):
+    raise ValueError("OPENROUTER_API_KEY environment variable is not set")
 
 # Initialize agent with core tools for web content processing and language operations
 # MarkitdownTool enables article analysis while LLMTool handles reasoning tasks

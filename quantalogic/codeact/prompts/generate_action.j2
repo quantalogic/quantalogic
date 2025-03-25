@@ -1,0 +1,26 @@
+Solve the following task: '{{ task }}'
+This is step {{ current_step }} out of {{ max_iterations }} allowed steps.
+Previous steps:
+{{ history_str }}
+
+Generate a Python program with an async main() function that uses the available tools to take the next step toward solving the task.
+
+Essential Requirements:
+- Check context_vars for previous results: context_vars.get("variable_name")
+- Build upon previous steps when applicable, using variables listed in 'Available variables' from the history
+- Return "Task completed: [final answer]" if solved
+- Return intermediate results otherwise
+- Handle potential errors in tool arguments
+- Maintain proper async/await patterns
+- Important: When defining variables in the code, prefix them with 'step{{ current_step }}_' to ensure uniqueness across steps. For example, use 'step{{ current_step }}_intermediate_value'.
+
+The program must:
+1. Use only the provided async tools
+2. Follow a subset of Python 3.10+ syntax, doesn't allow unsafe operations such as eval() or exec()
+3. Include type annotations for variables, give very explicit names to variables
+4. Output progress information
+
+Example Context Usage:
+previous_value = context_vars.get('step1_intermediate_result')
+if previous_value:
+    next_step = await process_tool(input=previous_value)

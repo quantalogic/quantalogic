@@ -7,7 +7,7 @@ from quantalogic.agent_config import (
     DuckDuckGoSearchTool,
     NodeJsTool,
     PythonTool,
-    SearchDefinitionNames,
+    SearchDefinitionNamesTool,
     TaskCompleteTool,
     WikipediaSearchTool,
     create_basic_agent,
@@ -107,7 +107,7 @@ def create_agent_for_mode(
             if tool_mode == "search":
                 tools.extend([DuckDuckGoSearchTool(), WikipediaSearchTool()])
             elif tool_mode == "code":
-                tools.extend([PythonTool(), NodeJsTool(), SearchDefinitionNames()])
+                tools.extend([PythonTool(), NodeJsTool(), SearchDefinitionNamesTool()])
             elif tool_mode in [t.name for t in tools]:  # Specific tool name
                 tools = [t for t in tools if t.name == tool_mode or isinstance(t, TaskCompleteTool)]
             else:
