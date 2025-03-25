@@ -33,6 +33,7 @@ class DuckDuckGoSearchTool(Tool):
     """
 
     name: str = "duckduckgo_tool"
+    need_post_process: bool = False
     description: str = "Retrieves search results from DuckDuckGo. " "Provides structured output of search results."
     arguments: list = [
         ToolArgument(

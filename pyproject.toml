@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic"
-version = "0.59.3"
+version = "0.59.4"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
@@ -99,6 +99,18 @@ llama-index-embeddings-bedrock = "^0.5.0"
 llama-index-vector-stores-chroma = "^0.4.1"
 llama-index-vector-stores-faiss = "^0.3.0"
 llmlingua = "^0.2.2"
+uvicorn = "^0.34.0"
+fastapi = "^0.115.11"
+python-multipart = "^0.0.20"
+gnews = "^0.4.0"
+google-generativeai = "^0.8.4"
+google-genai = "^1.5.0"
+rank-bm25 = "^0.2.2"
+scikit-learn = "^1.6.1"
+numpy = "^2.2.4"
+selenium = "^4.29.0"
+webdriver-manager = "^4.0.2"
+asciinema = "^2.4.0"
 
 [tool.poetry.group.web-tools]
 optional = true
@@ -189,7 +201,7 @@ preview = true
 [tool.pytest.ini_options]
 addopts = "-v"
 markers = [
-    "integration: marks integration tests that require external services",
-    "unit: marks unit tests"
+"integration: marks integration tests that require external services",
+"unit: marks unit tests"
 ]
 testpaths = ["tests"]

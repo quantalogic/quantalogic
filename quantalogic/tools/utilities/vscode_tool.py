@@ -15,7 +15,7 @@ class VSCodeServerTool(Tool):
 
     name: str = "vscode_tool"
     description: str = "Launches a VS Code Server instance for remote development."
-    need_validation: bool = True
+    need_validation: bool = False
     arguments: list = [
         ToolArgument(
             name="workspace_path",
