@@ -333,7 +333,7 @@ The **Flow module** is your architect—building workflows that hum with precisi
 
 🔍 **Want to dive deeper?** Check out our comprehensive [Workflow YAML DSL Specification](./quantalogic/flow/flow_yaml.md), a detailed guide that walks you through defining powerful, structured workflows. From basic node configurations to complex transition logic, this documentation is your roadmap to mastering workflow design with QuantaLogic.
 
-📚 **For a deeper understanding of Flow YAML and its applications, please refer to the official [Flow YAML Documentation](https://quantalogic.github.io/quantalogic/flow/flow_yaml).**
+📚 **For a deeper understanding of Flow YAML and its applications, please refer to the official [Flow YAMAL Documentation](./quantalogic/flow/flow_yaml.md).**
 
 The Flow YAML documentation provides a comprehensive overview of the Flow YAML language, including its syntax, features, and best practices. It's a valuable resource for anyone looking to create complex workflows with QuantaLogic.
 
