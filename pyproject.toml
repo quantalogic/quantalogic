@@ -49,6 +49,7 @@ boto3 = "^1.34.0"
 botocore = "^1.29.123"
 psutil = "^7.0.0"
 openai = "^1.68.0"
+aiofiles = "^24.1.0"
 
 [tool.poetry.group.file-tools]
 optional = false
