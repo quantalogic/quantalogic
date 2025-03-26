@@ -10,7 +10,7 @@ packages = [{include = "quantalogic"}]
 [tool.poetry.dependencies]
 python = "<4.0,>=3.10"
 pydantic = "^2.10.4"
-litellm = "^1.59.0"
+litellm = "^1.63.14"
 rich = "^13.9.4"
 loguru = "^0.7.3"
 tenacity = "^9.0.0"
@@ -163,7 +163,7 @@ optional = false
 ruff = "^0.8.4"
 pytest = "^8.2.0"
 pytest-mock = "^3.14.0"
-litellm = "^1.55.9"
+litellm = "^1.63.14"
 ollama = "^0.4.4"
 
 # Scripts for CLI and documentation
