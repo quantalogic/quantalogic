@@ -65,7 +65,7 @@ def create_coding_agent(
         # Core file manipulation tools
         TaskCompleteTool(),  # Marks task completion
         ReadFileBlockTool(),  # Reads specific file sections
-        WriteFileTool(),  # Creates new files
+        WriteFileTool(disable_ensure_tmp_path=True),  # Creates new files
         ReplaceInFileTool(),  # Updates file sections
         EditWholeContentTool(),  # Modifies entire files
         # Code navigation and search tools

@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 
 from loguru import logger
+from pydantic import Field
+
 from quantalogic.tools.tool import Tool, ToolArgument
 
 
@@ -13,41 +15,45 @@ class WriteFileTool(Tool):
     name: str = "write_file_tool"
     description: str = "Writes a file with the given content in /tmp directory. The tool will fail if the file already exists when not used in append mode."
     need_validation: bool = True
-    arguments: list = [
-        ToolArgument(
-            name="file_path",
-            arg_type="string",
-            description="The name of the file to write in /tmp directory. Can include subdirectories within /tmp.",
-            required=True,
-            example="/tmp/myfile.txt or myfile.txt",
-        ),
-        ToolArgument(
-            name="content",
-            arg_type="string",
-            description="""
-            The content to write to the file. Use CDATA to escape special characters.
-            Don't add newlines at the beginning or end of the content.
-            """,
-            required=True,
-            example="Hello, world!",
-        ),
-        ToolArgument(
-            name="append_mode",
-            arg_type="string",
-            description="""Append mode. If true, the content will be appended to the end of the file.
-            """,
-            required=False,
-            example="False",
-        ),
-        ToolArgument(
-            name="overwrite",
-            arg_type="string",
-            description="Overwrite mode. If true, existing files can be overwritten. Defaults to False.",
-            required=False,
-            example="False",
-            default="False",
-        ),
-    ]
+
+    disable_ensure_tmp_path: bool = Field(default=False)
+
+    arguments: list = Field(
+        default=[
+            ToolArgument(
+                name="file_path",
+                arg_type="string",
+                description="The path to the file to write. By default, paths will be forced to /tmp directory unless disable_ensure_tmp_path is enabled. Can include subdirectories.",
+                required=True,
+                example="/tmp/myfile.txt or myfile.txt",
+            ),
+            ToolArgument(
+                name="content",
+                arg_type="string",
+                description="""The content to write to the file. Use CDATA to escape special characters.
+                Don't add newlines at the beginning or end of the content.
+                """,
+                required=True,
+                example="Hello, world!",
+            ),
+            ToolArgument(
+                name="append_mode",
+                arg_type="string",
+                description="""Append mode. If true, the content will be appended to the end of the file.
+                """,
+                required=False,
+                example="False",
+            ),
+            ToolArgument(
+                name="overwrite",
+                arg_type="string",
+                description="Overwrite mode. If true, existing files can be overwritten. Defaults to False.",
+                required=False,
+                example="False",
+                default="False",
+            ),
+        ],
+    )
 
     def _ensure_tmp_path(self, file_path: str) -> str:
         """Ensures the file path is within /tmp directory.
@@ -99,7 +105,8 @@ class WriteFileTool(Tool):
             overwrite_bool = overwrite.lower() in ["true", "1", "yes"]
 
             # Ensure path is in /tmp and normalize it
-            file_path = self._ensure_tmp_path(file_path)
+            if not self.disable_ensure_tmp_path:
+                file_path = self._ensure_tmp_path(file_path)
 
             # Ensure parent directory exists (only within /tmp)
             parent_dir = os.path.dirname(file_path)

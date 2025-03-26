@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic"
-version = "0.61.1"
+version = "0.61.2"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
