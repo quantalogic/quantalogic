@@ -98,6 +98,15 @@ class AgentState:
             "memory_compacted",
             "memory_summary",
             "error_agent_not_found",
+            "node_started",
+            "node_completed",
+            "node_failed",
+            "transition_evaluated",
+            "workflow_started",
+            "workflow_completed",
+            "sub_workflow_entered",
+            "sub_workflow_exited",
+            "streaming_chunk",
         ]
 
     async def create_agent(self, config: AgentConfig) -> bool:
@@ -138,7 +147,8 @@ class AgentState:
                 no_stream=False,
                 tools=tools_dict,
                 specific_expertise=config.expertise,
-                memory=AgentMemory()
+                memory=AgentMemory(),
+                agent_mode=config.agent_mode
             )
              
             # Override ask_for_user_validation with SSE-based method 
@@ -858,3 +868,6 @@ class AgentState:
             self.agent = None
             if server_state.force_exit:
                 sys.exit(1)
+
+            # Import the tutorial generation module
+            from quantalogic.flows.create_tutorial import generate_tutorial

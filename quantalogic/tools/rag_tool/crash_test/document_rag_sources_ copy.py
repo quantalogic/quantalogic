@@ -38,7 +38,6 @@ from quantalogic.tools.rag_tool.ocr_pdf_markdown import PDFToMarkdownConverter
 from rank_bm25 import BM25Okapi
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
-from huggingface_hub import login
 
 # Configure tool-specific logging
 logger.remove()
@@ -48,56 +47,18 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>"
 )
 
-# Login to Hugging Face
-hf_token = os.getenv("HUGGING_FACE_API_KEY")
-if hf_token:
-    try:
-        login(token=hf_token)
-        logger.info("Successfully logged in to Hugging Face")
-    except Exception as e:
-        logger.error(f"Failed to login to Hugging Face: {e}")
-else:
-    logger.warning("No Hugging Face API token found in environment variables")
-
-@dataclass
-class LegalContext:
-    """Structured information about a legal document."""
-    document_type: Optional[str] = None
-    jurisdiction: Optional[str] = None
-    court_level: Optional[str] = None
-    decision_date: Optional[str] = None
-    key_concepts: Optional[List[str]] = None
-    temporal_info: Optional[Dict[str, Any]] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for storage."""
-        return {
-            "document_type": self.document_type,
-            "jurisdiction": self.jurisdiction,
-            "court_level": self.court_level,
-            "decision_date": self.decision_date,
-            "key_concepts": self.key_concepts,
-            "temporal_info": self.temporal_info
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'LegalContext':
-        """Create from dictionary."""
-        return cls(**data)
-
 @dataclass
 class LawSource:
-    """Structured representation of a law source with enhanced legal context."""
+    """Structured representation of a law source."""
     content: str
     file_name: str
     page_number: str
     reference_number: Optional[str] = None
     score: Optional[float] = None
-    legal_context: Optional[LegalContext] = None
 
 @dataclass
 class SearchResult:
-    """Represents a single search result with combined scores and legal context."""
+    """Represents a single search result with combined scores."""
     content: str
     file_name: str
     page_number: str
@@ -106,44 +67,6 @@ class SearchResult:
     embedding_score: float = 0.0
     combined_score: float = 0.0
     metadata: Dict[str, Any] = None
-    legal_context: Optional[LegalContext] = None
-
-class LegalTextSplitter(SentenceSplitter):
-    """Custom text splitter for legal documents that respects legal document structure."""
-    
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 50):
-        super().__init__(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            paragraph_separator="\n\n"
-        )
-        
-    def split_text(self, text: str) -> List[str]:
-        """Split text while preserving legal document structure."""
-        # First split by major legal sections
-        sections = []
-        current_section = []
-        
-        for line in text.split('\n'):
-            line = line.strip()
-            # Check for legal section markers
-            if any(marker in line.lower() for marker in ['article', 'section', '§', 'chapitre']):
-                if current_section:
-                    sections.append('\n'.join(current_section))
-                current_section = [line]
-            else:
-                current_section.append(line)
-        
-        if current_section:
-            sections.append('\n'.join(current_section))
-        
-        # Then apply sentence splitting to each section
-        chunks = []
-        for section in sections:
-            section_chunks = super().split_text(section)
-            chunks.extend(section_chunks)
-        
-        return chunks
 
 class RagToolHf_(Tool):
     """Enhanced RAG tool specialized for law source retrieval."""
@@ -178,86 +101,37 @@ class RagToolHf_(Tool):
         chunk_size: int = 512,
         chunk_overlap: int = 50,
         use_ocr_for_pdfs: bool = False,
-        ocr_model: str = "openai/gpt-4o-mini",
-        embed_model: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
-        force_reindex: bool = False,
-        legal_context_model: str = "nlpaueb/legal-bert-base-uncased",
-        jurisdiction_model: str = "sentence-transformers/all-MiniLM-L6-v2",
-        reranking_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        ocr_model: str = "openai/gpt-4o-mini", # "gemini/gemini-2.0-flash",
+        embed_model: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2" # "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     ):
-        """Initialize the multilingual RAG tool.
-        
-        Args:
-            force_reindex: If True, forces reindexing even if embeddings exist
-        """
+        """Initialize the multilingual RAG tool."""
         super().__init__()
         self.name = name
         self.persist_dir = os.path.abspath(persist_dir)
         self.use_ocr_for_pdfs = use_ocr_for_pdfs
         self.ocr_model = ocr_model
-        self.force_reindex = force_reindex  # Store force_reindex as instance attribute
         
-        # Check if we need to reindex
+        # Clean up existing index if embedding model changed
         chroma_persist_dir = os.path.join(self.persist_dir, "chroma")
-        embedding_config_path = os.path.join(self.persist_dir, "embedding_config.json")
-        needs_reindex = False
-
-        if os.path.exists(embedding_config_path):
-            try:
-                with open(embedding_config_path, 'r') as f:
-                    config = json.load(f)
-                if config.get('embed_model') != embed_model:
-                    logger.info(f"Embedding model changed from {config.get('embed_model')} to {embed_model}")
-                    needs_reindex = True
-            except Exception as e:
-                logger.warning(f"Failed to read embedding config: {e}")
-                needs_reindex = True
-        else:
-            needs_reindex = True
-
-        # Clean up only if needed
-        if (needs_reindex or force_reindex) and os.path.exists(chroma_persist_dir):
-            logger.info("Cleaning up existing index due to model change or forced reindex")
+        if os.path.exists(chroma_persist_dir):
             shutil.rmtree(chroma_persist_dir)
-            
-            # Save new embedding configuration
-            os.makedirs(os.path.dirname(embedding_config_path), exist_ok=True)
-            with open(embedding_config_path, 'w') as f:
-                json.dump({'embed_model': embed_model}, f)
+            logger.info("Cleaned up existing index due to embedding model change")
 
-        # Initialize embedding model with error handling
-        try:
-            self.embed_model = HuggingFaceEmbedding(
-                model_name=embed_model,
-                embed_batch_size=8
-            )
-            logger.info(f"Successfully initialized embedding model: {embed_model}")
-        except Exception as e:
-            logger.error(f"Failed to initialize embedding model: {e}")
-            raise
-
-        # Initialize legal context models with error handling
-        try:
-            self.legal_context_model = SentenceTransformer(legal_context_model)
-            self.jurisdiction_model = SentenceTransformer(jurisdiction_model)
-            self.reranking_model = SentenceTransformer(reranking_model)
-            logger.info(f"Successfully initialized legal models")
-        except Exception as e:
-            logger.error(f"Failed to initialize legal models: {e}")
-            raise
+        # Use paraphrase-multilingual-mpnet-base-v2 for better multilingual understanding
+        self.embed_model = HuggingFaceEmbedding(
+            model_name=embed_model,
+            embed_batch_size=8  # Smaller batch size for better memory usage
+        )
         
         # Configure ChromaDB
-        try:
-            os.makedirs(chroma_persist_dir, exist_ok=True)
-            chroma_client = chromadb.PersistentClient(path=chroma_persist_dir)
-            collection = chroma_client.create_collection(
-                name="multilingual_collection",
-                get_or_create=True
-            )
-            logger.info("Successfully initialized ChromaDB collection")
-        except Exception as e:
-            logger.error(f"Failed to initialize ChromaDB: {e}")
-            raise
+        chroma_persist_dir = os.path.join(self.persist_dir, "chroma")
+        os.makedirs(chroma_persist_dir, exist_ok=True)
+        
+        chroma_client = chromadb.PersistentClient(path=chroma_persist_dir)
+        collection = chroma_client.create_collection(
+            name="multilingual_collection",
+            get_or_create=True
+        )
         
         self.vector_store = ChromaVectorStore(chroma_collection=collection)
         
@@ -265,14 +139,16 @@ class RagToolHf_(Tool):
         Settings.embed_model = self.embed_model
         Settings.chunk_size = chunk_size
         Settings.chunk_overlap = chunk_overlap
-        Settings.num_output = 1024
+        Settings.num_output = 1024  # Increased output length
         
         self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
         
-        # Initialize text splitter with legal document awareness
-        self.text_splitter = LegalTextSplitter(
+        # Initialize text splitter with better PDF handling
+        self.text_splitter = SentenceSplitter(
             chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap
+            chunk_overlap=chunk_overlap,
+            paragraph_separator="\n\n",
+            tokenizer=lambda x: x.replace("\n", " ").split(" ")  # Better handling of PDF line breaks
         )
         
         # Initialize or load index
@@ -402,7 +278,7 @@ class RagToolHf_(Tool):
         return None
 
     def _create_index(self, document_paths: List[str]) -> Optional[VectorStoreIndex]:
-        """Create a new index from documents with legal context."""
+        """Create a new index from documents."""
         try:
             all_documents = self._load_documents(document_paths)
 
@@ -410,143 +286,32 @@ class RagToolHf_(Tool):
                 logger.warning("No valid documents found")
                 return None
 
-            # Process documents with legal context
-            enhanced_documents = []
+            total_chunks = 0
             for doc in all_documents:
-                # Generate legal context
-                legal_context = self._generate_legal_context(doc.text)
-                
-                # Convert LegalContext to JSON string for ChromaDB storage
-                metadata = {
-                    "source": doc.metadata.get("source", ""),
-                    "legal_context": json.dumps(legal_context.to_dict()) if legal_context else None
-                }
-                
-                enhanced_doc = Document(
-                    text=doc.text,
-                    metadata=metadata
-                )
-                enhanced_documents.append(enhanced_doc)
+                chunks = self.text_splitter.split_text(doc.text)
+                total_chunks += len(chunks)
+                logger.debug(f"Created {len(chunks)} chunks from document {doc.metadata.get('file_name', 'unknown')}")
+                for i, chunk in enumerate(chunks[:2]):  # Log only first 2 chunks as preview
+                    logger.debug(f"Chunk {i+1} preview ({len(chunk)} chars): {chunk[:100]}...")
 
-            logger.info(f"Created {len(enhanced_documents)} enhanced documents with legal context")
+            logger.info(f"Total chunks created: {total_chunks}")
+            logger.info("Creating vector index...")
             
-            # Create index with enhanced documents
             index = VectorStoreIndex.from_documents(
-                enhanced_documents,
+                all_documents,
                 storage_context=self.storage_context,
                 transformations=[self.text_splitter],
                 show_progress=True
             )
             
             self.storage_context.persist(persist_dir=self.persist_dir)
+            logger.info(f"Created and persisted index with {len(all_documents)} documents")
+            
             return index
 
         except Exception as e:
-            logger.error(f"Error creating index with legal context: {str(e)}")
+            logger.error(f"Error creating index: {str(e)}")
             return None
-
-    def _generate_legal_context(self, text: str) -> LegalContext:
-        """Generate legal context for a text segment."""
-        try:
-            # Extract document type and jurisdiction
-            doc_type = self._detect_document_type(text)
-            jurisdiction = self._detect_jurisdiction(text)
-            
-            # Extract temporal information
-            temporal_info = self._extract_temporal_info(text)
-            
-            # Extract key legal concepts
-            legal_concepts = self._extract_legal_concepts(text)
-            
-            # Determine court level if applicable
-            court_level = self._detect_court_level(text)
-            
-            return LegalContext(
-                document_type=doc_type,
-                jurisdiction=jurisdiction,
-                court_level=court_level,
-                decision_date=temporal_info.get('decision_date'),
-                key_concepts=legal_concepts,
-                temporal_info=temporal_info
-            )
-        except Exception as e:
-            logger.error(f"Error generating legal context: {e}")
-            return None
-
-    def _detect_document_type(self, text: str) -> str:
-        """Detect the type of legal document."""
-        doc_types = {
-            'law': ['loi', 'law', 'قانون'],
-            'decree': ['décret', 'decree', 'مرسوم'],
-            'regulation': ['règlement', 'regulation', 'تنظيم'],
-            'judgment': ['jugement', 'judgment', 'حكم'],
-            'contract': ['contrat', 'contract', 'عقد']
-        }
-        
-        text_lower = text.lower()
-        for doc_type, keywords in doc_types.items():
-            if any(keyword in text_lower for keyword in keywords):
-                return doc_type
-        return 'other'
-
-    def _detect_jurisdiction(self, text: str) -> str:
-        """Detect the jurisdiction of the legal document."""
-        # Use jurisdiction model for classification
-        embeddings = self.jurisdiction_model.encode(text, convert_to_tensor=True)
-        # Add your jurisdiction classification logic here
-        return "unknown"
-
-    def _extract_temporal_info(self, text: str) -> Dict[str, Any]:
-        """Extract temporal information from the text."""
-        import re
-        from datetime import datetime
-        
-        temporal_info = {
-            'decision_date': None,
-            'effective_date': None,
-            'relevant_periods': []
-        }
-        
-        # Date patterns for different formats
-        date_patterns = [
-            r'(\d{1,2}[-/]\d{1,2}[-/]\d{4})',
-            r'(\d{4}[-/]\d{1,2}[-/]\d{1,2})',
-            r'(\d{1,2}\s+(?:janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+\d{4})'
-        ]
-        
-        for pattern in date_patterns:
-            matches = re.finditer(pattern, text)
-            for match in matches:
-                date_str = match.group(1)
-                try:
-                    # Parse and store the date
-                    date = datetime.strptime(date_str, '%Y-%m-%d')
-                    temporal_info['decision_date'] = date.isoformat()
-                    break
-                except ValueError:
-                    continue
-        
-        return temporal_info
-
-    def _extract_legal_concepts(self, text: str) -> List[str]:
-        """Extract key legal concepts from the text."""
-        # Add your legal concept extraction logic here
-        # This could use NER, keyword extraction, or a specialized model
-        return []
-
-    def _detect_court_level(self, text: str) -> Optional[str]:
-        """Detect the court level from the text."""
-        court_levels = {
-            'supreme': ['cour suprême', 'supreme court', 'المحكمة العليا'],
-            'appeal': ['cour d\'appel', 'court of appeal', 'محكمة الاستئناف'],
-            'first_instance': ['tribunal de première instance', 'court of first instance', 'محكمة ابتدائية']
-        }
-        
-        text_lower = text.lower()
-        for level, keywords in court_levels.items():
-            if any(keyword in text_lower for keyword in keywords):
-                return level
-        return None
 
     def _extract_law_reference(self, text: str) -> Optional[str]:
         """Extract law reference numbers from text."""
@@ -565,7 +330,7 @@ class RagToolHf_(Tool):
                 return match.group(1)
         return None
 
-    def execute(self, query: str, max_sources: int = 3) -> str:
+    def execute(self, query: str, max_sources: int = 5) -> str:
         """
         Execute a search for legal sources and return a JSON string of law sources.
         
@@ -603,19 +368,10 @@ class RagToolHf_(Tool):
                 # Extract reference number once to avoid duplicate processing
                 ref_number = self._extract_law_reference(node.node.text)
                 
-                # Parse legal context from JSON string
-                legal_context_str = node.metadata.get("legal_context")
-                legal_context = None
-                if legal_context_str:
-                    try:
-                        legal_context_dict = json.loads(legal_context_str)
-                        legal_context = LegalContext.from_dict(legal_context_dict)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Failed to parse legal context: {legal_context_str}")
-
                 # Create a dictionary with source information
                 source_data = {
                     'content': node.node.text.strip(),
+                    'file_path': node.node.metadata.get('file_path', ''),
                     'file_name': node.node.metadata.get('file_name', 'Unknown'),
                     'page_number': str(node.node.metadata.get('page_number', 'N/A')),
                     'reference_number': ref_number,
@@ -625,8 +381,7 @@ class RagToolHf_(Tool):
                         'processing_method': node.node.metadata.get('processing_method', 'standard'),
                         'query': query,
                         'timestamp': str(datetime.now().isoformat())
-                    },
-                    'legal_context': legal_context.to_dict() if legal_context else None
+                    }
                 }
                 processed_sources.append(source_data)
             
@@ -699,18 +454,8 @@ class RagToolHf(RagToolHf_):
         embed_model: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
         bm25_weight: float = 0.3,  # Weight for BM25 scores in hybrid ranking
         embedding_weight: float = 0.7,  # Weight for embedding scores in hybrid ranking
-        force_reindex: bool = False,
-        legal_context_model: str = "nlpaueb/legal-bert-base-uncased",
-        jurisdiction_model: str = "sentence-transformers/all-MiniLM-L6-v2",
-        reranking_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     ):
-        """Initialize the hybrid RAG tool with both BM25 and embeddings capabilities.
-        
-        Args:
-            bm25_weight: Weight for BM25 scores in hybrid ranking (0.0-1.0)
-            embedding_weight: Weight for embedding scores in hybrid ranking (0.0-1.0)
-            force_reindex: If True, forces reindexing even if embeddings exist
-        """
+        """Initialize the hybrid RAG tool with both BM25 and embeddings capabilities."""
         super().__init__(
             name=name,
             persist_dir=persist_dir,
@@ -720,52 +465,47 @@ class RagToolHf(RagToolHf_):
             use_ocr_for_pdfs=use_ocr_for_pdfs,
             ocr_model=ocr_model,
             embed_model=embed_model,
-            force_reindex=force_reindex,
-            legal_context_model=legal_context_model,
-            jurisdiction_model=jurisdiction_model,
-            reranking_model=reranking_model
         )
         
         self.bm25_weight = bm25_weight
         self.embedding_weight = embedding_weight
         
-        # Initialize BM25 index and document store
+        # Initialize BM25 index
         self.bm25_index = None
         self.document_store = []
         
-        # Build BM25 index if we have documents
+        # Initialize or build indices
         if document_paths:
             self._build_hybrid_index(document_paths)
 
     def _build_hybrid_index(self, document_paths: List[str]):
-        """Build BM25 index and optionally rebuild embedding index."""
-        # Load documents if needed
-        if not self.document_store:
-            documents = self._load_documents(document_paths)
-            
-            # Store documents and their text for BM25
-            tokenized_corpus = []
-            
-            for doc in documents:
-                # Process text for BM25
-                text = doc.text.lower()
-                tokens = text.split()
-                
-                # Store document info
-                self.document_store.append({
-                    'text': doc.text,
-                    'metadata': doc.metadata,
-                    'tokens': tokens
-                })
-                
-                tokenized_corpus.append(tokens)
-            
-            # Create BM25 index
-            self.bm25_index = BM25Okapi(tokenized_corpus)
+        """Build both BM25 and embedding indices."""
+        # Load documents
+        documents = self._load_documents(document_paths)
         
-        # Rebuild embedding index if needed
-        if not self.index:
-            self._create_index(document_paths)
+        # Store documents and their text for BM25
+        self.document_store = []
+        tokenized_corpus = []
+        
+        for doc in documents:
+            # Process text for BM25
+            text = doc.text.lower()  # Normalize text
+            tokens = text.split()  # Simple tokenization, could be enhanced
+            
+            # Store document info
+            self.document_store.append({
+                'text': doc.text,
+                'metadata': doc.metadata,
+                'tokens': tokens
+            })
+            
+            tokenized_corpus.append(tokens)
+        
+        # Create BM25 index
+        self.bm25_index = BM25Okapi(tokenized_corpus)
+        
+        # Create embedding index (using parent class method)
+        self._create_index(document_paths)
 
     def _normalize_scores(self, scores: List[float]) -> List[float]:
         """Normalize scores to range [0, 1] using min-max scaling."""
@@ -775,7 +515,7 @@ class RagToolHf(RagToolHf_):
         normalized = scaler.fit_transform(np.array(scores).reshape(-1, 1))
         return normalized.flatten().tolist()
 
-    def execute(self, query: str, max_sources: int = 3) -> str:
+    def execute(self, query: str, max_sources: int = 5) -> str:
         """Execute hybrid search combining BM25 and embedding-based retrieval."""
         try:
             if not self.index or not self.bm25_index:
@@ -835,8 +575,7 @@ class RagToolHf(RagToolHf_):
                         'processing_method': node.node.metadata.get('processing_method', 'standard'),
                         'query': query,
                         'timestamp': str(datetime.now().isoformat())
-                    },
-                    legal_context=node.node.metadata.get('legal_context')
+                    }
                 )
                 combined_results.append(result)
             
@@ -874,8 +613,7 @@ class RagToolHf(RagToolHf_):
                         'embedding_score': round(result.embedding_score, 4),
                         'combined_score': round(result.combined_score, 4)
                     },
-                    'metadata': result.metadata,
-                    'legal_context': result.legal_context
+                    'metadata': result.metadata
                 })
             
             logger.info(f"Found {len(output_results)} relevant sources using hybrid search")
@@ -893,39 +631,64 @@ class RagToolHf(RagToolHf_):
             return json.dumps(error_response, indent=4, ensure_ascii=False)
 
 if __name__ == "__main__":
-    # Example usage of hybrid tool
-    try:
-        if os.path.exists("./storage/hybrid_multilingual_rag"):
-            shutil.rmtree("./storage/hybrid_multilingual_rag")
-        
-        logger.info("Initializing hybrid RAG tool...")
-        hybrid_tool = RagToolHf(
-            persist_dir="./storage/hybrid_multilingual_rag",
-            document_paths=[
-                "./docs/test/code_civile.md",
-                "./docs/test/code_procedure.md"
-            ],
-            chunk_size=512,
-            chunk_overlap=50,
-            use_ocr_for_pdfs=False,
-            bm25_weight=0.3,
-            embedding_weight=0.7
-        )
-        
-        # Test queries
-        test_queries = [
-            "Articles du Code Civil Algérien concernant les ouvertures sur propriétés voisines et protection de la vie privée",
-            #"Mon voisin a créé des ouvertures (fenêtres) donnant directement sur ma propriété, ce qui porte atteinte à ma vie privée. Je souhaite faire valoir mes droits et le contraindre à fermer ces ouvertures.",
-        ]
-        
-        for query in test_queries:
-            logger.info(f"\nExecuting query: {query}")
-            try:
-                result = hybrid_tool.execute(query, max_sources=2)
-                print(json.dumps(json.loads(result), indent=2, ensure_ascii=False))
-            except Exception as e:
-                logger.error(f"Error executing query '{query}': {e}")
-                continue
+    # Example usage
+    if os.path.exists("./storage/multilingual_rag"):
+        shutil.rmtree("./storage/multilingual_rag")
+    
+    tool = RagToolHf_(
+        persist_dir="./storage/multilingual_rag",
+        document_paths=[
+            "./docs/test/F2015054.pdf",
+            "./docs/test/F2015055.pdf"
+        ],
+        chunk_size=512,  
+        chunk_overlap=50,
+        use_ocr_for_pdfs=False
+    )
+    
+    # Test queries
+    test_queries = [
+        "Find articles related to environmental protection",
+        "Search for traffic regulations",
+        "Look for workplace safety laws"
+    ]
+    
+    for query in test_queries:
+        print(f"\nQuery: {query}")
+        try:
+            result = tool.execute(query, max_sources=2)
+            print(result)
+        except Exception as e:
+            print(f"Error: {str(e)}")
 
-    except Exception as e:
-        logger.error(f"Failed to initialize or run hybrid RAG tool: {e}")
+    # Example usage of hybrid tool
+    if os.path.exists("./storage/hybrid_multilingual_rag"):
+        shutil.rmtree("./storage/hybrid_multilingual_rag")
+    
+    hybrid_tool = RagToolHf(
+        persist_dir="./storage/hybrid_multilingual_rag",
+        document_paths=[
+            "./docs/test/code_civile.md",
+            "./docs/test/code_procedure.md"
+        ],
+        chunk_size=512,
+        chunk_overlap=50,
+        use_ocr_for_pdfs=False,
+        bm25_weight=0.3,
+        embedding_weight=0.7
+    )
+    
+    # Test queries
+    test_queries = [
+        "Find articles related to environmental protection",
+        "Search for traffic regulations",
+        "Look for workplace safety laws"
+    ]
+    
+    for query in test_queries:
+        print(f"\nQuery: {query}")
+        try:
+            result = hybrid_tool.execute(query, max_sources=2)
+            print(result)
+        except Exception as e:
+            print(f"Error: {str(e)}")

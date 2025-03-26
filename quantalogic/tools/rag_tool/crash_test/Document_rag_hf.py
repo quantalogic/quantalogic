@@ -8,12 +8,10 @@ This tool provides enhanced RAG capabilities with:
 """
 
 import os
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from dataclasses import dataclass
 import asyncio
 import shutil
-import json
-from datetime import datetime
 
 import chromadb
 from sentence_transformers import SentenceTransformer
@@ -45,36 +43,34 @@ logger.add(
 )
 
 @dataclass
-class LawSource:
-    """Structured representation of a law source."""
-    content: str
-    file_name: str
-    page_number: str
-    reference_number: Optional[str] = None
-    score: Optional[float] = None
+class SearchResult:
+    """Structured search result with source attribution."""
+    answer: str
+    sources: List[Dict[str, str]]
+    confidence: float
 
 class RagToolHf(Tool):
-    """Enhanced RAG tool specialized for law source retrieval."""
+    """Enhanced RAG tool with multilingual support and improved response formatting."""
 
     name: str = "rag_tool_hf"
     description: str = (
-        "Specialized RAG tool for retrieving and analyzing legal sources "
-        "from documents with detailed source attribution."
+        "Advanced multilingual RAG tool optimized for French and Arabic content "
+        "with detailed responses and source attribution."
     )
     arguments: List[ToolArgument] = [
         ToolArgument(
             name="query",
             arg_type="string",
-            description="Query to search for specific legal sources",
+            description="Query in French, Arabic, or English",
             required=True,
-            example="Find articles related to environmental protection",
+            example="ما هو الموضوع الرئيسي؟ / Quel est le sujet principal?",
         ),
         ToolArgument(
             name="max_sources",
             arg_type="int",
             description="Maximum number of sources to return",
             required=False,
-            example="5",
+            example="3",
         ),
     ]
 
@@ -298,118 +294,129 @@ class RagToolHf(Tool):
             logger.error(f"Error creating index: {str(e)}")
             return None
 
-    def _extract_law_reference(self, text: str) -> Optional[str]:
-        """Extract law reference numbers from text."""
-        import re
-        
-        # Common patterns for law references
-        patterns = [
-            r'(?:loi|décret|arrêté)\s+n[°o]?\s*(\d+[-./]\d+)',  # French
-            r'(?:قانون|مرسوم|قرار)\s+(?:رقم\s+)?(\d+[-./]\d+)',  # Arabic
-            r'(?:law|decree)\s+(?:no\.\s+)?(\d+[-./]\d+)',       # English
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, text.lower())
-            if match:
-                return match.group(1)
-        return None
-
-    def execute(self, query: str, max_sources: int = 5) -> str:
-        """
-        Execute a search for legal sources and return a JSON string of law sources.
-        
-        Args:
-            query: Search query for finding relevant law sources
-            max_sources: Maximum number of sources to return
-            
-        Returns:
-            JSON string containing an array of law sources with their content and metadata
-        """
+    def execute(self, query: str, max_sources: int = 3) -> str:
+        """Execute a multilingual query with enhanced response formatting."""
         try:
             if not self.index:
                 raise ValueError("No index available. Please add documents first.")
 
-            logger.info(f"Searching for legal sources with query: {query}")
+            logger.info(f"Processing query: {query}")
             
             query_engine = self.index.as_query_engine(
-                similarity_top_k=max_sources,
+                similarity_top_k=15,  
                 node_postprocessors=[
-                    SimilarityPostprocessor(similarity_cutoff=0.1)
+                    SimilarityPostprocessor(similarity_cutoff=0.2)  
                 ],
-                response_mode="no_text",
+                response_mode="tree_summarize",  
+                response_kwargs={
+                    "response_template": (
+                        "Based on the provided documents, here is a detailed analysis:\n\n"
+                        "{response}\n\n"
+                        "Key points from the sources:\n"
+                        "{context_str}"
+                    )
+                },
                 streaming=False,
                 verbose=True
             )
             
             response = query_engine.query(query)
+            logger.debug(f"Raw response: {str(response)}")
+            logger.debug(f"Number of source nodes: {len(response.source_nodes)}")
             
-            # Process sources
-            processed_sources = []
-            for node in response.source_nodes:
-                if node.score < 0.1:
-                    continue
+            for i, node in enumerate(response.source_nodes):
+                logger.debug(f"Source node {i+1}:")
+                logger.debug(f"  Score: {node.score}")
+                logger.debug(f"  Text: {node.node.text[:300]}...")
+                logger.debug(f"  Metadata: {node.node.metadata}")
+                logger.debug(f"  Page: {node.node.metadata.get('page_number', 'N/A')}")
+            
+            result = self._format_response(response, max_sources)
+            
+            if not result.answer or result.answer.strip() == "Empty Response":
+                logger.warning("Empty response received, using direct node text")
+                sections = []
+                current_topic = None
                 
-                # Extract reference number once to avoid duplicate processing
-                ref_number = self._extract_law_reference(node.node.text)
+                for node in response.source_nodes[:5]:
+                    if node.score < 0.2:
+                        continue
+                    
+                    text = node.node.text.strip()
+                    if not text:
+                        continue
+                        
+                    if text.startswith('Art.'):
+                        current_topic = "Legal Framework"
+                    elif any(word in text.lower() for word in ['comité', 'committee', 'اللجنة']):
+                        current_topic = "Committee Structure and Responsibilities"
+                    elif any(word in text.lower() for word in ['recensement', 'census', 'تعداد']):
+                        current_topic = "Census Operations"
+                    else:
+                        current_topic = "General Information"
+                    
+                    page_info = f"Page {node.node.metadata.get('page_number', 'N/A')}"
+                    doc_info = f"Document: {node.node.metadata.get('file_name', 'Unknown')}"
+                    sections.append(f"\n### {current_topic}\n{text}\n[Source: {doc_info} | {page_info} | Relevance: {node.score:.2f}]")
                 
-                # Create a dictionary with source information
-                source_data = {
-                    'content': node.node.text.strip(),
-                    'file_path': node.node.metadata.get('file_path', ''),
-                    'file_name': node.node.metadata.get('file_name', 'Unknown'),
-                    'page_number': str(node.node.metadata.get('page_number', 'N/A')),
-                    'reference_number': ref_number,
-                    'score': float(node.score) if node.score else 0.0,
-                    'metadata': {
-                        'source_type': 'law_document',
-                        'processing_method': node.node.metadata.get('processing_method', 'standard'),
-                        'query': query,
-                        'timestamp': str(datetime.now().isoformat())
+                if sections:
+                    result.answer = "\n\n".join(sections)
+                else:
+                    result.answer = "No relevant content found in the documents."
+            
+            output = ["# Detailed Analysis\n"]
+            output.append(result.answer)
+            
+            output.append("\n## Source Documents\n")
+            source_summary = {}
+            
+            for source in result.sources:
+                file_name = source['file']
+                if file_name not in source_summary:
+                    source_summary[file_name] = {
+                        'pages': set(),
+                        'relevance_scores': [],
+                        'excerpts': []
                     }
-                }
-                processed_sources.append(source_data)
+                
+                source_summary[file_name]['pages'].add(source.get('page', 'N/A'))
+                source_summary[file_name]['relevance_scores'].append(source['score'])
+                source_summary[file_name]['excerpts'].append(source['content'])
             
-            # Sort sources by score
-            processed_sources.sort(key=lambda x: x['score'], reverse=True)
+            for file_name, summary in source_summary.items():
+                output.append(f"\n### {file_name}")
+                output.append(f"- Pages Referenced: {', '.join(sorted(summary['pages']))}")
+                output.append(f"- Average Relevance: {sum(summary['relevance_scores']) / len(summary['relevance_scores']):.2f}%")
+                output.append("\nKey Excerpts:")
+                for i, excerpt in enumerate(summary['excerpts'], 1):
+                    output.append(f"\n{i}. {excerpt}")
             
-            logger.info(f"Found {len(processed_sources)} relevant law sources for query: {query}")
-            return json.dumps(processed_sources, indent=4, ensure_ascii=False)
+            return "\n".join(output)
 
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Source search failed: {error_msg}")
-            error_response = {
-                'error': error_msg,
-                'query': query,
-                'timestamp': str(datetime.now().isoformat()),
-                'sources': []
+            logger.error(f"Query failed: {str(e)}")
+            raise RuntimeError(f"Query failed: {str(e)}")
+
+    def _format_response(self, response: Response, max_sources: int = 3) -> SearchResult:
+        """Format the query response with source attribution."""
+        sources = []
+        for node in response.source_nodes[:max_sources]:
+            if node.score < 0.2:  
+                continue
+                
+            source_info = {
+                "content": node.node.text[:300] + "..." if len(node.node.text) > 300 else node.node.text,
+                "file": node.node.metadata.get("file_name", "Unknown"),
+                "page": node.node.metadata.get("page_number", "N/A"),
+                "score": round(node.score * 100, 2) if node.score else None,
             }
-            return json.dumps(error_response, indent=4, ensure_ascii=False)
+            sources.append(source_info)
 
-    def format_sources(self, sources: List[LawSource]) -> str:
-        """Format a list of LawSource objects into a readable string."""
-        if not sources:
-            return "No relevant legal sources found in the documents."
-
-        output = ["# Legal Sources Found\n"]
-        current_file = None
-        
-        for source in sources:
-            if current_file != source.file_name:
-                current_file = source.file_name
-                output.append(f"\n## Document: {source.file_name}\n")
-            
-            # Format source information
-            if source.reference_number:
-                output.append(f"**Reference Number:** {source.reference_number}\n")
-            output.append(f"**Page:** {source.page_number}\n")
-            if source.score:
-                output.append(f"**Relevance Score:** {round(source.score * 100, 2)}%\n")
-            output.append(f"\n{source.content}\n")
-            output.append("\n---\n")
-        
-        return "\n".join(output)
+        return SearchResult(
+            answer=str(response),
+            sources=sources,
+            confidence=response.source_nodes[0].score if response.source_nodes else 0.0
+        )
 
     def add_documents(self, document_paths: List[str]) -> bool:
         """Add new documents to the index."""
@@ -426,30 +433,32 @@ class RagToolHf(Tool):
 
 if __name__ == "__main__":
     # Example usage
+    # logger.info("Starting example usage...")
+    
+    # Clean up any existing index
     if os.path.exists("./storage/multilingual_rag"):
         shutil.rmtree("./storage/multilingual_rag")
+        # logger.info("Cleaned up existing index")
     
     tool = RagToolHf(
         persist_dir="./storage/multilingual_rag",
         document_paths=[
-            "./docs/test/Code_Civil.pdf",
+            "./docs/test/code_civile.md",
+            "./docs/test/code_procedure.md"
         ],
         chunk_size=512,  
         chunk_overlap=50,
-        use_ocr_for_pdfs=False
+        use_ocr_for_pdfs=False,
+        ocr_model="gemini/gemini-2.0-flash"
     )
     
-    # Test queries
-    test_queries = [
-        "Find articles related to environmental protection",
-        "Search for traffic regulations",
-        "Look for workplace safety laws"
+    queries = [
+        "Donne moi toutes les lois lister dans mes documents, détaille chaqune des lois", 
     ]
     
-    for query in test_queries:
+    for query in queries:
         print(f"\nQuery: {query}")
         try:
-            result = tool.execute(query, max_sources=2)
-            print(result)
+            print(tool.execute(query, max_sources=2))
         except Exception as e:
             print(f"Error: {str(e)}")

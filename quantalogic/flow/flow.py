@@ -36,6 +36,7 @@ class WorkflowEventType(Enum):
     WORKFLOW_COMPLETED = "workflow_completed"
     SUB_WORKFLOW_ENTERED = "sub_workflow_entered"
     SUB_WORKFLOW_EXITED = "sub_workflow_exited"
+    STREAMING_CHUNK = "streaming_chunk"
 
 
 @dataclass
@@ -642,15 +643,53 @@ class Nodes:
                         presence_penalty=presence_penalty_to_use,
                         frequency_penalty=frequency_penalty_to_use,
                         drop_params=True,
+                        stream=True,
                         **kwargs,
                     )
-                    content = response.choices[0].message.content.strip()
-                    wrapped_func.usage = {
-                        "prompt_tokens": response.usage.prompt_tokens,
-                        "completion_tokens": response.usage.completion_tokens,
-                        "total_tokens": response.usage.total_tokens,
-                        "cost": getattr(response, "cost", None),
-                    }
+                    
+                    # Handle streaming response
+                    if hasattr(response, 'choices') and isinstance(response.choices, list):
+                        # Non-streaming response
+                        content = response.choices[0].message.content.strip()
+                        wrapped_func.usage = {
+                            "prompt_tokens": response.usage.prompt_tokens,
+                            "completion_tokens": response.usage.completion_tokens,
+                            "total_tokens": response.usage.total_tokens,
+                            "cost": getattr(response, "cost", None),
+                        }
+                    else:
+                        # Streaming response
+                        content = []
+                        logger.info(f"Starting streaming response for {func.__name__}...")
+                        async for chunk in response:
+                            if hasattr(chunk, 'choices') and chunk.choices:
+                                delta = chunk.choices[0].delta
+                                if hasattr(delta, 'content') and delta.content:
+                                    content.append(delta.content)
+                                    # Print streaming chunks in real-time
+                                    print(delta.content, end='', flush=True)
+                                    # Emit streaming chunk event
+                                    if hasattr(func, '__self__') and isinstance(func.__self__, WorkflowEngine):
+                                        await func.__self__._notify_observers(
+                                            WorkflowEvent(event_type=WorkflowEventType.STREAMING_CHUNK, node_name=func.__name__, context={
+                                                "chunk": delta.content
+                                            })
+                                        )
+                        content = ''.join(content).strip()
+                        print()  # New line after streaming completes
+                        logger.info(f"Completed streaming response for {func.__name__}")
+                        
+                        # For streaming, usage is typically available on the last chunk
+                        if hasattr(chunk, 'usage'):
+                            wrapped_func.usage = {
+                                "prompt_tokens": chunk.usage.prompt_tokens,
+                                "completion_tokens": chunk.usage.completion_tokens,
+                                "total_tokens": chunk.usage.total_tokens,
+                                "cost": getattr(chunk, "cost", None),
+                            }
+                        else:
+                            wrapped_func.usage = None
+                            
                     logger.debug(f"LLM output from {func.__name__}: {content[:50]}...")
                     return content
                 except Exception as e:

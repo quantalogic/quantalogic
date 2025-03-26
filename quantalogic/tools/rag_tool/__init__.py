@@ -13,13 +13,16 @@ from loguru import logger
 # from .Document_rag_hf import RagToolHf
 #from .document_rag_sources import RagToolHf
 from .document_rag_sources_ import RagToolHf
+from .openai_legal_rag import OpenAILegalRAG
+# from .hybride_search import RagToolHf
 
 # Define __all__ to control what is imported with `from ... import *`
 __all__ = [
     # 'DocumentMetadata',
     # 'QueryResponse', 
     # 'RagToolBeta',
-    'RagToolHf'
+    'RagToolHf',
+    'OpenAILegalRAG'
 ]
 
 # Optional: Add logging for import confirmation

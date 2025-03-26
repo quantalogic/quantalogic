@@ -23,7 +23,29 @@ from quantalogic.utils import get_environment
 from quantalogic.utils.ask_user_validation import console_ask_for_user_validation
 from quantalogic.xml_parser import ToleranceXMLParser
 from quantalogic.xml_tool_parser import ToolParser
+import sys
 import uuid
+from pathlib import Path
+
+# Configure loguru logger
+logger.remove()  # Remove default handler
+# Add file handler
+project_root = Path(__file__).resolve().parents[3]  # Go up 3 levels to reach project root
+log_file = project_root / "agent.log"
+logger.add(
+    log_file,
+    rotation="1 day",  # Create a new file daily
+    retention="7 days",  # Keep logs for 7 days
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
+    level="DEBUG",
+    enqueue=True  # Thread-safe logging
+)
+# Add console handler
+logger.add(
+    sys.stderr,
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
+    level="INFO"
+)
 
 # Maximum ratio occupancy of the occupied memory
 MAX_OCCUPANCY = 90.0
@@ -93,6 +115,7 @@ class Agent(BaseModel):
     chat_system_prompt: str  # Base persona prompt for chat mode
     tool_mode: Optional[str] = None  # Tool or toolset to prioritize in chat mode
     tracked_files: list[str] = []  # List to track files created or modified during execution
+    agent_mode: str = "react"  # Default mode is ReAct
 
     def __init__(
         self,
@@ -109,6 +132,7 @@ class Agent(BaseModel):
         event_emitter: EventEmitter | None = None,
         chat_system_prompt: str | None = None,
         tool_mode: Optional[str] = None,
+        agent_mode: str = "react",
     ):
         """Initialize the agent with model, memory, tools, and configurations.
 
@@ -126,6 +150,7 @@ class Agent(BaseModel):
             event_emitter: EventEmitter instance for event handling
             chat_system_prompt: Optional base system prompt for chat mode persona
             tool_mode: Optional tool or toolset to prioritize in chat mode
+            agent_mode: Mode to use ("react" or "chat")
         """
         try:
             logger.debug("Initializing agent...")
@@ -142,8 +167,9 @@ class Agent(BaseModel):
             tools_markdown = tool_manager.to_markdown()
             logger.debug(f"Tools Markdown: {tools_markdown}")
 
+            logger.info(f"Agent mode: {agent_mode}")
             system_prompt_text = system_prompt(
-                tools=tools_markdown, environment=environment, expertise=specific_expertise
+                tools=tools_markdown, environment=environment, expertise=specific_expertise, agent_mode=agent_mode
             )
             logger.debug(f"System prompt: {system_prompt_text}")
 
@@ -180,6 +206,7 @@ class Agent(BaseModel):
                 max_tokens_working_memory=max_tokens_working_memory,
                 chat_system_prompt=chat_system_prompt,
                 tool_mode=tool_mode,
+                agent_mode=agent_mode,
             )
 
             self._model_name = model_name
@@ -464,6 +491,7 @@ class Agent(BaseModel):
                     logger.debug(f"Tool executed: {observation.executed_tool}, iteration: {tool_iteration}")
                 elif not observation.executed_tool and "<action>" in content and auto_tool_call:
                     # Detected malformed tool call attempt; provide feedback and exit loop
+                    # FIX THIS MESSAGE !! TO BE NICE TO SHOW
                     response_content = (
                         f"{content}\n\n⚠️ Error: Invalid tool call format detected. "
                         "Please use the exact XML structure as specified in the system prompt:\n"
@@ -704,7 +732,13 @@ class Agent(BaseModel):
                 is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
 
                 if is_repeated_call:
-                    executed_tool, response = self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                    executed_tool, response, answer = self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                    if answer:
+                        return ObserveResponseResult(
+                            next_prompt=response,
+                            executed_tool=executed_tool,
+                            answer=answer
+                        )
                 else:
                     executed_tool, response = await self._async_execute_tool(tool_name, tool, arguments_with_values)
 
@@ -712,8 +746,10 @@ class Agent(BaseModel):
                     return self._handle_tool_execution_failure(response)
 
                 # Track files when write_file_tool or writefile is used
-                if (tool_name in ["write_file_tool", "writefile", "edit_whole_content", "replace_in_file", "replaceinfile", "EditWholeContent"]) and "file_path" in arguments_with_values:
-                    self._track_file(arguments_with_values["file_path"], tool_name)
+                logger.debug(f"Tracking file for tool: {tool_name}")
+                if (tool_name in ["write_file_tool", "writefile", "edit_whole_content", "replace_in_file", "replaceinfile", "EditWholeContent", "markdowntodocx", "markdowntodocx_tool", "markdowntopdf", "markdowntopdf_tool"]) and ("file_path" in arguments_with_values or "output_path" in arguments_with_values):
+                    file_path = arguments_with_values.get("file_path") or arguments_with_values.get("output_path")
+                    self._track_file(file_path, tool_name)
 
                 variable_name = self.variable_store.add(response)
                 new_prompt = self._format_observation_response(response, executed_tool, variable_name, iteration)
@@ -1157,7 +1193,7 @@ class Agent(BaseModel):
             answer=None,
         )
 
-    def _handle_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> tuple[str, str]:
+    def _handle_repeated_tool_call(self, tool_name: str, arguments_with_values: dict) -> tuple[str, str, str | None]:
         """Handle the case where a tool call is repeated.
 
         Args:
@@ -1165,16 +1201,23 @@ class Agent(BaseModel):
             arguments_with_values: Tool arguments
 
         Returns:
-            Tuple of (executed_tool_name, error_message)
+            Tuple of (executed_tool_name, error_message, answer)
         """
         repeat_count = self.last_tool_call.get("count", 0)
+        logger.debug(f"Tool '{tool_name}' called repeatedly. Repeat count: {repeat_count}, arguments: {arguments_with_values}")
+        logger.info(f"Tool '{tool_name}' called repeatedly. Repeat count: {repeat_count}, arguments: {arguments_with_values}")
+        logger.info(f"Last tool call: {self.last_tool_call}")
+        
+        answer = arguments_with_values.get('answer')
+        logger.info(f"Last tool call answer: {answer}")
+        
         error_message = self._render_template(
             'repeated_tool_call_error.j2',
             tool_name=tool_name,
             arguments_with_values=arguments_with_values,
             repeat_count=repeat_count
         )
-        return tool_name, error_message
+        return tool_name, error_message, answer
 
     def _handle_tool_execution_failure(self, response: str) -> ObserveResponseResult:
         """Handle the case where tool execution fails.
@@ -1270,7 +1313,13 @@ class Agent(BaseModel):
                 # Check for repeated calls
                 is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
                 if is_repeated_call:
-                    executed_tool, response = self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                    executed_tool, response, answer = self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                    if answer:
+                        return ObserveResponseResult(
+                            next_prompt=response,
+                            executed_tool=executed_tool,
+                            answer=answer
+                        )
                 else:
                     executed_tool, response = await self._async_execute_tool(tool_name, tool, arguments_with_values)
                 
@@ -1685,7 +1734,7 @@ class Agent(BaseModel):
         """
         try:
             # Handle /tmp directory for write tools
-            if tool_name in ["write_file_tool", "writefile", "edit_whole_content", "replace_in_file", "replaceinfile", "EditWholeContent"]:
+            if tool_name in ["write_file_tool", "writefile", "edit_whole_content", "replace_in_file", "replaceinfile", "EditWholeContent", "markdowntodocx", "markdowntodocx_tool", "markdowntopdf", "markdowntopdf_tool"]:
                 if not file_path.startswith("/tmp/"):
                     file_path = os.path.join("/tmp", file_path.lstrip("/"))
             

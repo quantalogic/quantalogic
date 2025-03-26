@@ -1,10 +1,22 @@
-Error: Detected repeated identical tool call pattern.
-Tool: {{ tool_name }}
-Arguments: {{ arguments_with_values }}
-Repeated {{ repeat_count }} times
+⚠️ Tool Call Error: Consecutive Failed Attempts Detected in the same flow
 
-PLEASE:
-1. Review your previous steps
-2. Consider a different approach
-3. Use a different tool or modify the arguments
-4. Ensure you're making progress towards the goal
+Tool: {{ tool_name }}
+Last Arguments: {{ arguments_with_values }}
+Failure Count: {{ repeat_count }}
+
+🔍 Analysis:
+• Identical tool call pattern detected
+• No progress made in {{ repeat_count }} attempts
+• Potential issue with tool parameters or approach
+
+🛑 Action Required:
+1. Operation paused for safety
+2. User guidance needed before proceeding
+
+💡 Recommendations:
+• Verify input parameters are correct
+• Check if prerequisites are met
+• Consider alternative tools or methods
+• Provide additional context if needed
+
+Reply with the last answer directly.

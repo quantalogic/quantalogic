@@ -17,6 +17,27 @@ from loguru import logger
 from pydantic import Field, validator
 
 from quantalogic.tools.tool import Tool, ToolArgument
+import sys
+# Configure loguru logger
+logger.remove()  # Remove default handler
+# Add file handler
+project_root = Path(__file__).resolve().parents[3]  # Go up 3 levels to reach project root
+log_file = project_root / "agent_log.log"
+logger.add(
+    log_file,
+    rotation="1 day",  # Create a new file daily
+    retention="7 days",  # Keep logs for 7 days
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
+    level="DEBUG",
+    enqueue=True  # Thread-safe logging
+)
+# Add console handler
+logger.add(
+    sys.stderr,
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
+    level="INFO"
+)
+
 
 # Base directory for all Bitbucket repositories
 BITBUCKET_REPOS_BASE_DIR = "/tmp/bitbucket_repos"

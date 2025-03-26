@@ -5,6 +5,7 @@ https://support.atlassian.com/bitbucket-cloud/docs/using-repository-access-token
 """
 
 import os
+import sys
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -15,6 +16,26 @@ from loguru import logger
 from pydantic import Field
 
 from quantalogic.tools.tool import Tool, ToolArgument
+
+# Configure loguru logger
+logger.remove()  # Remove default handler
+# Add file handler
+project_root = Path(__file__).resolve().parents[3]  # Go up 3 levels to reach project root
+log_file = project_root / "agent_log.log"
+logger.add(
+    log_file,
+    rotation="1 day",  # Create a new file daily
+    retention="7 days",  # Keep logs for 7 days
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
+    level="DEBUG",
+    enqueue=True  # Thread-safe logging
+)
+# Add console handler
+logger.add(
+    sys.stderr,
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
+    level="INFO"
+)
 
 # Base directory for all cloned repositories
 BITBUCKET_REPOS_BASE_DIR = "/tmp/bitbucket_repos"
@@ -101,27 +122,27 @@ class BitbucketCloneTool(Tool):
             repo_url = repo_url.split('/src/')[0]
             logger.debug(f"URL after removing /src/: {repo_url}")
         
-        # Ensure URL ends with .git
-        if not repo_url.endswith('.git'):
-            repo_url = f"{repo_url}.git"
-            logger.debug(f"URL after adding .git: {repo_url}")
-
-        # Add authentication using the official Bitbucket format
-        if self.access_token and self.access_token.strip():
-            # First, extract the workspace and repository from the URL
-            parts = repo_url.split('bitbucket.org/')
-            if len(parts) != 2:
-                raise ValueError("Invalid Bitbucket URL format")
+        # Extract the workspace and repository name
+        parts = repo_url.split('bitbucket.org/')
+        if len(parts) != 2:
+            raise ValueError("Invalid Bitbucket URL format")
             
-            workspace_repo = parts[1].rstrip('.git')
-            # Construct the URL exactly as per Bitbucket docs
+        workspace_repo = parts[1].rstrip('/')
+        if workspace_repo.endswith('.git'):
+            workspace_repo = workspace_repo[:-4]
+            
+        # Ensure URL ends with .git
+        clone_url = f"https://bitbucket.org/{workspace_repo}.git"
+        
+        # Add authentication if token is present
+        if self.access_token and self.access_token.strip():
             clone_url = f"https://x-token-auth:{self.access_token}@bitbucket.org/{workspace_repo}.git"
             logger.debug("Added Repository Access Token authentication to clone URL")
             logger.debug(f"Final URL format (token masked): {clone_url.replace(self.access_token, '***')}")
-            return clone_url
-        
-        logger.debug("No token provided, using public URL")
-        return repo_url
+        else:
+            logger.debug("No token provided, using public URL")
+            
+        return clone_url
 
     def execute(self, **kwargs) -> str:
         """Execute the repository cloning operation using Repository Access Token."""

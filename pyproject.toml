@@ -202,7 +202,7 @@ preview = true
 [tool.pytest.ini_options]
 addopts = "-v"
 markers = [
-    "integration: marks integration tests that require external services",
-    "unit: marks unit tests"
+"integration: marks integration tests that require external services",
+"unit: marks unit tests"
 ]
 testpaths = ["tests"]

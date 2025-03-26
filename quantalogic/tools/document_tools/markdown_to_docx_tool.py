@@ -42,6 +42,9 @@ class MarkdownToDocxTool(Tool):
     description: str = (
         "Converts markdown to DOCX with support for images, Mermaid diagrams, "
         "code blocks, and advanced document formatting."
+        "This tool is useful for generating professional documents from markdown content."
+        "It supports customization through templates and style configurations."
+        "It saves in /tmp directory."
     )
     need_validation: bool = False
     
@@ -175,16 +178,23 @@ graph TD
     }
 
     def _normalize_path(self, path: str) -> Path:
-        """Convert path string to normalized Path object.
+        """Convert path string to normalized Path object and ensure it's in /tmp.
         
         Args:
             path: Input path string
             
         Returns:
-            Normalized Path object
+            Normalized Path object in /tmp directory
         """
         if path.startswith("~"):
             path = os.path.expanduser(path)
+            
+        # Get just the filename from the path
+        filename = os.path.basename(path)
+        
+        # Ensure path is directly in /tmp
+        path = os.path.join("/tmp", filename)
+            
         return Path(path).resolve()
 
     def _parse_style_config(self, style_config: Optional[str]) -> Dict:

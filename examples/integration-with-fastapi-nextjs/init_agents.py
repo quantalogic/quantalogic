@@ -29,5 +29,31 @@ init_agents  = [
             }
         ],
         "id": "20878790-28a9-478a-a56a-5aa58dacb8c5"
-    }
+    },
+    {
+        "name": "Translator",
+        "description": "Expert in translating texts, paragraphs..etc",
+        "model_name": "mistral/mistral-saba-latest",
+        "expertise": "As an expert in translating texts and paragraphs from language input to language output.\n",
+        "project": "T-PR",
+        "tags": [
+            "translation"
+        ],
+        "tools": [],
+        "id": "3ff00c53-0ffb-4106-b939-9101222e4d4e"
+    }, 
+    {
+        "name": "Prompt Optimizer",
+        "description": "Assistant for prompt optimization",
+        "model_name": "gpt-4o-mini",
+        "expertise": "As an expert in prompt crafting, and prompt optimization, \n\nAnalyze the client prompt, and give a better prompt to have a better results",
+        "project": "O-PR",
+        "tags": [
+            "optimization",
+            "prompt"
+        ],
+        "tools": [],
+        "id": "9504cbf7-5e39-4be5-86fd-52c50a5e4ed1"
+    },
+    
 ]

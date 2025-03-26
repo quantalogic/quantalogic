@@ -17,7 +17,7 @@ from threading import Lock
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -41,7 +41,7 @@ from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
 from .models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
 from .AgentState import AgentState
-from .init_agents import init_agents
+from .init_agents import init_agents 
 
 # Configure logger
 logger.remove()
@@ -92,7 +92,25 @@ class AgentConfig(BaseModel):
     expertise: str
     mode: str = "custom"
     model_name: str
+    agent_mode: str
     tools: List[ToolConfig]
+
+class TutorialRequest(BaseModel):
+    """Request model for tutorial generation."""
+    markdown_path: str
+    model: str = "gemini/gemini-2.0-flash"
+    num_chapters: int = 5
+    words_per_chapter: int = 2000
+    copy_to_clipboard: bool = True
+    skip_refinement: bool = True
+
+class FileUploadResponse(BaseModel):
+    status: str
+    filename: str
+    path: str
+    project_path: str
+    size: str
+    content_type: str
 
 # Constants
 SHUTDOWN_TIMEOUT = 10.0  # seconds
@@ -128,6 +146,7 @@ async def load_initial_agents():
                 description=agent_dict["description"],
                 expertise=agent_dict["expertise"],
                 model_name=agent_dict["model_name"],
+                agent_mode=agent_dict.get("agent_mode", "react"),
                 tools=tool_configs
             )
             
@@ -342,6 +361,75 @@ async def upload_file(file: UploadFile = File(...)) -> Dict[str, str]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/agent/fileupload", response_model=FileUploadResponse)
+async def file_upload(
+    file: UploadFile = File(...),
+    project_path: str = Form(...),
+) -> FileUploadResponse:
+    """Handle file uploads with custom project paths.
+    
+    Args:
+        file: The uploaded file
+        project_path: Target path including project folders and filename (e.g. 'olaf/omg/test.md')
+    
+    Returns:
+        FileUploadResponse with upload details
+    """
+    logger.info(f"Received file upload request - Filename: {file.filename}, Content-Type: {file.content_type}, Project Path: {project_path}")
+    try:
+        if not file.filename:
+            logger.error("No filename provided in upload")
+            raise HTTPException(status_code=400, detail="No filename provided")
+            
+        # Check file content
+        file_content = await file.read()
+        if not file_content:
+            logger.error("Empty file content")
+            raise HTTPException(status_code=400, detail="Empty file content")
+        await file.seek(0)  # Reset file pointer for later use
+            
+        # Ensure project_path is safe and normalized
+        project_path = os.path.normpath(project_path)
+        if project_path.startswith("/") or ".." in project_path:
+            logger.error(f"Invalid project path detected: {project_path}")
+            raise HTTPException(status_code=400, detail="Invalid project path")
+            
+        # Create full path within UPLOAD_DIR
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = os.path.basename(project_path)
+        full_dir = os.path.join(UPLOAD_DIR, os.path.dirname(project_path))
+        # new_filename = f"{timestamp}_{filename}"
+        new_filename = f"{filename}"
+        file_path = os.path.join(full_dir, new_filename)
+        
+        logger.info(f"Creating directory: {full_dir}")
+        # Create directories if they don't exist
+        os.makedirs(full_dir, exist_ok=True)
+        
+        logger.info(f"Saving file to: {file_path}")
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        response = FileUploadResponse(
+            status="success",
+            filename=new_filename,
+            path=file_path,
+            project_path=project_path,
+            size=str(len(file_content)),
+            content_type=file.content_type
+        )
+        logger.info(f"File upload successful: {response.dict()}")
+        return response
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error uploading file to project: {str(e)}")
+        logger.exception(e)  # This will log the full stack trace
+        raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
+
+
 @app.post("/api/agent/upload-html")
 async def upload_html_content(payload: HtmlContent) -> Dict[str, str]:
     """Handle HTML content upload and save to file."""
@@ -549,7 +637,6 @@ async def get_file_content(file_path: str, raw: Optional[bool] = False) -> Respo
     except Exception as e:
         logger.error(f"Error reading file content: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 if __name__ == "__main__":
     config = uvicorn.Config(

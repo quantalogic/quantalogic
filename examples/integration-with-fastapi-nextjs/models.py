@@ -58,6 +58,7 @@ class AgentConfig(BaseModel):
     expertise: str
     mode: str = "custom"
     model_name: str
+    agent_mode: str
     tools: List[ToolConfig]
 
 

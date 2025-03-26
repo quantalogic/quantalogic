@@ -10,6 +10,21 @@ from quantalogic.console_print_token import console_print_token
 from quantalogic.event_emitter import EventEmitter
 from quantalogic.tools.tool import Tool
 
+import sys
+from pathlib import Path
+# Configure loguru logger
+logger.remove()  # Remove default handler
+# Add file handler
+project_root = Path(__file__).resolve().parents[3]  # Go up 3 levels to reach project root
+log_file = project_root / "agent_log.log"
+logger.add(
+    log_file,
+    rotation="1 day",  # Create a new file daily
+    retention="7 days",  # Keep logs for 7 days
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
+    level="DEBUG",
+    enqueue=True  # Thread-safe logging
+)
 # Configure loguru to output only INFO and above
 logger.remove()  # Remove default handler
 logger.add(
@@ -135,6 +150,7 @@ TOOL_IMPORTS = {
     
     # RAG Tools 
     "rag_tool_hf": lambda: _import_tool("quantalogic.tools.rag_tool", "RagToolHf"),
+    "openai_legal_rag": lambda: _import_tool("quantalogic.tools.rag_tool", "OpenAILegalRAG"),
     
     # Utility Tools
     "task_complete": lambda: _import_tool("quantalogic.tools.task_complete_tool", "TaskCompleteTool"),
@@ -158,7 +174,8 @@ def create_custom_agent(
     max_tokens_working_memory: Optional[int] = None,
     specific_expertise: str = "",
     tools: Optional[list[dict[str, Any]]] = None,
-    memory: Optional[AgentMemory] = None
+    memory: Optional[AgentMemory] = None,
+    agent_mode: str = "react"
 ) -> Agent:
     """Create an agent with lazy-loaded tools and graceful error handling.
 
@@ -312,9 +329,21 @@ def create_custom_agent(
             use_ocr_for_pdfs=params.get("use_ocr_for_pdfs", False),
             ocr_model=params.get("ocr_model", "openai/gpt-4o-mini"),
             embed_model=params.get("embed_model", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"),
-            document_paths=params.get("document_paths", [
-            "./docs/test/Code_Civil.pdf",
-            ])
+            document_paths=params.get("document_paths", ["ddd"])
+        ),
+        
+        # Legal RAG tool
+        "openai_legal_rag": lambda params: create_tool_instance(TOOL_IMPORTS["openai_legal_rag"](),
+            persist_dir=params.get("persist_dir", "./storage/openai_legal_rag"),
+            document_paths=params.get("document_paths", ["ddd"]),
+            openai_api_key=params.get("openai_api_key", os.getenv("OPENAI_API_KEY")),
+            embedding_model=params.get("embedding_model", "text-embedding-3-large"),
+            chunk_size=params.get("chunk_size", 512),
+            chunk_overlap=params.get("chunk_overlap", 128),
+            bm25_weight=params.get("bm25_weight", 0.3),
+            embedding_weight=params.get("embedding_weight", 0.7),
+            force_reindex=params.get("force_reindex", True),
+            cache_embeddings=params.get("cache_embeddings", True)
         ),
         
         "vscode_server_tool": lambda _: create_tool_instance(TOOL_IMPORTS["vscode_server_tool"]())
@@ -381,6 +410,7 @@ def create_custom_agent(
             max_tokens_working_memory=max_tokens_working_memory,
             specific_expertise=specific_expertise,
             memory=memory if memory else AgentMemory(),
+            agent_mode=agent_mode
         )
     except Exception as e:
         logger.error(f"Failed to create agent: {str(e)}")

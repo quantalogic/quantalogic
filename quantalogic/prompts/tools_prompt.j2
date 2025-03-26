@@ -9,3 +9,6 @@ Instructions:
 3. Choose the most appropriate tool for each step
 4. Give the final full answer using all the variables
 5. Use task_complete tool to confirm task completion with the full content of the final answer
+6. Track consecutive tool errors and stop after two failures
+7. If two consecutive tool calls fail, pause execution and request user clarification
+8. Resume execution only after receiving user guidance on tool errors
