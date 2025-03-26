@@ -36,12 +36,11 @@ from quantalogic.memory import AgentMemory
 from quantalogic.task_runner import configure_logger
 from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
-from .models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus, AgentConfig
+from .models import EventMessage, UserValidationRequest, UserValidationResponse, AgentConfig, TaskSubmission
 
 memory = AgentMemory()
 SHUTDOWN_TIMEOUT = 10.0  # seconds
 VALIDATION_TIMEOUT = 10.0  # seconds
-
 
 class AgentState:
     """Manages agent state and event queues."""
@@ -107,6 +106,7 @@ class AgentState:
             "sub_workflow_entered",
             "sub_workflow_exited",
             "streaming_chunk",
+            "task_progress"
         ]
 
     async def create_agent(self, config: AgentConfig) -> bool:
@@ -445,6 +445,59 @@ class AgentState:
             logger.error(f"Failed to initialize agent: {e}", exc_info=True)
             raise
 
+    def _handle_workflow_event(self, event_type: str, data: Dict[str, Any]) -> None:
+        """Handle workflow-specific events."""
+        # Add workflow-specific metadata
+        if event_type == "workflow_started":
+            data["workflow_info"] = {
+                "start_time": datetime.utcnow().isoformat(),
+                "status": "running"
+            }
+        elif event_type == "workflow_completed":
+            data["workflow_info"] = {
+                "end_time": datetime.utcnow().isoformat(),
+                "status": "completed"
+            }
+        elif event_type in ["node_started", "node_completed", "node_failed"]:
+            # Add node execution metadata
+            data["node_info"] = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "status": event_type.replace("node_", "")
+            }
+        elif event_type == "transition_evaluated":
+            # Add transition metadata
+            data["transition_info"] = {
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        
+        # Broadcast the enhanced event
+        self._handle_event(event_type, data)
+
+    def _setup_workflow_events(self, agent: Agent) -> None:
+        """Set up workflow-specific event handlers."""
+        workflow_events = [
+            "workflow_started",
+            "workflow_completed",
+            "node_started",
+            "node_completed",
+            "node_failed",
+            "transition_evaluated",
+            "sub_workflow_entered",
+            "sub_workflow_exited"
+        ]
+        
+        for event in workflow_events:
+            def create_workflow_handler(event_type: str):
+                def handler(event: str, *args: Any, **kwargs: Any):
+                    logger.debug(f"Received workflow event: {event_type}")
+                    data = args[0] if args else kwargs
+                    self._handle_workflow_event(event_type, data)
+                return handler
+                
+            handler = create_workflow_handler(event)
+            self._event_handlers[event] = handler
+            agent.event_emitter.on(event, handler)
+
     def _setup_agent_events(self, agent: Agent) -> None:
         """Set up event handlers for the agent."""
         # Instead of removing all listeners, we'll track our handlers
@@ -465,7 +518,7 @@ class AgentState:
                 # Get data from args or kwargs
                 data = args[0] if args else kwargs
                 
-                # CHECKKKKK !!!! Handle string data for stream_chunk events
+                # Handle string data for stream_chunk events
                 if event_type == "stream_chunk" and isinstance(data, str):
                     data = {"chunk": data}
                 
@@ -480,14 +533,20 @@ class AgentState:
                 self._handle_event(event_type, data)
             return handler
 
-        # Set up new handlers
+        # Set up standard event handlers
         for event in self.agent_events:
-            logger.debug(f"Setting up handler for event: {event}")
-            handler = create_event_handler(event)
-            self._event_handlers[event] = handler
-            agent.event_emitter.on(event, handler)
-
-        # agent.event_emitter.on(event=["stream_chunk"], listener=console_print_token)
+            if event not in [
+                "workflow_started", "workflow_completed",
+                "node_started", "node_completed", "node_failed",
+                "transition_evaluated", "sub_workflow_entered", "sub_workflow_exited"
+            ]:
+                logger.debug(f"Setting up handler for event: {event}")
+                handler = create_event_handler(event)
+                self._event_handlers[event] = handler
+                agent.event_emitter.on(event, handler)
+        
+        # Set up workflow-specific event handlers
+        self._setup_workflow_events(agent)
 
     def _handle_event(self, event_type: str, data: Dict[str, Any]) -> None:
         """Handle agent events with rich console output."""
@@ -724,7 +783,7 @@ class AgentState:
         finally:
             self.remove_task_event_queue(task_id)
 
-    def _update_task_success(self, task_info: Dict[str, Any], result: str, agent: Agent) -> None:
+    def _update_task_success(self, task_info: Dict[str, Any], result: str, agent: Optional[Agent]) -> None:
         """Update task info after successful execution.
         
         Args:
@@ -871,3 +930,71 @@ class AgentState:
 
             # Import the tutorial generation module
             from quantalogic.flows.create_tutorial import generate_tutorial
+
+
+    async def execute_tutorial(self, task_id: str) -> None:
+        """Execute a tutorial generation task asynchronously."""
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found")
+
+        task_info = self.tasks[task_id]
+        task_info["started_at"] = datetime.now().isoformat()
+        task_info["status"] = "running"
+
+        try:
+            import sys
+            import os
+            logger.info(f"Starting tutorial generation: {task_id}") 
+            
+            # Add the examples directory to Python path
+            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples'))
+            sys.path.append(examples_dir)
+            
+            from test_md.create_tutorial.create_tutorial import generate_tutorial
+            
+            # Run tutorial generation in a thread to not block the event loop
+            loop = asyncio.get_running_loop()
+
+            # Create event for task completion
+            self._handle_event("task_solve_start", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Tutorial generation started"
+            })
+
+            result = await loop.run_in_executor(
+                None,
+                lambda: generate_tutorial(
+                    path="/home/yarab/Bureau/trash_agents_tests/f1/examples/integration-with-fastapi-nextjs/test_input.md",
+                    model="gemini/gemini-2.0-flash",
+                    num_chapters=5,
+                    words_per_chapter=2000,
+                    copy_to_clipboard=True,
+                    skip_refinement=True,
+                    _handle_event=self._handle_event,
+                    task_id=task_id
+                )
+            )
+
+            self._update_task_success(task_info, result, None) 
+            
+            # Create event for task completion
+            self._handle_event("task_solve_end", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Tutorial generation completed",
+                "result": json.dumps(result)
+            })
+            
+        except Exception as e:
+            self._update_task_failure(task_info, e)
+            
+            # Create event for task failure
+            self._handle_event("error_tool_execution", {
+                "task_id": task_id,
+                "message": f"Tutorial generation failed: {str(e)}"
+            })
+            
+            logger.exception(f"Error generating tutorial {task_id}")
+        finally:
+            self.remove_task_event_queue(task_id)

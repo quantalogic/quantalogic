@@ -638,6 +638,36 @@ async def get_file_content(file_path: str, raw: Optional[bool] = False) -> Respo
         logger.error(f"Error reading file content: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/agent/generate-tutorial")
+async def generate_tutorial(request: TutorialRequest) -> Dict[str, str]:
+    """Generate a tutorial from markdown content."""
+    try:
+        # Create a task submission
+        task_submission = TaskSubmission(
+            task="GENERATE TUTORIAL",  # Convert to JSON string
+            agent_id="default"  # Use default agent for tutorial generation
+        )
+        
+        # Submit the task
+        task_id = await agent_state.submit_task(task_submission)
+        logger.info(f"Tutorial generation task submitted with ID: {task_id}")
+        
+        # Start tutorial generation in background
+        asyncio.create_task(agent_state.execute_tutorial(task_id))
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "message": "Tutorial generation started"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting tutorial generation: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start tutorial generation: {str(e)}"
+        )
+
 if __name__ == "__main__":
     config = uvicorn.Config(
         "quantalogic.agent_server:app",

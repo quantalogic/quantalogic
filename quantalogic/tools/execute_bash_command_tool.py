@@ -86,7 +86,7 @@ class ExecuteBashCommandTool(Tool):
             logger.warning(f"Error processing mkdir command: {e}")
             return command
 
-    def _format_output(self, stdout: str, return_code: int, error: Optional[str] = None) -> str:
+    def _format_output_bis(self, stdout: str, return_code: int, error: Optional[str] = None) -> str:
         """Format command output with stdout, return code, and optional error."""
         formatted_result = "<command_output>\n"
         formatted_result += f" <stdout>{stdout.strip()}</stdout>\n"
@@ -94,6 +94,13 @@ class ExecuteBashCommandTool(Tool):
         if error:
             formatted_result += f" <error>{error}</error>\n"
         formatted_result += "</command_output>"
+        return formatted_result
+
+    def _format_output(self, stdout: str, return_code: int, error: Optional[str] = None) -> str:
+        """Format command output with stdout, return code, and optional error."""
+        formatted_result = stdout
+        if error:
+            formatted_result += f" \n  {error}   \n" 
         return formatted_result
 
     def _execute_windows(

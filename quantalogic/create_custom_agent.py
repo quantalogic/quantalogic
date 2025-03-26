@@ -151,6 +151,7 @@ TOOL_IMPORTS = {
     # RAG Tools 
     "rag_tool_hf": lambda: _import_tool("quantalogic.tools.rag_tool", "RagToolHf"),
     "openai_legal_rag": lambda: _import_tool("quantalogic.tools.rag_tool", "OpenAILegalRAG"),
+    "legal_embedding_rag": lambda: _import_tool("quantalogic.tools.rag_tool", "LegalEmbeddingRAG"),
     
     # Utility Tools
     "task_complete": lambda: _import_tool("quantalogic.tools.task_complete_tool", "TaskCompleteTool"),
@@ -335,7 +336,7 @@ def create_custom_agent(
         # Legal RAG tool
         "openai_legal_rag": lambda params: create_tool_instance(TOOL_IMPORTS["openai_legal_rag"](),
             persist_dir=params.get("persist_dir", "./storage/openai_legal_rag"),
-            document_paths=params.get("document_paths", ["ddd"]),
+            document_paths=params.get("document_paths", []),
             openai_api_key=params.get("openai_api_key", os.getenv("OPENAI_API_KEY")),
             embedding_model=params.get("embedding_model", "text-embedding-3-large"),
             chunk_size=params.get("chunk_size", 512),
@@ -344,6 +345,15 @@ def create_custom_agent(
             embedding_weight=params.get("embedding_weight", 0.7),
             force_reindex=params.get("force_reindex", True),
             cache_embeddings=params.get("cache_embeddings", True)
+        ),
+        
+        # Legal Embedding RAG tool
+        "legal_embedding_rag": lambda params: create_tool_instance(TOOL_IMPORTS["legal_embedding_rag"](),
+            persist_dir=params.get("persist_dir", "./storage/legal_embedding_rag"),
+            document_paths=params.get("document_paths", []),
+            chunk_size=params.get("chunk_size", 512),
+            chunk_overlap=params.get("chunk_overlap", 128),
+            force_reindex=params.get("force_reindex", True)
         ),
         
         "vscode_server_tool": lambda _: create_tool_instance(TOOL_IMPORTS["vscode_server_tool"]())

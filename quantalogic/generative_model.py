@@ -3,6 +3,7 @@
 import asyncio
 from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List
+import random
 
 import openai
 from loguru import logger
@@ -12,7 +13,10 @@ from quantalogic.event_emitter import EventEmitter  # Importing the EventEmitter
 from quantalogic.get_model_info import get_max_input_tokens, get_max_output_tokens, get_max_tokens
 from quantalogic.quantlitellm import acompletion, aimage_generation, exceptions, token_counter
 
-MIN_RETRIES = 1
+MIN_RETRIES = 3  # Increased from 1 to 3
+MAX_RETRIES = 5
+BASE_RETRY_DELAY = 1.0  # Base delay in seconds
+MAX_RETRY_DELAY = 32.0  # Maximum delay in seconds
 
 
 # Define the Message class for conversation handling
@@ -102,6 +106,7 @@ class GenerativeModel:
         exceptions.ServiceUnavailableError,  # Service issues - should retry
         exceptions.Timeout,  # Timeout - should retry
         exceptions.APIError,  # Generic API errors - should retry
+        exceptions.InternalServerError,  # Server overload - should retry
     )
 
     # Non-retriable exceptions that need specific handling
@@ -199,25 +204,66 @@ class GenerativeModel:
             self._handle_generation_exception(e)
             # We should never reach here as _handle_generation_exception always raises
 
+    async def _exponential_backoff(self, attempt: int) -> float:
+        """Calculate exponential backoff delay with jitter.
+        
+        Args:
+            attempt: Current retry attempt number
+            
+        Returns:
+            Delay in seconds
+        """
+        delay = min(MAX_RETRY_DELAY, BASE_RETRY_DELAY * (2 ** attempt))
+        jitter = random.uniform(0, 0.1 * delay)  # Add 0-10% jitter
+        return delay + jitter
+
     async def _async_stream_response(self, messages, stop_words: list[str] | None = None):
-        """Private method to handle asynchronous streaming responses."""
-        try:
-            response = await acompletion(
-                model=self.model,
-                messages=messages,
-                temperature=self.temperature,
-                stream=True,
-                stop=stop_words,
-                num_retries=MIN_RETRIES,
-            )
-            async for chunk in response:
-                if chunk.choices[0].delta.content is not None:
-                    self.event_emitter.emit("stream_chunk", chunk.choices[0].delta.content)
-                    yield chunk.choices[0].delta.content
-            self.event_emitter.emit("stream_end")
-        except Exception as e:
-            logger.error(f"Async streaming error: {str(e)}")
-            raise
+        """Private method to handle asynchronous streaming responses with retry logic."""
+        attempt = 0
+        last_error = None
+
+        while attempt <= MAX_RETRIES:
+            try:
+                response = await acompletion(
+                    model=self.model,
+                    messages=messages,
+                    temperature=self.temperature,
+                    stream=True,
+                    stop=stop_words,
+                    num_retries=MIN_RETRIES,
+                )
+                async for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        self.event_emitter.emit("stream_chunk", chunk.choices[0].delta.content)
+                        yield chunk.choices[0].delta.content
+                self.event_emitter.emit("stream_end")
+                return
+
+            except Exception as e:
+                last_error = e
+                
+                # Check if error is retriable
+                if not isinstance(e, self.RETRIABLE_EXCEPTIONS) or attempt >= MAX_RETRIES:
+                    logger.error(f"Non-retriable error or max retries exceeded: {str(e)}")
+                    self.event_emitter.emit("stream_error", {"error": str(e), "attempt": attempt})
+                    raise
+
+                # Calculate backoff delay
+                delay = await self._exponential_backoff(attempt)
+                logger.warning(f"Retriable error occurred (attempt {attempt + 1}/{MAX_RETRIES}). "
+                           f"Retrying in {delay:.2f}s. Error: {str(e)}")
+                self.event_emitter.emit("stream_retry", {
+                    "error": str(e),
+                    "attempt": attempt + 1,
+                    "delay": delay
+                })
+
+                # Wait before retrying
+                await asyncio.sleep(delay)
+                attempt += 1
+
+        # If we exit the loop without returning, raise the last error
+        raise last_error
 
     async def async_generate(
         self,

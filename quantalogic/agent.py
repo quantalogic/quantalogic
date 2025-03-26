@@ -79,7 +79,6 @@ class ObserveResponseResult(BaseModel):
     executed_tool: str | None = None
     answer: str | None = None
 
-
 class Agent(BaseModel):
     """Enhanced QuantaLogic agent supporting both ReAct goal-solving and conversational chat modes.
 

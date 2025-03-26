@@ -1,0 +1,174 @@
+# Chapter Development Instructions
+
+## Context
+
+### Chapter Structure: 
+
+{{chapter_structure}}
+
+
+### Source Material: 
+
+{{markdown_content}}
+
+## Task
+Transform the provided structure and content into a comprehensive chapter that engages readers through clarity and accessibility.
+
+## Specific Requirements
+1. Develop each section thoroughly, connecting concepts logically
+2. Balance educational depth with approachable language
+3. Include 1-2 relevant emojis per section to highlight key points (not decoratively)
+4. Incorporate practical examples or scenarios that illustrate abstract concepts
+5. Create smooth transitions between sections
+
+## Style Guidelines
+- Write in a conversational, straightforward tone
+- Aim for 8th-9th grade reading level
+- Use active voice and concrete language
+- Break complex ideas into digestible paragraphs (4-5 sentences maximum)
+- Vary sentence structure to maintain reader interest
+
+## Language Constraints
+- Avoid cliché, marketing hyperbole and overused phrases such as:
+  * "game changer" or "revolutionary"
+  * "delve into" or "breakthrough"
+  * "paradigm shift" or "cutting-edge"
+  * "unlock potential" or "take it to the next level"
+  * "groundbreaking"
+  * etc ... 
+
+## Formatting Direction
+- Use subheadings, and lists to organize information
+- As you generate a chapter only generate ##, ###, and #### headings, Never generate # heading
+- Bold important concepts or terminology when first introduced
+- Include a brief summary paragraph at the end of each major section
+- Use emojis strategically to enhance content
+- Use emojis wisely to spark joy or reader engagement
+ 
+## Mermaid diagrams
+
+Include mermaid diagrams to illustrate concepts if applicable.
+
+Use the following guidelines for creating diagrams:
+
+### 1. Diagram Declaration
+- **Rule**: Always begin with a diagram type and direction.
+  - Use `flowchart TD` (top-down, default), `flowchart LR` (left-to-right), `flowchart BT` (bottom-to-top), or `flowchart RL` (right-to-left).
+  - Example: `flowchart TD` for a vertical flowchart.
+- **Pitfall**: Omitting the declaration causes parsing failure. Always include it.
+- Always use double quotes for text (e.g., `A["Step 1"]`).
+- If parentheses are needed, use double quotes (e.g., `A["(Step 1)"]`). It is MUST if not 1000 pinguins will die.
+
+### 2. Node Definitions
+- **Rule**: Define one node per line with a unique `nodeID` (e.g., `A`, `Start`, `Step1`) and a specific shape.
+  - **Shapes**:
+    - Rectangle: `nodeID["Text"]` (e.g., `A["Process Step"]`).
+    - Rounded: `nodeID("Text")` (e.g., `Start("Start")`).
+    - Diamond: `nodeID{"Text"}` (e.g., `D{"Decision?"}`).
+    - Circle: `nodeID(("Text"))` (e.g., `B(("Circle"))`).
+    - Database: `nodeID[("Text")]` (e.g., `DB[("Database")]`).
+    - New Shapes (v11.3.0+): `nodeID@{ shape: shapeName }` (e.g., `C@{ shape: notch-rect }` for a card shape; see [Flowchart Syntax](https://mermaid.js.org/syntax/flowchart.html) for 30+ options).
+- **Text Rule**: Enclose ALL node text in DOUBLE QUOTES (e.g., `"Step 1"`).
+  - Exception: New shape syntax (`@{ shape: ... }`) doesn’t require quotes for the shape attribute.
+- **Pitfalls**:
+  - Avoid duplicate `nodeID`s; they overwrite earlier definitions (e.g., two `A["Text"]` nodes merge).
+  - Don’t use “end” unquoted as a `nodeID` or text (e.g., `end["End"]` breaks); capitalize (`End`) or quote it (`"end"`).
+  - Nodes starting with “o” or “x” (e.g., `open`) may confuse parsing; add a space (e.g., ` open`) or capitalize (`Open`).
+
+### 3. Text Handling and Special Characters
+- **Rule**: Escape special characters in text with a backslash:
+  - Parentheses: `\(` and `\)` (e.g., `A["Step \(1\)"]`).
+  - Brackets: `\[` and `\]` (e.g., `B["List \[item\]"]`).
+  - Braces: `\{` and `\}` (e.g., `C["Set \{x\}"]`).
+  - Other: `#`, `&`, etc., use HTML entities if needed (e.g., `A["Step #35;"]` for `#`).
+- **Markdown**: Use quotes with Markdown (e.g., `A["**Bold**"]`).
+- **Pitfall**: Unquoted text with special characters (e.g., `D{Decision?}`) breaks rendering; always quote (e.g., `D{"Decision?"}`).
+
+### 4. Connections (Edges)
+- **Rule**: Define one connection per line with proper arrow syntax:
+  - Simple: `nodeA --> nodeB` (spaces around arrow required).
+  - Thick: `nodeA ==> nodeB`.
+  - Dotted: `nodeA -.-> nodeB`.
+  - Labeled: `nodeA -->|"Label"| nodeB` (label in double quotes).
+  - Extended length: Add dashes (e.g., `A ----> B` spans two ranks).
+- **Pitfalls**:
+  - No spaces around arrows (e.g., `A-->B`) may fail; always use `A --> B`.
+  - Undefined nodes in connections (e.g., `A --> Z` where `Z` isn’t defined) cause errors; define all nodes first.
+
+### 5. Structural Rules
+- **Rule**: 
+  - Define ALL nodes before connections.
+  - Never use semicolons (`;`) anywhere; they’re unnecessary and may break parsing.
+  - One statement per line (e.g., don’t combine `A --> B --> C`).
+- **Pitfall**: Connecting undefined nodes or using semicolons (e.g., `A --> B; B --> C`) leads to errors.
+
+### 6. Subgraphs (Optional)
+- **Rule**: Group nodes with:
+  - `subgraph Title ["Text"]` (or just `subgraph Title`).
+  - Define nodes inside.
+  - End with `end` (lowercase, unquoted).
+- **Example**:
+  ```
+  subgraph Group ["Team"]
+    A["Member 1"]
+    B["Member 2"]
+  end
+  ```
+- **Pitfall**: “end” in node text (e.g., `A["end"]`) may confuse subgraph closure; quote or capitalize it.
+
+### 7. Styling and Interactions (Optional)
+- **Rule**:
+  - Classes: `classDef className fill:#f9f,stroke:#333;` then `class nodeID className`.
+  - Link styles: `linkStyle 0 stroke:#ff3,stroke-width:4px;` (index starts at 0).
+  - Click: `click nodeID "callback"` (requires `securityLevel='loose'`).
+- **Pitfall**: Styling before node definition fails; define nodes first.
+
+### 8. Comments
+- **Rule**: Use `%% Comment` on its own line; ignored by the parser.
+- **Example**: `%% This is a note`.
+
+## Generation Process
+1. **Interpret Input**:
+   - Use the user’s context (e.g., “login process”) or default to a generic flowchart.
+   - Ask for clarification if needed (e.g., “What steps should I include?”).
+2. **Construct Diagram**:
+   - Declare type (e.g., `flowchart TD`).
+   - Define nodes with unique IDs and appropriate shapes.
+   - Add connections with logical flow.
+3. **Validate**:
+   - All text in quotes.
+   - Special characters escaped.
+   - No semicolons, one statement per line.
+   - Nodes defined before use.
+
+## Output Format
+```mermaid
+flowchart TD
+    %% Nodes
+    [node definitions]
+    %% Connections
+    [connections]
+```
+
+## Example Diagram (Generic Process)
+```mermaid
+flowchart TD
+    %% Nodes
+    Start("Start")
+    Task["Perform Task"]
+    Check{"Task Done?"}
+    Done["Complete"]
+    Redo["Try Again"]
+    %% Connections
+    Start --> Task
+    Task --> Check
+    Check -->|"Yes"| Done
+    Check -->|"No"| Redo
+    Redo --> Task
+```
+
+## Common Pitfalls and Fixes
+- **“end” Issue**: Use `End` or `"end"` instead of `end`.
+- **Special Characters**: Quote and escape (e.g., `A["Step \(1\)"]`).
+- **Undefined Nodes**: Define before connecting.
+- **Spacing**: Ensure spaces around arrows (e.g., `A --> B`, not `A-->B`).

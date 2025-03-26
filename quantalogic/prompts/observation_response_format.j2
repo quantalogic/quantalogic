@@ -53,3 +53,8 @@ Last executed tool {{ last_executed_tool }} Execution Result:
 - Use interpolated variables ($variable_name$) where required in tool calls, to minimize token usage, if possible
 - strictly follow the required arguments for each tool as defined in system prompt
 - Utilize <action><task_complete><answer>...</answer></task_complete><action> to indicate task completion, display the result or if the task is deemed unfeasible.
+- ✅ Return complete, usable results well structured.
+- Never return $var$, always return the content of it if needed
+- Track consecutive tool errors and stop after three Identical calls
+- If two consecutive tool calls fail, pause execution and request user clarification
+- Resume execution only after receiving user guidance on tool errors

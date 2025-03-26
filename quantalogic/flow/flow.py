@@ -672,7 +672,7 @@ class Nodes:
                                     if hasattr(func, '__self__') and isinstance(func.__self__, WorkflowEngine):
                                         await func.__self__._notify_observers(
                                             WorkflowEvent(event_type=WorkflowEventType.STREAMING_CHUNK, node_name=func.__name__, context={
-                                                "chunk": delta.content
+                                                "result": delta.content
                                             })
                                         )
                         content = ''.join(content).strip()
