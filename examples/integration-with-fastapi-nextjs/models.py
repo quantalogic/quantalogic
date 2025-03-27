@@ -7,6 +7,14 @@ from pydantic import BaseModel
 from quantalogic.agent_config import MODEL_NAME
 from datetime import datetime
 
+class TutorialRequest(BaseModel):
+    """Request model for tutorial generation."""
+    markdown_content: str
+    model: str = "gemini/gemini-2.0-flash"
+    num_chapters: int = 5
+    words_per_chapter: int = 2000
+    copy_to_clipboard: bool = True
+    skip_refinement: bool = True
 
 class EventMessage(BaseModel):
     """Event message model for SSE."""

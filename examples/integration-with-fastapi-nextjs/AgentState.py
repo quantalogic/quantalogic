@@ -36,7 +36,7 @@ from quantalogic.memory import AgentMemory
 from quantalogic.task_runner import configure_logger
 from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
-from .models import EventMessage, UserValidationRequest, UserValidationResponse, AgentConfig, TaskSubmission
+from .models import EventMessage, TutorialRequest, UserValidationRequest, UserValidationResponse, AgentConfig, TaskSubmission
 
 memory = AgentMemory()
 SHUTDOWN_TIMEOUT = 10.0  # seconds
@@ -932,7 +932,7 @@ class AgentState:
             from quantalogic.flows.create_tutorial import generate_tutorial
 
 
-    async def execute_tutorial(self, task_id: str) -> None:
+    async def execute_tutorial(self, task_id: str, request: TutorialRequest) -> None:
         """Execute a tutorial generation task asynchronously."""
         if task_id not in self.tasks:
             raise ValueError(f"Task {task_id} not found")
@@ -962,17 +962,19 @@ class AgentState:
                 "message": "Tutorial generation started"
             })
 
+            logger.info(f"Tutorial generation started using model: {request.model}")
+
             result = await loop.run_in_executor(
                 None,
                 lambda: generate_tutorial(
-                    path="/home/yarab/Bureau/trash_agents_tests/f1/examples/integration-with-fastapi-nextjs/test_input.md",
-                    model="gemini/gemini-2.0-flash",
-                    num_chapters=5,
-                    words_per_chapter=2000,
-                    copy_to_clipboard=True,
-                    skip_refinement=True,
-                    _handle_event=self._handle_event,
-                    task_id=task_id
+                    markdown_content=request.markdown_content,
+                    model=request.model,
+                    num_chapters=request.num_chapters,
+                    words_per_chapter=request.words_per_chapter,
+                    copy_to_clipboard=request.copy_to_clipboard,
+                    skip_refinement=request.skip_refinement,
+                    task_id=task_id,
+                    _handle_event=self._handle_event
                 )
             )
 
@@ -983,7 +985,7 @@ class AgentState:
                 "task_id": task_id, 
                 "agent_id": "default",
                 "message": "Tutorial generation completed",
-                "result": json.dumps(result)
+                "result": result
             })
             
         except Exception as e:

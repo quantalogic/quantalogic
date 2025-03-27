@@ -39,7 +39,7 @@ from quantalogic.console_print_events import console_print_events
 from quantalogic.task_runner import configure_logger
 from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
-from .models import EventMessage, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
+from .models import EventMessage, TutorialRequest, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
 from .AgentState import AgentState
 from .init_agents import init_agents 
 
@@ -94,15 +94,6 @@ class AgentConfig(BaseModel):
     model_name: str
     agent_mode: str
     tools: List[ToolConfig]
-
-class TutorialRequest(BaseModel):
-    """Request model for tutorial generation."""
-    markdown_path: str
-    model: str = "gemini/gemini-2.0-flash"
-    num_chapters: int = 5
-    words_per_chapter: int = 2000
-    copy_to_clipboard: bool = True
-    skip_refinement: bool = True
 
 class FileUploadResponse(BaseModel):
     status: str
@@ -653,7 +644,7 @@ async def generate_tutorial(request: TutorialRequest) -> Dict[str, str]:
         logger.info(f"Tutorial generation task submitted with ID: {task_id}")
         
         # Start tutorial generation in background
-        asyncio.create_task(agent_state.execute_tutorial(task_id))
+        asyncio.create_task(agent_state.execute_tutorial(task_id, request))
         
         return {
             "status": "success",

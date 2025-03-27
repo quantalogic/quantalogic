@@ -669,12 +669,7 @@ class Nodes:
                                     # Print streaming chunks in real-time
                                     print(delta.content, end='', flush=True)
                                     # Emit streaming chunk event
-                                    if hasattr(func, '__self__') and isinstance(func.__self__, WorkflowEngine):
-                                        await func.__self__._notify_observers(
-                                            WorkflowEvent(event_type=WorkflowEventType.STREAMING_CHUNK, node_name=func.__name__, context={
-                                                "result": delta.content
-                                            })
-                                        )
+                                    
                         content = ''.join(content).strip()
                         print()  # New line after streaming completes
                         logger.info(f"Completed streaming response for {func.__name__}")

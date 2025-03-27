@@ -1,14 +1,11 @@
 # Test Tutorial Input
 
-This is a test markdown file that will be used to generate a tutorial. 
+This is a test markdown file that will be used to generate a tutorial.
 
 ## Key Topics
 
 1. Introduction to the topic
 2. Understanding core concepts
-3. Implementation details
-4. Best practices
-5. Advanced techniques
 
 ## Example Code
 

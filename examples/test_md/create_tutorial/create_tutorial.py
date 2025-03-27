@@ -63,12 +63,16 @@ async def tutorial_progress_observer(event: WorkflowEvent):
 
 # Workflow Nodes
 @Nodes.define(output=None)
-async def read_markdown(path: str) -> dict:
-    path = os.path.expanduser(path)
-    with open(path, encoding='utf-8') as f:
-        content = f.read()
-    logger.info(f"Read markdown file: {path}")
-    return {"markdown_content": content, "original_path": path}
+async def read_markdown(path: Optional[str] = None, markdown_content: Optional[str] = None) -> dict:
+    if path:
+        path = os.path.expanduser(path)
+        with open(path, encoding='utf-8') as f:
+            content = f.read()
+        logger.info(f"Read markdown file: {path}")
+        return {"markdown_content": content, "original_path": path}
+    else:
+        logger.info("Using provided markdown content")
+        return {"markdown_content": markdown_content, "original_path": None}
 
 @Nodes.structured_llm_node(
     system_prompt_file=get_template_path("system_generate_structure.j2"),
@@ -211,21 +215,22 @@ async def optional_copy_to_clipboard(final_book: str, copy_to_clipboard: bool) -
         logger.info("Copied tutorial to clipboard 📋")
 
 @Nodes.define(output=None)
-async def save_and_display(final_book: str, original_path: str) -> None:
-    dir_path = os.path.dirname(original_path)
-    base_name = os.path.basename(original_path)
-    name, ext = os.path.splitext(base_name)
-    output_path = os.path.join(dir_path, f"{name}_tutorial{ext}")
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(final_book)
+async def save_and_display(final_book: str, original_path: Optional[str] = None) -> None:
+    if original_path:
+        dir_path = os.path.dirname(original_path)
+        base_name = os.path.basename(original_path)
+        name, ext = os.path.splitext(base_name)
+        output_path = os.path.join(dir_path, f"{name}_tutorial{ext}")
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(final_book)
+        logger.info(f"Saved tutorial to {output_path} 💾")
+        print("Saved to:", output_path)
+    
     print("\n" + "="*50)
     print("📘 Final Tutorial Content 📘")
     print("="*50)
     print(final_book)
     print("="*50)
-    logger.info(f"Saved tutorial to {output_path} 💾")
-    print("Saved to:", output_path)
-
 
 # Define the Workflow with explicit transitions
 workflow = (
@@ -279,24 +284,35 @@ workflow = (
 )
 
 def generate_tutorial(
-    path: str ,
-    model: str ,
-    num_chapters: int ,
-    words_per_chapter: int ,
-    copy_to_clipboard: bool ,
-    skip_refinement: bool ,
-    task_id: str,
+    path: Optional[str] = None,
+    markdown_content: Optional[str] = None,
+    model: str = "gemini/gemini-2.0-flash",
+    num_chapters: int = 5,
+    words_per_chapter: int = 2000,
+    copy_to_clipboard: bool = True,
+    skip_refinement: bool = True,
+    task_id: str = "default",
     _handle_event: Optional[Callable[[str, Dict[str, Any]], None]] = None
 ):
+    if not path and not markdown_content:
+        raise ValueError("Either path or markdown_content must be provided")
+    if path and markdown_content:
+        raise ValueError("Only one of path or markdown_content should be provided")
+
     initial_context = {
-        "path": path,
         "model": model,
         "num_chapters": num_chapters,
         "words_per_chapter": words_per_chapter,
         "copy_to_clipboard": copy_to_clipboard,
         "skip_refinement": skip_refinement,
     }
-    logger.info(f"Starting tutorial generation for {path}")
+
+    if path:
+        initial_context["path"] = path
+    else:
+        initial_context["markdown_content"] = markdown_content
+
+    logger.info(f"Starting tutorial generation for {path if path else 'provided content'}")
     engine = workflow.build()
 
 
@@ -314,6 +330,9 @@ def generate_tutorial(
         }
 
         # Handle streaming chunks immediately
+        logger.info(f"=========================== Event type: {event.event_type}  ============================")
+
+
         if event.event_type == WorkflowEventType.STREAMING_CHUNK:
             _handle_event("streaming_chunk", {
                 **base_event_data,
