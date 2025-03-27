@@ -37,7 +37,7 @@ from quantalogic.memory import AgentMemory
 from quantalogic.task_runner import configure_logger
 from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
-from .models import EventMessage, TutorialRequest, UserValidationRequest, UserValidationResponse, AgentConfig, TaskSubmission
+from .models import CourseRequest, EventMessage, TutorialRequest, UserValidationRequest, UserValidationResponse, AgentConfig, TaskSubmission
 
 memory = AgentMemory()
 SHUTDOWN_TIMEOUT = 10.0  # seconds
@@ -982,6 +982,82 @@ class AgentState:
                 "task_id": task_id, 
                 "agent_id": "default",
                 "message": "Tutorial generation completed",
+                "result": result
+            })
+            
+        except Exception as e:
+            self._update_task_failure(task_info, e)
+            
+            # Create event for task failure
+            self._handle_event("error_tool_execution", {
+                "task_id": task_id,
+                "message": f"Tutorial generation failed: {str(e)}"
+            })
+            
+            logger.exception(f"Error generating tutorial {task_id}")
+        finally:
+            self.remove_task_event_queue(task_id)
+
+    async def execute_course(self, task_id: str, request: CourseRequest) -> None:
+        """Execute a course generation task asynchronously."""
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found")
+
+        task_info = self.tasks[task_id]
+        task_info["started_at"] = datetime.now().isoformat()
+        task_info["status"] = "running"
+
+        try:
+            logger.info(f"== Starting course generation: {task_id}") 
+            
+            # Add the examples directory to Python path
+            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', "integration-with-fastapi-nextjs"))
+            sys.path.append(examples_dir)
+            
+            from flows.courses_generator.course_generator_agent import generate_course
+            
+            # Run tutorial generation in a thread to not block the event loop
+            loop = asyncio.get_running_loop()
+
+            # Create event for task completion
+            self._handle_event("task_solve_start", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Course generation started"
+            })
+
+            request = CourseRequest(
+                subject=request.subject,
+                number_of_chapters=request.number_of_chapters,
+                level=request.level,
+                words_by_chapter=request.words_by_chapter,
+                target_directory="./courses/python3",
+                pdf_generation=True,
+                docx_generation=True,
+                epub_generation=False,
+                model=request.model_name,
+                model_name=request.model_name,
+            )
+
+            logger.info(f"== Course request: {request}")
+
+            result = await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(generate_course(
+                    request,
+                    task_id=task_id,
+                    _handle_event=self._handle_event
+                ))
+            )
+            logger.info(f"== Course generation result: {result}")
+
+            self._update_task_success(task_info, result, None) 
+            
+            # Create event for task completion
+            self._handle_event("task_solve_end", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Course generation completed",
                 "result": result
             })
             

@@ -622,7 +622,7 @@ class Nodes:
                 frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
                 
                 # Prioritize model from func_kwargs (workflow mapping), then model_param, then default
-                model_to_use = func_kwargs.get("model", model_param if model_param is not None else model(func_kwargs))
+                model_to_use = func_kwargs.get("model", model_param if model_param is not None else (model(func_kwargs) if callable(model) else model))
                 logger.debug(f"Selected model for {func.__name__}: {model_to_use}")
 
                 sig = inspect.signature(func)
@@ -776,7 +776,7 @@ class Nodes:
                 frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
                 
                 # Prioritize model from func_kwargs (workflow mapping), then model_param, then default
-                model_to_use = func_kwargs.get("model", model_param if model_param is not None else model(func_kwargs))
+                model_to_use = func_kwargs.get("model", model_param if model_param is not None else (model(func_kwargs) if callable(model) else model))
                 logger.debug(f"Selected model for {func.__name__}: {model_to_use}")
 
                 sig = inspect.signature(func)

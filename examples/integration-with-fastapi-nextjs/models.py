@@ -16,6 +16,19 @@ class TutorialRequest(BaseModel):
     copy_to_clipboard: bool = True
     skip_refinement: bool = True
 
+class CourseRequest(BaseModel):
+    subject: str
+    number_of_chapters: int
+    level: str
+    words_by_chapter: int
+    target_directory: Optional[str] = None
+    pdf_generation: Optional[bool] = True
+    docx_generation: Optional[bool] = True
+    epub_generation: Optional[bool] = False
+    model_name: Optional[str] = "gemini/gemini-2.0-flash"
+    model: Optional[str] = "gemini/gemini-2.0-flash"
+
+
 class EventMessage(BaseModel):
     """Event message model for SSE."""
 

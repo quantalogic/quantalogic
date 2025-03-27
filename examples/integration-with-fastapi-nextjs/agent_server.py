@@ -40,7 +40,7 @@ from quantalogic.console_print_events import console_print_events
 from quantalogic.task_runner import configure_logger
 from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
-from .models import EventMessage, TutorialRequest, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
+from .models import CourseRequest, EventMessage, TutorialRequest, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
 from .AgentState import AgentState
 from .init_agents import init_agents 
 
@@ -657,6 +657,35 @@ async def generate_tutorial(request: TutorialRequest) -> Dict[str, str]:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to start tutorial generation: {str(e)}"
+        )
+
+@app.post("/api/agent/generate-coursera")
+async def generate_course(request: CourseRequest) -> Dict[str, str]:
+    """Generate a course from markdown content."""
+    try:
+        # Create a task submission
+        task_submission = TaskSubmission(
+            task="generate_course",  # Convert to JSON string
+        )
+        
+        # Submit the task
+        task_id = await agent_state.submit_task(task_submission)
+        logger.info(f"Course generation task submitted with ID: {task_id}")
+        
+        # Start course generation in background
+        asyncio.create_task(agent_state.execute_course(task_id, request))
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "message": "Course generation started"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting course generation: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start course generation: {str(e)}"
         )
 
 if __name__ == "__main__":

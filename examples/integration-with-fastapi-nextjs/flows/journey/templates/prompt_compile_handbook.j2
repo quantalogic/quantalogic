@@ -1,0 +1,29 @@
+# {{ journey_structure.title }}
+
+Create a comprehensive travel handbook for the {{ journey_structure.duration_days }}-day journey to {{ journey_structure.destination }}.
+
+## Trip Overview
+- Duration: {{ journey_structure.duration_days }} days
+- Budget: {{ journey_structure.total_budget }}
+- Destination: {{ journey_structure.destination }}
+
+## Search Results Summary
+{% for category, results in search_results.items() %}
+### {{ category | title }}
+{% for result in results[:3] %}
+- {{ result.title if result.title else '' }}
+{% endfor %}
+{% endfor %}
+
+## Daily Plans
+{% for day in completed_days %}
+{{ day }}
+{% endfor %}
+
+## Additional Information
+Include:
+1. Essential phrases: {{ journey_structure.essential_phrases | length }} provided
+2. Cultural tips: {{ journey_structure.cultural_tips | length }} provided
+3. Emergency information from {{ journey_structure.emergency_info | length }} sources
+
+Please compile this information into a well-structured, easy-to-follow travel handbook.
