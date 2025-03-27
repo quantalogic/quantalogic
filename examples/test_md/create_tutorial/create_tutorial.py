@@ -336,7 +336,7 @@ def generate_tutorial(
         if event.event_type == WorkflowEventType.STREAMING_CHUNK:
             _handle_event("streaming_chunk", {
                 **base_event_data,
-                "content": event.context.get("result", ""),
+                "content": event.result,  # Changed from event.context.get("result", "")
                 "node_name": event.node_name,
                 "message": "Streaming content chunk"
             })

@@ -18,7 +18,7 @@ from pydantic import Field
 from quantalogic.tools.tool import Tool, ToolArgument
 
 # Configure loguru logger
-logger.remove()  # Remove default handler
+""" logger.remove()  # Remove default handler
 # Add file handler
 project_root = Path(__file__).resolve().parents[3]  # Go up 3 levels to reach project root
 log_file = project_root / "agent_log.log"
@@ -35,7 +35,7 @@ logger.add(
     sys.stderr,
     format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
     level="INFO"
-)
+) """
 
 # Base directory for all cloned repositories
 BITBUCKET_REPOS_BASE_DIR = "/tmp/bitbucket_repos"

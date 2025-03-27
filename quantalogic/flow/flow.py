@@ -153,6 +153,10 @@ class WorkflowEngine:
             for param in self.workflow.node_inputs[current_node]:
                 if param not in inputs:
                     inputs[param] = self.context.get(param)
+            
+            # UPDATED !!! Only pass engine to LLM nodes that expect it
+            if 'engine' in self.workflow.node_inputs[current_node]:
+                inputs['engine'] = self
 
             result = None
             exception = None
@@ -599,7 +603,8 @@ class Nodes:
             Decorator function wrapping the LLM logic.
         """
         def decorator(func: Callable) -> Callable:
-            async def wrapped_func(model_param: str = None, **func_kwargs):
+            # UPDATED !!!
+            async def wrapped_func(engine: Optional[WorkflowEngine] = None, model_param: str = None, **func_kwargs):
                 system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
                 system_prompt_file_to_use = func_kwargs.pop("system_prompt_file", system_prompt_file)
                 
@@ -668,8 +673,17 @@ class Nodes:
                                     content.append(delta.content)
                                     # Print streaming chunks in real-time
                                     print(delta.content, end='', flush=True)
-                                    # Emit streaming chunk event
-                                    
+                                    # UPDATED !!! Emit streaming chunk event if engine is available
+                                    if engine:
+                                        await engine._notify_observers(
+                                            WorkflowEvent(
+                                                event_type=WorkflowEventType.STREAMING_CHUNK,
+                                                node_name=func.__name__,
+                                                context=func_kwargs,
+                                                result=delta.content
+                                            )
+                                        )
+                                        
                         content = ''.join(content).strip()
                         print()  # New line after streaming completes
                         logger.info(f"Completed streaming response for {func.__name__}")
@@ -684,14 +698,16 @@ class Nodes:
                             }
                         else:
                             wrapped_func.usage = None
-                            
+                                
                     logger.debug(f"LLM output from {func.__name__}: {content[:50]}...")
                     return content
                 except Exception as e:
                     logger.error(f"Error in LLM node {func.__name__}: {e}")
                     raise
             sig = inspect.signature(func)
-            inputs = ['model'] + [param.name for param in sig.parameters.values()]
+            # UPDATED !!
+            func_inputs = [param.name for param in sig.parameters.values() if param.name != 'engine']
+            inputs = ['engine', 'model'] + func_inputs
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
             cls.NODE_REGISTRY[func.__name__] = (wrapped_func, inputs, output)
             return wrapped_func
@@ -741,7 +757,8 @@ class Nodes:
             raise ImportError("Instructor is required for structured_llm_node")
 
         def decorator(func: Callable) -> Callable:
-            async def wrapped_func(model_param: str = None, **func_kwargs):
+            # UPDATED !!! Only pass engine to LLM nodes that expect it
+            async def wrapped_func(engine: Optional[WorkflowEngine] = None, model_param: str = None, **func_kwargs):
                 system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
                 system_prompt_file_to_use = func_kwargs.pop("system_prompt_file", system_prompt_file)
                 
@@ -804,7 +821,9 @@ class Nodes:
                     logger.error(f"Error in structured LLM node {func.__name__}: {e}")
                     raise
             sig = inspect.signature(func)
-            inputs = ['model'] + [param.name for param in sig.parameters.values()]
+            # UPDATED !!!
+            func_inputs = [param.name for param in sig.parameters.values() if param.name != 'engine']
+            inputs = ['engine', 'model'] + func_inputs
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
             cls.NODE_REGISTRY[func.__name__] = (wrapped_func, inputs, output)
             return wrapped_func

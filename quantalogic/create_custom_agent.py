@@ -13,7 +13,7 @@ from quantalogic.tools.tool import Tool
 import sys
 from pathlib import Path
 # Configure loguru logger
-logger.remove()  # Remove default handler
+""" logger.remove()  # Remove default handler
 # Add file handler
 project_root = Path(__file__).resolve().parents[3]  # Go up 3 levels to reach project root
 log_file = project_root / "agent_log.log"
@@ -32,7 +32,7 @@ logger.add(
     level="INFO",
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
 )
-
+ """
 # Helper function to import tool classes
 def _import_tool(module_path: str, class_name: str) -> Type[Tool]:
     """
