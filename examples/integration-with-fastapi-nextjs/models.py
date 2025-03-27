@@ -74,7 +74,7 @@ class TaskSubmission(BaseModel):
     """Request model for task submission."""
 
     task: str
-    agent_id: str
+    agent_id: Optional[str] = None
     model_name: Optional[str] = MODEL_NAME
     max_iterations: Optional[int] = 30
     mode: Optional[str] = "minimal"

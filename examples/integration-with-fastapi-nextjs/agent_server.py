@@ -5,6 +5,7 @@ import asyncio
 import functools
 import json
 import os
+from pickle import NONE
 import shutil
 import signal
 import sys
@@ -635,8 +636,7 @@ async def generate_tutorial(request: TutorialRequest) -> Dict[str, str]:
     try:
         # Create a task submission
         task_submission = TaskSubmission(
-            task="GENERATE TUTORIAL",  # Convert to JSON string
-            agent_id="default"  # Use default agent for tutorial generation
+            task="generate_tutorial",  # Convert to JSON string
         )
         
         # Submit the task

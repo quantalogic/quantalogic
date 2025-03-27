@@ -12,7 +12,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from queue import Empty, Queue
 from threading import Lock
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional 
+import os
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -942,15 +943,13 @@ class AgentState:
         task_info["status"] = "running"
 
         try:
-            import sys
-            import os
             logger.info(f"Starting tutorial generation: {task_id}") 
             
             # Add the examples directory to Python path
-            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples'))
+            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', "integration-with-fastapi-nextjs"))
             sys.path.append(examples_dir)
             
-            from test_md.create_tutorial.create_tutorial import generate_tutorial
+            from flows.create_tutorial.create_tutorial import generate_tutorial
             
             # Run tutorial generation in a thread to not block the event loop
             loop = asyncio.get_running_loop()
@@ -961,8 +960,6 @@ class AgentState:
                 "agent_id": "default",
                 "message": "Tutorial generation started"
             })
-
-            logger.info(f"Tutorial generation started using model: {request.model}")
 
             result = await loop.run_in_executor(
                 None,

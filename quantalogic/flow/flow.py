@@ -672,7 +672,7 @@ class Nodes:
                                 if hasattr(delta, 'content') and delta.content:
                                     content.append(delta.content)
                                     # Print streaming chunks in real-time
-                                    print(delta.content, end='', flush=True)
+                                    # print(delta.content, end='', flush=True)
                                     # UPDATED !!! Emit streaming chunk event if engine is available
                                     if engine:
                                         await engine._notify_observers(
