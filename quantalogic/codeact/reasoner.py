@@ -72,6 +72,7 @@ class Reasoner:
                 max_iterations=max_iterations
             )
             program = await generate_program(task_prompt, self.tools, self.model, MAX_GENERATE_PROGRAM_TOKENS, step, notify_event, streaming=streaming)
+            program = self._clean_code(program)
             response = jinja_env.get_template("response_format.j2").render(
                 task=task,
                 history_str=history_str,
@@ -84,3 +85,30 @@ class Reasoner:
             return response
         except Exception as e:
             return jinja_env.get_template("error_format.j2").render(error=str(e))
+
+    def _clean_code(self, code: str) -> str:
+        """
+        Extract Python code from markdown code block if present, otherwise return the input string.
+
+        Args:
+            code: Input string that may contain markdown code block
+
+        Returns:
+            Extracted Python code or original string
+        """
+        lines = code.splitlines()
+        in_code_block = False
+        code_lines = []
+        
+        for line in lines:
+            if line.startswith('```python'):
+                in_code_block = True
+                continue
+            if in_code_block:
+                if line.startswith('```'):
+                    break
+                code_lines.append(line)
+        
+        if not in_code_block:
+            return code
+        return '\n'.join(code_lines)
