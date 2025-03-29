@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-import json
-import os
-
-import requests
 import typer
 from litellm import completion
+import json
+import os
+import requests
+import time
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.theme import Theme
