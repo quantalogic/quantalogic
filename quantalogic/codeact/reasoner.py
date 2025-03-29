@@ -103,6 +103,9 @@ class Reasoner:
         for line in lines:
             if line.startswith('```python'):
                 in_code_block = True
+                code_part = line[len('```python'):].strip()
+                if code_part:
+                    code_lines.append(code_part)
                 continue
             if in_code_block:
                 if line.startswith('```'):
