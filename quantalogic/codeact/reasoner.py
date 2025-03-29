@@ -1,0 +1,86 @@
+import asyncio
+from typing import Callable, List, Optional
+
+from quantalogic.tools import Tool
+
+from .constants import MAX_GENERATE_PROGRAM_TOKENS
+from .llm_util import litellm_completion
+from .templates import jinja_env
+from .utils import validate_xml
+
+
+async def generate_program(
+    task_description: str,
+    tools: List[Tool],
+    model: str,
+    max_tokens: int,
+    step: int,
+    notify_event: Callable,
+    streaming: bool = False
+) -> str:
+    """Generate a Python program using the specified model with streaming support."""
+    tool_docstrings = "\n\n".join(tool.to_docstring() for tool in tools)
+    prompt = jinja_env.get_template("generate_program.j2").render(
+        task_description=task_description,
+        tool_docstrings=tool_docstrings
+    )
+
+    for attempt in range(3):
+        try:
+            response = await litellm_completion(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a Python code generator."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=0.3,
+                stream=streaming,
+                step=step,
+                notify_event=notify_event
+            )
+            code = response.strip()
+            return code[9:-3].strip() if code.startswith("```python") and code.endswith("```") else code
+        except Exception as e:
+            if attempt < 2:
+                await asyncio.sleep(2 ** attempt)
+            else:
+                raise Exception(f"Code generation failed with {model}: {e}")
+
+class Reasoner:
+    """Handles action generation using the language model."""
+    def __init__(self, model: str, tools: List[Tool]):
+        self.model = model
+        self.tools = tools
+
+    async def generate_action(
+        self,
+        task: str,
+        history_str: str,
+        step: int,
+        max_iterations: int,
+        system_prompt: Optional[str] = None,
+        notify_event: Callable = None,
+        streaming: bool = False
+    ) -> str:
+        """Generate an action based on task and history with streaming support."""
+        try:
+            task_prompt = jinja_env.get_template("generate_action.j2").render(
+                task=task if not system_prompt else f"{system_prompt}\nTask: {task}",
+                history_str=history_str,
+                current_step=step,
+                max_iterations=max_iterations
+            )
+            program = await generate_program(task_prompt, self.tools, self.model, MAX_GENERATE_PROGRAM_TOKENS, step, notify_event, streaming=streaming)
+            response = jinja_env.get_template("response_format.j2").render(
+                task=task,
+                history_str=history_str,
+                program=program,
+                current_step=step,
+                max_iterations=max_iterations
+            )
+            if not validate_xml(response):
+                raise ValueError("Invalid XML generated")
+            return response
+        except Exception as e:
+            return jinja_env.get_template("error_format.j2").render(error=str(e))
