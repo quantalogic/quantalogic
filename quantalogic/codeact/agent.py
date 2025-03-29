@@ -5,8 +5,8 @@ from typing import Callable, Dict, List, Optional, Tuple
 from jinja2 import Environment, FileSystemLoader
 from loguru import logger
 from lxml import etree
+from quantalogic_pythonbox import execute_async
 
-from quantalogic.python_interpreter import execute_async
 from quantalogic.tools import Tool
 
 from .constants import MAX_GENERATE_PROGRAM_TOKENS, MAX_HISTORY_TOKENS, MAX_TOKENS, TEMPLATE_DIR

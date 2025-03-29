@@ -4,11 +4,9 @@ from typing import Callable, List, Optional, Union
 import typer
 from loguru import logger
 
-from quantalogic.tools import create_tool
-
-from .agent import Agent  # Import only Agent from agent.py
-from .constants import DEFAULT_MODEL, LOG_FILE
-from .events import (  # Import events from events.py
+from quantalogic.codeact.agent import Agent  # Import only Agent from agent.py
+from quantalogic.codeact.constants import DEFAULT_MODEL, LOG_FILE
+from quantalogic.codeact.events import (  # Import events from events.py
     ActionExecutedEvent,
     ActionGeneratedEvent,
     ErrorOccurredEvent,
@@ -22,6 +20,8 @@ from .events import (  # Import events from events.py
     ToolExecutionErrorEvent,
     ToolExecutionStartedEvent,
 )
+from quantalogic.tools import create_tool
+
 from .tools_manager import Tool, get_default_tools
 from .utils import XMLResultHandler
 
