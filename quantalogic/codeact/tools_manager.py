@@ -130,6 +130,6 @@ def get_default_tools(model: str) -> List[Tool]:
         # RipgrepTool(), 
         # SearchDefinitionNamesTool(),
         #TaskCompleteTool(), 
-        WriteFileTool(), 
+        WriteFileTool(disable_ensure_tmp_path=True),
         AgentTool(model=model),
     ]

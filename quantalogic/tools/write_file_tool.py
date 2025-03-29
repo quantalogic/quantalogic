@@ -10,10 +10,10 @@ from quantalogic.tools.tool import Tool, ToolArgument
 
 
 class WriteFileTool(Tool):
-    """Tool for writing a text file in /tmp directory."""
+    """Tool for writing a text file to a specified path."""
 
     name: str = "write_file_tool"
-    description: str = "Writes a file with the given content in /tmp directory. The tool will fail if the file already exists when not used in append mode."
+    description: str = "Writes a file to the specified path. The tool will fail if the file already exists when not used in append mode."
     need_validation: bool = True
 
     disable_ensure_tmp_path: bool = Field(default=False)
@@ -25,7 +25,7 @@ class WriteFileTool(Tool):
                 arg_type="string",
                 description="The path to the file to write. By default, paths will be forced to /tmp directory unless disable_ensure_tmp_path is enabled. Can include subdirectories.",
                 required=True,
-                example="/tmp/myfile.txt or myfile.txt",
+                example="/tmp/myfile.txt or ./myfile.txt",
             ),
             ToolArgument(
                 name="content",
