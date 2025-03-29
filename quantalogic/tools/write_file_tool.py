@@ -10,10 +10,10 @@ from quantalogic.tools.tool import Tool, ToolArgument
 
 
 class WriteFileTool(Tool):
-    """Tool for writing a text file in /tmp directory."""
+    """Tool for writing a text file to a specified path."""
 
     name: str = "write_file_tool"
-    description: str = "Writes a file with the given content in /tmp directory. The tool will fail if the file already exists when not used in append mode."
+    description: str = "Writes a file to the specified path. The tool will fail if the file already exists when not used in append mode."
     need_validation: bool = True
 
     disable_ensure_tmp_path: bool = Field(default=False)
@@ -25,7 +25,7 @@ class WriteFileTool(Tool):
                 arg_type="string",
                 description="The path to the file to write. By default, paths will be forced to /tmp directory unless disable_ensure_tmp_path is enabled. Can include subdirectories.",
                 required=True,
-                example="/tmp/myfile.txt or myfile.txt",
+                example="/tmp/myfile.txt or ./myfile.txt",
             ),
             ToolArgument(
                 name="content",
@@ -107,11 +107,8 @@ class WriteFileTool(Tool):
             # Ensure path is in /tmp and normalize it
             if not self.disable_ensure_tmp_path:
                 file_path = self._ensure_tmp_path(file_path)
-
-            # Ensure parent directory exists (only within /tmp)
-            parent_dir = os.path.dirname(file_path)
-            if parent_dir.startswith("/tmp/"):
-                os.makedirs(parent_dir, exist_ok=True)
+                if not file_path.startswith('/tmp/'):
+                    raise ValueError('File path must be under /tmp when disable_ensure_tmp_path is False')
 
             # Determine file write mode based on append_mode
             mode = "a" if append_mode_bool else "w"
@@ -121,6 +118,8 @@ class WriteFileTool(Tool):
                 raise FileExistsError(
                     f"File {file_path} already exists. Set append_mode=True to append or overwrite=True to overwrite."
                 )
+
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
             with open(file_path, mode, encoding="utf-8") as f:
                 f.write(content)
