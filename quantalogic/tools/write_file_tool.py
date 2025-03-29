@@ -107,11 +107,8 @@ class WriteFileTool(Tool):
             # Ensure path is in /tmp and normalize it
             if not self.disable_ensure_tmp_path:
                 file_path = self._ensure_tmp_path(file_path)
-
-            # Ensure parent directory exists (only within /tmp)
-            parent_dir = os.path.dirname(file_path)
-            if parent_dir.startswith("/tmp/"):
-                os.makedirs(parent_dir, exist_ok=True)
+                if not file_path.startswith('/tmp/'):
+                    raise ValueError('File path must be under /tmp when disable_ensure_tmp_path is False')
 
             # Determine file write mode based on append_mode
             mode = "a" if append_mode_bool else "w"
@@ -121,6 +118,8 @@ class WriteFileTool(Tool):
                 raise FileExistsError(
                     f"File {file_path} already exists. Set append_mode=True to append or overwrite=True to overwrite."
                 )
+
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
             with open(file_path, mode, encoding="utf-8") as f:
                 f.write(content)
