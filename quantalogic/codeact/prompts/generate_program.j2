@@ -11,7 +11,7 @@ If applicable use tools to assess the situation and generate a Python program th
 If applicable use tools to verify the task is completed.
 
 Instructions:
-1. Generate a simple vanilla Python program, avoid complex logic, return the program as a single string.
+1. Generate a very simple Python program, avoid complex logic, return the program as a single string.
 2. Include only the import for asyncio (import asyncio).
 3. Define an async function named main() that solves the task.
 4. Use the pre-defined tool functions directly by calling them with await and the appropriate arguments as specified in their descriptions.
@@ -20,9 +20,13 @@ Instructions:
 7. Strictly exclude asyncio.run(main()) or any code outside the main() function definition, including any 'if __name__ == "__main__":' block, as the runtime will handle execution of main().
 8. Express all string variables as multiline strings string, always start a string at the beginning of a line.
 9. Always return a string from main(); use "Task completed: [result]" if the task is solved, otherwise return intermediate results.
-10. Access variables from previous steps using the 'context_vars' dictionary (e.g., previous_value = context_vars.get("var_name", default_value))
+10. Access variables from previous steps using the `context_vars` dictionary:
+    - Use `context_vars.get("variable_name", default_value)` to safely retrieve variables (e.g., `previous_sum = context_vars.get("step1_sum", 0)`).
+    - Always specify a default value to handle cases where the variable might not exist.
+    - Check the history for 'Available variables' to identify relevant previous results.
+    - Use these variables to build on prior work rather than starting from scratch.
 11. Be careful to avoid programs that cannot terminate.
-
+12. When defining new variables, prefix them with 'step<current_step>_' (e.g., `step1_result`) to ensure uniqueness across steps.
 
 Example task: "Calculate running total by adding 5 to previous sum stored in context"
 Example output:
@@ -30,10 +34,10 @@ import asyncio
 
 async def main():
     # Retrieve previous total or default to 0
-    current_total = int(context_vars.get('running_total', 0))
+    current_total = int(context_vars.get('step1_running_total', 0))
     
     # Execute tool operation
-    new_total = await add_tool(a=current_total, b=5)
+    step2_new_total = await add_tool(a=current_total, b=5)
     
     # Return formatted result
-    return f"Task completed: {new_total}"
+    return f"Task completed: {step2_new_total}"

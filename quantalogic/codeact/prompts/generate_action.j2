@@ -18,13 +18,32 @@ Generate a Python program with an async main() function that uses the available 
 
 Essential Requirements:
 
-- Check context_vars for previous results: context_vars.get("variable_name")
-- Build upon previous steps when applicable, using variables listed in 'Available variables' from the history
-- Return "Task completed: [final answer]" if solved
-- Return intermediate results otherwise
-- Handle potential errors in tool arguments
-- Maintain proper async/await patterns
-- Important: When defining variables in the code, prefix them with 'step{{ current_step }}_' to ensure uniqueness across steps. For example, use 'step{{ current_step }}_intermediate_value'.
+- **Always check the 'Available variables' from the history** before proceeding. These are listed in the <History> section and stored in the `context_vars` dictionary. Access them using `context_vars.get("variable_name", default_value)` to retrieve results from previous steps.
+- **Build upon previous steps** by using these variables when they are relevant. This avoids redundant work and ensures continuity. For example, if a previous step stored a sum as `step1_sum`, retrieve it with `previous_sum = context_vars.get('step1_sum', 0)`.
+- When defining new variables, **prefix them with 'step{{ current_step }}_'** to ensure uniqueness (e.g., `step{{ current_step }}_result`). This prevents overwriting variables from earlier steps.
+- Return `"Task completed: [final answer]"` if the task is fully solved in this step.
+- Otherwise, return intermediate results as a string to be stored for future steps.
+- Handle potential errors in tool arguments gracefully, using try/except blocks if needed.
+- Use proper async/await syntax for all asynchronous operations.
+
+Variable Naming Convention:
+- Prefix all new variables with 'step{{ current_step }}_' (e.g., `step{{ current_step }}_result = ...`).
+- This ensures variables are unique across steps and traceable to their origin.
+
+Example Scenario:
+Suppose the task is "Calculate the running total by adding 10 to the previous sum." The history shows:
+- Step 1 stored `step1_total = 5` (visible in 'Available variables').
+
+Your code should:
+import asyncio
+
+async def main():
+    # Get previous total, default to 0 if not found
+    previous_total: int = int(context_vars.get('step1_total', 0))
+    # Calculate new total
+    step{{ current_step }}_total: int = previous_total + 10
+    # Return intermediate result
+    return f"Intermediate total: {step{{ current_step }}_total}"
 
 The program must:
 
@@ -32,11 +51,3 @@ The program must:
 2. Follow a subset of Python 3.10+ syntax, doesn't allow unsafe operations such as eval() or exec()
 3. Include type annotations for variables, give very explicit names to variables
 4. Output progress information
-
-Example Context Usage:
-
-You can get previous results from context_vars:
-
-previous_value = context_vars.get('step1_intermediate_result')
-if previous_value:
-    next_step = await process_tool(input=previous_value)
