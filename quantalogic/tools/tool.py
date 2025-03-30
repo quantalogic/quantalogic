@@ -37,6 +37,35 @@ def type_hint_to_str(type_hint):
         return str(type_hint)
 
 
+def get_type_description(type_hint):
+    """Generate a detailed description of the type hint.
+
+    Args:
+        type_hint: The type hint to describe.
+
+    Returns:
+        A string describing the type hint in detail, e.g., 'a list of int', or a structured class description.
+    """
+    origin = get_origin(type_hint)
+    if origin is not None:
+        if origin is list:
+            item_type = get_args(type_hint)[0]
+            return f"a list of {get_type_description(item_type)}"
+        elif origin is dict:
+            key_type, value_type = get_args(type_hint)
+            return f"a dictionary with {get_type_description(key_type)} keys and {get_type_description(value_type)} values"
+        else:
+            return type_hint_to_str(type_hint)
+    elif inspect.isclass(type_hint) and hasattr(type_hint, "__annotations__"):
+        annotations = getattr(type_hint, "__annotations__", {})
+        if annotations:
+            field_desc = "\n".join([f"        - {name}: {type_hint_to_str(typ)}" for name, typ in annotations.items()])
+            return f"an instance of {type_hint.__name__} with attributes:\n{field_desc}"
+        return type_hint.__name__
+    else:
+        return str(type_hint)
+
+
 class ToolArgument(BaseModel):
     """Represents an argument for a tool with validation and description.
 
@@ -47,6 +76,7 @@ class ToolArgument(BaseModel):
         required: Indicates if the argument is mandatory.
         default: Optional default value for the argument.
         example: Optional example value to illustrate the argument's usage.
+        type_details: Detailed description of the argument's type.
     """
 
     name: str = Field(..., description="The name of the argument.")
@@ -59,6 +89,7 @@ class ToolArgument(BaseModel):
         default=None, description="The default value for the argument. This parameter is required."
     )
     example: str | None = Field(default=None, description="An example value to illustrate the argument's usage.")
+    type_details: str | None = Field(default=None, description="Detailed description of the argument's type.")
 
 
 class ToolDefinition(BaseModel):
@@ -70,6 +101,7 @@ class ToolDefinition(BaseModel):
         arguments: List of arguments the tool accepts.
         return_type: The return type of the tool's execution method. Defaults to "str".
         return_description: Optional description of the return value.
+        return_type_details: Detailed description of the return type.
         need_validation: Flag to indicate if tool requires validation.
     """
 
@@ -80,6 +112,7 @@ class ToolDefinition(BaseModel):
     arguments: list[ToolArgument] = Field(default_factory=list, description="A list of arguments the tool accepts.")
     return_type: str = Field(default="str", description="The return type of the tool's execution method.")
     return_description: str | None = Field(default=None, description="Description of the return value.")
+    return_type_details: str | None = Field(default=None, description="Detailed description of the return type.")
     need_validation: bool = Field(
         default=False,
         description="When True, requires user confirmation before execution. Useful for tools that perform potentially destructive operations.",
@@ -116,6 +149,7 @@ class ToolDefinition(BaseModel):
             "need_validation",
             "need_variables",
             "need_caller_context_memory",
+            "return_type_details",
         }
         properties = {}
 
@@ -203,7 +237,7 @@ class ToolDefinition(BaseModel):
 
         Returns:
             A string formatted as a valid Python docstring representing the tool's configuration,
-            including the function signature and return type with a detailed description.
+            including the function signature, detailed argument types, and return type with descriptions.
         """
         signature_parts = []
         for arg in self.arguments:
@@ -230,10 +264,15 @@ class ToolDefinition(BaseModel):
                     arg_line += f" [{', '.join(details)}]"
                 if arg.description:
                     arg_line += f": {arg.description}"
+                if arg.type_details and arg.type_details != arg.arg_type:
+                    arg_line += f"\n        {arg.type_details}"
                 docstring += f"{arg_line}\n"
 
         return_desc = self.return_description or "The result of the tool execution."
-        docstring += f"Returns:\n    {self.return_type}: {return_desc}\n"
+        docstring += f"Returns:\n    {self.return_type}: {return_desc}"
+        if self.return_type_details and self.return_type_details != self.return_type:
+            docstring += f"\n        {self.return_type_details}"
+        docstring += "\n"
 
         docstring += '"""'
         return docstring
@@ -369,10 +408,12 @@ def create_tool(func: F) -> Tool:
             description=description,
             required=required,
             default=default,
-            example=default if default else None
+            example=default if default else None,
+            type_details=get_type_description(hint)
         ))
 
     return_type_str = type_hint_to_str(type_hints.get("return", str))
+    return_type_details = get_type_description(type_hints.get("return", str))
 
     class GeneratedTool(Tool):
         def __init__(self, *args: Any, **kwargs: Any):
@@ -383,6 +424,7 @@ def create_tool(func: F) -> Tool:
                 arguments=arguments,
                 return_type=return_type_str,
                 return_description=return_description,
+                return_type_details=return_type_details,
                 **kwargs
             )
             self._func = func
@@ -424,7 +466,7 @@ if __name__ == "__main__":
         field1: str | None = Field(default=None, description="Field 1 description")
 
     tool_with_fields = MyTool(
-        name="my_tool1",
+        name="my_thexpectedool1",
         description="A simple tool with a field",
         arguments=[ToolArgument(name="field1", arg_type="string")]
     )
