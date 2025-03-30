@@ -355,7 +355,7 @@ class Tool(ToolDefinition):
             ]
         return []
 
-    def execute(self, **kwargs: Any) -> str:
+    def execute(self, **kwargs: Any) -> Any:
         """Execute the tool with provided arguments.
 
         If not implemented by a subclass, falls back to the asynchronous execute_async method.
@@ -364,13 +364,13 @@ class Tool(ToolDefinition):
             **kwargs: Keyword arguments for tool execution.
 
         Returns:
-            A string representing the result of tool execution.
+            The result of tool execution, preserving the original type returned by the tool's logic.
         """
         if self.__class__.execute is Tool.execute:
             return asyncio.run(self.async_execute(**kwargs))
         raise NotImplementedError("This method should be implemented by subclasses.")
 
-    async def async_execute(self, **kwargs: Any) -> str:
+    async def async_execute(self, **kwargs: Any) -> Any:
         """Asynchronous version of execute.
 
         By default, runs the synchronous execute method in a separate thread using asyncio.to_thread.
@@ -381,7 +381,7 @@ class Tool(ToolDefinition):
             **kwargs: Keyword arguments for tool execution.
 
         Returns:
-            A string representing the result of tool execution.
+            The result of tool execution, preserving the original type returned by the tool's logic.
         """
         if self.__class__.async_execute is Tool.async_execute:
             return await asyncio.to_thread(self.execute, **kwargs)
@@ -474,30 +474,42 @@ def create_tool(func: F) -> Tool:
                 return_type=return_type_str,
                 return_description=return_description,
                 return_type_details=return_type_details,
-                is_async=is_async,  # Pass the async flag
+                is_async=is_async,
                 **kwargs
             )
             self._func = func
 
-        def execute(self, **kwargs: Any) -> str:
-            """Execute the tool synchronously, handling both sync and async functions."""
+        def execute(self, **kwargs: Any) -> Any:
+            """Execute the tool synchronously, handling both sync and async functions.
+
+            Args:
+                **kwargs: Keyword arguments for tool execution.
+
+            Returns:
+                The result of the function execution, preserving its original type.
+            """
             injectable = self.get_injectable_properties_in_execution()
             full_kwargs = {**injectable, **kwargs}
             if self.is_async:
                 return asyncio.run(self.async_execute(**full_kwargs))
             else:
-                result = self._func(**full_kwargs)
-                return str(result)
+                return self._func(**full_kwargs)
 
-        async def async_execute(self, **kwargs: Any) -> str:
-            """Execute the tool asynchronously, handling both sync and async functions."""
+        async def async_execute(self, **kwargs: Any) -> Any:
+            """Execute the tool asynchronously, handling both sync and async functions.
+
+            Args:
+                **kwargs: Keyword arguments for tool execution.
+
+            Returns:
+                The result of the function execution, preserving its original type.
+            """
             injectable = self.get_injectable_properties_in_execution()
             full_kwargs = {**injectable, **kwargs}
             if self.is_async:
-                result = await self._func(**full_kwargs)
+                return await self._func(**full_kwargs)
             else:
-                result = self._func(**full_kwargs)
-            return str(result)
+                return self._func(**full_kwargs)
 
     return GeneratedTool()
 
