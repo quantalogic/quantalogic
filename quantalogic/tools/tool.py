@@ -7,7 +7,7 @@ with type-validated arguments and execution methods.
 import ast
 import asyncio
 import inspect
-from typing import Any, Callable, Literal, TypeVar
+from typing import Any, Callable, TypeVar, get_args, get_origin
 
 from docstring_parser import parse as parse_docstring
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -16,12 +16,33 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 F = TypeVar('F', bound=Callable[..., Any])
 
 
+def type_hint_to_str(type_hint):
+    """Convert a type hint to a string representation.
+
+    Args:
+        type_hint: The type hint to convert.
+
+    Returns:
+        A string representation of the type hint, e.g., 'list[int]', 'dict[str, float]'.
+    """
+    origin = get_origin(type_hint)
+    if origin is not None:
+        origin_name = origin.__name__
+        args = get_args(type_hint)
+        args_str = ", ".join(type_hint_to_str(arg) for arg in args)
+        return f"{origin_name}[{args_str}]"
+    elif hasattr(type_hint, "__name__"):
+        return type_hint.__name__
+    else:
+        return str(type_hint)
+
+
 class ToolArgument(BaseModel):
     """Represents an argument for a tool with validation and description.
 
     Attributes:
         name: The name of the argument.
-        arg_type: The type of the argument (integer, float, boolean).
+        arg_type: The type of the argument, e.g., 'string', 'int', 'list[int]', 'dict[str, float]'.
         description: Optional description of the argument.
         required: Indicates if the argument is mandatory.
         default: Optional default value for the argument.
@@ -29,8 +50,8 @@ class ToolArgument(BaseModel):
     """
 
     name: str = Field(..., description="The name of the argument.")
-    arg_type: Literal["string", "int", "float", "boolean"] = Field(
-        ..., description="The type of the argument. Must be one of: string, integer, float, boolean."
+    arg_type: str = Field(
+        ..., description="The type of the argument, e.g., 'string', 'int', 'list[int]', 'dict[str, float]', etc."
     )
     description: str | None = Field(default=None, description="A brief description of the argument.")
     required: bool = Field(default=False, description="Indicates if the argument is required.")
@@ -48,6 +69,7 @@ class ToolDefinition(BaseModel):
         description: Brief description of the tool's functionality.
         arguments: List of arguments the tool accepts.
         return_type: The return type of the tool's execution method. Defaults to "str".
+        return_description: Optional description of the return value.
         need_validation: Flag to indicate if tool requires validation.
     """
 
@@ -57,6 +79,7 @@ class ToolDefinition(BaseModel):
     description: str = Field(..., description="A brief description of what the tool does.")
     arguments: list[ToolArgument] = Field(default_factory=list, description="A list of arguments the tool accepts.")
     return_type: str = Field(default="str", description="The return type of the tool's execution method.")
+    return_description: str | None = Field(default=None, description="Description of the return value.")
     need_validation: bool = Field(
         default=False,
         description="When True, requires user confirmation before execution. Useful for tools that perform potentially destructive operations.",
@@ -89,6 +112,7 @@ class ToolDefinition(BaseModel):
             "description",
             "arguments",
             "return_type",
+            "return_description",
             "need_validation",
             "need_variables",
             "need_caller_context_memory",
@@ -115,47 +139,40 @@ class ToolDefinition(BaseModel):
         Returns:
             A detailed Markdown string representing the tool's configuration and usage.
         """
-        # Tool name and description
         markdown = f"`{self.name}`:\n"
         markdown += f"- **Description**: {self.description}\n\n"
 
         properties_injectable = self.get_injectable_properties_in_execution()
 
-        # Parameters section
         if self.arguments:
             markdown += "- **Parameters**:\n"
             parameters = ""
             for arg in self.arguments:
-                # Skip if parameter name matches an object property with non-None value
                 if properties_injectable.get(arg.name) is not None:
                     continue
-
+                type_str = arg.arg_type
                 required_status = "required" if arg.required else "optional"
-                # Prioritize example, then default, then create a generic description
                 value_info = ""
+                if arg.default is not None:
+                    value_info += f", default: `{arg.default}`"
                 if arg.example is not None:
-                    value_info = f" (example: `{arg.example}`)"
-                elif arg.default is not None:
-                    value_info = f" (default: `{arg.default}`)"
-
+                    value_info += f", example: `{arg.example}`"
                 parameters += (
-                    f"  - `{arg.name}`: " f"({required_status}{value_info})\n" f"    {arg.description or ''}\n"
+                    f"  - `{arg.name}`: ({type_str}, {required_status}{value_info})\n"
+                    f"    {arg.description or ''}\n"
                 )
-            if len(parameters) > 0:
+            if parameters:
                 markdown += parameters + "\n\n"
             else:
                 markdown += "None\n\n"
 
-        # Usage section with XML-style example
         markdown += "**Usage**:\n"
         markdown += "```xml\n"
         markdown += f"<{self.name}>\n"
 
-        # Generate example parameters
         for arg in self.arguments:
             if properties_injectable.get(arg.name) is not None:
                 continue
-            # Prioritize example, then default, then create a generic example
             example_value = arg.example or arg.default or f"Your {arg.name} here"
             markdown += f"  <{arg.name}>{example_value}</{arg.name}>\n"
 
@@ -171,7 +188,6 @@ class ToolDefinition(BaseModel):
             List of ToolArgument instances that cannot be injected by the agent.
         """
         properties_injectable = self.get_injectable_properties_in_execution()
-
         return [arg for arg in self.arguments if properties_injectable.get(arg.name) is None]
 
     def get_injectable_properties_in_execution(self) -> dict[str, Any]:
@@ -180,7 +196,6 @@ class ToolDefinition(BaseModel):
         Returns:
             A dictionary of property names and values, excluding tool arguments and None values.
         """
-        # For ToolDefinition, return empty dict as it has no execution context
         return {}
 
     def to_docstring(self) -> str:
@@ -188,30 +203,22 @@ class ToolDefinition(BaseModel):
 
         Returns:
             A string formatted as a valid Python docstring representing the tool's configuration,
-            including the function signature and return type.
+            including the function signature and return type with a detailed description.
         """
-        # Construct the function signature
         signature_parts = []
         for arg in self.arguments:
-            # Base argument: name and type
             arg_str = f"{arg.name}: {arg.arg_type}"
-            # Add default value if present
             if arg.default is not None:
                 arg_str += f" = {arg.default}"
             signature_parts.append(arg_str)
         signature = f"def {self.name}({', '.join(signature_parts)}) -> {self.return_type}:"
 
-        # Start with the signature and description
         docstring = f'"""\n{signature}\n\n{self.description}\n\n'
-        
-        # Add Arguments section if there are any
+
         if self.arguments:
             docstring += "Args:\n"
             for arg in self.arguments:
-                # Base argument line: name and type
                 arg_line = f"    {arg.name} ({arg.arg_type})"
-                
-                # Add optional/required status and default/example if present
                 details = []
                 if not arg.required:
                     details.append("optional")
@@ -221,19 +228,14 @@ class ToolDefinition(BaseModel):
                     details.append(f"e.g., {arg.example}")
                 if details:
                     arg_line += f" [{', '.join(details)}]"
-                
-                # Add description if present
                 if arg.description:
                     arg_line += f": {arg.description}"
-                
                 docstring += f"{arg_line}\n"
-        
-        # Add Returns section
-        docstring += f"Returns:\n    {self.return_type}: The result of the tool execution.\n"
-        
-        # Close the docstring
+
+        return_desc = self.return_description or "The result of the tool execution."
+        docstring += f"Returns:\n    {self.return_type}: {return_desc}\n"
+
         docstring += '"""'
-        
         return docstring
 
 
@@ -260,7 +262,7 @@ class Tool(ToolDefinition):
                 if isinstance(arg, dict)
                 else arg
                 if isinstance(arg, ToolArgument)
-                else ToolArgument(name=str(arg), type=type(arg).__name__)
+                else ToolArgument(name=str(arg), arg_type=type(arg).__name__)
                 for arg in v
             ]
         return []
@@ -276,9 +278,7 @@ class Tool(ToolDefinition):
         Returns:
             A string representing the result of tool execution.
         """
-        # Check if execute is implemented in the subclass
         if self.__class__.execute is Tool.execute:
-            # If not implemented, run the async version synchronously
             return asyncio.run(self.async_execute(**kwargs))
         raise NotImplementedError("This method should be implemented by subclasses.")
 
@@ -295,7 +295,6 @@ class Tool(ToolDefinition):
         Returns:
             A string representing the result of tool execution.
         """
-        # Check if async_execute is implemented in the subclass
         if self.__class__.async_execute is Tool.async_execute:
             return await asyncio.to_thread(self.execute, **kwargs)
         raise NotImplementedError("This method should be implemented by subclasses.")
@@ -306,10 +305,7 @@ class Tool(ToolDefinition):
         Returns:
             A dictionary of property names and values, excluding tool arguments and None values.
         """
-        # Get argument names from tool definition
         argument_names = {arg.name for arg in self.arguments}
-
-        # Get properties excluding arguments and filter out None values
         properties = self.get_properties(exclude=["arguments"])
         return {name: value for name, value in properties.items() if value is not None and name in argument_names}
 
@@ -333,32 +329,27 @@ def create_tool(func: F) -> Tool:
     if not callable(func):
         raise ValueError("Input must be a callable function")
 
-    # Get source code and parse with AST
     try:
         source = inspect.getsource(func).strip()
         tree = ast.parse(source)
     except (OSError, TypeError, SyntaxError) as e:
         raise ValueError(f"Failed to parse function source: {e}")
 
-    # Ensure root node is a function definition
     if not tree.body or not isinstance(tree.body[0], (ast.FunctionDef, ast.AsyncFunctionDef)):
         raise ValueError("Source must define a single function")
     func_def = tree.body[0]
 
-    # Extract metadata
     name = func_def.name
     docstring = ast.get_docstring(func_def) or ""
     parsed_doc = parse_docstring(docstring)
     description = parsed_doc.short_description or f"Tool generated from {name}"
     param_docs = {p.arg_name: p.description for p in parsed_doc.params}
+    return_description = parsed_doc.returns.description if parsed_doc.returns else None
     is_async = isinstance(func_def, ast.AsyncFunctionDef)
 
-    # Get type hints using typing module
     from typing import get_type_hints
     type_hints = get_type_hints(func)
-    type_map = {int: "int", str: "string", float: "float", bool: "boolean"}
 
-    # Process arguments
     args = func_def.args
     defaults = [None] * (len(args.args) - len(args.defaults)) + [
         ast.unparse(d) if isinstance(d, ast.AST) else str(d) for d in args.defaults
@@ -369,15 +360,9 @@ def create_tool(func: F) -> Tool:
         arg_name = arg.arg
         default = defaults[i]
         required = default is None
-
-        # Determine argument type
-        hint = type_hints.get(arg_name, str)  # Default to str if no hint
-        arg_type = type_map.get(hint, "string")  # Fallback to string for unmapped types
-
-        # Use docstring or default description
+        hint = type_hints.get(arg_name, str)
+        arg_type = type_hint_to_str(hint)
         description = param_docs.get(arg_name, f"Argument {arg_name}")
-
-        # Create ToolArgument
         arguments.append(ToolArgument(
             name=arg_name,
             arg_type=arg_type,
@@ -387,11 +372,8 @@ def create_tool(func: F) -> Tool:
             example=default if default else None
         ))
 
-    # Determine return type from type hints
-    return_type = type_hints.get("return", str)
-    return_type_str = type_map.get(return_type, "string")
+    return_type_str = type_hint_to_str(type_hints.get("return", str))
 
-    # Define Tool subclass with both execute and async_execute
     class GeneratedTool(Tool):
         def __init__(self, *args: Any, **kwargs: Any):
             super().__init__(
@@ -400,6 +382,7 @@ def create_tool(func: F) -> Tool:
                 description=description,
                 arguments=arguments,
                 return_type=return_type_str,
+                return_description=return_description,
                 **kwargs
             )
             self._func = func
@@ -407,20 +390,16 @@ def create_tool(func: F) -> Tool:
         def execute(self, **kwargs: Any) -> str:
             """Execute the tool synchronously, handling both sync and async functions."""
             if is_async:
-                # For async functions, run synchronously via asyncio.run
                 return asyncio.run(self.async_execute(**kwargs))
             else:
-                # For sync functions, call directly
                 result = self._func(**kwargs)
                 return str(result)
 
         async def async_execute(self, **kwargs: Any) -> str:
             """Execute the tool asynchronously, handling both sync and async functions."""
             if is_async:
-                # For async functions, await directly
                 result = await self._func(**kwargs)
             else:
-                # For sync functions, call synchronously in async context
                 result = self._func(**kwargs)
             return str(result)
 
@@ -477,6 +456,9 @@ if __name__ == "__main__":
         Args:
             a: First number.
             b: Second number (optional).
+        
+        Returns:
+            The sum of a and b.
         """
         return a + b
 
@@ -495,8 +477,11 @@ if __name__ == "__main__":
         
         Args:
             name: Name of the person.
+        
+        Returns:
+            A greeting message.
         """
-        await asyncio.sleep(0.1)  # Simulate async work
+        await asyncio.sleep(0.1)
         return f"Hello, {name}"
 
     async_tool = create_tool(greet)
@@ -508,6 +493,29 @@ if __name__ == "__main__":
     print("Execution result (async):", asyncio.run(async_tool.async_execute(name="Alice")))
     print()
 
+    # Comprehensive tool with complex types
+    from typing import List, Dict
+
+    def process_data(data: List[int], options: Dict[str, bool] = {}) -> Dict[str, int]:
+        """Process a list of integers with options.
+
+        Args:
+            data: List of integers to process.
+            options: Dictionary of options.
+
+        Returns:
+            A dictionary with results.
+        """
+        return {str(i): i for i in data}
+
+    complex_tool = create_tool(process_data)
+    print("Complex Tool Markdown:")
+    print(complex_tool.to_markdown())
+    print("Complex Tool Docstring:")
+    print(complex_tool.to_docstring())
+    print("Execution result (sync):", complex_tool.execute(data=[1, 2, 3]))
+    print()
+
     # Comprehensive tool for to_docstring demonstration with custom return type
     docstring_tool = Tool(
         name="sample_tool",
@@ -517,7 +525,8 @@ if __name__ == "__main__":
             ToolArgument(name="y", arg_type="float", description="The second number", default="0.0", example="1.5"),
             ToolArgument(name="verbose", arg_type="boolean", description="Print extra info", default="False")
         ],
-        return_type="int"  # Custom return type
+        return_type="int",
+        return_description="The computed result of the operation."
     )
     print("Comprehensive Tool Markdown:")
     print(docstring_tool.to_markdown())
