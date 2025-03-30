@@ -63,7 +63,7 @@ def get_type_description(type_hint):
             return f"an instance of {type_hint.__name__} with attributes:\n{field_desc}"
         return type_hint.__name__
     else:
-        return str(type_hint)
+        return f"<class '{str(type_hint)}'>"
 
 
 class ToolArgument(BaseModel):
@@ -103,6 +103,7 @@ class ToolDefinition(BaseModel):
         return_description: Optional description of the return value.
         return_type_details: Detailed description of the return type.
         need_validation: Flag to indicate if tool requires validation.
+        is_async: Flag to indicate if the tool is asynchronous (for documentation purposes).
     """
 
     model_config = ConfigDict(extra="allow", validate_assignment=True)
@@ -129,6 +130,10 @@ class ToolDefinition(BaseModel):
         default=False,
         description="When True, provides access to the agent's conversation history. Useful for tools that need context from previous interactions.",
     )
+    is_async: bool = Field(
+        default=False,
+        description="Indicates if the tool is asynchronous (used for documentation).",
+    )
 
     def get_properties(self, exclude: list[str] | None = None) -> dict[str, Any]:
         """Return a dictionary of all non-None properties, excluding Tool class fields and specified fields.
@@ -150,6 +155,7 @@ class ToolDefinition(BaseModel):
             "need_variables",
             "need_caller_context_memory",
             "return_type_details",
+            "is_async",
         }
         properties = {}
 
@@ -177,6 +183,8 @@ class ToolDefinition(BaseModel):
         markdown += f"- **Description**: {self.description}\n\n"
 
         properties_injectable = self.get_injectable_properties_in_execution()
+        if any(properties_injectable.get(arg.name) is not None for arg in self.arguments):
+            markdown += "- **Note**: Some arguments are injected from the tool's configuration and may not need to be provided explicitly.\n\n"
 
         if self.arguments:
             markdown += "- **Parameters**:\n"
@@ -184,7 +192,9 @@ class ToolDefinition(BaseModel):
             for arg in self.arguments:
                 if properties_injectable.get(arg.name) is not None:
                     continue
-                type_str = arg.arg_type
+                type_info = f"{arg.arg_type}"
+                if arg.type_details and arg.type_details != arg.arg_type:
+                    type_info += f" ({arg.type_details})"
                 required_status = "required" if arg.required else "optional"
                 value_info = ""
                 if arg.default is not None:
@@ -192,15 +202,31 @@ class ToolDefinition(BaseModel):
                 if arg.example is not None:
                     value_info += f", example: `{arg.example}`"
                 parameters += (
-                    f"  - `{arg.name}`: ({type_str}, {required_status}{value_info})\n"
+                    f"  - `{arg.name}`: ({type_info}, {required_status}{value_info})\n"
                     f"    {arg.description or ''}\n"
                 )
             if parameters:
-                markdown += parameters + "\n\n"
+                markdown += parameters + "\n"
             else:
-                markdown += "None\n\n"
+                markdown += "  None\n\n"
 
-        markdown += "**Usage**:\n"
+        standard_fields = {
+            "name", "description", "arguments", "return_type", "return_description", "return_type_details",
+            "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async"
+        }
+        additional_fields = [f for f in self.model_fields if f not in standard_fields]
+        if additional_fields:
+            markdown += "- **Configuration**:\n"
+            for field in additional_fields:
+                field_info = self.model_fields[field]
+                field_type = type_hint_to_str(field_info.annotation)
+                field_desc = field_info.description or "No description provided."
+                if field in properties_injectable:
+                    field_desc += f" Injects into '{field}' argument."
+                markdown += f"  - `{field}`: ({field_type}) - {field_desc}\n"
+            markdown += "\n"
+
+        markdown += "- **Usage**: This tool can be invoked using the following XML-like syntax:\n"
         markdown += "```xml\n"
         markdown += f"<{self.name}>\n"
 
@@ -211,7 +237,9 @@ class ToolDefinition(BaseModel):
             markdown += f"  <{arg.name}>{example_value}</{arg.name}>\n"
 
         markdown += f"</{self.name}>\n"
-        markdown += "```\n"
+        markdown += "```\n\n"
+
+        markdown += f"- **Returns**: `{self.return_type}` - {self.return_description or 'The result of the tool execution.'}\n"
 
         return markdown
 
@@ -245,12 +273,15 @@ class ToolDefinition(BaseModel):
             if arg.default is not None:
                 arg_str += f" = {arg.default}"
             signature_parts.append(arg_str)
-        signature = f"def {self.name}({', '.join(signature_parts)}) -> {self.return_type}:"
+        signature = f"{'async ' if self.is_async else ''}def {self.name}({', '.join(signature_parts)}) -> {self.return_type}:"
 
-        docstring = f'"""\n{signature}\n\n{self.description}\n\n'
+        docstring = f'"""\n{signature}\n\n{self.description}\n'
+        properties_injectable = self.get_injectable_properties_in_execution()
+        if properties_injectable:
+            docstring += "\n    Note: Some arguments may be injected from the tool's configuration.\n"
 
         if self.arguments:
-            docstring += "Args:\n"
+            docstring += "\nArgs:\n"
             for arg in self.arguments:
                 arg_line = f"    {arg.name} ({arg.arg_type})"
                 details = []
@@ -269,12 +300,30 @@ class ToolDefinition(BaseModel):
                 docstring += f"{arg_line}\n"
 
         return_desc = self.return_description or "The result of the tool execution."
-        docstring += f"Returns:\n    {self.return_type}: {return_desc}"
+        docstring += f"\nReturns:\n    {self.return_type}: {return_desc}"
         if self.return_type_details and self.return_type_details != self.return_type:
             docstring += f"\n        {self.return_type_details}"
         docstring += "\n"
 
-        docstring += '"""'
+        docstring += "\nExamples:\n"
+        args_str = ", ".join([f"{arg.name}=..." for arg in self.arguments if arg.required])
+        prefix = "        result = " if not self.is_async else "        result = await "
+        docstring += f"{prefix}{self.name}({args_str})\n"
+
+        standard_fields = {
+            "name", "description", "arguments", "return_type", "return_description", "return_type_details",
+            "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async"
+        }
+        additional_fields = [f for f in self.model_fields if f not in standard_fields]
+        if additional_fields:
+            docstring += "\nConfiguration:\n"
+            for field in additional_fields:
+                field_info = self.model_fields[field]
+                field_type = type_hint_to_str(field_info.annotation)
+                field_desc = field_info.description or "No description provided."
+                docstring += f"    {field} ({field_type}): {field_desc}\n"
+
+        docstring += '\n"""'
         return docstring
 
 
@@ -425,24 +474,29 @@ def create_tool(func: F) -> Tool:
                 return_type=return_type_str,
                 return_description=return_description,
                 return_type_details=return_type_details,
+                is_async=is_async,  # Pass the async flag
                 **kwargs
             )
             self._func = func
 
         def execute(self, **kwargs: Any) -> str:
             """Execute the tool synchronously, handling both sync and async functions."""
-            if is_async:
-                return asyncio.run(self.async_execute(**kwargs))
+            injectable = self.get_injectable_properties_in_execution()
+            full_kwargs = {**injectable, **kwargs}
+            if self.is_async:
+                return asyncio.run(self.async_execute(**full_kwargs))
             else:
-                result = self._func(**kwargs)
+                result = self._func(**full_kwargs)
                 return str(result)
 
         async def async_execute(self, **kwargs: Any) -> str:
             """Execute the tool asynchronously, handling both sync and async functions."""
-            if is_async:
-                result = await self._func(**kwargs)
+            injectable = self.get_injectable_properties_in_execution()
+            full_kwargs = {**injectable, **kwargs}
+            if self.is_async:
+                result = await self._func(**full_kwargs)
             else:
-                result = self._func(**kwargs)
+                result = self._func(**full_kwargs)
             return str(result)
 
     return GeneratedTool()
@@ -466,7 +520,7 @@ if __name__ == "__main__":
         field1: str | None = Field(default=None, description="Field 1 description")
 
     tool_with_fields = MyTool(
-        name="my_thexpectedool1",
+        name="my_tool1",
         description="A simple tool with a field",
         arguments=[ToolArgument(name="field1", arg_type="string")]
     )
@@ -582,7 +636,7 @@ if __name__ == "__main__":
         x: int
         y: int
 
-    def distance(point1: Point, point2: Point) -> float:
+    async def distance(point1: Point, point2: Point) -> float:
         """
         Calculate the Euclidean distance between two points.
 
@@ -591,7 +645,7 @@ if __name__ == "__main__":
             point2: Second point with x and y coordinates.
 
         Returns:
-            The Euclidean distance between the two points.
+            The Euclidean distance between two points.
         """
         return ((point1.x - point2.x) ** 2 + (point1.y - point2.y) ** 2) ** 0.5
 
