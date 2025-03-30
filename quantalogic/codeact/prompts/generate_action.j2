@@ -31,19 +31,23 @@ Variable Naming Convention:
 - This ensures variables are unique across steps and traceable to their origin.
 
 Example Scenario:
-Suppose the task is "Calculate the running total by adding 10 to the previous sum." The history shows:
-- Step 1 stored `step1_total = 5` (visible in 'Available variables').
-
+Task: "Calculate the running total by adding 10 to the previous sum."
+History: 
+"===== Step 1 of 5 max =====
+Thought: Initialize the sum
+Action: <code>import asyncio\nasync def main():\n    step1_sum = 5\n    return f'Initial sum: {step1_sum}'</code>
+Result: Initial sum: 5
+Available variables: step1_sum"
 Your code should:
 import asyncio
 
 async def main():
     # Get previous total, default to 0 if not found
-    previous_total: int = int(context_vars.get('step1_total', 0))
+    previous_total: int = int(context_vars.get('step1_sum', 0))
     # Calculate new total
-    step{{ current_step }}_total: int = previous_total + 10
+    step2_total: int = previous_total + 10
     # Return intermediate result
-    return f"Intermediate total: {step{{ current_step }}_total}"
+    return f"Intermediate total: {step2_total}"
 
 The program must:
 

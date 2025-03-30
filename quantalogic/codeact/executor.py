@@ -8,6 +8,7 @@ from quantalogic_pythonbox import execute_async
 from quantalogic.tools import Tool
 
 from .events import ToolExecutionCompletedEvent, ToolExecutionErrorEvent, ToolExecutionStartedEvent
+from .tools_manager import ToolRegistry
 from .utils import XMLResultHandler, validate_code
 
 
@@ -24,13 +25,24 @@ class BaseExecutor(ABC):
 
 class Executor(BaseExecutor):
     """Manages action execution and context updates with dynamic tool registration."""
-    def __init__(self, tools: List[Tool], notify_event: Callable):
-        self.tools: Dict[str, Tool] = {tool.name: tool for tool in tools}
+    def __init__(self, tools: List[Tool], notify_event: Callable, verbose: bool = True):
+        self.registry = ToolRegistry()
+        for tool in tools:
+            self.registry.register(tool)
+        self.tools: Dict[str, Tool] = self.registry.tools
         self.notify_event = notify_event
+        self.verbose = verbose
         self.tool_namespace = self._build_tool_namespace()
 
     def _build_tool_namespace(self) -> Dict:
-        """Build the namespace with wrapped tool functions that trigger events."""
+        """Build the namespace with wrapped tool functions that trigger events if verbose."""
+        if not self.verbose:
+            return {
+                "asyncio": asyncio,
+                "context_vars": {},
+                **{tool.name: tool.async_execute for tool in self.tools.values()}
+            }
+
         def wrap_tool(tool):
             async def wrapped_tool(**kwargs):
                 current_step = self.tool_namespace.get('current_step', None)
@@ -72,10 +84,9 @@ class Executor(BaseExecutor):
 
     def register_tool(self, tool: Tool) -> None:
         """Register a new tool dynamically at runtime."""
-        if tool.name in self.tools:
-            raise ValueError(f"Tool '{tool.name}' is already registered")
+        self.registry.register(tool)
         self.tools[tool.name] = tool
-        self.tool_namespace[tool.name] = self._wrap_tool(tool)
+        self.tool_namespace[tool.name] = self._wrap_tool(tool) if self.verbose else tool.async_execute
 
     def _wrap_tool(self, tool: Tool) -> Callable:
         """Wrap a tool function to handle execution events (internal use)."""

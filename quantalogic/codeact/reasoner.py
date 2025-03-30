@@ -1,3 +1,4 @@
+import ast
 import asyncio
 from abc import ABC, abstractmethod
 from typing import Callable, List, Optional
@@ -20,7 +21,7 @@ async def generate_program(
     notify_event: Callable,
     streaming: bool = False
 ) -> str:
-    """Generate a Python program using the specified model with streaming support."""
+    """Generate a Python program using the specified model with streaming support and retries."""
     tool_docstrings = "\n\n".join(tool.to_docstring() for tool in tools)
     prompt = jinja_env.get_template("generate_program.j2").render(
         task_description=task_description,
@@ -48,9 +49,9 @@ async def generate_program(
             return code[9:-3].strip() if code.startswith("```python") and code.endswith("```") else code
         except Exception as e:
             if attempt < 2:
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s
             else:
-                raise Exception(f"Code generation failed with {model}: {e}")
+                raise Exception(f"Code generation failed with {model} after 3 attempts: {e}")
 
 
 class BaseReasoner(ABC):
@@ -112,7 +113,9 @@ class Reasoner(BaseReasoner):
             return XMLResultHandler.format_error_result(str(e))
 
     def _clean_code(self, code: str) -> str:
-        """Extract Python code from markdown code block if present, otherwise return the input string."""
+
+        
+        # Extract code from markdown block
         lines = code.splitlines()
         in_code_block = False
         code_lines = []
@@ -129,6 +132,12 @@ class Reasoner(BaseReasoner):
                     break
                 code_lines.append(line)
         
-        if not in_code_block:
-            return code
-        return '\n'.join(code_lines)
+        # Use extracted code or original if no markdown block
+        final_code = '\n'.join(code_lines) if in_code_block else code
+        
+        # Validate syntax
+        try:
+            ast.parse(final_code)
+            return final_code
+        except SyntaxError as e:
+            raise ValueError(f'Invalid Python code: {e}') from e

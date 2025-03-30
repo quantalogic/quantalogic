@@ -9,13 +9,13 @@ from ..utils import log_async_tool
 
 @create_tool
 @log_async_tool("Calculating cosine")
-async def cosinus(x: float) -> str:
-    """Calculates the cosine of a number and returns it as a string.
+async def cosinus(x: float) -> float:
+    """Calculates the cosine of a number.
 
     Args:
         x (float): The input value in radians.
 
     Returns:
-        str: The cosine of x as a string.
+        float: The cosine of x.
     """
-    return str(math.cos(x))
+    return math.cos(x)

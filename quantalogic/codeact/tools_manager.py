@@ -2,6 +2,7 @@
 
 import asyncio
 import importlib
+import os
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import List, Optional
@@ -14,9 +15,26 @@ from quantalogic.tools import Tool, ToolArgument
 from .utils import log_tool_method
 
 
+class ToolRegistry:
+    """Manages tool registration with dependency and conflict checking."""
+    def __init__(self):
+        self.tools: dict[str, Tool] = {}
+
+    def register(self, tool: Tool) -> None:
+        """Register a tool, checking for conflicts."""
+        if tool.name in self.tools:
+            raise ValueError(f"Tool '{tool.name}' is already registered")
+        # Placeholder for dependency checking (e.g., required libraries)
+        self.tools[tool.name] = tool
+
+    def get_tools(self) -> List[Tool]:
+        """Return all registered tools."""
+        return list(self.tools.values())
+
+
 class AgentTool(Tool):
     """Tool for generating text using a language model."""
-    def __init__(self, model: str = "gemini/gemini-2.0-flash", timeout: int = 30) -> None:
+    def __init__(self, model: str = None, timeout: int = None) -> None:
         super().__init__(
             name="agent_tool",
             description="Generates text using a language model.",
@@ -30,8 +48,8 @@ class AgentTool(Tool):
             ],
             return_type="string"
         )
-        self.model: str = model
-        self.timeout: int = timeout
+        self.model: str = model or os.getenv("AGENT_MODEL", "gemini/gemini-2.0-flash")
+        self.timeout: int = timeout or int(os.getenv("AGENT_TIMEOUT", "30"))
 
     @log_tool_method
     async def async_execute(self, **kwargs) -> str:
@@ -65,7 +83,7 @@ class AgentTool(Tool):
 
 
 class RetrieveStepTool(Tool):
-    """Tool to retrieve information from a specific previous step."""
+    """Tool to retrieve information from a specific previous step with indexed access."""
     def __init__(self, history_store: List[dict]) -> None:
         super().__init__(
             name="retrieve_step",
@@ -76,16 +94,16 @@ class RetrieveStepTool(Tool):
             ],
             return_type="string"
         )
-        self.history_store: List[dict] = history_store
+        self.history_index: dict[int, dict] = {i + 1: step for i, step in enumerate(history_store)}
 
     @log_tool_method
     async def async_execute(self, **kwargs) -> str:
         step_number: int = kwargs["step_number"]
-        if not (1 <= step_number <= len(self.history_store)):
-            error_msg = f"Error: Step {step_number} is out of range (1-{len(self.history_store)})"
+        if step_number not in self.history_index:
+            error_msg = f"Error: Step {step_number} is out of range (1-{len(self.history_index)})"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        step: dict = self.history_store[step_number - 1]
+        step: dict = self.history_index[step_number]
         result = (
             f"Step {step_number}:\n"
             f"Thought: {step['thought']}\n"
@@ -116,6 +134,8 @@ def get_default_tools(model: str, history_store: Optional[List[dict]] = None) ->
         WriteFileTool,
     )
     
+    registry = ToolRegistry()
+    
     # Core tools that don't need dynamic loading
     static_tools: List[Tool] = [
         GrepAppTool(),
@@ -130,19 +150,26 @@ def get_default_tools(model: str, history_store: Optional[List[dict]] = None) ->
     if history_store is not None:
         static_tools.append(RetrieveStepTool(history_store))
 
+    for tool in static_tools:
+        registry.register(tool)
+
     # Dynamically load tools from the tools/ subdirectory
     tools_dir: Path = Path(__file__).parent / "tools"
-    dynamic_tools: List[Tool] = []
     for tool_file in tools_dir.glob("*.py"):
         if tool_file.stem == "__init__":
             continue
         module = importlib.import_module(f".tools.{tool_file.stem}", package="quantalogic.codeact")
+        # Iterate over module attributes to find Tool instances
         for name, obj in module.__dict__.items():
+            # Only consider objects that are Tool instances with async_execute
             if isinstance(obj, Tool) and hasattr(obj, 'async_execute'):
-                dynamic_tools.append(obj)
-            else:
-                logger.warning(f"Skipping invalid tool in {tool_file.stem}: {name} - not a valid Tool instance")
+                try:
+                    registry.register(obj)
+                    logger.debug(f"Registered tool: {name} from {tool_file.stem}")
+                except ValueError as e:
+                    logger.warning(f"Failed to register tool {name} in {tool_file.stem}: {e}")
+            # Silently skip non-Tool attributes (e.g., __name__, math, etc.)
 
-    combined_tools = static_tools + dynamic_tools
+    combined_tools = registry.get_tools()
     logger.info(f"Loaded {len(combined_tools)} default tools: {[tool.name for tool in combined_tools]}")
     return combined_tools

@@ -2,9 +2,11 @@
 
 import asyncio
 from typing import Callable, List, Optional, Union
+import sys
 
 import typer
 from loguru import logger
+from rich.console import Console  # Optional dependency for improved output
 
 from quantalogic.codeact.agent import Agent, AgentConfig
 from quantalogic.codeact.constants import DEFAULT_MODEL, LOG_FILE
@@ -28,6 +30,7 @@ from .tools_manager import Tool, get_default_tools
 from .utils import XMLResultHandler
 
 app = typer.Typer(no_args_is_help=True)
+console = Console()  # Rich console for enhanced output
 
 
 class ProgressMonitor:
@@ -36,84 +39,72 @@ class ProgressMonitor:
         self._token_buffer = ""
 
     async def on_task_started(self, event: TaskStartedEvent):
-        typer.echo(typer.style(f"Task Started: {event.task_description}", fg=typer.colors.GREEN, bold=True))
-        typer.echo(f"Timestamp: {event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-        typer.echo("-" * 50)
+        console.print(f"[bold green]Task Started: {event.task_description}[/bold green]")
+        console.print(f"Timestamp: {event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        console.print("-" * 50)
 
     async def on_thought_generated(self, event: ThoughtGeneratedEvent):
-        typer.echo(typer.style(f"Step {event.step_number} - Thought Generated:", fg=typer.colors.CYAN, bold=True))
-        typer.echo(f"Thought: {event.thought}")
-        typer.echo(f"Generation Time: {event.generation_time:.2f} seconds")
-        typer.echo("-" * 50)
+        console.print(f"[bold cyan]Step {event.step_number} - Thought Generated:[/bold cyan]")
+        console.print(f"Thought: {event.thought}")
+        console.print(f"Generation Time: {event.generation_time:.2f} seconds")
+        console.print("-" * 50)
 
     async def on_action_generated(self, event: ActionGeneratedEvent):
-        typer.echo(typer.style(f"Step {event.step_number} - Action Generated:", fg=typer.colors.BLUE, bold=True))
-        typer.echo(f"Action Code:\n{event.action_code}")
-        typer.echo(f"Generation Time: {event.generation_time:.2f} seconds")
-        typer.echo("-" * 50)
+        console.print(f"[bold blue]Step {event.step_number} - Action Generated:[/bold blue]")
+        console.print(f"Action Code:\n{event.action_code}")
+        console.print(f"Generation Time: {event.generation_time:.2f} seconds")
+        console.print("-" * 50)
 
     async def on_action_executed(self, event: ActionExecutedEvent):
         summary = XMLResultHandler.format_result_summary(event.result_xml)
-        typer.echo(typer.style(f"Step {event.step_number} - Action Executed:", fg=typer.colors.MAGENTA, bold=True))
-        typer.echo(f"Result Summary:\n{summary}")
-        typer.echo(f"Execution Time: {event.execution_time:.2f} seconds")
-        typer.echo("-" * 50)
+        console.print(f"[bold magenta]Step {event.step_number} - Action Executed:[/bold magenta]")
+        console.print(f"Result Summary:\n{summary}")
+        console.print(f"Execution Time: {event.execution_time:.2f} seconds")
+        console.print("-" * 50)
 
     async def on_step_completed(self, event: StepCompletedEvent):
-        typer.echo(typer.style(f"Step {event.step_number} - Completed", fg=typer.colors.YELLOW, bold=True))
-        typer.echo("-" * 50)
+        console.print(f"[bold yellow]Step {event.step_number} - Completed[/bold yellow]")
+        console.print("-" * 50)
 
     async def on_error_occurred(self, event: ErrorOccurredEvent):
-        typer.echo(typer.style(f"Error Occurred{' at Step ' + str(event.step_number) if event.step_number else ''}:", fg=typer.colors.RED, bold=True))
-        typer.echo(f"Message: {event.error_message}")
-        typer.echo(f"Timestamp: {event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-        typer.echo("-" * 50)
+        console.print(f"[bold red]Error Occurred{' at Step ' + str(event.step_number) if event.step_number else ''}:[/bold red]")
+        console.print(f"Message: {event.error_message}")
+        console.print(f"Timestamp: {event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        console.print("-" * 50)
 
     async def on_task_completed(self, event: TaskCompletedEvent):
         if event.final_answer:
-            typer.echo(typer.style("Task Completed Successfully:", fg=typer.colors.GREEN, bold=True))
-            typer.echo(f"Final Answer:\n{event.final_answer}")
+            console.print("[bold green]Task Completed Successfully:[/bold green]")
+            console.print(f"Final Answer:\n{event.final_answer}")
         else:
-            typer.echo(typer.style("Task Did Not Complete Successfully:", fg=typer.colors.RED, bold=True))
-            typer.echo(f"Reason: {event.reason}")
-        typer.echo(f"Timestamp: {event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-        typer.echo("-" * 50)
+            console.print("[bold red]Task Did Not Complete Successfully:[/bold red]")
+            console.print(f"Reason: {event.reason}")
+        console.print(f"Timestamp: {event.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        console.print("-" * 50)
 
     async def on_step_started(self, event: StepStartedEvent):
-        typer.echo(typer.style(f"Starting Step {event.step_number}", fg=typer.colors.YELLOW, bold=True))
-        typer.echo("-" * 50)
+        console.print(f"[bold yellow]Starting Step {event.step_number}[/bold yellow]")
+        console.print("-" * 50)
 
     async def on_tool_execution_started(self, event: ToolExecutionStartedEvent):
-        typer.echo(typer.style(f"Tool {event.tool_name} started execution at step {event.step_number}", fg=typer.colors.CYAN))
-        typer.echo(f"Parameters: {event.parameters_summary}")
+        console.print(f"[cyan]Tool {event.tool_name} started execution at step {event.step_number}[/cyan]")
+        console.print(f"Parameters: {event.parameters_summary}")
 
     async def on_tool_execution_completed(self, event: ToolExecutionCompletedEvent):
-        typer.echo(typer.style(f"Tool {event.tool_name} completed execution at step {event.step_number}", fg=typer.colors.GREEN))
-        typer.echo(f"Result: {event.result_summary}")
+        console.print(f"[green]Tool {event.tool_name} completed execution at step {event.step_number}[/green]")
+        console.print(f"Result: {event.result_summary}")
 
     async def on_tool_execution_error(self, event: ToolExecutionErrorEvent):
-        typer.echo(typer.style(f"Tool {event.tool_name} encountered an error at step {event.step_number}", fg=typer.colors.RED))
-        typer.echo(f"Error: {event.error}")
+        console.print(f"[red]Tool {event.tool_name} encountered an error at step {event.step_number}[/red]")
+        console.print(f"Error: {event.error}")
 
     async def on_stream_token(self, event: StreamTokenEvent):
-        """Handle streaming token events for real-time output with buffering."""
-        self._token_buffer += event.token
-        if "\n" in event.token or event.token.strip() in [".", ";", ":", "{", "}", "]", ")"]:
-            lines = self._token_buffer.split("\n")
-            for line in lines[:-1]:
-                if line.strip():
-                    typer.echo(f"{line}", nl=False)
-                    typer.echo("")
-            self._token_buffer = lines[-1]
-        if len(self._token_buffer) > 100:
-            typer.echo(f"{self._token_buffer}", nl=False)
-            self._token_buffer = ""
+        """Handle streaming token events with real-time output."""
+        console.print(event.token, end="")
 
     async def flush_buffer(self):
-        """Flush any remaining tokens in the buffer."""
-        if self._token_buffer.strip():
-            typer.echo(f"{self._token_buffer}")
-            self._token_buffer = ""
+        """No buffer needed with rich console."""
+        pass
 
     async def __call__(self, event):
         """Dispatch events to their respective handlers."""
@@ -172,9 +163,8 @@ async def run_react_agent(
         streaming (bool): Enable streaming output.
     """
     logger.remove()
-    if debug:
-        logger.add(typer.stderr, level="INFO")
-    logger.add(LOG_FILE, level="INFO")
+    logger.add(sys.stderr, level="DEBUG" if debug else "INFO")
+    logger.add(LOG_FILE, level="DEBUG" if debug else "INFO")
 
     tools = tools if tools is not None else get_default_tools(model)
     
@@ -185,8 +175,7 @@ async def run_react_agent(
         elif callable(tool):
             processed_tools.append(create_tool(tool))
         else:
-            logger.warning(f"Invalid tool type: {type(tool)}. Skipping.")
-            typer.echo(typer.style(f"Warning: Invalid tool type {type(tool)} skipped.", fg=typer.colors.YELLOW))
+            raise ValueError(f"Invalid tool type: {type(tool)}. Expected Tool or callable.")
 
     config = AgentConfig(model=model, max_iterations=max_iterations, tools=processed_tools)
     agent = Agent(
@@ -205,7 +194,7 @@ async def run_react_agent(
         "StreamToken"
     ])
     
-    typer.echo(typer.style(f"Starting task: {task}", fg=typer.colors.GREEN, bold=True))
+    console.print(f"[bold green]Starting task: {task}[/bold green]")
     history = await agent.solve(task, success_criteria, streaming=streaming)
 
 
@@ -230,7 +219,7 @@ def react(
         ))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
-        typer.echo(typer.style(f"Error: {e}", fg=typer.colors.RED))
+        typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
 
 

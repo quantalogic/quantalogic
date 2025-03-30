@@ -9,13 +9,13 @@ from ..utils import log_async_tool
 
 @create_tool
 @log_async_tool("Calculating sine")
-async def sinus(x: float) -> str:
-    """Calculates the sine of a number and returns it as a string.
+async def sinus(x: float) -> float:
+    """Calculates the sine of a number.
 
     Args:
         x (float): The input value in radians.
 
     Returns:
-        str: The sine of x as a string.
+        float: The sine of x.
     """
-    return str(math.sin(x))
+    return math.sin(x)
