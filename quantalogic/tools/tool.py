@@ -494,7 +494,7 @@ if __name__ == "__main__":
     print()
 
     # Comprehensive tool with complex types
-    from typing import List, Dict
+    from typing import Dict, List
 
     def process_data(data: List[int], options: Dict[str, bool] = {}) -> Dict[str, int]:
         """Process a list of integers with options.
@@ -532,3 +532,31 @@ if __name__ == "__main__":
     print(docstring_tool.to_markdown())
     print("Comprehensive Tool Docstring with Custom Return Type:")
     print(docstring_tool.to_docstring())
+
+    from dataclasses import dataclass
+
+    @dataclass
+    class Point:
+        x: int
+        y: int
+
+    def distance(point1: Point, point2: Point) -> float:
+        """
+        Calculate the Euclidean distance between two points.
+
+        Args:
+            point1: First point with x and y coordinates.
+            point2: Second point with x and y coordinates.
+
+        Returns:
+            The Euclidean distance between the two points.
+        """
+        return ((point1.x - point2.x) ** 2 + (point1.y - point2.y) ** 2) ** 0.5
+
+    distance_tool = create_tool(distance)
+    print("Distance Tool Markdown:")
+    print(distance_tool.to_markdown())
+    print("Distance Tool Docstring:")
+    print(distance_tool.to_docstring())
+    print("Execution result (sync):", distance_tool.execute(point1=Point(x=1, y=2), point2=Point(x=4, y=6)))
+    print()
