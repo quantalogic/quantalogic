@@ -9,12 +9,13 @@ from .constants import MAX_GENERATE_PROGRAM_TOKENS
 from .events import PromptGeneratedEvent
 from .llm_util import litellm_completion
 from .templates import jinja_env
+from .tools_manager import get_toolboxes
 from .utils import XMLResultHandler, validate_xml
 
 
 async def generate_program(
     task_description: str,
-    tools: List[Tool],
+    tools: List[Tool],  # Kept for compatibility with existing calls
     model: str,
     max_tokens: int,
     step: int,
@@ -22,10 +23,10 @@ async def generate_program(
     streaming: bool = False
 ) -> str:
     """Generate a Python program using the specified model with streaming support and retries."""
-    tool_docstrings = "\n\n".join(tool.to_docstring() for tool in tools)
+    toolboxes = get_toolboxes(model)  # Fetch dynamically loaded toolboxes
     prompt = jinja_env.get_template("generate_program.j2").render(
         task_description=task_description,
-        tool_docstrings=tool_docstrings
+        toolboxes=toolboxes
     )
     await notify_event(PromptGeneratedEvent(
         event_type="PromptGenerated", step_number=step, prompt=prompt
@@ -113,8 +114,6 @@ class Reasoner(BaseReasoner):
             return XMLResultHandler.format_error_result(str(e))
 
     def _clean_code(self, code: str) -> str:
-
-        
         # Extract code from markdown block
         lines = code.splitlines()
         in_code_block = False
@@ -132,7 +131,6 @@ class Reasoner(BaseReasoner):
                     break
                 code_lines.append(line)
         
-        # Use extracted code or original if no markdown block
         final_code = '\n'.join(code_lines) if in_code_block else code
         
         # Validate syntax

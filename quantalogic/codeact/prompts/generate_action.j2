@@ -18,40 +18,29 @@ Generate a Python program with an async main() function that uses the available 
 
 Essential Requirements:
 
-- **Always check the 'Available variables' from the history** before proceeding. These are listed in the <History> section and stored in the `context_vars` dictionary. Access them using `context_vars.get("variable_name", default_value)` to retrieve results from previous steps.
-- **Build upon previous steps** by using these variables when they are relevant. This avoids redundant work and ensures continuity. For example, if a previous step stored a sum as `step1_sum`, retrieve it with `previous_sum = context_vars.get('step1_sum', 0)`.
-- When defining new variables, **prefix them with 'step{{ current_step }}_'** to ensure uniqueness (e.g., `step{{ current_step }}_result`). This prevents overwriting variables from earlier steps.
-- Return `"Task completed: [final answer]"` if the task is fully solved in this step.
-- Otherwise, return intermediate results as a string to be stored for future steps.
-- Handle potential errors in tool arguments gracefully, using try/except blocks if needed.
-- Use proper async/await syntax for all asynchronous operations.
+- **Always check the 'Available variables' from the history** to retrieve results from previous steps using `context_vars.get("variable_name", default_value)`.
+- **Build upon previous steps** by using these variables to avoid redundant work.
+- When defining new variables, **prefix them with 'step{{ current_step }}_'** to ensure uniqueness.
+- Return `"Task completed: [final answer]"` if the task is fully solved.
+- Otherwise, return intermediate results as a string.
+- Use proper async/await syntax.
 
-Variable Naming Convention:
-- Prefix all new variables with 'step{{ current_step }}_' (e.g., `step{{ current_step }}_result = ...`).
-- This ensures variables are unique across steps and traceable to their origin.
+Tool Selection:
 
-Example Scenario:
-Task: "Calculate the running total by adding 10 to the previous sum."
-History: 
-"===== Step 1 of 5 max =====
-Thought: Initialize the sum
-Action: <code>import asyncio\nasync def main():\n    step1_sum = 5\n    return f'Initial sum: {step1_sum}'</code>
-Result: Initial sum: 5
-Available variables: step1_sum"
-Your code should:
+- First, identify the category of tools (toolbox) needed based on the task description and history (e.g., MathToolBox, StringToolBox).
+- Then, select the specific tool from that category.
+- For example, for a math-related task, consider tools in MathToolBox.
+
+Example:
+
+Task: "Calculate the sine of 30 degrees."
+
+Thought: This is a mathematical operation, so I should use a tool from MathToolBox. The sinus tool is appropriate.
+
+Action:
+
 import asyncio
 
 async def main():
-    # Get previous total, default to 0 if not found
-    previous_total: int = int(context_vars.get('step1_sum', 0))
-    # Calculate new total
-    step2_total: int = previous_total + 10
-    # Return intermediate result
-    return f"Intermediate total: {step2_total}"
-
-The program must:
-
-1. Use only the provided async tools
-2. Follow a subset of Python 3.10+ syntax, doesn't allow unsafe operations such as eval() or exec()
-3. Include type annotations for variables, give very explicit names to variables
-4. Output progress information
+    step{{ current_step }}_result = await sinus(30 * (3.14159 / 180))  # Convert degrees to radians
+    return f"Task completed: {step{{ current_step }}_result}"

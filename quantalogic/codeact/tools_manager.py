@@ -5,9 +5,10 @@ import importlib
 import os
 from contextlib import AsyncExitStack
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import litellm
+import yaml
 from loguru import logger
 
 from quantalogic.tools import Tool, ToolArgument
@@ -24,7 +25,6 @@ class ToolRegistry:
         """Register a tool, checking for conflicts."""
         if tool.name in self.tools:
             raise ValueError(f"Tool '{tool.name}' is already registered")
-        # Placeholder for dependency checking (e.g., required libraries)
         self.tools[tool.name] = tool
 
     def get_tools(self) -> List[Tool]:
@@ -114,16 +114,21 @@ class RetrieveStepTool(Tool):
         return result
 
 
-def get_default_tools(model: str, history_store: Optional[List[dict]] = None) -> List[Tool]:
-    """Dynamically load default tools from the tools/ directory.
+def load_toolbox(module_name: str) -> List[Tool]:
+    """Dynamically load a toolbox module and return its tools."""
+    try:
+        module = importlib.import_module(module_name)
+        if not hasattr(module, 'tools'):
+            logger.warning(f"Module {module_name} lacks 'tools' list. Skipping.")
+            return []
+        return module.tools
+    except ImportError as e:
+        logger.error(f"Failed to load toolbox {module_name}: {e}")
+        return []
 
-    Args:
-        model (str): The language model to use for model-specific tools.
-        history_store (Optional[List[dict]]): Optional history store for RetrieveStepTool.
 
-    Returns:
-        List[Tool]: A list of initialized tool instances.
-    """
+def get_toolboxes(model: str, history_store: Optional[List[dict]] = None) -> Dict[str, List[Tool]]:
+    """Returns a dictionary of toolboxes with their respective tools, dynamically loaded or static."""
     from quantalogic.tools import (
         GrepAppTool,
         InputQuestionTool,
@@ -133,43 +138,84 @@ def get_default_tools(model: str, history_store: Optional[List[dict]] = None) ->
         ReadHTMLTool,
         WriteFileTool,
     )
-    
-    registry = ToolRegistry()
-    
-    # Core tools that don't need dynamic loading
-    static_tools: List[Tool] = [
-        GrepAppTool(),
-        InputQuestionTool(),
-        ListDirectoryTool(),
-        ReadFileBlockTool(),
-        ReadFileTool(),
-        ReadHTMLTool(),
-        WriteFileTool(disable_ensure_tmp_path=True),
-        AgentTool(model=model)
-    ]
+
+    toolboxes = {}
+    config_path = Path(__file__).parent / "config.yaml"
+    loaded_tool_names = set()
+
+    # Try loading from config file first
+    try:
+        with open(config_path) as f:
+            config = yaml.safe_load(f) or {}
+        for tb in config.get('toolboxes', []):
+            module_name = tb['module']
+            tools = load_toolbox(module_name)
+            if tools:
+                toolbox_name = tb.get('name', module_name.split('.')[-1])
+                toolboxes[toolbox_name] = tools
+                loaded_tool_names.update(tool.name for tool in tools)
+    except FileNotFoundError:
+        # Fallback to original static toolboxes
+        logger.info("No config.yaml found, using default static toolboxes.")
+        from .tools.concat_tool import concat_tool
+        from .tools.cosinus import cosinus
+        from .tools.multiply_tool import multiply_tool
+        from .tools.sinus import sinus
+        toolboxes = {
+            "MathToolBox": [sinus, cosinus, multiply_tool],
+            "StringToolBox": [concat_tool],
+            "FileSystemToolBox": [
+                ListDirectoryTool(),
+                ReadFileTool(),
+                WriteFileTool(disable_ensure_tmp_path=True),
+                ReadFileBlockTool(),
+            ],
+            "InputOutputToolBox": [InputQuestionTool()],
+            "WebToolBox": [ReadHTMLTool()],
+            "TextProcessingToolBox": [GrepAppTool()],
+        }
+        loaded_tool_names.update(
+            sinus.name, cosinus.name, multiply_tool.name, concat_tool.name,
+            ListDirectoryTool().name, ReadFileTool().name, WriteFileTool(disable_ensure_tmp_path=True).name,
+            ReadFileBlockTool().name, InputQuestionTool().name, ReadHTMLTool().name, GrepAppTool().name
+        )
+
+    # Add AgentToolBox regardless of source
+    toolboxes["AgentToolBox"] = [AgentTool(model=model)]
+    loaded_tool_names.add("agent_tool")
     if history_store is not None:
-        static_tools.append(RetrieveStepTool(history_store))
+        toolboxes["AgentToolBox"].append(RetrieveStepTool(history_store))
+        loaded_tool_names.add("retrieve_step")
 
-    for tool in static_tools:
-        registry.register(tool)
-
-    # Dynamically load tools from the tools/ subdirectory
+    # Dynamically load additional tools from tools/ directory, avoiding duplicates
     tools_dir: Path = Path(__file__).parent / "tools"
     for tool_file in tools_dir.glob("*.py"):
         if tool_file.stem == "__init__":
             continue
         module = importlib.import_module(f".tools.{tool_file.stem}", package="quantalogic.codeact")
-        # Iterate over module attributes to find Tool instances
         for name, obj in module.__dict__.items():
-            # Only consider objects that are Tool instances with async_execute
-            if isinstance(obj, Tool) and hasattr(obj, 'async_execute'):
-                try:
-                    registry.register(obj)
-                    logger.debug(f"Registered tool: {name} from {tool_file.stem}")
-                except ValueError as e:
-                    logger.warning(f"Failed to register tool {name} in {tool_file.stem}: {e}")
-            # Silently skip non-Tool attributes (e.g., __name__, math, etc.)
+            if isinstance(obj, Tool) and hasattr(obj, 'async_execute') and obj.name not in loaded_tool_names:
+                toolbox_name = tool_file.stem.capitalize() + "ToolBox"
+                if toolbox_name not in toolboxes:
+                    toolboxes[toolbox_name] = []
+                toolboxes[toolbox_name].append(obj)
+                loaded_tool_names.add(obj.name)
+                logger.debug(f"Added tool: {name} from {tool_file.stem} to {toolbox_name}")
 
-    combined_tools = registry.get_tools()
+    return toolboxes
+
+
+def get_default_tools(model: str, history_store: Optional[List[dict]] = None) -> List[Tool]:
+    """Return a flat list of all tools from toolboxes, ensuring no duplicates."""
+    toolboxes = get_toolboxes(model, history_store)
+    combined_tools = []
+    seen_names = set()
+    
+    for tools in toolboxes.values():
+        for tool in tools:
+            if tool.name not in seen_names:
+                combined_tools.append(tool)
+                seen_names.add(tool.name)
+    
     logger.info(f"Loaded {len(combined_tools)} default tools: {[tool.name for tool in combined_tools]}")
     return combined_tools
