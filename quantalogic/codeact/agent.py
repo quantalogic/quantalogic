@@ -92,7 +92,7 @@ class Agent:
                 max_iterations=1,
                 max_history_tokens=self.max_history_tokens
             )
-            chat_agent.executor.tools.append(RetrieveStepTool(chat_agent.history_store))
+            chat_agent.executor.register_tool(RetrieveStepTool(chat_agent.history_store))  # Changed from append
             for observer, event_types in self._observers:
                 chat_agent.add_observer(observer, event_types)
             history = await chat_agent.solve(message, system_prompt=system_prompt, streaming=streaming)
@@ -134,7 +134,7 @@ class Agent:
             max_iterations=max_iterations if max_iterations is not None else self.max_iterations,
             max_history_tokens=self.max_history_tokens
         )
-        solve_agent.executor.tools.append(RetrieveStepTool(solve_agent.history_store))
+        solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.history_store))  # Changed from append
         for observer, event_types in self._observers:
             solve_agent.add_observer(observer, event_types)
         
