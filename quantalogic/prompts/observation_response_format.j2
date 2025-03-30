@@ -21,9 +21,10 @@
 4. Utilize variable interpolation where needed
 
 ## Response Requirements
-Provide TWO markdown-formatted XML blocks:
+Provide THREE markdown-formatted XML blocks:
 1. Your analysis of the progression resulting from the execution of the tool in <thinking> tags, don't include <context_analysis/>
-2. Your tool execution plan in <tool_name> tags
+2. The progress in the plan
+3. Your tool execution plan in <tool_name> tags
 
 ## Last executed action result
 Last executed tool {{ last_executed_tool }} Execution Result:
@@ -39,6 +40,16 @@ Last executed tool {{ last_executed_tool }} Execution Result:
 </thinking>
 ```
 ```xml
+<plan_status>
+  • 📈 Progress: Step X of Y completed
+  • 🔄 Plan Updates: Modifications to the original plan
+  • 📝 List of steps to be completed
+    - Step 1: 
+    - Step 2: ...etc
+  • 🎯 Next Step: Upcoming action
+</plan_status>
+```
+```xml
 <action>
 <selected_tool_name>
 [Precise instruction for tool execution]
@@ -47,14 +58,11 @@ Last executed tool {{ last_executed_tool }} Execution Result:
 ```
 
 ⚠️ Important:
-- Respond ONLY with the two XML blocks
+- Respond ONLY with the three XML blocks
 - No additional commentary
-- If previous step failed, revise approach
+- If previous step failed, revise approach and plan.
 - Use interpolated variables ($variable_name$) where required in tool calls, to minimize token usage, if possible
 - strictly follow the required arguments for each tool as defined in system prompt
+- Never return interpolated variables ($variable_name$)in the task complete, always return the content of the variable.
 - Utilize <action><task_complete><answer>...</answer></task_complete><action> to indicate task completion, display the result or if the task is deemed unfeasible.
 - ✅ Return complete, usable results well structured.
-- Never return $var$, always return the content of it if needed
-- Track consecutive tool errors and stop after three Identical calls
-- If two consecutive tool calls fail, pause execution and request user clarification
-- Resume execution only after receiving user guidance on tool errors

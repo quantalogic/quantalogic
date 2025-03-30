@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Journey Plan: {{ plan.destination }}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            padding: 20px;
+            background-color: #f5f5f5;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .day-plan {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .activity {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .info-section {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 8px;
+        }
+        .cost {
+            color: #2c5282;
+            font-weight: bold;
+        }
+        ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        h1, h2, h3 {
+            color: #2d3748;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Journey Plan: {{ plan.destination }}</h1>
+        <p>{{ plan.start_date }} to {{ plan.end_date }}</p>
+        <p class="cost">Total Budget: ${{ plan.total_budget }}</p>
+    </div>
+
+    <div class="info-section">
+        <h2>Essential Information</h2>
+        <h3>Emergency Contacts</h3>
+        <ul>
+        {% for contact, number in plan.emergency_contacts.items() %}
+            <li><strong>{{ contact }}:</strong> {{ number }}</li>
+        {% endfor %}
+        </ul>
+
+        {% if plan.visa_requirements %}
+        <h3>Visa Requirements</h3>
+        <p>{{ plan.visa_requirements }}</p>
+        {% endif %}
+
+        <h3>Local Customs</h3>
+        <ul>
+        {% for custom in plan.local_customs %}
+            <li>{{ custom }}</li>
+        {% endfor %}
+        </ul>
+    </div>
+
+    <h2>Daily Plans</h2>
+    {% for day in plan.daily_plans %}
+    <div class="day-plan">
+        <h3>Day {{ loop.index }}: {{ day.date }}</h3>
+        {% if day.weather_forecast %}
+        <p><strong>Weather:</strong> {{ day.weather_forecast }}</p>
+        {% endif %}
+
+        <h4>Activities</h4>
+        {% for activity in day.activities %}
+        <div class="activity">
+            <h5>{{ activity.name }}</h5>
+            <p>{{ activity.description }}</p>
+            <p><strong>Location:</strong> {{ activity.location }}</p>
+            <p><strong>Duration:</strong> {{ activity.duration }}</p>
+            <p><strong>Cost:</strong> ${{ activity.cost }}</p>
+            <p><strong>Best Time:</strong> {{ activity.best_time }}</p>
+        </div>
+        {% endfor %}
+
+        <h4>Accommodation</h4>
+        <div class="activity">
+            <h5>{{ day.accommodation.name }}</h5>
+            <p><strong>Type:</strong> {{ day.accommodation.type }}</p>
+            <p><strong>Location:</strong> {{ day.accommodation.location }}</p>
+            <p><strong>Price Range:</strong> {{ day.accommodation.price_range }}</p>
+            <p><strong>Amenities:</strong> {{ day.accommodation.amenities|join(', ') }}</p>
+            {% if day.accommodation.booking_url %}
+            <p><a href="{{ day.accommodation.booking_url }}" target="_blank">Booking Link</a></p>
+            {% endif %}
+        </div>
+
+        <h4>Transportation</h4>
+        {% for transport in day.transportation %}
+        <div class="activity">
+            <p><strong>{{ transport.mode }}</strong></p>
+            <p>From: {{ transport.from_location }}</p>
+            <p>To: {{ transport.to_location }}</p>
+            <p>Duration: {{ transport.duration }}</p>
+            <p>Cost: ${{ transport.cost }}</p>
+            <p>{{ transport.details }}</p>
+        </div>
+        {% endfor %}
+
+        <p class="cost">Day Total: ${{ day.total_cost }}</p>
+    </div>
+    {% endfor %}
+
+    <div class="info-section">
+        <h2>Travel Tips</h2>
+        <ul>
+        {% for tip in plan.travel_tips %}
+            <li>{{ tip }}</li>
+        {% endfor %}
+        </ul>
+
+        <h2>Packing List</h2>
+        <ul>
+        {% for item in plan.packing_list %}
+            <li>{{ item }}</li>
+        {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>

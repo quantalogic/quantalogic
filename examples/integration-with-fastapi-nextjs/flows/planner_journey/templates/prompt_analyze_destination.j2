@@ -1,0 +1,14 @@
+Analyze the following destination information and structure it for trip planning:
+
+{{ destination_info }}
+
+Please structure your response as a JSON object with the following keys:
+{
+    "areas": [{"name": "str", "description": "str", "highlights": ["str"]}],
+    "attractions": [{"name": "str", "category": "str", "description": "str", "duration": "str", "cost": "float"}],
+    "transportation": [{"mode": "str", "cost_range": "str", "notes": "str"}],
+    "accommodations": [{"type": "str", "areas": ["str"], "price_range": "str"}],
+    "weather": {"best_time": "str", "seasonal_notes": {"spring": "str", "summer": "str", "fall": "str", "winter": "str"}},
+    "budget": {"budget_per_day": {"low": "float", "mid": "float", "high": "float"}, "currency": "str"},
+    "safety": {"overall_rating": "str", "emergency_numbers": {"police": "str", "ambulance": "str"}, "tips": ["str"]}
+}

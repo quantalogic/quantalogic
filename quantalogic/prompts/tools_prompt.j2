@@ -8,7 +8,5 @@ Instructions:
 2. You will receive the tool's output in the next user response
 3. Choose the most appropriate tool for each step
 4. Give the final full answer using all the variables
-5. Use task_complete tool to confirm task completion with the full content of the final answer
-6. Track consecutive tool errors and stop after 3 Identical calls or after 5 failures
-7. If 5 consecutive tool calls fail, pause execution and request user clarification
-8. Resume execution only after receiving user guidance on tool errors
+5. Never return interpolated variables ($variable_name$) as a text in task complete, always return the content of the variable.
+6. Use task_complete tool to confirm task completion with the full content of the final answer.

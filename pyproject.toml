@@ -58,6 +58,8 @@ selenium = "^4.29.0"
 webdriver-manager = "^4.0.2"
 asciinema = "^2.4.0"
 pypandoc = "^1.15"
+folium = "^0.19.5"
+geocoder = "^1.38.1"
 
 [tool.poetry.group.file-tools]
 optional = false

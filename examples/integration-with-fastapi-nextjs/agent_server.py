@@ -40,7 +40,7 @@ from quantalogic.console_print_events import console_print_events
 from quantalogic.task_runner import configure_logger
 from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
-from .models import CourseRequest, EventMessage, TutorialRequest, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
+from .models import AnalyzePaperRequest, ConvertRequest, CourseRequest, EventMessage, JourneyRequest, LinkedInIntroduceContentRequest, QuizRequest, TutorialRequest, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
 from .AgentState import AgentState
 from .init_agents import init_agents 
 
@@ -378,7 +378,6 @@ async def file_upload(
         if not file_content:
             logger.error("Empty file content")
             raise HTTPException(status_code=400, detail="Empty file content")
-        await file.seek(0)  # Reset file pointer for later use
             
         # Ensure project_path is safe and normalized
         project_path = os.path.normpath(project_path)
@@ -399,9 +398,9 @@ async def file_upload(
         os.makedirs(full_dir, exist_ok=True)
         
         logger.info(f"Saving file to: {file_path}")
-        # Save the file
+        # Save the file using the content we already read
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            buffer.write(file_content)
             
         response = FileUploadResponse(
             status="success",
@@ -686,6 +685,151 @@ async def generate_course(request: CourseRequest) -> Dict[str, str]:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to start course generation: {str(e)}"
+        )
+
+@app.post("/api/agent/generate-quizz")
+async def generate_quizz(request: QuizRequest) -> Dict[str, str]:
+    """Generate a quizz from markdown content."""
+    try:
+        # Create a task submission
+        task_submission = TaskSubmission(
+            task="generate_quizz",  # Convert to JSON string
+        )
+        
+        # Submit the task
+        task_id = await agent_state.submit_task(task_submission)
+        logger.info(f"Quizz generation task submitted with ID: {task_id}")
+        
+        # Start quizz generation in background
+        asyncio.create_task(agent_state.execute_quizz(task_id, request))
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "message": "Quizz generation started"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting quizz generation: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start course generation: {str(e)}"
+        )
+
+@app.post("/api/agent/generate-journey")
+async def generate_journey(request: JourneyRequest) -> Dict[str, str]:
+    """Generate a journey from markdown content."""
+    try:
+        # Create a task submission
+        task_submission = TaskSubmission(
+            task="generate_journey",  # Convert to JSON string
+        )
+        
+        # Submit the task
+        task_id = await agent_state.submit_task(task_submission)
+        logger.info(f"Journey generation task submitted with ID: {task_id}")
+        
+        # Start journey generation in background
+        asyncio.create_task(agent_state.execute_journey(task_id, request))
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "message": "Journey generation started"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting journey generation: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start journey generation: {str(e)}"
+        )
+
+@app.post("/api/agent/generate-analyze-paper")
+async def generate_analyze_paper(request: AnalyzePaperRequest) -> Dict[str, str]:
+    """Generate a paper analysis from markdown content."""
+    try:
+        # Create a task submission
+        task_submission = TaskSubmission(
+            task="generate_analyze_paper",  # Convert to JSON string
+        )
+        
+        # Submit the task
+        task_id = await agent_state.submit_task(task_submission)
+        logger.info(f"Paper analysis task submitted with ID: {task_id}")
+        
+        # Start paper analysis in background
+        asyncio.create_task(agent_state.execute_analyze_paper(task_id, request))
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "message": "Paper analysis started"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting paper analysis: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start paper analysis: {str(e)}"
+        )
+
+@app.post("/api/agent/generate-linkedin-introduce-content")
+async def generate_linkedin_introduce_content(request: LinkedInIntroduceContentRequest) -> Dict[str, str]:
+    """Generate a LinkedIn introduce content from markdown content."""
+    try:
+        # Create a task submission
+        task_submission = TaskSubmission(
+            task="generate_linkedin_introduce_content",  # Convert to JSON string
+        )
+        
+        # Submit the task
+        task_id = await agent_state.submit_task(task_submission)
+        logger.info(f"LinkedIn introduce content task submitted with ID: {task_id}")
+        
+        # Start LinkedIn introduce content in background
+        asyncio.create_task(agent_state.execute_linkedin_introduce_content(task_id, request))
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "message": "LinkedIn introduce content started"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting LinkedIn introduce content: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start LinkedIn introduce content: {str(e)}"
+        )
+
+@app.post("/api/agent/generate-convert")
+async def generate_convert(request: ConvertRequest) -> Dict[str, str]:
+    """Generate a PDF to Markdown conversion task asynchronously."""
+    try:
+        # Create a task submission
+        task_submission = TaskSubmission(
+            task="generate_convert",  # Convert to JSON string
+        )
+        
+        # Submit the task
+        task_id = await agent_state.submit_task(task_submission)
+        logger.info(f"PDF to Markdown conversion task submitted with ID: {task_id}")
+        
+        # Start PDF to Markdown conversion in background
+        asyncio.create_task(agent_state.execute_convert(task_id, request))
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "message": "PDF to Markdown conversion started"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting PDF to Markdown conversion: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start PDF to Markdown conversion: {str(e)}"
         )
 
 if __name__ == "__main__":

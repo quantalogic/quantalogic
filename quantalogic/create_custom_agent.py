@@ -350,7 +350,10 @@ def create_custom_agent(
         # Legal Embedding RAG tool
         "legal_embedding_rag": lambda params: create_tool_instance(TOOL_IMPORTS["legal_embedding_rag"](),
             persist_dir=params.get("persist_dir", "./storage/legal_embedding_rag"),
-            document_paths=params.get("document_paths", []),
+            document_paths=[
+                "./docs/test/code_civile.md",
+                "./docs/test/code_procedure.md"],
+            embed_model=params.get("embed_model", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"),
             chunk_size=params.get("chunk_size", 512),
             chunk_overlap=params.get("chunk_overlap", 128),
             force_reindex=params.get("force_reindex", True)

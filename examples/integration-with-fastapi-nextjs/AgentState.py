@@ -37,9 +37,8 @@ from quantalogic.memory import AgentMemory
 from quantalogic.task_runner import configure_logger
 from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
-from .models import CourseRequest, EventMessage, TutorialRequest, UserValidationRequest, UserValidationResponse, AgentConfig, TaskSubmission
+from .models import AnalyzePaperRequest, ConvertRequest, CourseRequest, EventMessage, JourneyRequest, LinkedInIntroduceContentRequest, QuizRequest, TutorialRequest, UserValidationRequest, UserValidationResponse, AgentConfig, TaskSubmission
 
-memory = AgentMemory()
 SHUTDOWN_TIMEOUT = 10.0  # seconds
 VALIDATION_TIMEOUT = 10.0  # seconds
 
@@ -1071,5 +1070,345 @@ class AgentState:
             })
             
             logger.exception(f"Error generating tutorial {task_id}")
+        finally:
+            self.remove_task_event_queue(task_id)
+
+
+    async def execute_journey(self, task_id: str, request: JourneyRequest) -> None:
+        """Execute a journey generation task asynchronously."""
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found")
+
+        task_info = self.tasks[task_id]
+        task_info["started_at"] = datetime.now().isoformat()
+        task_info["status"] = "running"
+
+        try:
+            logger.info(f"== Starting journey generation: {task_id}") 
+            
+            # Add the examples directory to Python path
+            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', "integration-with-fastapi-nextjs"))
+            sys.path.append(examples_dir)
+            
+            from flows.planner_journey.planner import generate_journey_plan
+            
+            # Run tutorial generation in a thread to not block the event loop
+            loop = asyncio.get_running_loop()
+
+            # Create event for task completion
+            self._handle_event("task_solve_start", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Journey generation started"
+            }) 
+
+            result = await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(generate_journey_plan(
+                    destination=request.destination,
+                    start_date=request.start_date,
+                    end_date=request.end_date,
+                    budget=request.budget,
+                    model=request.model,
+                    task_id=task_id,
+                    _handle_event=self._handle_event
+                ))
+            )
+            logger.debug(f"================================================================")
+            logger.info(f"================================================================")
+            logger.info(f"== Journey generation result: {result}")
+
+            self._update_task_success(task_info, result, None) 
+            
+            # Create event for task completion
+            self._handle_event("task_solve_end", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Journey generation completed",
+                "result": result
+            })
+            
+        except Exception as e:
+            self._update_task_failure(task_info, e)
+            
+            # Create event for task failure
+            self._handle_event("error_tool_execution", {
+                "task_id": task_id,
+                "message": f"Tutorial generation failed: {str(e)}"
+            })
+            
+            logger.exception(f"Error generating tutorial {task_id}")
+        finally:
+            self.remove_task_event_queue(task_id)
+
+    async def execute_quizz(self, task_id: str, request: QuizRequest) -> None:
+        """Execute a quiz generation task asynchronously."""
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found")
+
+        task_info = self.tasks[task_id]
+        task_info["started_at"] = datetime.now().isoformat()
+        task_info["status"] = "running"
+
+        try:
+            logger.info(f"== Starting quiz generation: {task_id}") 
+            
+            # Add the examples directory to Python path
+            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', "integration-with-fastapi-nextjs"))
+            sys.path.append(examples_dir)
+            
+            from flows.questions_and_answers.question_and_anwsers import generate_quiz
+            
+            # Run tutorial generation in a thread to not block the event loop
+            loop = asyncio.get_running_loop()
+
+            # Create event for task completion
+            self._handle_event("task_solve_start", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Quiz generation started"
+            }) 
+
+            result = await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(generate_quiz(
+                    file_path=request.file_path,
+                    model=request.model,
+                    num_questions=request.num_questions,
+                    token_limit=request.token_limit,
+                    save=request.save,
+                    task_id=task_id,
+                    _handle_event=self._handle_event
+                ))
+            )
+            logger.debug(f"================================================================")
+            logger.info(f"================================================================")
+            logger.info(f"== Journey generation result: {result}")
+
+            self._update_task_success(task_info, result, None) 
+            
+            # Create event for task completion
+            self._handle_event("task_solve_end", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Journey generation completed",
+                "result": result
+            })
+            
+        except Exception as e:
+            self._update_task_failure(task_info, e)
+            
+            # Create event for task failure
+            self._handle_event("error_tool_execution", {
+                "task_id": task_id,
+                "message": f"Tutorial generation failed: {str(e)}"
+            })
+            
+            logger.exception(f"Error generating tutorial {task_id}")
+        finally:
+            self.remove_task_event_queue(task_id)
+
+    async def execute_analyze_paper(self, task_id: str, request: AnalyzePaperRequest) -> None:
+        """Execute a paper analysis task asynchronously."""
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found")
+
+        task_info = self.tasks[task_id]
+        task_info["started_at"] = datetime.now().isoformat()
+        task_info["status"] = "running"
+
+        try:
+            logger.info(f"== Starting paper analysis: {task_id}") 
+            
+            # Add the examples directory to Python path
+            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', "integration-with-fastapi-nextjs"))
+            sys.path.append(examples_dir)
+            
+            from flows.analyze_paper.analyze_paper import generate_analyze_paper
+            
+            # Run tutorial generation in a thread to not block the event loop
+            loop = asyncio.get_running_loop()
+
+            # Create event for task completion
+            self._handle_event("task_solve_start", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Paper analysis started"
+            }) 
+
+            result = await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(generate_analyze_paper(
+                    file_path=request.file_path,
+                    text_extraction_model=request.text_extraction_model or "gemini/gemini-2.0-flash",
+                    cleaning_model=request.cleaning_model or "gemini/gemini-2.0-flash",
+                    writing_model=request.writing_model or "gemini/gemini-2.0-flash",
+                    # output_dir=request.output_dir,
+                    copy_to_clipboard_flag=request.copy_to_clipboard_flag or True,
+                    max_character_count=request.max_character_count or 3000,
+                    task_id=task_id,
+                    _handle_event=self._handle_event
+                ))
+            )
+            logger.debug(f"================================================================")
+            logger.info(f"================================================================")
+            logger.info(f"== Journey generation result: {result}")
+
+            self._update_task_success(task_info, result, None) 
+            
+            # Create event for task completion
+            self._handle_event("task_solve_end", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Paper analysis completed",
+                "result": result
+            })
+            
+        except Exception as e:
+            self._update_task_failure(task_info, e)
+            
+            # Create event for task failure
+            self._handle_event("error_tool_execution", {
+                "task_id": task_id,
+                "message": f"Paper analysis failed: {str(e)}"
+            })
+            
+            logger.exception(f"Error generating tutorial {task_id}")
+        finally:
+            self.remove_task_event_queue(task_id)
+
+    async def execute_linkedin_introduce_content(self, task_id: str, request: LinkedInIntroduceContentRequest) -> None:
+        """Execute a LinkedIn introduce content task asynchronously."""
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found")
+
+        task_info = self.tasks[task_id]
+        task_info["started_at"] = datetime.now().isoformat()
+        task_info["status"] = "running"
+
+        try:
+            logger.info(f"== Starting paper analysis: {task_id}") 
+            
+            # Add the examples directory to Python path
+            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', "integration-with-fastapi-nextjs"))
+            sys.path.append(examples_dir)
+            
+            from flows.linkedin_introduce_content.linkedin_introduce_content import generate_linkedin_introduce_content
+            
+            # Run tutorial generation in a thread to not block the event loop
+            loop = asyncio.get_running_loop()
+
+            # Create event for task completion
+            self._handle_event("task_solve_start", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "LinkedIn introduce content started"
+            }) 
+
+            result = await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(generate_linkedin_introduce_content(
+                    file_path=request.file_path,
+                    analysis_model=request.analysis_model or "gemini/gemini-2.0-flash", 
+                    writing_model=request.writing_model or "gemini/gemini-2.0-flash",
+                    cleaning_model=request.cleaning_model or "gemini/gemini-2.0-flash",
+                    formatting_model=request.formatting_model or "gemini/gemini-2.0-flash",
+                    copy_to_clipboard_flag=request.copy_to_clipboard_flag or True, 
+                    intent=request.intent or None,
+                    mock_analysis=request.mock_analysis or False,
+                    task_id=task_id,
+                    _handle_event=self._handle_event
+                ))
+            )
+            logger.debug(f"================================================================")
+            logger.info(f"================================================================")
+            logger.info(f"== Journey generation result: {result}")
+
+            self._update_task_success(task_info, result, None) 
+            
+            # Create event for task completion
+            self._handle_event("task_solve_end", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "LinkedIn introduce content completed",
+                "result": result
+            })
+            
+        except Exception as e:
+            self._update_task_failure(task_info, e)
+            
+            # Create event for task failure
+            self._handle_event("error_tool_execution", {
+                "task_id": task_id,
+                "message": f"LinkedIn introduce content failed: {str(e)}"
+            })
+            
+            logger.exception(f"Error generating tutorial {task_id}")
+        finally:
+            self.remove_task_event_queue(task_id)
+
+    async def execute_convert(self, task_id: str, request: ConvertRequest) -> None:
+        """Execute a PDF to Markdown conversion task asynchronously."""
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found")
+
+        task_info = self.tasks[task_id]
+        task_info["started_at"] = datetime.now().isoformat()
+        task_info["status"] = "running"
+
+        try:
+            logger.info(f"== Starting PDF to Markdown conversion: {task_id}") 
+            
+            # Add the examples directory to Python path
+            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', "integration-with-fastapi-nextjs"))
+            sys.path.append(examples_dir)
+            
+            from flows.pdf_to_markdown.pdf_to_markdown import convert
+            
+            # Run tutorial generation in a thread to not block the event loop
+            loop = asyncio.get_running_loop()
+
+            # Create event for task completion
+            self._handle_event("task_solve_start", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "PDF to Markdown conversion started"
+            }) 
+
+            result = await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(convert(
+                    input_pdf=request.input_pdf,
+                    output_md=request.output_md,
+                    model=request.model,
+                    system_prompt=request.system_prompt,
+                    task_id=task_id,
+                    _handle_event=self._handle_event
+                ))
+            )
+            logger.debug(f"================================================================")
+            logger.info(f"================================================================")
+            logger.info(f"== Journey generation result: {result}")
+
+            self._update_task_success(task_info, result, None) 
+            
+            # Create event for task completion
+            self._handle_event("task_solve_end", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "PDF to Markdown conversion completed",
+                "result": result
+            })
+            
+        except Exception as e:
+            self._update_task_failure(task_info, e)
+            
+            # Create event for task failure
+            self._handle_event("error_tool_execution", {
+                "task_id": task_id,
+                "message": f"PDF to Markdown conversion failed: {str(e)}"
+            })
+            
+            logger.exception(f"Error converting PDF to Markdown {task_id}")
         finally:
             self.remove_task_event_queue(task_id)

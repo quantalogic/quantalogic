@@ -29,6 +29,50 @@ class CourseRequest(BaseModel):
     model: Optional[str] = "gemini/gemini-2.0-flash"
 
 
+class JourneyRequest(BaseModel):
+    """Request model for journey generation."""
+    destination: str
+    start_date: str
+    end_date: str
+    budget: float
+    model: str = "gemini/gemini-2.0-flash"
+
+class QuizRequest(BaseModel):
+    """Request model for quiz generation.""" 
+    file_path: Optional[str] = None
+    model: str = "gemini/gemini-2.0-flash"
+    num_questions: int = 10
+    token_limit: int = 2000
+    save: bool = True
+    words_per_question: int = 2000
+
+class AnalyzePaperRequest(BaseModel):
+    """Request model for paper analysis."""
+    file_path: str
+    text_extraction_model: Optional[str] = "gemini/gemini-2.0-flash"
+    cleaning_model: Optional[str] = "gemini/gemini-2.0-flash"
+    writing_model: Optional[str] = "gemini/gemini-2.0-flash"
+    output_dir: Optional[str] = None
+    copy_to_clipboard_flag: Optional[bool] = True
+    max_character_count: Optional[int] = 3000
+
+class LinkedInIntroduceContentRequest(BaseModel):
+    """Request model for LinkedIn introduce content generation."""
+    file_path: str
+    analysis_model: Optional[str] = "gemini/gemini-2.0-flash"
+    writing_model: Optional[str] = "gemini/gemini-2.0-flash"
+    cleaning_model: Optional[str] = "gemini/gemini-2.0-flash"
+    formatting_model: Optional[str] = "gemini/gemini-2.0-flash"
+    copy_to_clipboard_flag: Optional[bool] = True
+    intent: Optional[str] = None
+    mock_analysis: Optional[bool] = False
+
+class ConvertRequest(BaseModel):
+    input_pdf: str
+    output_md: Optional[str] = None
+    model: str = "gemini/gemini-2.0-flash"
+    system_prompt: Optional[str] = None
+
 class EventMessage(BaseModel):
     """Event message model for SSE."""
 
@@ -93,7 +137,7 @@ class TaskSubmission(BaseModel):
     mode: Optional[str] = "minimal"
     expertise: Optional[str] = None
     tools: Optional[List[Dict[str, Any]]] = None 
-
+    conversation_id: Optional[str] = None  # Added for memory management
     model_config = {"extra": "forbid"}
 
 

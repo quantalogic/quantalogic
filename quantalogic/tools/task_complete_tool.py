@@ -1,5 +1,6 @@
 """Tool for reading a file and returning its content."""
 
+from loguru import logger
 from quantalogic.tools.tool import Tool, ToolArgument
 
 
@@ -26,7 +27,25 @@ class TaskCompleteTool(Tool):
 
         Returns:
             str: The answer to the user.
+
+        Raises:
+            ValueError: If the answer contains uninterpolated variables.
         """
+        import re
+
+        # Check for any variable-like patterns
+        var_pattern = r'\$[a-zA-Z_][a-zA-Z0-9_]*\$?'
+        matches = re.findall(var_pattern, answer)
+        
+        if matches:
+            var_list = ", ".join(matches)
+            error_msg = (
+                f"Error: Task complete answer contains uninterpolated variables: {var_list}. "
+                "Variables should be interpolated before completing the task."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
         return answer
 
 

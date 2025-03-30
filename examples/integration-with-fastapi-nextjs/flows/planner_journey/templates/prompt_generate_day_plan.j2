@@ -1,0 +1,19 @@
+Generate a day plan for {{ current_date }} with remaining budget of {{ remaining_budget }}.
+
+Destination Analysis:
+{{ destination_analysis }}
+
+{% if previous_day_plan %}
+Previous Day's Plan:
+{{ previous_day_plan }}
+{% endif %}
+
+Create a structured day plan that includes:
+1. A mix of activities (cultural, adventure, relaxation)
+2. Logical transportation between locations
+3. Appropriate accommodation
+4. Meals and breaks
+5. Weather-appropriate activities
+6. Budget-conscious choices
+
+Return the plan in the DayPlan model format with activities, transportation, and accommodation details.

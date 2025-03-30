@@ -490,7 +490,6 @@ class Agent(BaseModel):
                     logger.debug(f"Tool executed: {observation.executed_tool}, iteration: {tool_iteration}")
                 elif not observation.executed_tool and "<action>" in content and auto_tool_call:
                     # Detected malformed tool call attempt; provide feedback and exit loop
-                    # FIX THIS MESSAGE !! TO BE NICE TO SHOW
                     response_content = (
                         f"{content}\n\n⚠️ Error: Invalid tool call format detected. "
                         "Please use the exact XML structure as specified in the system prompt:\n"
@@ -768,6 +767,110 @@ class Agent(BaseModel):
         except Exception as e:
             return self._handle_error(e)
 
+    async def _async_observe_response_chat(self, content: str, iteration: int = 1) -> ObserveResponseResult:
+        """Specialized observation method for chat mode with tool handling.
+
+        This method processes responses in chat mode, identifying and executing tool calls
+        while providing appropriate default parameters when needed. Prevents task_complete usage.
+
+        Args:
+            content: The response content to analyze
+            iteration: Current iteration number
+
+        Returns:
+            ObserveResponseResult with next steps information
+        """
+        try:
+            # Check for tool call patterns in the content
+            if "<action>" not in content:
+                logger.debug("No tool usage detected in chat response")
+                return ObserveResponseResult(next_prompt=content, executed_tool=None, answer=None)
+                
+            # Parse content for tool usage
+            parsed_content = self._parse_tool_usage(content)
+            if not parsed_content:
+                # Malformed tool call in chat mode; return feedback
+                error_prompt = (
+                    "⚠️ Error: Invalid tool call format detected. "
+                    "Please use the exact XML structure:\n"
+                    "```xml\n<action>\n<tool_name>\n  <parameter_name>value</parameter_name>\n</tool_name>\n</action>\n```"
+                )
+                return ObserveResponseResult(next_prompt=error_prompt, executed_tool=None, answer=None)
+
+            # Check for task_complete attempt and block it with feedback
+            if "task_complete" in parsed_content:
+                feedback = (
+                    "⚠️ Note: The 'task_complete' tool is not available in chat mode. "
+                    "This is a conversational mode; tasks are not completed here. "
+                    "Please use other tools or continue the conversation."
+                )
+                return ObserveResponseResult(next_prompt=feedback, executed_tool=None, answer=None)
+
+            # Process tools with prioritization based on tool_mode
+            tool_names = list(parsed_content.keys())
+            # Prioritize specific tools if tool_mode is set and the tool is available
+            if self.tool_mode and self.tool_mode in self.tools.tool_names() and self.tool_mode in tool_names:
+                tool_names = [self.tool_mode] + [t for t in tool_names if t != self.tool_mode]
+
+            for tool_name in tool_names:
+                if tool_name not in parsed_content:
+                    continue
+                    
+                tool_input = parsed_content[tool_name]
+                tool = self.tools.get(tool_name)
+                if not tool:
+                    return self._handle_tool_not_found(tool_name)
+
+                # Parse tool arguments from the input
+                arguments_with_values = self._parse_tool_arguments(tool, tool_input)
+                
+                # Apply default parameters based on tool schema if missing
+                self._apply_default_parameters(tool, arguments_with_values)
+                
+                # Check for repeated calls
+                is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
+                if is_repeated_call:
+                    executed_tool, response, answer = self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                    if answer:
+                        return ObserveResponseResult(
+                            next_prompt=response,
+                            executed_tool=executed_tool,
+                            answer=answer
+                        )
+                else:
+                    executed_tool, response = await self._async_execute_tool(tool_name, tool, arguments_with_values)
+                
+                if not executed_tool:
+                    # Tool execution failed
+                    return self._handle_tool_execution_failure(response)
+                
+                # Store result in variable memory for potential future reference
+                variable_name = f"result_{executed_tool}_{iteration}"
+                self.variable_store[variable_name] = response
+                
+                # Truncate response if too long for display
+                response_display = response
+                if len(response) > MAX_RESPONSE_LENGTH:
+                    response_display = response[:MAX_RESPONSE_LENGTH]
+                    response_display += f"... (truncated, full content available in ${variable_name})"
+                
+                # Format result in a user-friendly way
+                return ObserveResponseResult(
+                    next_prompt=response_display,
+                    executed_tool=executed_tool,
+                    answer=None
+                )
+                
+            # If we get here, no tool was successfully executed
+            return ObserveResponseResult(
+                next_prompt="I tried to use a tool, but encountered an issue. Please try again with a different request.",
+                executed_tool=None,
+                answer=None
+            )
+                
+        except Exception as e:
+            return self._handle_error(e)
+            
     def _execute_tool(self, tool_name: str, tool: Tool, arguments_with_values: dict) -> tuple[str, Any]:
         """Execute a tool with validation if required (synchronous wrapper).
 
@@ -870,6 +973,7 @@ class Agent(BaseModel):
 
     async def _async_interpolate_variables(self, text: str, depth: int = 0) -> str:
         """Interpolate variables using $var$ syntax in the given text with recursion protection.
+        Also fixes malformed variable references (e.g., $var -> $var$).
 
         Args:
             text: Text containing variable references
@@ -887,13 +991,24 @@ class Agent(BaseModel):
 
         try:
             import re
+            
+            # First, fix malformed variable references (e.g., $var -> $var$)
+            malformed_pattern = r'\$([a-zA-Z_][a-zA-Z0-9_]*)(?!\$)'
+            text = re.sub(malformed_pattern, r'$\1$', text)
 
+            # Now handle proper variable interpolation
             for var in self.variable_store.keys():
                 escaped_var = re.escape(var).replace('\\$', '$')
                 pattern = f"\\${escaped_var}\\$"
                 replacement = str(self.variable_store[var])
+                
+                # Ensure the replacement doesn't contain variable references
+                if '$' in replacement:
+                    replacement = await self._async_interpolate_variables(replacement, depth + 1)
+                    
                 text = re.sub(pattern, lambda m: replacement, text)
 
+            # Check for any remaining variables to interpolate
             if '$' in text and depth < MAX_INTERPOLATION_DEPTH:
                 return await self._async_interpolate_variables(text, depth + 1)
 
@@ -1249,11 +1364,8 @@ class Agent(BaseModel):
             answer=None,
         )
         
-    async def _async_observe_response_chat(self, content: str, iteration: int = 1) -> ObserveResponseResult:
-        """Specialized observation method for chat mode with tool handling.
-
-        This method processes responses in chat mode, identifying and executing tool calls
-        while providing appropriate default parameters when needed. Prevents task_complete usage.
+    async def _async_observe_response(self, content: str, iteration: int = 1) -> ObserveResponseResult:
+        """Analyze the assistant's response and determine next steps (asynchronous).
 
         Args:
             content: The response content to analyze
@@ -1263,96 +1375,64 @@ class Agent(BaseModel):
             ObserveResponseResult with next steps information
         """
         try:
-            # Check for tool call patterns in the content
-            if "<action>" not in content:
-                logger.debug("No tool usage detected in chat response")
-                return ObserveResponseResult(next_prompt=content, executed_tool=None, answer=None)
-                
-            # Parse content for tool usage
-            parsed_content = self._parse_tool_usage(content)
-            if not parsed_content:
-                # Malformed tool call in chat mode; return feedback
-                error_prompt = (
-                    "⚠️ Error: Invalid tool call format detected. "
-                    "Please use the exact XML structure:\n"
-                    "```xml\n<action>\n<tool_name>\n  <parameter_name>value</parameter_name>\n</tool_name>\n</action>\n```"
-                )
-                return ObserveResponseResult(next_prompt=error_prompt, executed_tool=None, answer=None)
+            tool_usage = self._parse_tool_usage(content)
 
-            # Check for task_complete attempt and block it with feedback
-            if "task_complete" in parsed_content:
-                feedback = (
-                    "⚠️ Note: The 'task_complete' tool is not available in chat mode. "
-                    "This is a conversational mode; tasks are not completed here. "
-                    "Please use other tools or continue the conversation."
-                )
-                return ObserveResponseResult(next_prompt=feedback, executed_tool=None, answer=None)
+            if not tool_usage:
+                return self._handle_no_tool_usage()
 
-            # Process tools with prioritization based on tool_mode
-            tool_names = list(parsed_content.keys())
-            # Prioritize specific tools if tool_mode is set and the tool is available
-            if self.tool_mode and self.tool_mode in self.tools.tool_names() and self.tool_mode in tool_names:
-                tool_names = [self.tool_mode] + [t for t in tool_names if t != self.tool_mode]
-
-            for tool_name in tool_names:
-                if tool_name not in parsed_content:
-                    continue
-                    
-                tool_input = parsed_content[tool_name]
+            for tool_name, tool_input in tool_usage.items():
                 tool = self.tools.get(tool_name)
                 if not tool:
                     return self._handle_tool_not_found(tool_name)
 
-                # Parse tool arguments from the input
                 arguments_with_values = self._parse_tool_arguments(tool, tool_input)
-                
-                # Apply default parameters based on tool schema if missing
-                self._apply_default_parameters(tool, arguments_with_values)
-                
-                # Check for repeated calls
-                is_repeated_call = self._is_repeated_tool_call(tool_name, arguments_with_values)
-                if is_repeated_call:
-                    executed_tool, response, answer = self._handle_repeated_tool_call(tool_name, arguments_with_values)
-                    if answer:
+
+                # For task_complete, ensure variables are interpolated first
+                if tool_name == "task_complete" and arguments_with_values.get("answer"):
+                    try:
+                        arguments_with_values["answer"] = await self._async_interpolate_variables(arguments_with_values["answer"])
+                    except Exception as e:
+                        logger.error(f"Error interpolating variables in task_complete: {str(e)}")
                         return ObserveResponseResult(
-                            next_prompt=response,
-                            executed_tool=executed_tool,
-                            answer=answer
+                            next_prompt=self._format_observation_response(
+                                f"Error: Failed to interpolate variables in task completion: {str(e)}",
+                                "", "", iteration
+                            ),
+                            executed_tool="",
+                            answer=None
                         )
-                else:
-                    executed_tool, response = await self._async_execute_tool(tool_name, tool, arguments_with_values)
-                
+
+                if self._is_repeated_tool_call(tool_name, arguments_with_values):
+                    executed_tool, error_message, answer = self._handle_repeated_tool_call(tool_name, arguments_with_values)
+                    return ObserveResponseResult(
+                        next_prompt=error_message,
+                        executed_tool=executed_tool,
+                        answer=answer
+                    )
+
+                executed_tool, response = await self._async_execute_tool(tool_name, tool, arguments_with_values)
+
                 if not executed_tool:
-                    # Tool execution failed
                     return self._handle_tool_execution_failure(response)
-                
-                # Store result in variable memory for potential future reference
-                variable_name = f"result_{executed_tool}_{iteration}"
-                self.variable_store[variable_name] = response
-                
-                # Truncate response if too long for display
-                response_display = response
-                if len(response) > MAX_RESPONSE_LENGTH:
-                    response_display = response[:MAX_RESPONSE_LENGTH]
-                    response_display += f"... (truncated, full content available in ${variable_name})"
-                
-                # Format result in a user-friendly way
+
+                # For task_complete, we want to return the interpolated answer
+                if tool_name == "task_complete":
+                    return ObserveResponseResult(
+                        next_prompt="",
+                        executed_tool=executed_tool,
+                        answer=response
+                    )
+
+                # For other tools, continue with normal flow
                 return ObserveResponseResult(
-                    next_prompt=response_display,
+                    next_prompt=self._format_observation_response(response, executed_tool, f"var{iteration}", iteration),
                     executed_tool=executed_tool,
                     answer=None
                 )
-                
-            # If we get here, no tool was successfully executed
-            return ObserveResponseResult(
-                next_prompt="I tried to use a tool, but encountered an issue. Please try again with a different request.",
-                executed_tool=None,
-                answer=None
-            )
-                
+
         except Exception as e:
             return self._handle_error(e)
-            
+
     def _apply_default_parameters(self, tool: Tool, arguments_with_values: dict) -> None:
         """Apply default parameters to tool arguments based on tool schema.
         
@@ -1438,7 +1518,7 @@ class Agent(BaseModel):
                 
         # Return original response if no special handling applies
         return response
-
+        
     def _format_observation_response(
         self, response: str, last_executed_tool: str, variable_name: str, iteration: int
     ) -> str:

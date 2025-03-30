@@ -1,0 +1,37 @@
+Please analyze the following journey plan for {{ journey_plan.destination if journey_plan else "the destination" }} and provide tailored recommendations.
+
+Trip Details:
+{% if journey_plan and journey_plan.dates %}
+- Duration: {{ journey_plan.dates|length }} days ({{ journey_plan.dates[0] if journey_plan.dates else "" }} to {{ journey_plan.dates[-1] if journey_plan.dates else "" }})
+- Total Budget: ${{ "%.2f"|format(journey_plan.budget if journey_plan else 0) }}
+- Current Spend: ${{ "%.2f"|format(journey_plan.total_cost if journey_plan else 0) }}
+{% endif %}
+
+Destination Analysis:
+{% if destination_analysis %}
+- Best Time to Visit: {{ destination_analysis.best_time_to_visit if destination_analysis else "" }}
+- Local Currency: {{ destination_analysis.local_currency if destination_analysis else "" }}
+- Weather: {{ destination_analysis.weather_info if destination_analysis else "" }}
+- Transportation Options: {{ destination_analysis.transportation_options|join(", ") if destination_analysis else "" }}
+{% endif %}
+
+Daily Activities Overview:
+{% if journey_plan and journey_plan.daily_plans %}
+{% for day_plan in journey_plan.daily_plans %}
+Day {{ loop.index }}:
+{% for activity in day_plan.activities %}
+- {{ activity.name if activity else "" }} ({{ activity.duration if activity else "" }})
+{% endfor %}
+{% endfor %}
+{% endif %}
+
+Based on this journey plan, please provide:
+1. Practical tips to enhance their experience
+2. Cultural insights and local customs to be aware of
+3. Budget optimization suggestions
+4. Time-saving recommendations
+5. Safety and convenience tips
+6. Alternative activities or backup plans if needed
+7. Transportation and logistics advice
+
+Format your response as a list of clear, actionable recommendations.

@@ -80,6 +80,10 @@ presente le resultat sur une bonne structure
 
 Mon voisin a créé des ouvertures (fenêtres) donnant directement sur ma propriété, ce qui porte atteinte à ma vie privée. Je souhaite faire valoir mes droits et le contraindre à fermer ces ouvertures.
 
+tu répond en français tout en citant les sources,
+
+Et tu me crée une lettre à adresser à mon voisin, et une autre pour mon avocat
+
 # الهوية المهنية
 
 أنا الأستاذ كريم، محامي خبير معتمد لدى المحكمة العليا مع 25 سنة خبرة، متخصص في القانون المدني والإجراءات المدنية والإدارية الجزائرية.

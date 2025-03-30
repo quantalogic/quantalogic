@@ -276,47 +276,69 @@ class LegalEmbeddingRAG(Tool):
         self.persist_dir = os.path.abspath(persist_dir)
         self.force_reindex = force_reindex
 
+        logger.info("Initializing LegalEmbeddingRAG with parameters:")
+        logger.info(f"  Name: {name}")
+        logger.info(f"  Persist Directory: {self.persist_dir}")
+        logger.info(f"  Document Paths: {document_paths}")
+        logger.info(f"  Chunk Size: {chunk_size}")
+        logger.info(f"  Chunk Overlap: {chunk_overlap}")
+        logger.info(f"  Embedding Model: {embed_model}")
+        logger.info(f"  Force Reindex: {force_reindex}")
+
         # Initialize embedding model
         try:
+            logger.info("=> Initializing embedding model...")
             self.embed_model = HuggingFaceEmbedding(
                 model_name=embed_model,
                 embed_batch_size=8
             )
-            logger.info(f"Successfully initialized embedding model: {embed_model}")
+            logger.success(f"Successfully initialized embedding model: {embed_model}")
         except Exception as e:
             logger.error(f"Failed to initialize embedding model: {e}")
             raise
 
         # Initialize query processor and hybrid retriever
+        logger.info("=> Initializing query processor and hybrid retriever...")
         self.query_processor = QueryProcessor()
         self.hybrid_retriever = HybridRetriever(self.embed_model)
+        logger.success("Successfully initialized query processor and hybrid retriever")
 
         # Setup ChromaDB
+        logger.info("=> Setting up ChromaDB...")
         chroma_persist_dir = os.path.join(self.persist_dir, "chroma")
         if force_reindex and os.path.exists(chroma_persist_dir):
+            logger.warning(f"Force reindex enabled - removing existing ChromaDB at: {chroma_persist_dir}")
             shutil.rmtree(chroma_persist_dir)
         
         os.makedirs(chroma_persist_dir, exist_ok=True)
+        logger.info(f"ChromaDB persist directory: {chroma_persist_dir}")
         chroma_client = chromadb.PersistentClient(path=chroma_persist_dir)
         collection = chroma_client.create_collection(
             name="legal_collection",
             get_or_create=True
         )
+        logger.success("Successfully initialized ChromaDB collection")
         
         self.vector_store = ChromaVectorStore(chroma_collection=collection)
         self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
+        logger.success("Successfully initialized vector store and storage context")
         
         # Initialize text splitter with semantic chunking
+        logger.info("=> Initializing legal text splitter...")
         self.text_splitter = LegalTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap
         )
+        logger.success("Successfully initialized legal text splitter")
         
         # Initialize or load index
+        logger.info("=> Initializing index...")
         self.index = self._initialize_index(document_paths)
         if self.index and document_paths:
             # Index documents for hybrid search
+            logger.info("=> Indexing documents for hybrid search...")
             self.hybrid_retriever.index_documents(self._load_documents(document_paths))
+            logger.success("Successfully indexed documents for hybrid search")
 
     def _extract_legal_metadata(self, text: str) -> Dict[str, Any]:
         """Extract legal metadata from text with enhanced article detection."""
@@ -486,22 +508,64 @@ class LegalEmbeddingRAG(Tool):
             logger.error(f"Error creating index: {str(e)}")
             return None
 
+    def _check_index_exists(self) -> bool:
+        """Check if index files exist and are valid."""
+        required_files = [
+            os.path.join(self.persist_dir, "docstore.json"),
+            os.path.join(self.persist_dir, "chroma"),
+            os.path.join(self.persist_dir, "chroma", "chroma.sqlite3")
+        ]
+        return all(os.path.exists(f) for f in required_files)
+
     def _initialize_index(self, document_paths: Optional[List[str]]) -> Optional[VectorStoreIndex]:
         """Initialize or load the vector index."""
         logger.info("Initializing index...")
         
-        if document_paths:
-            documents = self._load_documents(document_paths)
-            return self._create_index(documents)
+        index_exists = self._check_index_exists()
         
-        # Try loading existing index
-        index_path = os.path.join(self.persist_dir, "docstore.json")
-        if os.path.exists(index_path):
+        # Case 1: Force reindex requested
+        if self.force_reindex:
+            logger.info("Force reindex requested - creating new index")
+            if document_paths:
+                documents = self._load_documents(document_paths)
+                return self._create_index(documents)
+            else:
+                logger.warning("Force reindex requested but no document paths provided")
+                return None
+        
+        # Case 2: Index exists and no new documents
+        if index_exists and not document_paths:
+            logger.info("Loading existing index from storage")
             try:
                 return load_index_from_storage(storage_context=self.storage_context)
             except Exception as e:
                 logger.error(f"Failed to load existing index: {str(e)}")
+                return None
         
+        # Case 3: Index exists and new documents provided
+        if index_exists and document_paths:
+            logger.info("Loading existing index and updating with new documents")
+            try:
+                index = load_index_from_storage(storage_context=self.storage_context)
+                new_documents = self._load_documents(document_paths)
+                if new_documents:
+                    for doc in new_documents:
+                        index.insert(doc)
+                    self.storage_context.persist(persist_dir=self.persist_dir)
+                    logger.info(f"Updated index with {len(new_documents)} new documents")
+                return index
+            except Exception as e:
+                logger.error(f"Failed to update existing index: {str(e)}")
+                return None
+        
+        # Case 4: No index exists but documents provided
+        if document_paths:
+            logger.info("Creating new index from documents")
+            documents = self._load_documents(document_paths)
+            return self._create_index(documents)
+        
+        # Case 5: No index and no documents
+        logger.warning("No index exists and no documents provided")
         return None
 
     def _generate_contextual_answer(self, query: str, sources: List[Dict]) -> str:
@@ -555,7 +619,7 @@ class LegalEmbeddingRAG(Tool):
                     reverse=True
                 )[:2]:
                     context_parts.append(f"• {source['content']}")
-
+                    
         # Add practical implications
         context_parts.append("\nPractical Implications:")
         main_source = sorted_sources[0]
@@ -644,12 +708,10 @@ class LegalEmbeddingRAG(Tool):
                 top_k=max(5, max_sources)
             )
             
-            logger.info(f"Found {len(results)} relevant articles after reranking")
-
             # Prepare response based on mode
             response_mode = ResponseMode(response_mode)
             if response_mode == ResponseMode.SOURCES_ONLY:
-                return json.dumps(results, indent=4, ensure_ascii=False)
+                return json.dumps({"sources": results}, indent=4, ensure_ascii=False)
             elif response_mode == ResponseMode.CONTEXTUAL_ANSWER:
                 answer = self._generate_contextual_answer(query, results)
                 return json.dumps({"answer": answer}, indent=4, ensure_ascii=False)
@@ -687,13 +749,24 @@ if __name__ == "__main__":
             ],
             chunk_size=512,
             chunk_overlap=128,
-            force_reindex=True
+            force_reindex=False  # Set to False to reuse existing embeddings
         )
         
         # Test query
         test_query = "Mon voisin à des ouverture (fenêtres) donnant sur ma propriété. j'aimerai invoquer la lois pour qu'il les ferme, quelles sont les lois qui me defends ?"
-        
-        print("\nTesting enhanced RAG with different response modes:")
+    
+        try:
+            result = tool.execute(
+                query=test_query,
+                max_sources=5,
+                min_relevance=0.5,
+                response_mode=ResponseMode.SOURCES_ONLY
+            )
+            print(result)
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            
+        """ print("\nTesting enhanced RAG with different response modes:")
         for mode in ResponseMode:
             print(f"\nResponse Mode: {mode.value}")
             try:
@@ -705,7 +778,7 @@ if __name__ == "__main__":
                 )
                 print(result)
             except Exception as e:
-                print(f"Error: {str(e)}")
+                print(f"Error: {str(e)}") """
 
     except Exception as e:
         logger.error(f"Failed to initialize or run tool: {e}")

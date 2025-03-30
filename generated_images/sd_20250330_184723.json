@@ -1,0 +1,13 @@
+{
+  "filename": "sd_20250330_184723.png",
+  "timestamp": "20250330_184723",
+  "model_id": "stability.stable-diffusion-xl-v1",
+  "prompt": "A majestic red dragon perched on a crystal mountain peak at sunset",
+  "negative_prompt": "ugly, deformed, noisy, blurry, distorted, low quality",
+  "size": "1024x1024",
+  "style": "digital-art",
+  "cfg_scale": 7.0,
+  "steps": 50,
+  "seed": null,
+  "local_path": "generated_images/sd_20250330_184723.png"
+}

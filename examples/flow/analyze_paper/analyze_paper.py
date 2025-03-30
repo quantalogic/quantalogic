@@ -46,7 +46,7 @@ DEFAULT_TEXT_EXTRACTION_MODEL = "gemini/gemini-2.0-flash"
 DEFAULT_CLEANING_MODEL = "gemini/gemini-2.0-flash"
 #DEFAULT_WRITING_MODEL = "deepseek/deepseek-reasoner"
 #DEFAULT_WRITING_MODEL = "openrouter/openai/gpt-4o-mini"
-DEFAULT_WRITING_MODEL = "openrouter/deepseek/deepseek-r1"
+DEFAULT_WRITING_MODEL = "gemini/gemini-2.0-flash"
 
 # Define a Pydantic model for structured output of title and authors
 class PaperInfo(BaseModel):

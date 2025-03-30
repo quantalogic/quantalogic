@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ book.title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="book-container" class="container mx-auto px-4 py-8">
+        <!-- Book Header -->
+        <header class="text-center mb-12">
+            <h1 class="text-5xl font-bold mb-4">{{ book.title }}</h1>
+            <p class="text-xl text-gray-600">by {{ book.author }}</p>
+            <div class="mt-4 text-gray-500">
+                <span class="mr-4">Genre: {{ book.genre }}</span>
+                <span>Theme: {{ book.theme }}</span>
+            </div>
+        </header>
+
+        <!-- Chapter Navigation -->
+        <nav class="fixed top-4 right-4 z-50">
+            <button id="menu-toggle" class="bg-white p-3 rounded-full shadow-lg">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </button>
+            <div id="chapter-menu" class="hidden absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl">
+                {% for chapter in book.chapters %}
+                <a href="#chapter-{{ loop.index }}" class="block px-4 py-2 hover:bg-gray-100">
+                    {{ chapter.title }}
+                </a>
+                {% endfor %}
+            </div>
+        </nav>
+
+        <!-- Chapters -->
+        <div id="chapters-container">
+            {% for chapter in book.chapters %}
+            <section id="chapter-{{ loop.index }}" class="chapter-section mb-16 opacity-0">
+                <h2 class="text-3xl font-bold mb-6">{{ chapter.title }}</h2>
+                
+                <!-- Chapter Content -->
+                <div class="prose lg:prose-xl mb-8">
+                    {{ chapter.content | safe }}
+                </div>
+
+                <!-- Chapter Illustrations -->
+                {% if chapter.illustrations %}
+                <div class="illustrations-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 my-8">
+                    {% for illustration in chapter.illustrations %}
+                    <figure class="illustration-card bg-white rounded-lg shadow-lg overflow-hidden">
+                        <img src="{{ illustration.path }}" 
+                             alt="{{ illustration.description }}"
+                             class="w-full h-64 object-cover"
+                             loading="lazy">
+                        <figcaption class="p-4 text-sm text-gray-600">
+                            {{ illustration.description }}
+                        </figcaption>
+                    </figure>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <!-- Chapter Information -->
+                <div class="mt-8 text-gray-600 bg-white rounded-lg p-6 shadow-sm">
+                    <p>Estimated reading time: {{ chapter.estimated_read_time }} minutes</p>
+                    <div class="mt-4">
+                        <h4 class="font-semibold">Key Themes:</h4>
+                        <div class="flex flex-wrap gap-2 mt-2">
+                            {% for keyword in chapter.keywords %}
+                            <span class="px-3 py-1 bg-gray-200 rounded-full text-sm">{{ keyword }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% if chapter.summary %}
+                    <div class="mt-4">
+                        <h4 class="font-semibold">Chapter Summary:</h4>
+                        <p class="mt-2">{{ chapter.summary }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </section>
+            {% endfor %}
+        </div>
+    </div>
+    <script src="animations.js"></script>
+</body>
+</html>
