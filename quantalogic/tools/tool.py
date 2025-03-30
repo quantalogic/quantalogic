@@ -5,7 +5,7 @@ with type-validated arguments and execution methods.
 """
 
 import ast
-import asyncio  # Added for asynchronous support
+import asyncio
 import inspect
 from typing import Any, Callable, Literal, TypeVar
 
@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Type variable for create_tool to preserve function signature
 F = TypeVar('F', bound=Callable[..., Any])
+
 
 class ToolArgument(BaseModel):
     """Represents an argument for a tool with validation and description.
@@ -37,6 +38,7 @@ class ToolArgument(BaseModel):
         default=None, description="The default value for the argument. This parameter is required."
     )
     example: str | None = Field(default=None, description="An example value to illustrate the argument's usage.")
+
 
 class ToolDefinition(BaseModel):
     """Base class for defining tool configurations without execution logic.
@@ -178,8 +180,7 @@ class ToolDefinition(BaseModel):
         Returns:
             A dictionary of property names and values, excluding tool arguments and None values.
         """
-        # This method is defined here in ToolDefinition and overridden in Tool
-        # For ToolDefinition, it returns an empty dict since it has no execution context yet
+        # For ToolDefinition, return empty dict as it has no execution context
         return {}
 
     def to_docstring(self) -> str:
@@ -234,6 +235,7 @@ class ToolDefinition(BaseModel):
         docstring += '"""'
         
         return docstring
+
 
 class Tool(ToolDefinition):
     """Extended class for tools with execution capabilities.
@@ -293,7 +295,7 @@ class Tool(ToolDefinition):
         Returns:
             A string representing the result of tool execution.
         """
-        # Check if execute_async is implemented in the subclass
+        # Check if async_execute is implemented in the subclass
         if self.__class__.async_execute is Tool.async_execute:
             return await asyncio.to_thread(self.execute, **kwargs)
         raise NotImplementedError("This method should be implemented by subclasses.")
@@ -311,11 +313,13 @@ class Tool(ToolDefinition):
         properties = self.get_properties(exclude=["arguments"])
         return {name: value for name, value in properties.items() if value is not None and name in argument_names}
 
+
 def create_tool(func: F) -> Tool:
     """Create a Tool instance from a Python function using AST analysis.
 
     Analyzes the function's source code to extract its name, docstring, and arguments,
-    then constructs a Tool subclass with appropriate execution logic.
+    then constructs a Tool subclass with appropriate execution logic for both
+    synchronous and asynchronous functions.
 
     Args:
         func: The Python function (sync or async) to convert into a Tool.
@@ -387,22 +391,41 @@ def create_tool(func: F) -> Tool:
     return_type = type_hints.get("return", str)
     return_type_str = type_map.get(return_type, "string")
 
-    # Define Tool subclass
+    # Define Tool subclass with both execute and async_execute
     class GeneratedTool(Tool):
         def __init__(self, *args: Any, **kwargs: Any):
-            super().__init__(*args, name=name, description=description, arguments=arguments, return_type=return_type_str, **kwargs)
+            super().__init__(
+                *args,
+                name=name,
+                description=description,
+                arguments=arguments,
+                return_type=return_type_str,
+                **kwargs
+            )
             self._func = func
 
-        if is_async:
-            async def async_execute(self, **kwargs: Any) -> str:
-                result = await self._func(**kwargs)
-                return str(result)
-        else:
-            def execute(self, **kwargs: Any) -> str:
+        def execute(self, **kwargs: Any) -> str:
+            """Execute the tool synchronously, handling both sync and async functions."""
+            if is_async:
+                # For async functions, run synchronously via asyncio.run
+                return asyncio.run(self.async_execute(**kwargs))
+            else:
+                # For sync functions, call directly
                 result = self._func(**kwargs)
                 return str(result)
 
+        async def async_execute(self, **kwargs: Any) -> str:
+            """Execute the tool asynchronously, handling both sync and async functions."""
+            if is_async:
+                # For async functions, await directly
+                result = await self._func(**kwargs)
+            else:
+                # For sync functions, call synchronously in async context
+                result = self._func(**kwargs)
+            return str(result)
+
     return GeneratedTool()
+
 
 if __name__ == "__main__":
     # Basic tool with argument
@@ -462,7 +485,8 @@ if __name__ == "__main__":
     print(sync_tool.to_markdown())
     print("Synchronous Tool Docstring:")
     print(sync_tool.to_docstring())
-    print("Execution result:", sync_tool.execute(a=5, b=3))
+    print("Execution result (sync):", sync_tool.execute(a=5, b=3))
+    print("Execution result (async):", asyncio.run(sync_tool.async_execute(a=5, b=3)))
     print()
 
     # Test create_tool with asynchronous function
@@ -480,7 +504,8 @@ if __name__ == "__main__":
     print(async_tool.to_markdown())
     print("Asynchronous Tool Docstring:")
     print(async_tool.to_docstring())
-    print("Execution result:", asyncio.run(async_tool.async_execute(name="Alice")))
+    print("Execution result (sync):", async_tool.execute(name="Alice"))
+    print("Execution result (async):", asyncio.run(async_tool.async_execute(name="Alice")))
     print()
 
     # Comprehensive tool for to_docstring demonstration with custom return type

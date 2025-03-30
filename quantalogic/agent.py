@@ -23,7 +23,6 @@ from quantalogic.utils import get_environment
 from quantalogic.utils.ask_user_validation import console_ask_for_user_validation
 from quantalogic.xml_parser import ToleranceXMLParser
 from quantalogic.xml_tool_parser import ToolParser
-import uuid
 
 # Maximum ratio occupancy of the occupied memory
 MAX_OCCUPANCY = 90.0

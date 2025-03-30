@@ -118,7 +118,7 @@ async def sinus(x: float):
     import math
     return math.sin(x)
 
-async def cosinus(x: float): 
+def cosinus(x: float): 
     import math
     return math.cos(x)
 
