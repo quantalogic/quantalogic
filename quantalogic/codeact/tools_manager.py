@@ -6,19 +6,12 @@ import litellm
 from loguru import logger
 
 from quantalogic.tools import (
-    EditWholeContentTool,
-    ExecuteBashCommandTool,
     GrepAppTool,
     InputQuestionTool,
-    JinjaTool,
     ListDirectoryTool,
     ReadFileBlockTool,
     ReadFileTool,
     ReadHTMLTool,
-    ReplaceInFileTool,
-    RipgrepTool,
-    SearchDefinitionNamesTool,
-    TaskCompleteTool,
     Tool,
     ToolArgument,
     WriteFileTool,
@@ -34,17 +27,20 @@ async def add_tool(a: int, b: int) -> str:
     """Adds two numbers and returns the sum as a string."""
     return str(a + b)
 
+
 @create_tool
 @log_async_tool("Multiplying")
 async def multiply_tool(x: int, y: int) -> str:
     """Multiplies two numbers and returns the product as a string."""
     return str(x * y)
 
+
 @create_tool
 @log_async_tool("Concatenating")
 async def concat_tool(s1: str, s2: str) -> str:
     """Concatenates two strings and returns the result."""
     return s1 + s2
+
 
 class AgentTool(Tool):
     """Tool for generating text using a language model."""
@@ -54,11 +50,11 @@ class AgentTool(Tool):
             description="Generates text using a language model.",
             arguments=[
                 ToolArgument(name="system_prompt", arg_type="string", 
-                           description="System prompt to guide the model", required=True),
+                            description="System prompt to guide the model", required=True),
                 ToolArgument(name="prompt", arg_type="string", 
-                           description="User prompt to generate a response", required=True),
+                            description="User prompt to generate a response", required=True),
                 ToolArgument(name="temperature", arg_type="float", 
-                           description="Temperature for generation (0 to 1)", required=True)
+                            description="Temperature for generation (0 to 1)", required=True)
             ],
             return_type="string"
         )
@@ -87,6 +83,7 @@ class AgentTool(Tool):
             )
             return response.choices[0].message.content.strip()
 
+
 class RetrieveStepTool(Tool):
     """Tool to retrieve information from a specific previous step."""
     def __init__(self, history_store: List[dict]):
@@ -114,16 +111,19 @@ class RetrieveStepTool(Tool):
             f"Result: {step['result']}"
         )
 
+
 async def sinus(x: float): 
     import math
     return math.sin(x)
+
 
 def cosinus(x: float): 
     import math
     return math.cos(x)
 
+
 def get_default_tools(model: str) -> List[Tool]:
-    """Return list of default tools."""
+    """Return list of default tools for the agent."""
     return [
         GrepAppTool(),
         InputQuestionTool(), 

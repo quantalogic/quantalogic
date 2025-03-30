@@ -1,12 +1,14 @@
 import asyncio
+from abc import ABC, abstractmethod
 from typing import Callable, List, Optional
 
 from quantalogic.tools import Tool
 
 from .constants import MAX_GENERATE_PROGRAM_TOKENS
+from .events import PromptGeneratedEvent
 from .llm_util import litellm_completion
 from .templates import jinja_env
-from .utils import validate_xml
+from .utils import XMLResultHandler, validate_xml
 
 
 async def generate_program(
@@ -24,6 +26,9 @@ async def generate_program(
         task_description=task_description,
         tool_docstrings=tool_docstrings
     )
+    await notify_event(PromptGeneratedEvent(
+        event_type="PromptGenerated", step_number=step, prompt=prompt
+    ))
 
     for attempt in range(3):
         try:
@@ -47,7 +52,24 @@ async def generate_program(
             else:
                 raise Exception(f"Code generation failed with {model}: {e}")
 
-class Reasoner:
+
+class BaseReasoner(ABC):
+    """Abstract base class for reasoning components."""
+    @abstractmethod
+    async def generate_action(
+        self,
+        task: str,
+        history_str: str,
+        step: int,
+        max_iterations: int,
+        system_prompt: Optional[str],
+        notify_event: Callable,
+        streaming: bool
+    ) -> str:
+        pass
+
+
+class Reasoner(BaseReasoner):
     """Handles action generation using the language model."""
     def __init__(self, model: str, tools: List[Tool]):
         self.model = model
@@ -71,6 +93,9 @@ class Reasoner:
                 current_step=step,
                 max_iterations=max_iterations
             )
+            await notify_event(PromptGeneratedEvent(
+                event_type="PromptGenerated", step_number=step, prompt=task_prompt
+            ))
             program = await generate_program(task_prompt, self.tools, self.model, MAX_GENERATE_PROGRAM_TOKENS, step, notify_event, streaming=streaming)
             program = self._clean_code(program)
             response = jinja_env.get_template("response_format.j2").render(
@@ -84,18 +109,10 @@ class Reasoner:
                 raise ValueError("Invalid XML generated")
             return response
         except Exception as e:
-            return jinja_env.get_template("error_format.j2").render(error=str(e))
+            return XMLResultHandler.format_error_result(str(e))
 
     def _clean_code(self, code: str) -> str:
-        """
-        Extract Python code from markdown code block if present, otherwise return the input string.
-
-        Args:
-            code: Input string that may contain markdown code block
-
-        Returns:
-            Extracted Python code or original string
-        """
+        """Extract Python code from markdown code block if present, otherwise return the input string."""
         lines = code.splitlines()
         in_code_block = False
         code_lines = []

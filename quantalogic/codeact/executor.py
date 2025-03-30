@@ -1,4 +1,5 @@
 import asyncio
+from abc import ABC, abstractmethod
 from typing import Callable, Dict, List
 
 from lxml import etree
@@ -10,12 +11,22 @@ from .events import ToolExecutionCompletedEvent, ToolExecutionErrorEvent, ToolEx
 from .utils import XMLResultHandler, validate_code
 
 
-class Executor:
+class BaseExecutor(ABC):
+    """Abstract base class for execution components."""
+    @abstractmethod
+    async def execute_action(self, code: str, context_vars: Dict, step: int, timeout: int) -> str:
+        pass
+
+    @abstractmethod
+    def register_tool(self, tool: Tool) -> None:
+        pass
+
+
+class Executor(BaseExecutor):
     """Manages action execution and context updates with dynamic tool registration."""
     def __init__(self, tools: List[Tool], notify_event: Callable):
-        # Changed from List to Dict for dynamic registration
         self.tools: Dict[str, Tool] = {tool.name: tool for tool in tools}
-        self.notify_event = notify_event  # Callback to notify observers
+        self.notify_event = notify_event
         self.tool_namespace = self._build_tool_namespace()
 
     def _build_tool_namespace(self) -> Dict:

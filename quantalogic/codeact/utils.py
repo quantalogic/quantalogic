@@ -67,7 +67,7 @@ def format_xml_element(tag: str, value: Any, **attribs) -> etree.Element:
 
 
 class XMLResultHandler:
-    """Utility class for handling XML formatting and parsing."""
+    """Utility class for handling all XML formatting and parsing operations."""
     @staticmethod
     def format_execution_result(result) -> str:
         """Format execution result as XML."""
@@ -116,7 +116,7 @@ class XMLResultHandler:
             return result_xml
 
     @staticmethod
-    def parse_response(response: str) -> Tuple[str, str]:
+    def parse_action_response(response: str) -> Tuple[str, str]:
         """Parse XML response to extract thought and code."""
         try:
             root = etree.fromstring(response)
@@ -133,3 +133,17 @@ class XMLResultHandler:
             return etree.fromstring(result).findtext("Value") or ""
         except etree.XMLSyntaxError:
             return ""
+
+    @staticmethod
+    def format_error_result(error_msg: str) -> str:
+        """Format an error result as XML."""
+        root = etree.Element("Action")
+        root.append(format_xml_element("Thought", f"Failed to generate a valid action due to: {error_msg}"))
+        root.append(etree.Element("Error"))
+        root.find("Error").append(format_xml_element("Message", error_msg))
+        root.append(format_xml_element("Code", """
+import asyncio
+async def main():
+    print("Error: Action generation failed")
+"""))
+        return etree.tostring(root, pretty_print=True, encoding="unicode")

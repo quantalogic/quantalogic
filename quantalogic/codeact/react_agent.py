@@ -17,17 +17,25 @@ from .events import (
     TaskStartedEvent,
     ThoughtGeneratedEvent,
 )
-from .executor import Executor
+from .executor import BaseExecutor, Executor
 from .llm_util import litellm_completion
-from .reasoner import Reasoner
+from .reasoner import BaseReasoner, Reasoner
 from .utils import XMLResultHandler
 
 
 class ReActAgent:
     """Core agent implementing the ReAct framework with modular components."""
-    def __init__(self, model: str, tools: List[Tool], max_iterations: int = 5, max_history_tokens: int = 2000):
-        self.reasoner = Reasoner(model, tools)
-        self.executor = Executor(tools, notify_event=self._notify_observers)
+    def __init__(
+        self,
+        model: str,
+        tools: List[Tool],
+        max_iterations: int = 5,
+        max_history_tokens: int = 2000,
+        reasoner: Optional[BaseReasoner] = None,
+        executor: Optional[BaseExecutor] = None
+    ):
+        self.reasoner = reasoner or Reasoner(model, tools)
+        self.executor = executor or Executor(tools, notify_event=self._notify_observers)
         self.max_iterations = max_iterations
         self.max_history_tokens = max_history_tokens
         self.context_vars: Dict = {}
@@ -58,8 +66,10 @@ class ReActAgent:
         """Generate an action using the Reasoner."""
         history_str = self._format_history(history, max_iterations)
         start = time.perf_counter()
-        response = await self.reasoner.generate_action(task, history_str, step, max_iterations, system_prompt, self._notify_observers, streaming=streaming)
-        thought, code = XMLResultHandler.parse_response(response)
+        response = await self.reasoner.generate_action(
+            task, history_str, step, max_iterations, system_prompt, self._notify_observers, streaming=streaming
+        )
+        thought, code = XMLResultHandler.parse_action_response(response)
         gen_time = time.perf_counter() - start
         await self._notify_observers(ThoughtGeneratedEvent(
             event_type="ThoughtGenerated", step_number=step, thought=thought, generation_time=gen_time
@@ -154,7 +164,7 @@ class ReActAgent:
             await self._notify_observers(StepStartedEvent(event_type="StepStarted", step_number=step))
             try:
                 response = await self.generate_action(task, history, step, max_iters, system_prompt, streaming=streaming)
-                thought, code = XMLResultHandler.parse_response(response)
+                thought, code = XMLResultHandler.parse_action_response(response)
                 result = await self.execute_action(code, step)
                 step_data = {"step_number": step, "thought": thought, "action": code, "result": result}
                 history.append(step_data)

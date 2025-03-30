@@ -1,53 +1,53 @@
 import asyncio
 import inspect
+from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
+from jinja2 import Environment
 from lxml import etree
 
-from quantalogic.tools import Tool, create_tool  # Added create_tool for processing async functions
+from quantalogic.tools import Tool, create_tool
 
 from .constants import MAX_HISTORY_TOKENS, MAX_TOKENS
 from .llm_util import litellm_completion
 from .react_agent import ReActAgent
+from .templates import jinja_env as default_jinja_env
 from .tools_manager import RetrieveStepTool, get_default_tools
 
 
+@dataclass
+class AgentConfig:
+    """Configuration for the Agent."""
+    model: str = "gemini/gemini-2.0-flash"
+    max_iterations: int = 5
+    tools: Optional[List[Union[Tool, Callable]]] = None
+    max_history_tokens: int = MAX_HISTORY_TOKENS
+
+
 class Agent:
-    """High-level interface for the Quantalogic Agent, providing chat and solve functionalities."""
+    """High-level interface for the Quantalogic Agent with modular configuration."""
     def __init__(
         self,
-        model: str = "gemini/gemini-2.0-flash",
-        tools: Optional[List[Union[Tool, Callable]]] = None,  # Updated to accept Tools or async functions
-        max_iterations: int = 5,
+        config: Optional[AgentConfig] = None,
         personality: Optional[str] = None,
         backstory: Optional[str] = None,
         sop: Optional[str] = None,
-        max_history_tokens: int = MAX_HISTORY_TOKENS
+        jinja_env: Optional[Environment] = None
     ):
-        self.model = model
-        # Process tools if provided, otherwise use default tools from tools_manager
-        self.default_tools = self._process_tools(tools) if tools is not None else get_default_tools(model)
-        self.max_iterations = max_iterations
+        config = config or AgentConfig()
+        self.model = config.model
+        self.default_tools = self._process_tools(config.tools) if config.tools is not None else get_default_tools(config.model)
+        self.max_iterations = config.max_iterations
         self.personality = personality
         self.backstory = backstory
         self.sop = sop
-        self.max_history_tokens = max_history_tokens
+        self.max_history_tokens = config.max_history_tokens
+        self.jinja_env = jinja_env or default_jinja_env
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.last_solve_context_vars: Dict = {}
 
     def _process_tools(self, tools: List[Union[Tool, Callable]]) -> List[Tool]:
-        """
-        Process a list of tools or async functions into a list of Tool instances.
-
-        Args:
-            tools: List containing Tool instances or async functions.
-
-        Returns:
-            List of Tool instances.
-
-        Raises:
-            ValueError: If a callable is not an async function or if an item is of an invalid type.
-        """
+        """Process a list of tools or async functions into Tool instances."""
         processed_tools = []
         for tool in tools:
             if isinstance(tool, Tool):
@@ -75,7 +75,7 @@ class Agent:
         self,
         message: str,
         use_tools: bool = False,
-        tools: Optional[List[Union[Tool, Callable]]] = None,  # Updated to accept Tools or async functions
+        tools: Optional[List[Union[Tool, Callable]]] = None,
         timeout: int = 30,
         max_tokens: int = MAX_TOKENS,
         temperature: float = 0.7,
@@ -84,7 +84,6 @@ class Agent:
         """Single-step interaction with optional custom tools and streaming."""
         system_prompt = self._build_system_prompt()
         if use_tools:
-            # Use provided tools (processed) or fall back to default tools
             chat_tools = self._process_tools(tools) if tools is not None else self.default_tools
             chat_agent = ReActAgent(
                 model=self.model,
@@ -92,7 +91,7 @@ class Agent:
                 max_iterations=1,
                 max_history_tokens=self.max_history_tokens
             )
-            chat_agent.executor.register_tool(RetrieveStepTool(chat_agent.history_store))  # Changed from append
+            chat_agent.executor.register_tool(RetrieveStepTool(chat_agent.history_store))
             for observer, event_types in self._observers:
                 chat_agent.add_observer(observer, event_types)
             history = await chat_agent.solve(message, system_prompt=system_prompt, streaming=streaming)
@@ -120,13 +119,12 @@ class Agent:
         task: str,
         success_criteria: Optional[str] = None,
         max_iterations: Optional[int] = None,
-        tools: Optional[List[Union[Tool, Callable]]] = None,  # Updated to accept Tools or async functions
+        tools: Optional[List[Union[Tool, Callable]]] = None,
         timeout: int = 300,
         streaming: bool = False
     ) -> List[Dict]:
         """Multi-step task solving with optional custom tools, max_iterations, and streaming."""
         system_prompt = self._build_system_prompt()
-        # Use provided tools (processed) or fall back to default tools
         solve_tools = self._process_tools(tools) if tools is not None else self.default_tools
         solve_agent = ReActAgent(
             model=self.model,
@@ -134,7 +132,7 @@ class Agent:
             max_iterations=max_iterations if max_iterations is not None else self.max_iterations,
             max_history_tokens=self.max_history_tokens
         )
-        solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.history_store))  # Changed from append
+        solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.history_store))
         for observer, event_types in self._observers:
             solve_agent.add_observer(observer, event_types)
         
@@ -156,6 +154,12 @@ class Agent:
         """Add an observer to be applied to agents created in chat and solve."""
         self._observers.append((observer, event_types))
         return self
+
+    def register_tool(self, tool: Tool) -> None:
+        """Register a new tool dynamically at runtime."""
+        if tool.name in [t.name for t in self.default_tools]:
+            raise ValueError(f"Tool '{tool.name}' is already registered")
+        self.default_tools.append(tool)
 
     def list_tools(self) -> List[str]:
         """Return a list of available tool names."""

@@ -4,9 +4,9 @@ from typing import Callable, List, Optional, Union
 import typer
 from loguru import logger
 
-from quantalogic.codeact.agent import Agent  # Import only Agent from agent.py
+from quantalogic.codeact.agent import Agent, AgentConfig
 from quantalogic.codeact.constants import DEFAULT_MODEL, LOG_FILE
-from quantalogic.codeact.events import (  # Import events from events.py
+from quantalogic.codeact.events import (
     ActionExecutedEvent,
     ActionGeneratedEvent,
     ErrorOccurredEvent,
@@ -27,10 +27,11 @@ from .utils import XMLResultHandler
 
 app = typer.Typer(no_args_is_help=True)
 
+
 class ProgressMonitor:
     """Handles progress monitoring for agent events."""
     def __init__(self):
-        self._token_buffer = ""  # Buffer to accumulate streaming tokens
+        self._token_buffer = ""
 
     async def on_task_started(self, event: TaskStartedEvent):
         typer.echo(typer.style(f"Task Started: {event.task_description}", fg=typer.colors.GREEN, bold=True))
@@ -95,17 +96,13 @@ class ProgressMonitor:
     async def on_stream_token(self, event: StreamTokenEvent):
         """Handle streaming token events for real-time output with buffering."""
         self._token_buffer += event.token
-        # Check for natural breakpoints to flush the buffer
         if "\n" in event.token or event.token.strip() in [".", ";", ":", "{", "}", "]", ")"]:
-            # Print the accumulated buffer with proper formatting
             lines = self._token_buffer.split("\n")
-            for line in lines[:-1]:  # Print all complete lines
+            for line in lines[:-1]:
                 if line.strip():
                     typer.echo(f"{line}", nl=False)
-                    typer.echo("")  # Add newline after each complete line
-            # Keep the last incomplete line in the buffer
+                    typer.echo("")
             self._token_buffer = lines[-1]
-        # Flush buffer if it gets too long (e.g., > 100 chars)
         if len(self._token_buffer) > 100:
             typer.echo(f"{self._token_buffer}", nl=False)
             self._token_buffer = ""
@@ -124,7 +121,7 @@ class ProgressMonitor:
             await self.on_thought_generated(event)
         elif isinstance(event, ActionGeneratedEvent):
             await self.on_action_generated(event)
-            await self.flush_buffer()  # Flush after action is fully generated
+            await self.flush_buffer()
         elif isinstance(event, ActionExecutedEvent):
             await self.on_action_executed(event)
         elif isinstance(event, StepCompletedEvent):
@@ -133,7 +130,7 @@ class ProgressMonitor:
             await self.on_error_occurred(event)
         elif isinstance(event, TaskCompletedEvent):
             await self.on_task_completed(event)
-            await self.flush_buffer()  # Flush at task completion
+            await self.flush_buffer()
         elif isinstance(event, StepStartedEvent):
             await self.on_step_started(event)
         elif isinstance(event, ToolExecutionStartedEvent):
@@ -145,6 +142,7 @@ class ProgressMonitor:
         elif isinstance(event, StreamTokenEvent):
             await self.on_stream_token(event)
 
+
 async def run_react_agent(
     task: str,
     model: str,
@@ -155,14 +153,13 @@ async def run_react_agent(
     backstory: Optional[str] = None,
     sop: Optional[str] = None,
     debug: bool = False,
-    streaming: bool = False  # New parameter for enabling streaming
+    streaming: bool = False
 ) -> None:
     """Run the Agent with detailed event monitoring."""
-    # Configure logging: disable stderr output unless debug is enabled
-    logger.remove()  # Remove default handler
+    logger.remove()
     if debug:
         logger.add(typer.stderr, level="INFO")
-    logger.add(LOG_FILE, level="INFO")  # Always log to file
+    logger.add(LOG_FILE, level="INFO")
 
     tools = tools if tools is not None else get_default_tools(model)
     
@@ -176,28 +173,26 @@ async def run_react_agent(
             logger.warning(f"Invalid tool type: {type(tool)}. Skipping.")
             typer.echo(typer.style(f"Warning: Invalid tool type {type(tool)} skipped.", fg=typer.colors.YELLOW))
 
+    config = AgentConfig(model=model, max_iterations=max_iterations, tools=processed_tools)
     agent = Agent(
-        model=model,
-        tools=processed_tools,
-        max_iterations=max_iterations,
+        config=config,
         personality=personality,
         backstory=backstory,
         sop=sop
     )
     
     progress_monitor = ProgressMonitor()
-    # Use solve with tools enabled for multi-step tasks
-    solve_agent = agent  # Store reference to add observer
+    solve_agent = agent
     solve_agent.add_observer(progress_monitor, [
         "TaskStarted", "ThoughtGenerated", "ActionGenerated", "ActionExecuted",
         "StepCompleted", "ErrorOccurred", "TaskCompleted", "StepStarted",
         "ToolExecutionStarted", "ToolExecutionCompleted", "ToolExecutionError",
-        "StreamToken"  # Added to observe streaming tokens
+        "StreamToken"
     ])
     
     typer.echo(typer.style(f"Starting task: {task}", fg=typer.colors.GREEN, bold=True))
-    # Pass the streaming flag to the solve method
     history = await agent.solve(task, success_criteria, streaming=streaming)
+
 
 @app.command()
 def react(
@@ -216,17 +211,13 @@ def react(
         asyncio.run(run_react_agent(
             task, model, max_iterations, success_criteria,
             personality=personality, backstory=backstory, sop=sop, debug=debug,
-            streaming=streaming  # Pass the streaming flag
+            streaming=streaming
         ))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
         typer.echo(typer.style(f"Error: {e}", fg=typer.colors.RED))
         raise typer.Exit(code=1)
 
+
 if __name__ == "__main__":
     app()
-
-
-# Example how to use the CLI
-# python -m quantalogic.codeact.cli "Write a poem, then evaluate the quality, in French, afficher le poem et la critique. Tout doit être Français. Si le poême n'est pas de bonne qualité, ré-écrit le poême"    --streaming
-
