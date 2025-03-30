@@ -114,22 +114,25 @@ class RetrieveStepTool(Tool):
             f"Result: {step['result']}"
         )
 
+async def sinus(x: float): 
+    import math
+    return math.sin(x)
+
+async def cosinus(x: float): 
+    import math
+    return math.cos(x)
+
 def get_default_tools(model: str) -> List[Tool]:
     """Return list of default tools."""
     return [
-        #EditWholeContentTool(), 
-        #ExecuteBashCommandTool(), 
         GrepAppTool(),
         InputQuestionTool(), 
-        JinjaTool(), 
         ListDirectoryTool(),
         ReadFileBlockTool(), 
         ReadFileTool(), 
         ReadHTMLTool(),
-        #ReplaceInFileTool(), 
-        # RipgrepTool(), 
-        # SearchDefinitionNamesTool(),
-        #TaskCompleteTool(), 
         WriteFileTool(disable_ensure_tmp_path=True),
         AgentTool(model=model),
+        sinus,
+        cosinus
     ]

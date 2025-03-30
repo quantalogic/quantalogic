@@ -1,9 +1,10 @@
 import asyncio
-from typing import Callable, Dict, List, Optional, Tuple
+import inspect
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from lxml import etree
 
-from quantalogic.tools import Tool
+from quantalogic.tools import Tool, create_tool  # Added create_tool for processing async functions
 
 from .constants import MAX_HISTORY_TOKENS, MAX_TOKENS
 from .llm_util import litellm_completion
@@ -16,7 +17,7 @@ class Agent:
     def __init__(
         self,
         model: str = "gemini/gemini-2.0-flash",
-        tools: Optional[List[Tool]] = None,
+        tools: Optional[List[Union[Tool, Callable]]] = None,  # Updated to accept Tools or async functions
         max_iterations: int = 5,
         personality: Optional[str] = None,
         backstory: Optional[str] = None,
@@ -24,7 +25,8 @@ class Agent:
         max_history_tokens: int = MAX_HISTORY_TOKENS
     ):
         self.model = model
-        self.default_tools = tools if tools is not None else get_default_tools(model)
+        # Process tools if provided, otherwise use default tools from tools_manager
+        self.default_tools = self._process_tools(tools) if tools is not None else get_default_tools(model)
         self.max_iterations = max_iterations
         self.personality = personality
         self.backstory = backstory
@@ -32,6 +34,31 @@ class Agent:
         self.max_history_tokens = max_history_tokens
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.last_solve_context_vars: Dict = {}
+
+    def _process_tools(self, tools: List[Union[Tool, Callable]]) -> List[Tool]:
+        """
+        Process a list of tools or async functions into a list of Tool instances.
+
+        Args:
+            tools: List containing Tool instances or async functions.
+
+        Returns:
+            List of Tool instances.
+
+        Raises:
+            ValueError: If a callable is not an async function or if an item is of an invalid type.
+        """
+        processed_tools = []
+        for tool in tools:
+            if isinstance(tool, Tool):
+                processed_tools.append(tool)
+            elif callable(tool):
+                if not inspect.iscoroutinefunction(tool):
+                    raise ValueError(f"Callable '{tool.__name__}' must be an async function to be used as a tool.")
+                processed_tools.append(create_tool(tool))
+            else:
+                raise ValueError(f"Invalid item type: {type(tool)}. Expected Tool or async function.")
+        return processed_tools
 
     def _build_system_prompt(self) -> str:
         """Builds a system prompt based on personality, backstory, and SOP."""
@@ -48,7 +75,7 @@ class Agent:
         self,
         message: str,
         use_tools: bool = False,
-        tools: Optional[List[Tool]] = None,
+        tools: Optional[List[Union[Tool, Callable]]] = None,  # Updated to accept Tools or async functions
         timeout: int = 30,
         max_tokens: int = MAX_TOKENS,
         temperature: float = 0.7,
@@ -57,8 +84,14 @@ class Agent:
         """Single-step interaction with optional custom tools and streaming."""
         system_prompt = self._build_system_prompt()
         if use_tools:
-            chat_tools = tools if tools is not None else self.default_tools
-            chat_agent = ReActAgent(model=self.model, tools=chat_tools, max_iterations=1, max_history_tokens=self.max_history_tokens)
+            # Use provided tools (processed) or fall back to default tools
+            chat_tools = self._process_tools(tools) if tools is not None else self.default_tools
+            chat_agent = ReActAgent(
+                model=self.model,
+                tools=chat_tools,
+                max_iterations=1,
+                max_history_tokens=self.max_history_tokens
+            )
             chat_agent.executor.tools.append(RetrieveStepTool(chat_agent.history_store))
             for observer, event_types in self._observers:
                 chat_agent.add_observer(observer, event_types)
@@ -87,13 +120,14 @@ class Agent:
         task: str,
         success_criteria: Optional[str] = None,
         max_iterations: Optional[int] = None,
-        tools: Optional[List[Tool]] = None,
+        tools: Optional[List[Union[Tool, Callable]]] = None,  # Updated to accept Tools or async functions
         timeout: int = 300,
         streaming: bool = False
     ) -> List[Dict]:
         """Multi-step task solving with optional custom tools, max_iterations, and streaming."""
         system_prompt = self._build_system_prompt()
-        solve_tools = tools if tools is not None else self.default_tools
+        # Use provided tools (processed) or fall back to default tools
+        solve_tools = self._process_tools(tools) if tools is not None else self.default_tools
         solve_agent = ReActAgent(
             model=self.model,
             tools=solve_tools,
@@ -104,7 +138,13 @@ class Agent:
         for observer, event_types in self._observers:
             solve_agent.add_observer(observer, event_types)
         
-        history = await solve_agent.solve(task, success_criteria, system_prompt=system_prompt, max_iterations=max_iterations, streaming=streaming)
+        history = await solve_agent.solve(
+            task,
+            success_criteria,
+            system_prompt=system_prompt,
+            max_iterations=max_iterations,
+            streaming=streaming
+        )
         self.last_solve_context_vars = solve_agent.context_vars.copy()
         return history
 
