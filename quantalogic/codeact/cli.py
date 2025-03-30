@@ -1,3 +1,5 @@
+"""Command-line interface for running the Quantalogic Agent with event monitoring."""
+
 import asyncio
 from typing import Callable, List, Optional, Union
 
@@ -155,7 +157,20 @@ async def run_react_agent(
     debug: bool = False,
     streaming: bool = False
 ) -> None:
-    """Run the Agent with detailed event monitoring."""
+    """Run the Agent with detailed event monitoring.
+
+    Args:
+        task (str): The task to solve.
+        model (str): The language model to use.
+        max_iterations (int): Maximum reasoning steps.
+        success_criteria (Optional[str]): Criteria to determine task completion.
+        tools (Optional[List[Union[Tool, Callable]]]): Custom tools to use.
+        personality (Optional[str]): Agent personality.
+        backstory (Optional[str]): Agent backstory.
+        sop (Optional[str]): Standard operating procedure.
+        debug (bool): Enable debug logging.
+        streaming (bool): Enable streaming output.
+    """
     logger.remove()
     if debug:
         logger.add(typer.stderr, level="INFO")
@@ -163,7 +178,7 @@ async def run_react_agent(
 
     tools = tools if tools is not None else get_default_tools(model)
     
-    processed_tools = []
+    processed_tools: List[Tool] = []
     for tool in tools:
         if isinstance(tool, Tool):
             processed_tools.append(tool)

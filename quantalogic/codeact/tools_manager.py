@@ -1,50 +1,22 @@
+"""Tool management module for defining and retrieving agent tools."""
+
 import asyncio
+import importlib
 from contextlib import AsyncExitStack
+from pathlib import Path
 from typing import List
 
 import litellm
 from loguru import logger
 
-from quantalogic.tools import (
-    GrepAppTool,
-    InputQuestionTool,
-    ListDirectoryTool,
-    ReadFileBlockTool,
-    ReadFileTool,
-    ReadHTMLTool,
-    Tool,
-    ToolArgument,
-    WriteFileTool,
-    create_tool,
-)
+from quantalogic.tools import Tool, ToolArgument
 
-from .utils import log_async_tool, log_tool_method
-
-
-@create_tool
-@log_async_tool("Adding")
-async def add_tool(a: int, b: int) -> str:
-    """Adds two numbers and returns the sum as a string."""
-    return str(a + b)
-
-
-@create_tool
-@log_async_tool("Multiplying")
-async def multiply_tool(x: int, y: int) -> str:
-    """Multiplies two numbers and returns the product as a string."""
-    return str(x * y)
-
-
-@create_tool
-@log_async_tool("Concatenating")
-async def concat_tool(s1: str, s2: str) -> str:
-    """Concatenates two strings and returns the result."""
-    return s1 + s2
+from .utils import log_tool_method
 
 
 class AgentTool(Tool):
     """Tool for generating text using a language model."""
-    def __init__(self, model: str = "gemini/gemini-2.0-flash"):
+    def __init__(self, model: str = "gemini/gemini-2.0-flash") -> None:
         super().__init__(
             name="agent_tool",
             description="Generates text using a language model.",
@@ -58,13 +30,13 @@ class AgentTool(Tool):
             ],
             return_type="string"
         )
-        self.model = model
+        self.model: str = model
 
     @log_tool_method
     async def async_execute(self, **kwargs) -> str:
-        system_prompt = kwargs["system_prompt"]
-        prompt = kwargs["prompt"]
-        temperature = float(kwargs["temperature"])
+        system_prompt: str = kwargs["system_prompt"]
+        prompt: str = kwargs["prompt"]
+        temperature: float = float(kwargs["temperature"])
 
         if not 0 <= temperature <= 1:
             raise ValueError("Temperature must be between 0 and 1")
@@ -86,7 +58,7 @@ class AgentTool(Tool):
 
 class RetrieveStepTool(Tool):
     """Tool to retrieve information from a specific previous step."""
-    def __init__(self, history_store: List[dict]):
+    def __init__(self, history_store: List[dict]) -> None:
         super().__init__(
             name="retrieve_step",
             description="Retrieve the thought, action, and result from a specific step.",
@@ -96,14 +68,14 @@ class RetrieveStepTool(Tool):
             ],
             return_type="string"
         )
-        self.history_store = history_store
+        self.history_store: List[dict] = history_store
 
     @log_tool_method
     async def async_execute(self, **kwargs) -> str:
-        step_number = kwargs["step_number"]
+        step_number: int = kwargs["step_number"]
         if step_number < 1 or step_number > len(self.history_store):
             return f"Error: Step {step_number} does not exist."
-        step = self.history_store[step_number - 1]
+        step: dict = self.history_store[step_number - 1]
         return (
             f"Step {step_number}:\n"
             f"Thought: {step['thought']}\n"
@@ -112,27 +84,46 @@ class RetrieveStepTool(Tool):
         )
 
 
-async def sinus(x: float): 
-    import math
-    return math.sin(x)
-
-
-def cosinus(x: float): 
-    import math
-    return math.cos(x)
-
-
 def get_default_tools(model: str) -> List[Tool]:
-    """Return list of default tools for the agent."""
-    return [
+    """Dynamically load default tools from the tools/ directory.
+
+    Args:
+        model (str): The language model to use for model-specific tools.
+
+    Returns:
+        List[Tool]: A list of initialized tool instances.
+    """
+    from quantalogic.tools import (
+        GrepAppTool,
+        InputQuestionTool,
+        ListDirectoryTool,
+        ReadFileBlockTool,
+        ReadFileTool,
+        ReadHTMLTool,
+        WriteFileTool,
+    )
+    
+    # Core tools that don't need dynamic loading
+    static_tools: List[Tool] = [
         GrepAppTool(),
-        InputQuestionTool(), 
+        InputQuestionTool(),
         ListDirectoryTool(),
-        ReadFileBlockTool(), 
-        ReadFileTool(), 
+        ReadFileBlockTool(),
+        ReadFileTool(),
         ReadHTMLTool(),
         WriteFileTool(disable_ensure_tmp_path=True),
-        AgentTool(model=model),
-        sinus,
-        cosinus
+        AgentTool(model=model)
     ]
+
+    # Dynamically load tools from the tools/ subdirectory
+    tools_dir: Path = Path(__file__).parent / "tools"
+    dynamic_tools: List[Tool] = []
+    for tool_file in tools_dir.glob("*.py"):
+        if tool_file.stem == "__init__":
+            continue
+        module = importlib.import_module(f".tools.{tool_file.stem}", package="quantalogic.codeact")
+        for name, obj in module.__dict__.items():
+            if isinstance(obj, Tool):
+                dynamic_tools.append(obj)
+
+    return static_tools + dynamic_tools

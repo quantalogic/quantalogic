@@ -1,0 +1,3 @@
+model: "gemini/gemini-2.0-flash"
+max_iterations: 5
+max_history_tokens: 2000
