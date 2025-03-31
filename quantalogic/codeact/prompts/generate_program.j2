@@ -2,9 +2,15 @@ You are a Python code generator. Your task is to create a Python program that so
 
 "{{ task_description }}"
 
-You have access to the following pre-defined async tool functions, as defined with their signatures and descriptions:
+You have access to the following pre-defined async tool functions, grouped by toolbox:
 
-{{ tool_docstrings }}
+{% for toolbox_name, docstrings in tools_by_toolbox.items() %}
+### {{ toolbox_name }}
+{% for docstring in docstrings %}
+{{ docstring }}
+
+{% endfor %}
+{% endfor %}
 
 If applicable use tools to assess the situation and generate a Python program that solves the task step by step.
 

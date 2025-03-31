@@ -22,10 +22,17 @@ async def generate_program(
     streaming: bool = False
 ) -> str:
     """Generate a Python program using the specified model with streaming support and retries."""
-    tool_docstrings = "\n\n".join(tool.to_docstring() for tool in tools)
+    # Group tools by toolbox_name instead of creating a flat string
+    tools_by_toolbox = {}
+    for tool in tools:
+        toolbox_name = tool.toolbox_name if tool.toolbox_name else "Default Toolbox"
+        if toolbox_name not in tools_by_toolbox:
+            tools_by_toolbox[toolbox_name] = []
+        tools_by_toolbox[toolbox_name].append(tool.to_docstring())
+
     prompt = jinja_env.get_template("generate_program.j2").render(
         task_description=task_description,
-        tool_docstrings=tool_docstrings
+        tools_by_toolbox=tools_by_toolbox
     )
     await notify_event(PromptGeneratedEvent(
         event_type="PromptGenerated", step_number=step, prompt=prompt
@@ -113,8 +120,6 @@ class Reasoner(BaseReasoner):
             return XMLResultHandler.format_error_result(str(e))
 
     def _clean_code(self, code: str) -> str:
-
-        
         # Extract code from markdown block
         lines = code.splitlines()
         in_code_block = False

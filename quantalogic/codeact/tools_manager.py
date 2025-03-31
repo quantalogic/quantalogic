@@ -66,11 +66,25 @@ class ToolRegistry:
 
 
 class AgentTool(Tool):
-    """Tool for generating text using a language model."""
+    """A specialized tool for generating text using language models, designed for AI agent workflows.
+    
+    This tool provides a clean interface for text generation tasks, supporting both synchronous 
+    and asynchronous execution. It handles prompt construction, temperature control, and timeout 
+    management, while ensuring robust error handling and logging.
+    
+    Key Features:
+    - Configurable model selection with fallback to environment variable
+    - Timeout protection for long-running generations
+    - Input validation for temperature parameter
+    - Structured logging for debugging and monitoring
+    - Asynchronous execution with proper resource cleanup
+    
+    Note: This tool operates in a stateless manner - all context must be provided in the prompts.
+    """
     def __init__(self, model: str = None, timeout: int = None) -> None:
         super().__init__(
             name="agent_tool",
-            description="Generates text using a language model.",
+            description="Generates text using a language model. This is a stateless agent - all necessary context must be explicitly provided in either the system prompt or user prompt. The tool does not maintain any memory of previous interactions.",
             arguments=[
                 ToolArgument(name="system_prompt", arg_type="string", 
                             description="System prompt to guide the model", required=True),
@@ -157,27 +171,10 @@ def get_default_tools(model: str, history_store: Optional[List[dict]] = None) ->
     Returns:
         List[Tool]: A list of initialized tool instances.
     """
-    from quantalogic.tools import (
-        GrepAppTool,
-        InputQuestionTool,
-        ListDirectoryTool,
-        ReadFileBlockTool,
-        ReadFileTool,
-        ReadHTMLTool,
-        WriteFileTool,
-    )
-    
     registry = ToolRegistry()
     
     # Core tools that don't need dynamic loading
     static_tools: List[Tool] = [
-        GrepAppTool(),
-        InputQuestionTool(),
-        ListDirectoryTool(),
-        ReadFileBlockTool(),
-        ReadFileTool(),
-        ReadHTMLTool(),
-        WriteFileTool(disable_ensure_tmp_path=True),
         AgentTool(model=model)
     ]
     if history_store is not None:
