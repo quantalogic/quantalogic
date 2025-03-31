@@ -4,6 +4,8 @@ import asyncio
 import importlib
 import inspect
 import os
+import re
+import subprocess
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import List, Optional
@@ -45,8 +47,55 @@ class ToolRegistry:
         if not tools_found:
             logger.warning(f"No @create_tool generated tools found in {module.__name__}")
 
+    def extract_uv_dependencies(self, script_path: Path) -> list[str]:
+        """Extract the dependencies list from the uv metadata in a script."""
+        with open(script_path, 'r') as f:
+            content = f.read()
+        
+        # Find the metadata block
+        match = re.search(r'# /// script\n(.*?)\n# ///', content, re.DOTALL)
+        if not match:
+            logger.debug(f"No uv metadata found in {script_path}")
+            return []
+        
+        metadata = match.group(1)
+        
+        # Extract the dependencies list
+        deps_match = re.search(r'dependencies = \[\n(.*?)\n\]', metadata, re.DOTALL)
+        if not deps_match:
+            logger.debug(f"No dependencies section found in uv metadata of {script_path}")
+            return []
+        
+        deps_str = deps_match.group(1)
+        dependencies = []
+        for line in deps_str.splitlines():
+            line = line.strip()
+            if line and line != ',':
+                # Remove trailing comma and quotes
+                if line.endswith(','):
+                    line = line[:-1]
+                dep = line.strip('"').strip("'")
+                dependencies.append(dep)
+        
+        logger.debug(f"Extracted dependencies from {script_path}: {dependencies}")
+        return dependencies
+
+    def install_uv_dependencies(self, dependencies: list[str]) -> None:
+        """Install dependencies using uv pip install."""
+        if not dependencies:
+            logger.debug("No dependencies to install")
+            return
+        cmd = ['uv', 'pip', 'install'] + dependencies
+        try:
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            logger.info(f"Installed dependencies: {dependencies}")
+            logger.debug(f"Installation output: {result.stdout}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to install dependencies: {e.stderr}")
+            raise
+
     def load_toolboxes(self, directory: str = "toolboxes") -> None:
-        """Load all toolboxes from the specified directory."""
+        """Load all toolboxes from the specified directory with dependency installation."""
         toolbox_dir = Path(__file__).parent / directory
         logger.debug(f"Attempting to load toolboxes from: {toolbox_dir}")
         
@@ -54,6 +103,19 @@ class ToolRegistry:
             logger.warning(f"Toolbox directory not found or invalid: {toolbox_dir}")
             return
 
+        # Collect all dependencies across toolboxes to install once
+        all_dependencies = set()
+        for tool_file in toolbox_dir.glob("*.py"):
+            if tool_file.stem == "__init__":
+                continue
+            dependencies = self.extract_uv_dependencies(tool_file)
+            all_dependencies.update(dependencies)
+
+        # Install all dependencies in one go
+        if all_dependencies:
+            self.install_uv_dependencies(list(all_dependencies))
+
+        # Import and register tools after dependencies are installed
         for tool_file in toolbox_dir.glob("*.py"):
             if tool_file.stem == "__init__":
                 continue
