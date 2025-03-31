@@ -73,7 +73,7 @@ class XMLResultHandler:
 
     @staticmethod
     def format_execution_result(result) -> str:
-        """Format execution result as XML."""
+        """Format execution result as XML with proper variable handling."""
         root = etree.Element("ExecutionResult")
         root.append(format_xml_element("Status", "Success" if not result.error else "Error"))
         root.append(format_xml_element("Value", result.result or result.error))
@@ -90,10 +90,15 @@ class XMLResultHandler:
             vars_elem = etree.SubElement(root, "Variables")
             for k, v in result.local_variables.items():
                 if not callable(v) and not k.startswith("__"):
-                    vars_elem.append(format_xml_element("Variable", str(v)[:5000] + 
-                                                      ("... (truncated)" if len(str(v)) > 5000 else ""), 
-                                                      name=k))
-        return etree.tostring(root, pretty_print=True, encoding="unicode")
+                    var_elem = etree.SubElement(vars_elem, "Variable", name=k)
+                    var_value = str(v)[:5000] + ("... (truncated)" if len(str(v)) > 5000 else "")
+                    var_elem.text = etree.CDATA(var_value)
+        
+        xml_str = etree.tostring(root, pretty_print=True, encoding="unicode")
+        if not validate_xml(xml_str):
+            logger.error(f"Generated invalid XML: {xml_str}")
+            raise ValueError("Generated XML is invalid")
+        return xml_str
 
     @staticmethod
     def format_result_summary(result_xml: str) -> str:

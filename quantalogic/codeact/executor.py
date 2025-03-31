@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, Dict, List
 
 from lxml import etree
-from quantalogic_pythonbox import execute_async
+from quantalogic_pythonbox import AsyncExecutionResult, execute_async  # Updated import for clarity
 
 from quantalogic.tools import Tool
 
@@ -126,7 +126,7 @@ class Executor(BaseExecutor):
         return wrapped_tool
 
     async def execute_action(self, code: str, context_vars: Dict, step: int, timeout: int = 300) -> str:
-        """Execute the generated code and return the result, setting the step number."""
+        """Execute the generated code and return the result with local variables, setting the step number."""
         self.tool_namespace["context_vars"] = context_vars
         self.tool_namespace["current_step"] = step
         if not validate_code(code):
@@ -135,19 +135,25 @@ class Executor(BaseExecutor):
             )
 
         try:
-            result = await execute_async(
+            # Execute the code using the updated quantalogic_pythonbox execute_async
+            result: AsyncExecutionResult = await execute_async(
                 code=code,
                 timeout=timeout,
                 entry_point="main",
                 allowed_modules=["asyncio", "math", "random", "time"],
                 namespace=self.tool_namespace,
             )
+            # Update context_vars with all local variables from the execution
             if result.local_variables:
                 context_vars.update(
                     {k: v for k, v in result.local_variables.items() if not k.startswith("__") and not callable(v)}
                 )
             return XMLResultHandler.format_execution_result(result)
         except Exception as e:
-            return etree.tostring(
-                etree.Element("ExecutionResult", status="Error", message=f"Execution error: {e}"), encoding="unicode"
-            )
+            # Format error result without local variables if execution fails
+            root = etree.Element("ExecutionResult")
+            root.append(etree.Element("Status", text="Error"))
+            root.append(etree.Element("Value", text=f"Execution error: {str(e)}"))
+            root.append(etree.Element("ExecutionTime", text="0.00 seconds"))
+            root.append(etree.Element("Completed", text="false"))
+            return etree.tostring(root, pretty_print=True, encoding="unicode")

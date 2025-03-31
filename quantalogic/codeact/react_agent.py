@@ -244,7 +244,17 @@ class ReActAgent:
         """
         is_complete, final_answer = await self.is_task_complete(task, history, step_data["result"], success_criteria)
         if is_complete:
-            step_data["result"] += f"\n<FinalAnswer><![CDATA[\n{final_answer}\n]]></FinalAnswer>"
+            try:
+                # Parse the existing result XML and append FinalAnswer as a child element
+                root = etree.fromstring(step_data["result"])
+                final_answer_elem = etree.Element("FinalAnswer")
+                final_answer_elem.text = etree.CDATA(final_answer)
+                root.append(final_answer_elem)
+                step_data["result"] = etree.tostring(root, pretty_print=True, encoding="unicode")
+            except etree.XMLSyntaxError as e:
+                logger.error(f"Failed to parse result XML for appending FinalAnswer: {e}")
+                # Fallback to string concatenation if parsing fails
+                step_data["result"] += f"\n<FinalAnswer><![CDATA[\n{final_answer}\n]]></FinalAnswer>"
         await self._notify_observers(StepCompletedEvent(
             event_type="StepCompleted", step_number=step_data["step_number"], 
             thought=step_data["thought"], action=step_data["action"], result=step_data["result"],
