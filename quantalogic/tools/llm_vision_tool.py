@@ -1,8 +1,9 @@
 """LLM Vision Tool for analyzing images using a language model."""
 
 import asyncio
+import base64
 from typing import Callable, Optional
-
+import os.path
 from loguru import logger
 from pydantic import ConfigDict, Field
 
@@ -44,7 +45,7 @@ class LLMVisionTool(Tool):
             ToolArgument(
                 name="image_url",
                 arg_type="string",
-                description="URL of the image to analyze",
+                description="URL of the image to analyze, or local file path prefixed with file://",
                 required=True,
                 example="https://example.com/image.jpg",
             ),
@@ -108,7 +109,7 @@ class LLMVisionTool(Tool):
         Args:
             system_prompt: The system prompt to guide the model
             prompt: The question or instruction about the image
-            image_url: URL of the image to analyze
+            image_url: URL of the image to analyze, or local file path prefixed with file://
             temperature: Sampling temperature
 
         Returns:
@@ -132,7 +133,7 @@ class LLMVisionTool(Tool):
         Args:
             system_prompt: The system prompt to guide the model
             prompt: The question or instruction about the image
-            image_url: URL of the image to analyze
+            image_url: URL of the image to analyze, or local file path prefixed with file://
             temperature: Sampling temperature
 
         Returns:
@@ -150,8 +151,23 @@ class LLMVisionTool(Tool):
             logger.error(f"Invalid temperature value: {temperature}")
             raise ValueError(f"Invalid temperature value: {temperature}") from ve
 
-        if not image_url.startswith(("http://", "https://")):
-            raise ValueError("Image URL must start with http:// or https://")
+        # Handle local files
+        if image_url.startswith("file://"):
+            file_path = image_url[7:]  # Remove 'file://' prefix
+            if not os.path.exists(file_path):
+                raise ValueError(f"Local file not found: {file_path}")
+            
+            # Read and encode the image
+            try:
+                with open(file_path, "rb") as image_file:
+                    image_data = image_file.read()
+                    base64_image = base64.b64encode(image_data).decode('utf-8')
+                    image_url = f"data:image/png;base64,{base64_image}"
+            except Exception as e:
+                logger.error(f"Error reading local file: {e}")
+                raise ValueError(f"Error reading local file: {e}") from e
+        elif not image_url.startswith(("http://", "https://", "data:")):
+            raise ValueError("Image URL must start with http://, https://, file://, or be a base64 data URL")
 
         # Prepare the messages history
         messages_history = [
@@ -189,7 +205,16 @@ if __name__ == "__main__":
     tool = LLMVisionTool(model_name=DEFAULT_MODEL_NAME)
     system_prompt = "You are a vision expert."
     question = "What is shown in this image? Describe it with details."
-    image_url = "https://fastly.picsum.photos/id/767/200/300.jpg?hmac=j5YA1cRw-jS6fK3Mx2ooPwl2_TS3RSyLmFmiM9TqLC4"
     temperature = "0.7"
-    answer = tool.execute(system_prompt=system_prompt, prompt=question, image_url=image_url, temperature=temperature)
+    
+    # Test with random online image
+    # image_url = "https://fastly.picsum.photos/id/767/200/300.jpg?hmac=j5YA1cRw-jS6fK3Mx2ooPwl2_TS3RSyLmFmiM9TqLC4"
+    # print("\nTesting with online image:")
+    # answer = tool.execute(system_prompt=system_prompt, prompt=question, image_url=image_url, temperature=temperature)
+    # print(answer)
+    
+    # Test with local image
+    local_image_path = "file:///home/yarab/Bureau/trash_agents_tests/f1/generated_images/sd_20250331_115658.png"
+    print("\nTesting with local image:")
+    answer = tool.execute(system_prompt=system_prompt, prompt=question, image_url=local_image_path, temperature=temperature)
     print(answer)

@@ -40,7 +40,7 @@ from quantalogic.console_print_events import console_print_events
 from quantalogic.task_runner import configure_logger
 from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
-from .models import AnalyzePaperRequest, ConvertRequest, CourseRequest, EventMessage, JourneyRequest, LinkedInIntroduceContentRequest, QuizRequest, TutorialRequest, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
+from .models import AnalyzePaperRequest, BookNovelRequest, ConvertRequest, CourseRequest, EventMessage, ImageAnalysisRequest, ImageGenerationRequest, JourneyRequest, LinkedInIntroduceContentRequest, QuizRequest, TutorialRequest, UserValidationRequest, UserValidationResponse, TaskSubmission, TaskStatus
 from .AgentState import AgentState
 from .init_agents import init_agents 
 
@@ -830,6 +830,93 @@ async def generate_convert(request: ConvertRequest) -> Dict[str, str]:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to start PDF to Markdown conversion: {str(e)}"
+        )
+
+@app.post("/api/agent/generate-image")
+async def generate_image(request: ImageGenerationRequest) -> Dict[str, str]:
+    """Generate an image from a prompt asynchronously."""
+    try:
+        # Create a task submission
+        task_submission = TaskSubmission(
+            task="generate_image",  # Convert to JSON string
+        )
+        
+        # Submit the task
+        task_id = await agent_state.submit_task(task_submission)
+        logger.info(f"Image generation task submitted with ID: {task_id}")
+        
+        # Start image generation in background
+        asyncio.create_task(agent_state.execute_image_generation(task_id, request))
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "message": "Image generation started"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting image generation: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start image generation: {str(e)}"
+        )
+
+@app.post("/api/agent/generate-book-novel")
+async def generate_book_novel(request: BookNovelRequest) -> Dict[str, str]:
+    """Generate a book novel asynchronously."""
+    try:
+        # Create a task submission
+        task_submission = TaskSubmission(
+            task="generate_book_novel",  # Convert to JSON string
+        )
+        
+        # Submit the task
+        task_id = await agent_state.submit_task(task_submission)
+        logger.info(f"Book novel generation task submitted with ID: {task_id}")
+        
+        # Start book novel generation in background
+        asyncio.create_task(agent_state.execute_book_creation_novel_only(task_id, request))
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "message": "Book novel generation started"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting book novel generation: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start book novel generation: {str(e)}"
+        )
+
+@app.post("/api/agent/generate-image-analysis")
+async def generate_image_analysis(request: ImageAnalysisRequest) -> Dict[str, str]:
+    """Generate an image analysis asynchronously."""
+    try:
+        # Create a task submission
+        task_submission = TaskSubmission(
+            task="generate_image_analysis",  # Convert to JSON string
+        )
+        
+        # Submit the task
+        task_id = await agent_state.submit_task(task_submission)
+        logger.info(f"Image analysis task submitted with ID: {task_id}")
+        
+        # Start image analysis in background
+        asyncio.create_task(agent_state.execute_image_analysis(task_id, request))
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "message": "Image analysis started"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting image analysis: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start image analysis: {str(e)}"
         )
 
 if __name__ == "__main__":

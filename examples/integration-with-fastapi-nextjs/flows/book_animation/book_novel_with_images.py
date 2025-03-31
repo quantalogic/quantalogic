@@ -17,14 +17,12 @@
 import os
 from typing import Dict, List
 from pydantic import BaseModel, Field
-from pathlib import Path
 
 import anyio
 import typer
 from loguru import logger
 from quantalogic.flow.flow import Nodes, Workflow, WorkflowEvent, WorkflowEventType
 from quantalogic.tools.image_generation.stable_diffusion import StableDiffusionTool
-from jinja2 import Environment, FileSystemLoader
 
 ## flow book with chapters, images, ...etc
 # i need a full book well designed with author, preambule, remerciements, dedicasse, final ...etc
@@ -420,65 +418,6 @@ async def save_book(final_book: str, output_path: str) -> None:
         f.write(final_book)
     logger.info(f"Saved book to {output_path}")
 
-@Nodes.define(output="web_book")
-async def generate_web_book(
-    structure: BookStructure,
-    completed_chapters: List[Dict],
-    templates_dir: str = TEMPLATES_DIR
-) -> str:
-    """Generate a web-based version of the book."""
-    try:
-        env = Environment(loader=FileSystemLoader(templates_dir))
-        template = env.get_template("web_book_template.html")
-        
-        # Create book data structure for the template
-        book_data = {
-            "metadata": structure.metadata.model_dump(),
-            "chapters": completed_chapters
-        }
-        
-        # Render the template
-        html_content = template.render(book=book_data)
-        return html_content
-    except Exception as e:
-        logger.error(f"Error generating web book: {str(e)}")
-        raise
-
-@Nodes.define(output=None)
-async def save_web_book(web_book: str, output_path: str, completed_chapters: List[Dict], structure: BookStructure) -> None:
-    """Save the web version of the book."""
-    # Create output directory based on the output_path
-    output_dir = os.path.dirname(output_path)
-    web_dir = os.path.join(output_dir, "web")
-    os.makedirs(web_dir, exist_ok=True)
-
-    # Create a sanitized book title for the filename
-    book_title = structure.metadata.title.lower().replace(" ", "_").replace("'", "").replace('"', "")
-    web_output_path = os.path.join(web_dir, f"{book_title}.html")
-
-    # Create assets directory for images and styles
-    assets_dir = os.path.join(web_dir, "assets")
-    images_dir = os.path.join(assets_dir, "images")
-    os.makedirs(images_dir, exist_ok=True)
-
-    # Copy images to assets directory and update paths
-    for chapter in completed_chapters:
-        if "image_paths" in chapter and chapter["image_paths"]:
-            for old_path in chapter["image_paths"]:
-                if os.path.exists(old_path):
-                    filename = os.path.basename(old_path)
-                    new_path = os.path.join(images_dir, filename)
-                    import shutil
-                    shutil.copy2(old_path, new_path)
-                    
-                    # Update image path in chapter to be relative to the HTML file
-                    chapter["image_paths"][chapter["image_paths"].index(old_path)] = f"assets/images/{filename}"
-
-    # Save the HTML file
-    with open(web_output_path, 'w', encoding='utf-8') as f:
-        f.write(web_book)
-    logger.info(f"Saved web book to {web_output_path}")
-
 # Create the workflow
 workflow = (
     Workflow("generate_book_structure")
@@ -526,16 +465,6 @@ workflow = (
     .then("save_book", lambda ctx: {
         "final_book": ctx["final_book"],
         "output_path": ctx["output_path"]
-    })
-    .then("generate_web_book", lambda ctx: {
-        "structure": ctx["structure"],
-        "completed_chapters": ctx["completed_chapters"]
-    })
-    .then("save_web_book", lambda ctx: {
-        "web_book": ctx["web_book"],
-        "output_path": ctx["output_path"],
-        "completed_chapters": ctx["completed_chapters"],
-        "structure": ctx["structure"]
     })
 )
 
@@ -599,18 +528,13 @@ if __name__ == "__main__":
     about their past.
     """
     
-    # Create output directory
-    output_dir = os.path.join(os.path.dirname(__file__), "output")
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "novel.md")
-    
     # Create an async wrapper function
     async def main():
         await create_book(
             content=example_content,
             title="Echoes of Yesterday",
             author="A.I. Wordsworth",
-            output_path=output_path,
+            output_path="novel.md",
             num_chapters=2,
             words_per_chapter=300,
             narration_style={

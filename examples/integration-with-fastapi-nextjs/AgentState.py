@@ -37,7 +37,7 @@ from quantalogic.memory import AgentMemory
 from quantalogic.task_runner import configure_logger
 from .utils import handle_sigterm, get_version
 from .ServerState import ServerState
-from .models import AnalyzePaperRequest, ConvertRequest, CourseRequest, EventMessage, JourneyRequest, LinkedInIntroduceContentRequest, QuizRequest, TutorialRequest, UserValidationRequest, UserValidationResponse, AgentConfig, TaskSubmission
+from .models import AnalyzePaperRequest, BookNovelRequest, ConvertRequest, CourseRequest, EventMessage, ImageAnalysisRequest, ImageGenerationRequest, JourneyRequest, LinkedInIntroduceContentRequest, QuizRequest, TutorialRequest, UserValidationRequest, UserValidationResponse, AgentConfig, TaskSubmission
 
 SHUTDOWN_TIMEOUT = 10.0  # seconds
 VALIDATION_TIMEOUT = 10.0  # seconds
@@ -1412,3 +1412,233 @@ class AgentState:
             logger.exception(f"Error converting PDF to Markdown {task_id}")
         finally:
             self.remove_task_event_queue(task_id)
+
+    async def execute_image_generation(self, task_id: str, request: ImageGenerationRequest) -> None:
+        """Execute an image generation task asynchronously."""
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found")
+
+        task_info = self.tasks[task_id]
+        task_info["started_at"] = datetime.now().isoformat()
+        task_info["status"] = "running"
+
+        try:
+            logger.info(f"== Starting image generation: {task_id}") 
+            
+            # Add the examples directory to Python path
+            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', "integration-with-fastapi-nextjs"))
+            sys.path.append(examples_dir)
+            
+            from flows.image_generation.image_generation_flow import generate_image
+            
+            # Run tutorial generation in a thread to not block the event loop
+            loop = asyncio.get_running_loop()
+
+            # Create event for task completion
+            self._handle_event("task_solve_start", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Image generation started"
+            }) 
+
+            result = await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(generate_image(
+                    prompt=request.prompt,
+                    model_type=request.model_type,
+                    style=request.style,
+                    size=request.size,
+                    analysis_model=request.analysis_model or "gemini/gemini-2.0-flash",
+                    enhancement_model=request.enhancement_model or "gemini/gemini-2.0-flash",
+                    task_id=task_id,
+                    _handle_event=self._handle_event
+                ))
+            )
+            logger.debug(f"================================================================")
+            logger.info(f"================================================================")
+            logger.info(f"== Journey generation result: {result}")
+
+            self._update_task_success(task_info, result, None) 
+            
+            # Create event for task completion
+            self._handle_event("task_solve_end", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "PDF to Markdown conversion completed",
+                "result": result
+            })
+            
+        except Exception as e:
+            self._update_task_failure(task_info, e)
+            
+            # Create event for task failure
+            self._handle_event("error_tool_execution", {
+                "task_id": task_id,
+                "message": f"PDF to Markdown conversion failed: {str(e)}"
+            })
+            
+            logger.exception(f"Error converting PDF to Markdown {task_id}")
+        finally:
+            self.remove_task_event_queue(task_id)
+
+    async def execute_book_creation_novel_only(self, task_id: str, request: BookNovelRequest) -> None:
+        """Execute an image generation task asynchronously."""
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found")
+
+        task_info = self.tasks[task_id]
+        task_info["started_at"] = datetime.now().isoformat()
+        task_info["status"] = "running"
+
+        try:
+            logger.info(f"== Starting image generation: {task_id}") 
+            
+            # Add the examples directory to Python path
+            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', "integration-with-fastapi-nextjs"))
+            sys.path.append(examples_dir)
+            
+            from flows.book_animation.book_novel import create_book
+            
+            # Run tutorial generation in a thread to not block the event loop
+            loop = asyncio.get_running_loop()
+
+            # Create event for task completion
+            self._handle_event("task_solve_start", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Image generation started"
+            }) 
+
+            example_content = """
+            A psychological exploration of memory and identity through the lens of an unreliable narrator.
+            Set in a small coastal town, the story follows a reclusive writer who begins receiving mysterious
+            letters that seem to be written by their younger self, forcing them to confront long-buried truths
+            about their past.
+            """
+            result = await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(create_book(
+                    content=example_content,
+                    title="Echoes of Yesterday",
+                    author="A.I. Wordsworth",
+                    output_path="novel.md",
+                    num_chapters=3,
+                    words_per_chapter=3000,
+                    narration_style={
+                        "type": "unreliable_narrator",
+                        "perspective": "first person with questionable memory",
+                        "tense": "present"
+                    },
+                    literary_style={
+                        "genre": "psychological literary fiction",
+                        "tone": "introspective and unsettling",
+                        "themes": ["memory", "identity", "truth", "self-deception"],
+                        "writing_style": "stream of consciousness with unreliable elements",
+                        "influences": ["Virginia Woolf", "Kazuo Ishiguro", "Vladimir Nabokov"]
+                    },
+                    target_audience="Readers of literary fiction and psychological narratives",
+                    task_id=task_id,
+                    _handle_event=self._handle_event
+                ))
+            )
+            logger.debug(f"================================================================")
+            logger.info(f"================================================================")
+            logger.info(f"== Journey generation result: {result}")
+
+            self._update_task_success(task_info, result, None) 
+            
+            # Create event for task completion
+            self._handle_event("task_solve_end", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "PDF to Markdown conversion completed",
+                "result": result
+            })
+            
+        except Exception as e:
+            self._update_task_failure(task_info, e)
+            
+            # Create event for task failure
+            self._handle_event("error_tool_execution", {
+                "task_id": task_id,
+                "message": f"PDF to Markdown conversion failed: {str(e)}"
+            })
+            
+            logger.exception(f"Error converting PDF to Markdown {task_id}")
+        finally:
+            self.remove_task_event_queue(task_id)
+
+    async def execute_image_analysis(self, task_id: str, request: ImageAnalysisRequest) -> None:
+        """Execute an image analysis task asynchronously."""
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found")
+
+        task_info = self.tasks[task_id]
+        task_info["started_at"] = datetime.now().isoformat()
+        task_info["status"] = "running"
+
+        try:
+            logger.info(f"== Starting image analysis: {task_id}") 
+            
+            # Add the examples directory to Python path
+            examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', "integration-with-fastapi-nextjs"))
+            sys.path.append(examples_dir)
+            
+            from flows.image_analysis.image_analysis_flow import analyze_image_workflow
+            
+            # Run tutorial generation in a thread to not block the event loop
+            loop = asyncio.get_running_loop()
+
+            # Create event for task completion
+            self._handle_event("task_solve_start", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Image analysis started"
+            })
+
+            result = await loop.run_in_executor(
+                None,
+                lambda: asyncio.run(analyze_image_workflow(  
+                    image_url=request.image_url,
+                    image_context=request.image_context,
+                    analysis_context=request.analysis_context,
+                    vision_model=request.vision_model,
+                    analysis_model=request.analysis_model,
+                    task_id=task_id,
+                    _handle_event=self._handle_event
+                ))
+            )
+            logger.debug(f"================================================================")
+            logger.info(f"================================================================")
+            logger.info(f"== Image analysis result: {result}")
+
+            self._update_task_success(task_info, result, None) 
+            
+            # Create event for task completion
+            self._handle_event("task_solve_end", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Image analysis completed",
+                "result": result
+            })
+            
+        except Exception as e:
+            self._update_task_failure(task_info, e)
+            
+            # Create event for task failure
+            self._handle_event("error_tool_execution", {
+                "task_id": task_id,
+                "message": f"Image analysis failed: {str(e)}"
+            })
+            
+            logger.exception(f"Error analyzing image {task_id}")
+        finally:
+            self.remove_task_event_queue(task_id) 
+            
+            # Create event for task completion
+            self._handle_event("task_solve_end", {
+                "task_id": task_id, 
+                "agent_id": "default",
+                "message": "Image analysis completed",
+                "result": result
+            })

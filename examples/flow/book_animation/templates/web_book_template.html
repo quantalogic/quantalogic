@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en" data-chapters='["cover", "frontmatter"{% for chapter in book.chapters %}, "chapter{{ loop.index }}"{% endfor %}]'>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ book.metadata.title }} - {{ book.metadata.author }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/css/lightbox.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/js/lightbox.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Source+Sans+Pro:wght@400;600&display=swap');
+        
+        .book-content {
+            font-family: 'Source Sans Pro', sans-serif;
+        }
+        
+        .book-title {
+            font-family: 'Playfair Display', serif;
+        }
+        
+        .chapter-image {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.3s ease-in-out;
+            cursor: pointer;
+        }
+        
+        .chapter-image:hover {
+            transform: scale(1.02);
+        }
+
+        .page-flip {
+            transition: transform 0.5s ease-in-out;
+            transform-origin: left;
+            perspective: 1000px;
+        }
+
+        .page-flip.flipping {
+            transform: rotateY(-180deg);
+        }
+
+        .book-cover {
+            background: linear-gradient(45deg, #2c3e50, #3498db);
+            border-radius: 10px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        .chapter-link {
+            transition: all 0.3s ease;
+        }
+
+        .chapter-link:hover {
+            transform: translateX(10px);
+        }
+
+        .image-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            padding: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-stone-100 min-h-screen" x-data="{ currentChapter: 'cover', isMenuOpen: false }">
+    <!-- Navigation Bar -->
+    <nav class="bg-stone-800 text-white p-4 fixed w-full z-50">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold book-title">{{ book.metadata.title }}</h1>
+            <button @click="isMenuOpen = !isMenuOpen" class="lg:hidden">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/>
+                </svg>
+            </button>
+            <div class="hidden lg:flex space-x-4">
+                <button @click="currentChapter = 'cover'" class="hover:text-stone-300">Cover</button>
+                <button @click="currentChapter = 'frontmatter'" class="hover:text-stone-300">Front Matter</button>
+                {% for chapter in book.chapters %}
+                <button @click="currentChapter = 'chapter{{ loop.index }}'" class="hover:text-stone-300">Ch. {{ loop.index }}</button>
+                {% endfor %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container mx-auto pt-24 pb-12 px-4">
+        <!-- Book Cover -->
+        <div x-show="currentChapter === 'cover'" class="page-flip">
+            <div class="book-cover max-w-3xl mx-auto p-12 text-white text-center">
+                <h1 class="text-5xl font-bold mb-8 book-title">{{ book.metadata.title }}</h1>
+                <h2 class="text-3xl mb-6">by {{ book.metadata.author }}</h2>
+                <p class="text-lg mb-8">{{ book.metadata.target_audience }}</p>
+                <div class="space-y-4">
+                    <p class="italic">{{ book.metadata.literary_style.genre }}</p>
+                    <p>{{ book.metadata.literary_style.tone }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Front Matter -->
+        <div x-show="currentChapter === 'frontmatter'" class="page-flip">
+            <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-xl p-8 book-content">
+                <div class="space-y-8">
+                    <section>
+                        <h3 class="text-2xl font-bold mb-4 book-title">Dedication</h3>
+                        <div class="prose">{{ book.metadata.dedication }}</div>
+                    </section>
+                    
+                    <section>
+                        <h3 class="text-2xl font-bold mb-4 book-title">Preface</h3>
+                        <div class="prose">{{ book.metadata.preface }}</div>
+                    </section>
+                    
+                    <section>
+                        <h3 class="text-2xl font-bold mb-4 book-title">Acknowledgments</h3>
+                        <div class="prose">{{ book.metadata.acknowledgments }}</div>
+                    </section>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chapters -->
+        {% for chapter in book.chapters %}
+        <div x-show="currentChapter === 'chapter{{ loop.index }}'" class="page-flip">
+            <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-xl p-8 book-content">
+                <h2 class="text-3xl font-bold mb-6 book-title">Chapter {{ loop.index }}: {{ chapter.title }}</h2>
+                
+                <div class="text-stone-600 mb-6 italic">
+                    {{ chapter.summary }}
+                </div>
+
+                {% if chapter.image_paths %}
+                <div class="image-gallery mb-8">
+                    {% for image_path in chapter.image_paths %}
+                    <a href="{{ image_path }}" data-lightbox="chapter{{ loop.parent.index }}" 
+                       data-title="Chapter {{ loop.parent.index }} - {{ chapter.title }}">
+                        <img src="{{ image_path }}" 
+                             alt="Chapter {{ loop.parent.index }} Illustration {{ loop.index }}"
+                             class="chapter-image w-full h-64 object-cover rounded-lg">
+                    </a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="prose max-w-none">
+                    {{ chapter.content | safe }}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- Navigation Buttons -->
+        <div class="fixed bottom-8 right-8 flex space-x-4">
+            <button @click="currentChapter = $store.navigation.getPreviousChapter(currentChapter)"
+                    x-show="currentChapter !== 'cover'"
+                    class="bg-stone-800 text-white px-6 py-3 rounded-full shadow-lg hover:bg-stone-700 transition-colors">
+                Previous
+            </button>
+            <button @click="currentChapter = $store.navigation.getNextChapter(currentChapter)"
+                    x-show="!$store.navigation.isLastChapter(currentChapter)"
+                    class="bg-stone-800 text-white px-6 py-3 rounded-full shadow-lg hover:bg-stone-700 transition-colors">
+                Next
+            </button>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('navigation', {
+                chapters: JSON.parse(document.documentElement.dataset.chapters),
+                getPreviousChapter: function(current) {
+                    const index = this.chapters.indexOf(current);
+                    return index > 0 ? this.chapters[index - 1] : current;
+                },
+                getNextChapter: function(current) {
+                    const index = this.chapters.indexOf(current);
+                    return index < this.chapters.length - 1 ? this.chapters[index + 1] : current;
+                },
+                isLastChapter: function(current) {
+                    return this.chapters.indexOf(current) === this.chapters.length - 1;
+                }
+            });
+        });
+
+        window.addEventListener('load', function() {
+            lightbox.option({
+                'resizeDuration': 200,
+                'wrapAround': true,
+                'albumLabel': 'Image %1 of %2'
+            });
+        });
+    </script>
+</body>
+</html>

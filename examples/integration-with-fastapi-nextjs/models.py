@@ -67,6 +67,33 @@ class LinkedInIntroduceContentRequest(BaseModel):
     intent: Optional[str] = None
     mock_analysis: Optional[bool] = False
 
+class ImageAnalysisRequest(BaseModel):
+    image_url: str
+    image_context: Optional[str] = None
+    analysis_context: Optional[str] = None
+    vision_model: Optional[str] = "openai/gpt-4o-mini"
+    analysis_model: Optional[str] = "gemini/gemini-2.0-flash"
+
+class BookNovelRequest(BaseModel):
+    content: str
+    model: Optional[str] = "gemini/gemini-2.0-flash"
+    title: Optional[str] = None
+    author: Optional[str] = None
+    output_path: Optional[str] = None
+    num_chapters: Optional[int] = None
+    words_per_chapter: Optional[int] = None
+    narration_style: Optional[dict] = None
+    literary_style: Optional[dict] = None
+    target_audience: Optional[str] = None
+
+class ImageGenerationRequest(BaseModel):
+    prompt: str
+    model_type: Optional[str] = "stable_diffusion"
+    style: Optional[str] = None
+    size: Optional[str] = None
+    analysis_model: Optional[str] = "gemini/gemini-2.0-flash"
+    enhancement_model: Optional[str] = "gemini/gemini-2.0-flash"
+
 class ConvertRequest(BaseModel):
     input_pdf: str
     output_md: Optional[str] = None
