@@ -1,8 +1,9 @@
 """Command-line interface for running the Quantalogic Agent with event monitoring."""
 
 import asyncio
-from typing import Callable, List, Optional, Union
+import subprocess
 import sys
+from typing import Callable, List, Optional, Union
 
 import typer
 from loguru import logger
@@ -26,7 +27,7 @@ from quantalogic.codeact.events import (
 )
 from quantalogic.tools import create_tool
 
-from .tools_manager import Tool, get_default_tools
+from .tools_manager import Tool, ToolRegistry, get_default_tools
 from .utils import XMLResultHandler
 
 app = typer.Typer(no_args_is_help=True)
@@ -146,7 +147,8 @@ async def run_react_agent(
     backstory: Optional[str] = None,
     sop: Optional[str] = None,
     debug: bool = False,
-    streaming: bool = False
+    streaming: bool = False,
+    toolbox_directory: str = "toolboxes"
 ) -> None:
     """Run the Agent with detailed event monitoring.
 
@@ -161,6 +163,7 @@ async def run_react_agent(
         sop (Optional[str]): Standard operating procedure.
         debug (bool): Enable debug logging.
         streaming (bool): Enable streaming output.
+        toolbox_directory (str): Directory to load toolboxes from.
     """
     logger.remove()
     logger.add(sys.stderr, level="DEBUG" if debug else "INFO")
@@ -177,7 +180,12 @@ async def run_react_agent(
         else:
             raise ValueError(f"Invalid tool type: {type(tool)}. Expected Tool or callable.")
 
-    config = AgentConfig(model=model, max_iterations=max_iterations, tools=processed_tools)
+    config = AgentConfig(
+        model=model,
+        max_iterations=max_iterations,
+        tools=processed_tools,
+        toolbox_directory=toolbox_directory
+    )
     agent = Agent(
         config=config,
         personality=personality,
@@ -199,7 +207,7 @@ async def run_react_agent(
 
 
 @app.command()
-def react(
+def task(
     task: str = typer.Argument(..., help="The task to solve"),
     model: str = typer.Option(DEFAULT_MODEL, help="The litellm model to use"),
     max_iterations: int = typer.Option(5, help="Maximum reasoning steps"),
@@ -208,19 +216,50 @@ def react(
     backstory: Optional[str] = typer.Option(None, help="Agent backstory"),
     sop: Optional[str] = typer.Option(None, help="Standard operating procedure"),
     debug: bool = typer.Option(False, help="Enable debug logging to stderr"),
-    streaming: bool = typer.Option(False, help="Enable streaming output for real-time token generation")
+    streaming: bool = typer.Option(False, help="Enable streaming output for real-time token generation"),
+    toolbox_directory: str = typer.Option("toolboxes", help="Directory to load toolboxes from")
 ) -> None:
     """CLI command to run the Agent with detailed event monitoring."""
     try:
         asyncio.run(run_react_agent(
             task, model, max_iterations, success_criteria,
             personality=personality, backstory=backstory, sop=sop, debug=debug,
-            streaming=streaming
+            streaming=streaming, toolbox_directory=toolbox_directory
         ))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
+
+
+@app.command()
+def install_toolbox(
+    toolbox_name: str = typer.Argument(..., help="Name of the toolbox to install from PyPI")
+) -> None:
+    """Install a toolbox from PyPI using uv."""
+    try:
+        subprocess.run(["uv", "pip", "install", toolbox_name], check=True)
+        console.print(f"[green]Toolbox '{toolbox_name}' installed successfully[/green]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]Failed to install toolbox: {e}[/red]")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def list_toolboxes(
+    toolbox_directory: str = typer.Option("toolboxes", help="Directory to load toolboxes from")
+) -> None:
+    """List all loaded toolboxes."""
+    logger.debug(f"Listing toolboxes from directory: {toolbox_directory}")
+    registry = ToolRegistry()
+    registry.load_toolboxes(toolbox_directory)
+    tools = registry.get_tools()
+    if not tools:
+        console.print("[yellow]No toolboxes found.[/yellow]")
+    else:
+        console.print("[bold cyan]Available Tools:[/bold cyan]")
+        for tool in tools:
+            console.print(f"- {tool.name}")
 
 
 if __name__ == "__main__":

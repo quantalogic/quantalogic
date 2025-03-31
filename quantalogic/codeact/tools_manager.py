@@ -2,6 +2,7 @@
 
 import asyncio
 import importlib
+import inspect
 import os
 from contextlib import AsyncExitStack
 from pathlib import Path
@@ -24,12 +25,46 @@ class ToolRegistry:
         """Register a tool, checking for conflicts."""
         if tool.name in self.tools:
             raise ValueError(f"Tool '{tool.name}' is already registered")
-        # Placeholder for dependency checking (e.g., required libraries)
         self.tools[tool.name] = tool
+        logger.debug(f"Tool registered: {tool.name}")
 
     def get_tools(self) -> List[Tool]:
         """Return all registered tools."""
+        logger.debug(f"Returning {len(self.tools)} tools: {list(self.tools.keys())}")
         return list(self.tools.values())
+
+    def register_tools_from_module(self, module) -> None:
+        """Register all @create_tool generated Tool instances from a module."""
+        tools_found = False
+        for name, obj in inspect.getmembers(module):
+            # Check if the object is a Tool instance created by create_tool
+            if isinstance(obj, Tool) and hasattr(obj, '_func'):
+                self.register(obj)
+                logger.debug(f"Registered tool: {obj.name} from {module.__name__}")
+                tools_found = True
+        if not tools_found:
+            logger.warning(f"No @create_tool generated tools found in {module.__name__}")
+
+    def load_toolboxes(self, directory: str = "toolboxes") -> None:
+        """Load all toolboxes from the specified directory."""
+        toolbox_dir = Path(__file__).parent / directory
+        logger.debug(f"Attempting to load toolboxes from: {toolbox_dir}")
+        
+        if not toolbox_dir.exists() or not toolbox_dir.is_dir():
+            logger.warning(f"Toolbox directory not found or invalid: {toolbox_dir}")
+            return
+
+        for tool_file in toolbox_dir.glob("*.py"):
+            if tool_file.stem == "__init__":
+                continue
+            module_name = f"quantalogic.codeact.{directory}.{tool_file.stem}"
+            logger.debug(f"Attempting to import module: {module_name}")
+            try:
+                module = importlib.import_module(module_name)
+                self.register_tools_from_module(module)
+                logger.info(f"Successfully loaded toolbox: {module_name}")
+            except ImportError as e:
+                logger.error(f"Failed to import toolbox {module_name}: {e}")
 
 
 class AgentTool(Tool):
@@ -115,7 +150,7 @@ class RetrieveStepTool(Tool):
 
 
 def get_default_tools(model: str, history_store: Optional[List[dict]] = None) -> List[Tool]:
-    """Dynamically load default tools from the tools/ directory.
+    """Dynamically load default tools from the tools/ directory and toolboxes.
 
     Args:
         model (str): The language model to use for model-specific tools.
@@ -153,22 +188,8 @@ def get_default_tools(model: str, history_store: Optional[List[dict]] = None) ->
     for tool in static_tools:
         registry.register(tool)
 
-    # Dynamically load tools from the tools/ subdirectory
-    tools_dir: Path = Path(__file__).parent / "tools"
-    for tool_file in tools_dir.glob("*.py"):
-        if tool_file.stem == "__init__":
-            continue
-        module = importlib.import_module(f".tools.{tool_file.stem}", package="quantalogic.codeact")
-        # Iterate over module attributes to find Tool instances
-        for name, obj in module.__dict__.items():
-            # Only consider objects that are Tool instances with async_execute
-            if isinstance(obj, Tool) and hasattr(obj, 'async_execute'):
-                try:
-                    registry.register(obj)
-                    logger.debug(f"Registered tool: {name} from {tool_file.stem}")
-                except ValueError as e:
-                    logger.warning(f"Failed to register tool {name} in {tool_file.stem}: {e}")
-            # Silently skip non-Tool attributes (e.g., __name__, math, etc.)
+    # Load tools from toolboxes directory
+    registry.load_toolboxes("toolboxes")
 
     combined_tools = registry.get_tools()
     logger.info(f"Loaded {len(combined_tools)} default tools: {[tool.name for tool in combined_tools]}")

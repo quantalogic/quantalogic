@@ -28,11 +28,13 @@ class AgentConfig:
         max_iterations (int): Maximum number of reasoning steps.
         tools (Optional[List[Union[Tool, Callable]]]): List of tools or async functions.
         max_history_tokens (int): Token limit for history formatting.
+        toolbox_directory (str): Directory to load additional toolboxes from.
     """
     model: str = "gemini/gemini-2.0-flash"
     max_iterations: int = 5
     tools: Optional[List[Union[Tool, Callable]]] = None
     max_history_tokens: int = MAX_HISTORY_TOKENS
+    toolbox_directory: str = "toolboxes"
 
     def __init__(
         self,
@@ -40,6 +42,7 @@ class AgentConfig:
         max_iterations: int = 5,
         tools: Optional[List[Union[Tool, Callable]]] = None,
         max_history_tokens: int = MAX_HISTORY_TOKENS,
+        toolbox_directory: str = "toolboxes",
         config_file: Optional[str] = None
     ) -> None:
         """Initialize AgentConfig with direct arguments or from a YAML file.
@@ -49,6 +52,7 @@ class AgentConfig:
             max_iterations (int): Maximum number of reasoning steps.
             tools (Optional[List[Union[Tool, Callable]]]): List of tools or async functions.
             max_history_tokens (int): Token limit for history formatting.
+            toolbox_directory (str): Directory to load additional toolboxes from.
             config_file (Optional[str]): Path to a YAML config file to override defaults.
         """
         if config_file:
@@ -58,17 +62,20 @@ class AgentConfig:
                 self.model = config.get("model", model)
                 self.max_iterations = config.get("max_iterations", max_iterations)
                 self.max_history_tokens = config.get("max_history_tokens", max_history_tokens)
+                self.toolbox_directory = config.get("toolbox_directory", toolbox_directory)
                 self.tools = tools  # Tools are not loaded from YAML in this case
             except FileNotFoundError:
                 # Fall back to provided arguments if file not found
                 self.model = model
                 self.max_iterations = max_iterations
                 self.max_history_tokens = max_history_tokens
+                self.toolbox_directory = toolbox_directory
                 self.tools = tools
         else:
             self.model = model
             self.max_iterations = max_iterations
             self.max_history_tokens = max_history_tokens
+            self.toolbox_directory = toolbox_directory
             self.tools = tools
 
 
