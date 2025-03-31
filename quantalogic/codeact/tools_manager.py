@@ -2,12 +2,10 @@
 
 import asyncio
 import importlib
+import importlib.metadata
 import inspect
 import os
-import re
-import subprocess
 from contextlib import AsyncExitStack
-from pathlib import Path
 from typing import List, Optional
 
 import litellm
@@ -47,86 +45,23 @@ class ToolRegistry:
         if not tools_found:
             logger.warning(f"No @create_tool generated tools found in {module.__name__}")
 
-    def extract_uv_dependencies(self, script_path: Path) -> list[str]:
-        """Extract the dependencies list from the uv metadata in a script."""
-        with open(script_path, 'r') as f:
-            content = f.read()
-        
-        # Find the metadata block
-        match = re.search(r'# /// script\n(.*?)\n# ///', content, re.DOTALL)
-        if not match:
-            logger.debug(f"No uv metadata found in {script_path}")
-            return []
-        
-        metadata = match.group(1)
-        
-        # Extract the dependencies list
-        deps_match = re.search(r'dependencies = \[\n(.*?)\n\]', metadata, re.DOTALL)
-        if not deps_match:
-            logger.debug(f"No dependencies section found in uv metadata of {script_path}")
-            return []
-        
-        deps_str = deps_match.group(1)
-        dependencies = []
-        for line in deps_str.splitlines():
-            line = line.strip()
-            if line and line != ',':
-                # Remove trailing comma and quotes
-                if line.endswith(','):
-                    line = line[:-1]
-                dep = line.strip('"').strip("'")
-                dependencies.append(dep)
-        
-        logger.debug(f"Extracted dependencies from {script_path}: {dependencies}")
-        return dependencies
-
-    def install_uv_dependencies(self, dependencies: list[str]) -> None:
-        """Install dependencies using uv pip install."""
-        if not dependencies:
-            logger.debug("No dependencies to install")
-            return
-        cmd = ['uv', 'pip', 'install'] + dependencies
+    def load_toolboxes(self) -> None:
+        """Load all toolboxes from registered entry points."""
         try:
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-            logger.info(f"Installed dependencies: {dependencies}")
-            logger.debug(f"Installation output: {result.stdout}")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to install dependencies: {e.stderr}")
-            raise
+            # Use the modern entry_points() API with a group parameter
+            entry_points = importlib.metadata.entry_points(group="quantalogic.tools")
+        except Exception as e:
+            logger.error(f"Failed to retrieve entry points: {e}")
+            entry_points = []
 
-    def load_toolboxes(self, directory: str = "toolboxes") -> None:
-        """Load all toolboxes from the specified directory with dependency installation."""
-        toolbox_dir = Path(__file__).parent / directory
-        logger.debug(f"Attempting to load toolboxes from: {toolbox_dir}")
-        
-        if not toolbox_dir.exists() or not toolbox_dir.is_dir():
-            logger.warning(f"Toolbox directory not found or invalid: {toolbox_dir}")
-            return
-
-        # Collect all dependencies across toolboxes to install once
-        all_dependencies = set()
-        for tool_file in toolbox_dir.glob("*.py"):
-            if tool_file.stem == "__init__":
-                continue
-            dependencies = self.extract_uv_dependencies(tool_file)
-            all_dependencies.update(dependencies)
-
-        # Install all dependencies in one go
-        if all_dependencies:
-            self.install_uv_dependencies(list(all_dependencies))
-
-        # Import and register tools after dependencies are installed
-        for tool_file in toolbox_dir.glob("*.py"):
-            if tool_file.stem == "__init__":
-                continue
-            module_name = f"quantalogic.codeact.{directory}.{tool_file.stem}"
-            logger.debug(f"Attempting to import module: {module_name}")
+        logger.debug(f"Found {len(entry_points)} toolbox entry points")
+        for ep in entry_points:
             try:
-                module = importlib.import_module(module_name)
+                module = ep.load()
                 self.register_tools_from_module(module)
-                logger.info(f"Successfully loaded toolbox: {module_name}")
+                logger.info(f"Successfully loaded toolbox: {ep.name}")
             except ImportError as e:
-                logger.error(f"Failed to import toolbox {module_name}: {e}")
+                logger.error(f"Failed to import toolbox {ep.name}: {e}")
 
 
 class AgentTool(Tool):
@@ -212,7 +147,7 @@ class RetrieveStepTool(Tool):
 
 
 def get_default_tools(model: str, history_store: Optional[List[dict]] = None) -> List[Tool]:
-    """Dynamically load default tools from the tools/ directory and toolboxes.
+    """Dynamically load default tools and toolboxes via entry points.
 
     Args:
         model (str): The language model to use for model-specific tools.
@@ -250,8 +185,8 @@ def get_default_tools(model: str, history_store: Optional[List[dict]] = None) ->
     for tool in static_tools:
         registry.register(tool)
 
-    # Load tools from toolboxes directory
-    registry.load_toolboxes("toolboxes")
+    # Load tools from registered entry points
+    registry.load_toolboxes()
 
     combined_tools = registry.get_tools()
     logger.info(f"Loaded {len(combined_tools)} default tools: {[tool.name for tool in combined_tools]}")

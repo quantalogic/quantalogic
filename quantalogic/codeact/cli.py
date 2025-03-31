@@ -1,6 +1,8 @@
 """Command-line interface for running the Quantalogic Agent with event monitoring."""
 
 import asyncio
+import os
+from pathlib import Path
 import subprocess
 import sys
 from typing import Callable, List, Optional, Union
@@ -148,7 +150,6 @@ async def run_react_agent(
     sop: Optional[str] = None,
     debug: bool = False,
     streaming: bool = False,
-    toolbox_directory: str = "toolboxes"
 ) -> None:
     """Run the Agent with detailed event monitoring.
 
@@ -163,7 +164,6 @@ async def run_react_agent(
         sop (Optional[str]): Standard operating procedure.
         debug (bool): Enable debug logging.
         streaming (bool): Enable streaming output.
-        toolbox_directory (str): Directory to load toolboxes from.
     """
     logger.remove()
     logger.add(sys.stderr, level="DEBUG" if debug else "INFO")
@@ -184,7 +184,6 @@ async def run_react_agent(
         model=model,
         max_iterations=max_iterations,
         tools=processed_tools,
-        toolbox_directory=toolbox_directory
     )
     agent = Agent(
         config=config,
@@ -217,14 +216,13 @@ def task(
     sop: Optional[str] = typer.Option(None, help="Standard operating procedure"),
     debug: bool = typer.Option(False, help="Enable debug logging to stderr"),
     streaming: bool = typer.Option(False, help="Enable streaming output for real-time token generation"),
-    toolbox_directory: str = typer.Option("toolboxes", help="Directory to load toolboxes from")
 ) -> None:
     """CLI command to run the Agent with detailed event monitoring."""
     try:
         asyncio.run(run_react_agent(
             task, model, max_iterations, success_criteria,
             personality=personality, backstory=backstory, sop=sop, debug=debug,
-            streaming=streaming, toolbox_directory=toolbox_directory
+            streaming=streaming,
         ))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
@@ -234,9 +232,9 @@ def task(
 
 @app.command()
 def install_toolbox(
-    toolbox_name: str = typer.Argument(..., help="Name of the toolbox to install from PyPI")
+    toolbox_name: str = typer.Argument(..., help="Name of the toolbox to install (can be a PyPI package name or a path to a local wheel file)")
 ) -> None:
-    """Install a toolbox from PyPI using uv."""
+    """Install a toolbox using uv pip install. The toolbox can be specified by its PyPI package name or by a path to a local wheel file."""
     try:
         subprocess.run(["uv", "pip", "install", toolbox_name], check=True)
         console.print(f"[green]Toolbox '{toolbox_name}' installed successfully[/green]")
@@ -246,13 +244,11 @@ def install_toolbox(
 
 
 @app.command()
-def list_toolboxes(
-    toolbox_directory: str = typer.Option("toolboxes", help="Directory to load toolboxes from")
-) -> None:
-    """List all loaded toolboxes."""
-    logger.debug(f"Listing toolboxes from directory: {toolbox_directory}")
+def list_toolboxes() -> None:
+    """List all loaded toolboxes from entry points."""
+    logger.debug("Listing toolboxes from entry points")
     registry = ToolRegistry()
-    registry.load_toolboxes(toolbox_directory)
+    registry.load_toolboxes()
     tools = registry.get_tools()
     if not tools:
         console.print("[yellow]No toolboxes found.[/yellow]")
@@ -260,6 +256,80 @@ def list_toolboxes(
         console.print("[bold cyan]Available Tools:[/bold cyan]")
         for tool in tools:
             console.print(f"- {tool.name}")
+
+
+@app.command()
+def create_toolbox_template(
+    toolbox_name: str = typer.Argument(..., help="Name of the toolbox (e.g., math_tools)")
+) -> None:
+    """Create a starting point template for a new toolbox."""
+    try:
+        # Normalize toolbox name for directory and module names
+        normalized_name = toolbox_name.lower().replace("-", "_")
+        
+        # Define the root directory for the new toolbox
+        root_dir = Path(f"quantalogic-toolbox-{normalized_name}")
+        root_dir.mkdir(exist_ok=True)
+        
+        # Create the package directory
+        package_dir = root_dir / f"quantalogic_toolbox_{normalized_name}"
+        package_dir.mkdir(exist_ok=True)
+        
+        # Create __init__.py
+        init_file = package_dir / "__init__.py"
+        init_file.touch()
+        
+        # Create tools.py with sample content
+        tools_file = package_dir / "tools.py"
+        with tools_file.open("w") as f:
+            f.write(
+                """
+from quantalogic.tools import create_tool
+
+# Example tool: replace or remove this in your actual toolbox
+@create_tool
+async def sample_tool(param: str) -> str:
+    \"\"\"A sample tool that echoes the input parameter.\"\"\"
+    return f"Echo: {param}"
+
+# Add more tools here using the @create_tool decorator
+"""
+            )
+        
+        # Create pyproject.toml with configurations
+        pyproject_file = root_dir / "pyproject.toml"
+        with pyproject_file.open("w") as f:
+            f.write(
+                f"""
+[tool.poetry]
+name = "quantalogic-toolbox-{normalized_name}"
+version = "0.1.0"
+description = "A toolbox for Quantalogic providing {normalized_name} tools."
+authors = ["Your Name <you@example.com>"]
+dependencies = {{
+    "python": ">=3.12",
+    "quantalogic": ">=0.1.0",
+    # Add other dependencies here
+}}
+
+[tool.poetry.plugins."quantalogic.tools"]
+{normalized_name} = "quantalogic_toolbox_{normalized_name}.tools"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+"""
+            )
+        
+        console.print(f"[green]Toolbox template '{toolbox_name}' created successfully at {root_dir}[/green]")
+        console.print("Next steps:")
+        console.print("1. Navigate to the toolbox directory: cd", root_dir)
+        console.print("2. Install dependencies: uv pip install -e .")
+        console.print("3. Develop your tools in", tools_file)
+        console.print("4. Test your toolbox with the Quantalogic Agent.")
+    except Exception as e:
+        console.print(f"[red]Failed to create toolbox template: {e}[/red]")
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
