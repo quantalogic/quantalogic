@@ -104,6 +104,7 @@ class ToolDefinition(BaseModel):
         return_type_details: Detailed description of the return type.
         need_validation: Flag to indicate if tool requires validation.
         is_async: Flag to indicate if the tool is asynchronous (for documentation purposes).
+        toolbox_name: Optional name of the toolbox this tool belongs to.
     """
 
     model_config = ConfigDict(extra="allow", validate_assignment=True)
@@ -134,6 +135,10 @@ class ToolDefinition(BaseModel):
         default=False,
         description="Indicates if the tool is asynchronous (used for documentation).",
     )
+    toolbox_name: str | None = Field(
+        default=None,
+        description="The name of the toolbox this tool belongs to, set during registration if applicable."
+    )
 
     def get_properties(self, exclude: list[str] | None = None) -> dict[str, Any]:
         """Return a dictionary of all non-None properties, excluding Tool class fields and specified fields.
@@ -156,6 +161,7 @@ class ToolDefinition(BaseModel):
             "need_caller_context_memory",
             "return_type_details",
             "is_async",
+            "toolbox_name",  # Added to standard fields
         }
         properties = {}
 
@@ -212,7 +218,8 @@ class ToolDefinition(BaseModel):
 
         standard_fields = {
             "name", "description", "arguments", "return_type", "return_description", "return_type_details",
-            "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async"
+            "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
+            "toolbox_name"  # Added to standard fields
         }
         additional_fields = [f for f in self.model_fields if f not in standard_fields]
         if additional_fields:
@@ -312,7 +319,8 @@ class ToolDefinition(BaseModel):
 
         standard_fields = {
             "name", "description", "arguments", "return_type", "return_description", "return_type_details",
-            "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async"
+            "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
+            "toolbox_name"  # Added to standard fields
         }
         additional_fields = [f for f in self.model_fields if f not in standard_fields]
         if additional_fields:
@@ -475,6 +483,7 @@ def create_tool(func: F) -> Tool:
                 return_description=return_description,
                 return_type_details=return_type_details,
                 is_async=is_async,
+                toolbox_name=None,  # Explicitly set to None initially
                 **kwargs
             )
             self._func = func

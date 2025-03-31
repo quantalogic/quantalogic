@@ -267,12 +267,10 @@ def list_toolboxes() -> None:
     else:
         console.print("[bold cyan]Available Toolboxes and Tools:[/bold cyan]")
         
-        # Group tools by their toolbox (assuming toolbox name is available or inferable)
+        # Group tools by their toolbox_name attribute
         toolbox_dict = {}
         for tool in tools:
-            # For this example, we'll assume the toolbox name might be inferable from tool metadata
-            # If Tool object has a 'toolbox' attribute, use it; otherwise, group generically
-            toolbox_name = getattr(tool, 'toolbox', 'Unknown Toolbox')  # Placeholder; adjust based on actual Tool class
+            toolbox_name = tool.toolbox_name if tool.toolbox_name else 'Unknown Toolbox'
             if toolbox_name not in toolbox_dict:
                 toolbox_dict[toolbox_name] = []
             toolbox_dict[toolbox_name].append(tool.name)

@@ -33,20 +33,21 @@ class ToolRegistry:
         logger.debug(f"Returning {len(self.tools)} tools: {list(self.tools.keys())}")
         return list(self.tools.values())
 
-    def register_tools_from_module(self, module) -> None:
-        """Register all @create_tool generated Tool instances from a module."""
+    def register_tools_from_module(self, module, toolbox_name: str) -> None:
+        """Register all @create_tool generated Tool instances from a module with toolbox name."""
         tools_found = False
         for name, obj in inspect.getmembers(module):
             # Check if the object is a Tool instance created by create_tool
             if isinstance(obj, Tool) and hasattr(obj, '_func'):
+                obj.toolbox_name = toolbox_name  # Set the toolbox name on the tool
                 self.register(obj)
-                logger.debug(f"Registered tool: {obj.name} from {module.__name__}")
+                logger.debug(f"Registered tool: {obj.name} from {module.__name__} in toolbox {toolbox_name}")
                 tools_found = True
         if not tools_found:
             logger.warning(f"No @create_tool generated tools found in {module.__name__}")
 
     def load_toolboxes(self) -> None:
-        """Load all toolboxes from registered entry points."""
+        """Load all toolboxes from registered entry points and assign toolbox names."""
         try:
             # Use the modern entry_points() API with a group parameter
             entry_points = importlib.metadata.entry_points(group="quantalogic.tools")
@@ -58,7 +59,7 @@ class ToolRegistry:
         for ep in entry_points:
             try:
                 module = ep.load()
-                self.register_tools_from_module(module)
+                self.register_tools_from_module(module, toolbox_name=ep.name)  # Pass entry point name
                 logger.info(f"Successfully loaded toolbox: {ep.name}")
             except ImportError as e:
                 logger.error(f"Failed to import toolbox {ep.name}: {e}")
@@ -183,6 +184,8 @@ def get_default_tools(model: str, history_store: Optional[List[dict]] = None) ->
         static_tools.append(RetrieveStepTool(history_store))
 
     for tool in static_tools:
+        # Optional: Assign a "core" toolbox name for static tools
+        # tool.toolbox_name = "core"
         registry.register(tool)
 
     # Load tools from registered entry points
