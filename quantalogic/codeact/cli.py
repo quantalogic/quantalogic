@@ -1,8 +1,6 @@
 """Command-line interface for running the Quantalogic Agent with event monitoring."""
 
 import asyncio
-import os
-from pathlib import Path
 import subprocess
 import sys
 from typing import Callable, List, Optional, Union
@@ -244,92 +242,47 @@ def install_toolbox(
 
 
 @app.command()
+def uninstall_toolbox(
+    toolbox_name: str = typer.Argument(..., help="Name of the toolbox to uninstall (must be the package name, e.g., 'quantalogic-toolbox-math')")
+) -> None:
+    """Uninstall a toolbox using uv pip uninstall. The toolbox must be specified by its package name."""
+    try:
+        subprocess.run(["uv", "pip", "uninstall", toolbox_name], check=True)
+        console.print(f"[green]Toolbox '{toolbox_name}' uninstalled successfully[/green]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]Failed to uninstall toolbox: {e}[/red]")
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def list_toolboxes() -> None:
-    """List all loaded toolboxes from entry points."""
+    """List all loaded toolboxes and their associated tools from entry points."""
     logger.debug("Listing toolboxes from entry points")
     registry = ToolRegistry()
     registry.load_toolboxes()
     tools = registry.get_tools()
+
     if not tools:
         console.print("[yellow]No toolboxes found.[/yellow]")
     else:
-        console.print("[bold cyan]Available Tools:[/bold cyan]")
+        console.print("[bold cyan]Available Toolboxes and Tools:[/bold cyan]")
+        
+        # Group tools by their toolbox (assuming toolbox name is available or inferable)
+        toolbox_dict = {}
         for tool in tools:
-            console.print(f"- {tool.name}")
+            # For this example, we'll assume the toolbox name might be inferable from tool metadata
+            # If Tool object has a 'toolbox' attribute, use it; otherwise, group generically
+            toolbox_name = getattr(tool, 'toolbox', 'Unknown Toolbox')  # Placeholder; adjust based on actual Tool class
+            if toolbox_name not in toolbox_dict:
+                toolbox_dict[toolbox_name] = []
+            toolbox_dict[toolbox_name].append(tool.name)
 
-
-@app.command()
-def create_toolbox_template(
-    toolbox_name: str = typer.Argument(..., help="Name of the toolbox (e.g., math_tools)")
-) -> None:
-    """Create a starting point template for a new toolbox."""
-    try:
-        # Normalize toolbox name for directory and module names
-        normalized_name = toolbox_name.lower().replace("-", "_")
-        
-        # Define the root directory for the new toolbox
-        root_dir = Path(f"quantalogic-toolbox-{normalized_name}")
-        root_dir.mkdir(exist_ok=True)
-        
-        # Create the package directory
-        package_dir = root_dir / f"quantalogic_toolbox_{normalized_name}"
-        package_dir.mkdir(exist_ok=True)
-        
-        # Create __init__.py
-        init_file = package_dir / "__init__.py"
-        init_file.touch()
-        
-        # Create tools.py with sample content
-        tools_file = package_dir / "tools.py"
-        with tools_file.open("w") as f:
-            f.write(
-                """
-from quantalogic.tools import create_tool
-
-# Example tool: replace or remove this in your actual toolbox
-@create_tool
-async def sample_tool(param: str) -> str:
-    \"\"\"A sample tool that echoes the input parameter.\"\"\"
-    return f"Echo: {param}"
-
-# Add more tools here using the @create_tool decorator
-"""
-            )
-        
-        # Create pyproject.toml with configurations
-        pyproject_file = root_dir / "pyproject.toml"
-        with pyproject_file.open("w") as f:
-            f.write(
-                f"""
-[tool.poetry]
-name = "quantalogic-toolbox-{normalized_name}"
-version = "0.1.0"
-description = "A toolbox for Quantalogic providing {normalized_name} tools."
-authors = ["Your Name <you@example.com>"]
-dependencies = {{
-    "python": ">=3.12",
-    "quantalogic": ">=0.1.0",
-    # Add other dependencies here
-}}
-
-[tool.poetry.plugins."quantalogic.tools"]
-{normalized_name} = "quantalogic_toolbox_{normalized_name}.tools"
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
-"""
-            )
-        
-        console.print(f"[green]Toolbox template '{toolbox_name}' created successfully at {root_dir}[/green]")
-        console.print("Next steps:")
-        console.print("1. Navigate to the toolbox directory: cd", root_dir)
-        console.print("2. Install dependencies: uv pip install -e .")
-        console.print("3. Develop your tools in", tools_file)
-        console.print("4. Test your toolbox with the Quantalogic Agent.")
-    except Exception as e:
-        console.print(f"[red]Failed to create toolbox template: {e}[/red]")
-        raise typer.Exit(code=1)
+        # Display each toolbox and its tools
+        for toolbox_name, tool_names in toolbox_dict.items():
+            console.print(f"[bold green]Toolbox: {toolbox_name}[/bold green]")
+            for tool_name in sorted(tool_names):  # Sort for consistency
+                console.print(f"  - {tool_name}")
+            console.print("")  # Add a blank line between toolboxes
 
 
 if __name__ == "__main__":
