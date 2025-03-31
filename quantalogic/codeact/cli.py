@@ -31,6 +31,10 @@ from quantalogic.tools import create_tool
 from .tools_manager import Tool, ToolRegistry, get_default_tools
 from .utils import XMLResultHandler
 
+# Initialize PluginManager at module level to avoid duplicate loading
+plugin_manager = PluginManager()
+plugin_manager.load_plugins()
+
 app = typer.Typer(no_args_is_help=True)
 console = Console()
 
@@ -243,8 +247,6 @@ def uninstall_toolbox(
 def list_toolboxes() -> None:
     """List all loaded toolboxes and their associated tools from entry points."""
     logger.debug("Listing toolboxes from entry points")
-    plugin_manager = PluginManager()
-    plugin_manager.load_plugins()
     tools = plugin_manager.tools.get_tools()
 
     if not tools:
@@ -265,9 +267,7 @@ def list_toolboxes() -> None:
             console.print("")
 
 
-# Load plugin CLI commands dynamically
-plugin_manager = PluginManager()
-plugin_manager.load_plugins()
+# Load plugin CLI commands dynamically using the module-level plugin_manager
 for cmd_name, cmd_func in plugin_manager.cli_commands.items():
     app.command(name=cmd_name)(cmd_func)
 
