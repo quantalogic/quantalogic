@@ -37,9 +37,8 @@ class ToolRegistry:
         """Register all @create_tool generated Tool instances from a module with toolbox name."""
         tools_found = False
         for name, obj in inspect.getmembers(module):
-            # Check if the object is a Tool instance created by create_tool
             if isinstance(obj, Tool) and hasattr(obj, '_func'):
-                obj.toolbox_name = toolbox_name  # Set the toolbox name on the tool
+                obj.toolbox_name = toolbox_name
                 self.register(obj)
                 logger.debug(f"Registered tool: {obj.name} from {module.__name__} in toolbox {toolbox_name}")
                 tools_found = True
@@ -49,7 +48,6 @@ class ToolRegistry:
     def load_toolboxes(self) -> None:
         """Load all toolboxes from registered entry points and assign toolbox names."""
         try:
-            # Use the modern entry_points() API with a group parameter
             entry_points = importlib.metadata.entry_points(group="quantalogic.tools")
         except Exception as e:
             logger.error(f"Failed to retrieve entry points: {e}")
@@ -59,39 +57,22 @@ class ToolRegistry:
         for ep in entry_points:
             try:
                 module = ep.load()
-                self.register_tools_from_module(module, toolbox_name=ep.name)  # Pass entry point name
+                self.register_tools_from_module(module, toolbox_name=ep.name)
                 logger.info(f"Successfully loaded toolbox: {ep.name}")
             except ImportError as e:
                 logger.error(f"Failed to import toolbox {ep.name}: {e}")
 
 
 class AgentTool(Tool):
-    """A specialized tool for generating text using language models, designed for AI agent workflows.
-    
-    This tool provides a clean interface for text generation tasks, supporting both synchronous 
-    and asynchronous execution. It handles prompt construction, temperature control, and timeout 
-    management, while ensuring robust error handling and logging.
-    
-    Key Features:
-    - Configurable model selection with fallback to environment variable
-    - Timeout protection for long-running generations
-    - Input validation for temperature parameter
-    - Structured logging for debugging and monitoring
-    - Asynchronous execution with proper resource cleanup
-    
-    Note: This tool operates in a stateless manner - all context must be provided in the prompts.
-    """
+    """A specialized tool for generating text using language models, designed for AI agent workflows."""
     def __init__(self, model: str = None, timeout: int = None) -> None:
         super().__init__(
             name="agent_tool",
-            description="Generates text using a language model. This is a stateless agent - all necessary context must be explicitly provided in either the system prompt or user prompt. The tool does not maintain any memory of previous interactions.",
+            description="Generates text using a language model. This is a stateless agent - all necessary context must be explicitly provided in either the system prompt or user prompt.",
             arguments=[
-                ToolArgument(name="system_prompt", arg_type="string", 
-                            description="System prompt to guide the model", required=True),
-                ToolArgument(name="prompt", arg_type="string", 
-                            description="User prompt to generate a response", required=True),
-                ToolArgument(name="temperature", arg_type="float", 
-                            description="Temperature for generation (0 to 1)", required=True)
+                ToolArgument(name="system_prompt", arg_type="string", description="System prompt to guide the model", required=True),
+                ToolArgument(name="prompt", arg_type="string", description="User prompt to generate a response", required=True),
+                ToolArgument(name="temperature", arg_type="float", description="Temperature for generation (0 to 1)", required=True)
             ],
             return_type="string"
         )
@@ -136,8 +117,7 @@ class RetrieveStepTool(Tool):
             name="retrieve_step",
             description="Retrieve the thought, action, and result from a specific step.",
             arguments=[
-                ToolArgument(name="step_number", arg_type="int", 
-                            description="The step number to retrieve (1-based)", required=True)
+                ToolArgument(name="step_number", arg_type="int", description="The step number to retrieve (1-based)", required=True)
             ],
             return_type="string"
         )
@@ -162,32 +142,17 @@ class RetrieveStepTool(Tool):
 
 
 def get_default_tools(model: str, history_store: Optional[List[dict]] = None) -> List[Tool]:
-    """Dynamically load default tools and toolboxes via entry points.
-
-    Args:
-        model (str): The language model to use for model-specific tools.
-        history_store (Optional[List[dict]]): Optional history store for RetrieveStepTool.
-
-    Returns:
-        List[Tool]: A list of initialized tool instances.
-    """
+    """Dynamically load default tools and toolboxes via entry points."""
     registry = ToolRegistry()
     
-    # Core tools that don't need dynamic loading
-    static_tools: List[Tool] = [
-        AgentTool(model=model)
-    ]
+    static_tools: List[Tool] = [AgentTool(model=model)]
     if history_store is not None:
         static_tools.append(RetrieveStepTool(history_store))
 
     for tool in static_tools:
-        # Optional: Assign a "core" toolbox name for static tools
-        # tool.toolbox_name = "core"
         registry.register(tool)
 
-    # Load tools from registered entry points
     registry.load_toolboxes()
-
     combined_tools = registry.get_tools()
     logger.info(f"Loaded {len(combined_tools)} default tools: {[tool.name for tool in combined_tools]}")
     return combined_tools

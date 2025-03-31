@@ -22,7 +22,6 @@ async def generate_program(
     streaming: bool = False
 ) -> str:
     """Generate a Python program using the specified model with streaming support and retries."""
-    # Group tools by toolbox_name instead of creating a flat string
     tools_by_toolbox = {}
     for tool in tools:
         toolbox_name = tool.toolbox_name if tool.toolbox_name else "Default Toolbox"
@@ -56,9 +55,27 @@ async def generate_program(
             return code[9:-3].strip() if code.startswith("```python") and code.endswith("```") else code
         except Exception as e:
             if attempt < 2:
-                await asyncio.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s
+                await asyncio.sleep(2 ** attempt)
             else:
                 raise Exception(f"Code generation failed with {model} after 3 attempts: {e}")
+
+
+class PromptStrategy(ABC):
+    """Abstract base class for prompt generation strategies."""
+    @abstractmethod
+    async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int) -> str:
+        pass
+
+
+class DefaultPromptStrategy(PromptStrategy):
+    """Default strategy using Jinja2 templates."""
+    async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int) -> str:
+        return jinja_env.get_template("generate_action.j2").render(
+            task=task,
+            history_str=history_str,
+            current_step=step,
+            max_iterations=max_iterations
+        )
 
 
 class BaseReasoner(ABC):
@@ -79,9 +96,10 @@ class BaseReasoner(ABC):
 
 class Reasoner(BaseReasoner):
     """Handles action generation using the language model."""
-    def __init__(self, model: str, tools: List[Tool]):
+    def __init__(self, model: str, tools: List[Tool], prompt_strategy: Optional[PromptStrategy] = None):
         self.model = model
         self.tools = tools
+        self.prompt_strategy = prompt_strategy or DefaultPromptStrategy()
 
     async def generate_action(
         self,
@@ -95,11 +113,11 @@ class Reasoner(BaseReasoner):
     ) -> str:
         """Generate an action based on task and history with streaming support."""
         try:
-            task_prompt = jinja_env.get_template("generate_action.j2").render(
-                task=task if not system_prompt else f"{system_prompt}\nTask: {task}",
-                history_str=history_str,
-                current_step=step,
-                max_iterations=max_iterations
+            task_prompt = await self.prompt_strategy.generate_prompt(
+                task if not system_prompt else f"{system_prompt}\nTask: {task}",
+                history_str,
+                step,
+                max_iterations
             )
             await notify_event(PromptGeneratedEvent(
                 event_type="PromptGenerated", step_number=step, prompt=task_prompt
@@ -120,7 +138,6 @@ class Reasoner(BaseReasoner):
             return XMLResultHandler.format_error_result(str(e))
 
     def _clean_code(self, code: str) -> str:
-        # Extract code from markdown block
         lines = code.splitlines()
         in_code_block = False
         code_lines = []
@@ -137,10 +154,8 @@ class Reasoner(BaseReasoner):
                     break
                 code_lines.append(line)
         
-        # Use extracted code or original if no markdown block
         final_code = '\n'.join(code_lines) if in_code_block else code
         
-        # Validate syntax
         try:
             ast.parse(final_code)
             return final_code

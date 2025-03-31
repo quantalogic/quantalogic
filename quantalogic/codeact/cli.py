@@ -7,7 +7,7 @@ from typing import Callable, List, Optional, Union
 
 import typer
 from loguru import logger
-from rich.console import Console  # Optional dependency for improved output
+from rich.console import Console
 
 from quantalogic.codeact.agent import Agent, AgentConfig
 from quantalogic.codeact.constants import DEFAULT_MODEL, LOG_FILE
@@ -25,13 +25,14 @@ from quantalogic.codeact.events import (
     ToolExecutionErrorEvent,
     ToolExecutionStartedEvent,
 )
+from quantalogic.codeact.plugin_manager import PluginManager
 from quantalogic.tools import create_tool
 
 from .tools_manager import Tool, ToolRegistry, get_default_tools
 from .utils import XMLResultHandler
 
 app = typer.Typer(no_args_is_help=True)
-console = Console()  # Rich console for enhanced output
+console = Console()
 
 
 class ProgressMonitor:
@@ -100,15 +101,12 @@ class ProgressMonitor:
         console.print(f"Error: {event.error}")
 
     async def on_stream_token(self, event: StreamTokenEvent):
-        """Handle streaming token events with real-time output."""
         console.print(event.token, end="")
 
     async def flush_buffer(self):
-        """No buffer needed with rich console."""
         pass
 
     async def __call__(self, event):
-        """Dispatch events to their respective handlers."""
         if isinstance(event, TaskStartedEvent):
             await self.on_task_started(event)
         elif isinstance(event, ThoughtGeneratedEvent):
@@ -149,20 +147,7 @@ async def run_react_agent(
     debug: bool = False,
     streaming: bool = False,
 ) -> None:
-    """Run the Agent with detailed event monitoring.
-
-    Args:
-        task (str): The task to solve.
-        model (str): The language model to use.
-        max_iterations (int): Maximum reasoning steps.
-        success_criteria (Optional[str]): Criteria to determine task completion.
-        tools (Optional[List[Union[Tool, Callable]]]): Custom tools to use.
-        personality (Optional[str]): Agent personality.
-        backstory (Optional[str]): Agent backstory.
-        sop (Optional[str]): Standard operating procedure.
-        debug (bool): Enable debug logging.
-        streaming (bool): Enable streaming output.
-    """
+    """Run the Agent with detailed event monitoring."""
     logger.remove()
     logger.add(sys.stderr, level="DEBUG" if debug else "INFO")
     logger.add(LOG_FILE, level="DEBUG" if debug else "INFO")
@@ -200,7 +185,7 @@ async def run_react_agent(
     ])
     
     console.print(f"[bold green]Starting task: {task}[/bold green]")
-    history = await agent.solve(task, success_criteria, streaming=streaming)
+    _history = await agent.solve(task, success_criteria, streaming=streaming)
 
 
 @app.command()
@@ -230,9 +215,9 @@ def task(
 
 @app.command()
 def install_toolbox(
-    toolbox_name: str = typer.Argument(..., help="Name of the toolbox to install (can be a PyPI package name or a path to a local wheel file)")
+    toolbox_name: str = typer.Argument(..., help="Name of the toolbox to install (PyPI package or local wheel file)")
 ) -> None:
-    """Install a toolbox using uv pip install. The toolbox can be specified by its PyPI package name or by a path to a local wheel file."""
+    """Install a toolbox using uv pip install."""
     try:
         subprocess.run(["uv", "pip", "install", toolbox_name], check=True)
         console.print(f"[green]Toolbox '{toolbox_name}' installed successfully[/green]")
@@ -243,9 +228,9 @@ def install_toolbox(
 
 @app.command()
 def uninstall_toolbox(
-    toolbox_name: str = typer.Argument(..., help="Name of the toolbox to uninstall (must be the package name, e.g., 'quantalogic-toolbox-math')")
+    toolbox_name: str = typer.Argument(..., help="Name of the toolbox to uninstall (package name)")
 ) -> None:
-    """Uninstall a toolbox using uv pip uninstall. The toolbox must be specified by its package name."""
+    """Uninstall a toolbox using uv pip uninstall."""
     try:
         subprocess.run(["uv", "pip", "uninstall", toolbox_name], check=True)
         console.print(f"[green]Toolbox '{toolbox_name}' uninstalled successfully[/green]")
@@ -258,16 +243,14 @@ def uninstall_toolbox(
 def list_toolboxes() -> None:
     """List all loaded toolboxes and their associated tools from entry points."""
     logger.debug("Listing toolboxes from entry points")
-    registry = ToolRegistry()
-    registry.load_toolboxes()
-    tools = registry.get_tools()
+    plugin_manager = PluginManager()
+    plugin_manager.load_plugins()
+    tools = plugin_manager.tools.get_tools()
 
     if not tools:
         console.print("[yellow]No toolboxes found.[/yellow]")
     else:
         console.print("[bold cyan]Available Toolboxes and Tools:[/bold cyan]")
-        
-        # Group tools by their toolbox_name attribute
         toolbox_dict = {}
         for tool in tools:
             toolbox_name = tool.toolbox_name if tool.toolbox_name else 'Unknown Toolbox'
@@ -275,12 +258,18 @@ def list_toolboxes() -> None:
                 toolbox_dict[toolbox_name] = []
             toolbox_dict[toolbox_name].append(tool.name)
 
-        # Display each toolbox and its tools
         for toolbox_name, tool_names in toolbox_dict.items():
             console.print(f"[bold green]Toolbox: {toolbox_name}[/bold green]")
-            for tool_name in sorted(tool_names):  # Sort for consistency
+            for tool_name in sorted(tool_names):
                 console.print(f"  - {tool_name}")
-            console.print("")  # Add a blank line between toolboxes
+            console.print("")
+
+
+# Load plugin CLI commands dynamically
+plugin_manager = PluginManager()
+plugin_manager.load_plugins()
+for cmd_name, cmd_func in plugin_manager.cli_commands.items():
+    app.command(name=cmd_name)(cmd_func)
 
 
 if __name__ == "__main__":

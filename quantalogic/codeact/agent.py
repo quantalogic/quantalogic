@@ -13,23 +13,18 @@ from lxml import etree
 from quantalogic.tools import Tool, create_tool
 
 from .constants import MAX_HISTORY_TOKENS, MAX_TOKENS
+from .executor import BaseExecutor, Executor
 from .llm_util import litellm_completion
+from .plugin_manager import PluginManager
 from .react_agent import ReActAgent
+from .reasoner import BaseReasoner, Reasoner
 from .templates import jinja_env as default_jinja_env
 from .tools_manager import RetrieveStepTool, get_default_tools
 
 
 @dataclass
 class AgentConfig:
-    """Configuration for the Agent loaded from a YAML file or direct arguments.
-
-    Attributes:
-        model (str): The language model to use.
-        max_iterations (int): Maximum number of reasoning steps.
-        tools (Optional[List[Union[Tool, Callable]]]): List of tools or async functions.
-        max_history_tokens (int): Token limit for history formatting.
-        toolbox_directory (str): Directory to load additional toolboxes from.
-    """
+    """Configuration for the Agent loaded from a YAML file or direct arguments."""
     model: str = "gemini/gemini-2.0-flash"
     max_iterations: int = 5
     tools: Optional[List[Union[Tool, Callable]]] = None
@@ -45,16 +40,6 @@ class AgentConfig:
         toolbox_directory: str = "toolboxes",
         config_file: Optional[str] = None
     ) -> None:
-        """Initialize AgentConfig with direct arguments or from a YAML file.
-
-        Args:
-            model (str): The language model to use.
-            max_iterations (int): Maximum number of reasoning steps.
-            tools (Optional[List[Union[Tool, Callable]]]): List of tools or async functions.
-            max_history_tokens (int): Token limit for history formatting.
-            toolbox_directory (str): Directory to load additional toolboxes from.
-            config_file (Optional[str]): Path to a YAML config file to override defaults.
-        """
         if config_file:
             try:
                 with open(Path(__file__).parent / config_file) as f:
@@ -63,9 +48,8 @@ class AgentConfig:
                 self.max_iterations = config.get("max_iterations", max_iterations)
                 self.max_history_tokens = config.get("max_history_tokens", max_history_tokens)
                 self.toolbox_directory = config.get("toolbox_directory", toolbox_directory)
-                self.tools = tools  # Tools are not loaded from YAML in this case
+                self.tools = tools
             except FileNotFoundError:
-                # Fall back to provided arguments if file not found
                 self.model = model
                 self.max_iterations = max_iterations
                 self.max_history_tokens = max_history_tokens
@@ -80,23 +64,7 @@ class AgentConfig:
 
 
 class Agent:
-    """High-level interface for the Quantalogic Agent with modular configuration.
-
-    This class provides methods for single-step chats and multi-step task solving,
-    with support for custom tools, personality, and event observers.
-
-    Attributes:
-        model (str): The language model in use.
-        default_tools (List[Tool]): Default set of tools available.
-        max_iterations (int): Maximum steps for solving tasks.
-        personality (Optional[str]): Agent's personality description.
-        backstory (Optional[str]): Agent's backstory.
-        sop (Optional[str]): Standard operating procedure.
-        max_history_tokens (int): Token limit for history.
-        jinja_env (Environment): Jinja2 environment for templates.
-        _observers (List[Tuple[Callable, List[str]]]): Event observers.
-        last_solve_context_vars (Dict): Context vars from last solve call.
-    """
+    """High-level interface for the Quantalogic Agent with modular configuration."""
     def __init__(
         self,
         config: Optional[AgentConfig] = None,
@@ -106,6 +74,8 @@ class Agent:
         jinja_env: Optional[Environment] = None
     ) -> None:
         config = config or AgentConfig()
+        self.plugin_manager = PluginManager()
+        self.plugin_manager.load_plugins()
         self.model: str = config.model
         self.default_tools: List[Tool] = self._process_tools(config.tools) if config.tools is not None else get_default_tools(config.model)
         self.max_iterations: int = config.max_iterations
@@ -118,17 +88,7 @@ class Agent:
         self.last_solve_context_vars: Dict = {}
 
     def _process_tools(self, tools: List[Union[Tool, Callable]]) -> List[Tool]:
-        """Process a list of tools or async functions into Tool instances.
-
-        Args:
-            tools (List[Union[Tool, Callable]]): Tools or functions to process.
-
-        Returns:
-            List[Tool]: Processed tool instances.
-
-        Raises:
-            ValueError: If a callable is not async or an item is invalid.
-        """
+        """Process a list of tools or async functions into Tool instances."""
         processed_tools: List[Tool] = []
         for tool in tools:
             if isinstance(tool, Tool):
@@ -142,11 +102,7 @@ class Agent:
         return processed_tools
 
     def _build_system_prompt(self) -> str:
-        """Builds a system prompt based on personality, backstory, and SOP.
-
-        Returns:
-            str: The constructed system prompt.
-        """
+        """Builds a system prompt based on personality, backstory, and SOP."""
         prompt: str = "You are an AI assistant."
         if self.personality:
             prompt += f" You have a {self.personality} personality."
@@ -164,32 +120,25 @@ class Agent:
         timeout: int = 30,
         max_tokens: int = MAX_TOKENS,
         temperature: float = 0.7,
-        streaming: bool = False
+        streaming: bool = False,
+        reasoner_name: Optional[str] = None,
+        executor_name: Optional[str] = None
     ) -> str:
-        """Single-step interaction with optional custom tools and streaming.
-
-        Args:
-            message (str): User input message.
-            use_tools (bool): Whether to use tools.
-            tools (Optional[List[Union[Tool, Callable]]]): Custom tools to use.
-            timeout (int): Timeout in seconds.
-            max_tokens (int): Maximum tokens for response.
-            temperature (float): Sampling temperature.
-            streaming (bool): Whether to stream the response.
-
-        Returns:
-            str: The generated response.
-        """
+        """Single-step interaction with optional custom tools and streaming."""
         system_prompt: str = self._build_system_prompt()
         if use_tools:
             chat_tools: List[Tool] = self._process_tools(tools) if tools is not None else self.default_tools
+            reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
+            executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
             chat_agent = ReActAgent(
                 model=self.model,
                 tools=chat_tools,
                 max_iterations=1,
-                max_history_tokens=self.max_history_tokens
+                max_history_tokens=self.max_history_tokens,
+                reasoner=reasoner_cls(self.model, chat_tools),
+                executor=executor_cls(chat_tools, self._notify_observers)
             )
-            chat_agent.executor.register_tool(RetrieveStepTool(chat_agent.history_store))
+            chat_agent.executor.register_tool(RetrieveStepTool(chat_agent.history_manager.store))
             for observer, event_types in self._observers:
                 chat_agent.add_observer(observer, event_types)
             history: List[Dict] = await chat_agent.solve(message, system_prompt=system_prompt, streaming=streaming)
@@ -209,15 +158,7 @@ class Agent:
             return response.strip()
 
     def sync_chat(self, message: str, timeout: int = 30) -> str:
-        """Synchronous wrapper for chat.
-
-        Args:
-            message (str): User input message.
-            timeout (int): Timeout in seconds.
-
-        Returns:
-            str: The generated response.
-        """
+        """Synchronous wrapper for chat."""
         return asyncio.run(self.chat(message, timeout=timeout))
 
     async def solve(
@@ -227,30 +168,24 @@ class Agent:
         max_iterations: Optional[int] = None,
         tools: Optional[List[Union[Tool, Callable]]] = None,
         timeout: int = 300,
-        streaming: bool = False
+        streaming: bool = False,
+        reasoner_name: Optional[str] = None,
+        executor_name: Optional[str] = None
     ) -> List[Dict]:
-        """Multi-step task solving with optional custom tools, max_iterations, and streaming.
-
-        Args:
-            task (str): The task to solve.
-            success_criteria (Optional[str]): Criteria for completion.
-            max_iterations (Optional[int]): Override for max steps.
-            tools (Optional[List[Union[Tool, Callable]]]): Custom tools.
-            timeout (int): Timeout in seconds.
-            streaming (bool): Whether to stream responses.
-
-        Returns:
-            List[Dict]: History of steps taken.
-        """
+        """Multi-step task solving with optional custom tools, max_iterations, and streaming."""
         system_prompt: str = self._build_system_prompt()
         solve_tools: List[Tool] = self._process_tools(tools) if tools is not None else self.default_tools
+        reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
+        executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
         solve_agent = ReActAgent(
             model=self.model,
             tools=solve_tools,
             max_iterations=max_iterations if max_iterations is not None else self.max_iterations,
-            max_history_tokens=self.max_history_tokens
+            max_history_tokens=self.max_history_tokens,
+            reasoner=reasoner_cls(self.model, solve_tools),
+            executor=executor_cls(solve_tools, self._notify_observers)
         )
-        solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.history_store))
+        solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.history_manager.store))
         for observer, event_types in self._observers:
             solve_agent.add_observer(observer, event_types)
         
@@ -265,69 +200,39 @@ class Agent:
         return history
 
     def sync_solve(self, task: str, success_criteria: Optional[str] = None, timeout: int = 300) -> List[Dict]:
-        """Synchronous wrapper for solve.
-
-        Args:
-            task (str): The task to solve.
-            success_criteria (Optional[str]): Criteria for completion.
-            timeout (int): Timeout in seconds.
-
-        Returns:
-            List[Dict]: History of steps taken.
-        """
+        """Synchronous wrapper for solve."""
         return asyncio.run(self.solve(task, success_criteria, timeout=timeout))
 
     def add_observer(self, observer: Callable, event_types: List[str]) -> 'Agent':
-        """Add an observer to be applied to agents created in chat and solve.
-
-        Args:
-            observer (Callable): Function to call when events occur.
-            event_types (List[str]): List of event type names.
-
-        Returns:
-            Agent: Self, for method chaining.
-        """
+        """Add an observer to be applied to agents created in chat and solve."""
         self._observers.append((observer, event_types))
         return self
 
     def register_tool(self, tool: Tool) -> None:
-        """Register a new tool dynamically at runtime.
-
-        Args:
-            tool (Tool): The tool to register.
-
-        Raises:
-            ValueError: If the tool name is already registered.
-        """
+        """Register a new tool dynamically at runtime."""
         if tool.name in [t.name for t in self.default_tools]:
             raise ValueError(f"Tool '{tool.name}' is already registered")
         self.default_tools.append(tool)
+        self.plugin_manager.tools.register(tool)
+
+    def register_reasoner(self, reasoner: BaseReasoner, name: str) -> None:
+        """Register a new reasoner dynamically at runtime."""
+        self.plugin_manager.reasoners[name] = reasoner.__class__
+
+    def register_executor(self, executor: BaseExecutor, name: str) -> None:
+        """Register a new executor dynamically at runtime."""
+        self.plugin_manager.executors[name] = executor.__class__
 
     def list_tools(self) -> List[str]:
-        """Return a list of available tool names.
-
-        Returns:
-            List[str]: Names of registered tools.
-        """
+        """Return a list of available tool names."""
         return [tool.name for tool in self.default_tools]
 
     def get_context_vars(self) -> Dict:
-        """Return the context variables from the last solve call.
-
-        Returns:
-            Dict: Context variables.
-        """
+        """Return the context variables from the last solve call."""
         return self.last_solve_context_vars
 
     def _extract_response(self, history: List[Dict]) -> str:
-        """Extract a clean response from the history.
-
-        Args:
-            history (List[Dict]): Steps from a solve operation.
-
-        Returns:
-            str: Extracted response or error message.
-        """
+        """Extract a clean response from the history."""
         if not history:
             return "No response generated."
         last_result: str = history[-1]["result"]
