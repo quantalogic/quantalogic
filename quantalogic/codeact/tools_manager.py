@@ -6,7 +6,7 @@ import importlib.metadata
 import inspect
 import os
 from contextlib import AsyncExitStack
-from typing import Any, Dict, List, Optional  # Added Dict, Any for config
+from typing import Any, Dict, List, Optional
 
 import litellm
 from loguru import logger
@@ -19,7 +19,6 @@ from .utils import log_tool_method
 class ToolRegistry:
     """Manages tool registration with dependency and conflict checking."""
     def __init__(self):
-        # Use tuple (toolbox_name, tool_name) as key to allow same names across toolboxes
         self.tools: dict[tuple[str, str], Tool] = {}
 
     def register(self, tool: Tool) -> None:
@@ -127,7 +126,7 @@ class RetrieveStepTool(Tool):
             ],
             return_type="string"
         )
-        self.config = config or {}  # Added for consistency, not currently used
+        self.config = config or {}
         self.history_index: dict[int, dict] = {i + 1: step for i, step in enumerate(history_store)}
 
     @log_tool_method
@@ -152,21 +151,32 @@ def get_default_tools(
     model: str,
     history_store: Optional[List[dict]] = None,
     enabled_toolboxes: Optional[List[str]] = None,
-    tools_config: Optional[List[Dict[str, Any]]] = None  # Added parameter
+    tools_config: Optional[List[Dict[str, Any]]] = None
 ) -> List[Tool]:
-    """Dynamically load default tools and toolboxes via entry points."""
-    registry = ToolRegistry()
+    """Dynamically load default tools using the pre-loaded registry from PluginManager."""
+    from .cli import plugin_manager  # Import shared singleton plugin_manager
+
+    # Ensure plugins are loaded
+    plugin_manager.load_plugins()
+    registry = plugin_manager.tools
     
+    # Register static tools if not already present
     static_tools: List[Tool] = [AgentTool(model=model)]
     if history_store is not None:
         static_tools.append(RetrieveStepTool(history_store))
 
     for tool in static_tools:
-        registry.register(tool)
+        try:
+            registry.register(tool)
+        except ValueError as e:
+            logger.debug(f"Static tool {tool.name} already registered: {e}")
 
-    registry.load_toolboxes(toolbox_names=enabled_toolboxes)
-    tools = registry.get_tools()
-    
+    # Filter tools based on enabled_toolboxes
+    if enabled_toolboxes:
+        tools = [t for t in registry.get_tools() if t.toolbox_name in enabled_toolboxes]
+    else:
+        tools = registry.get_tools()
+
     # Apply tools_config if provided
     if tools_config:
         filtered_tools = []

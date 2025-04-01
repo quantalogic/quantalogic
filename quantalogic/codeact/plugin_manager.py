@@ -1,27 +1,36 @@
 """Plugin management module for dynamically loading components."""
 
 from importlib.metadata import entry_points
-from typing import Callable, Dict, List, Type
+from typing import List
 
 from loguru import logger
 
 from quantalogic.tools import Tool
 
-from .executor import BaseExecutor, Executor  # Import Executor explicitly
-from .reasoner import BaseReasoner, Reasoner  # Import Reasoner explicitly
+from .executor import Executor
+from .reasoner import Reasoner
 from .tools_manager import ToolRegistry
 
 
 class PluginManager:
     """Manages dynamic loading of plugins for tools, reasoners, executors, and CLI commands."""
-    def __init__(self):
-        self.tools = ToolRegistry()
-        self.reasoners: Dict[str, Type[BaseReasoner]] = {"default": Reasoner}  # Map to concrete Reasoner
-        self.executors: Dict[str, Type[BaseExecutor]] = {"default": Executor}  # Map to concrete Executor
-        self.cli_commands: Dict[str, Callable] = {}
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(PluginManager, cls).__new__(cls)
+            cls._instance.tools = ToolRegistry()
+            cls._instance.reasoners = {"default": Reasoner}
+            cls._instance.executors = {"default": Executor}
+            cls._instance.cli_commands = {}
+            cls._instance._plugins_loaded = False
+        return cls._instance
 
     def load_plugins(self) -> None:
-        """Load all plugins from registered entry points."""
+        """Load all plugins from registered entry points, handling duplicates gracefully."""
+        if self._plugins_loaded:
+            logger.debug("Plugins already loaded, skipping reload")
+            return
         for group, store in [
             ("quantalogic.tools", self.tools.load_toolboxes),
             ("quantalogic.reasoners", self.reasoners),
@@ -35,14 +44,17 @@ class PluginManager:
                     try:
                         loaded = ep.load()
                         if group == "quantalogic.tools":
-                            store()  # ToolRegistry handles its own loading
+                            store()
                         else:
                             store[ep.name] = loaded
                             logger.info(f"Loaded plugin {ep.name} for {group}")
+                    except ValueError as e:
+                        logger.warning(f"Skipping duplicate tool registration for {ep.name}: {e}")
                     except ImportError as e:
                         logger.error(f"Failed to load plugin {ep.name} for {group}: {e}")
             except Exception as e:
                 logger.error(f"Failed to retrieve entry points for {group}: {e}")
+        self._plugins_loaded = True
 
     def get_tools(self) -> List[Tool]:
         """Return all registered tools."""
