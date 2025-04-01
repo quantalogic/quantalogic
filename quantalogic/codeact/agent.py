@@ -1,7 +1,6 @@
 """High-level interface for the Quantalogic Agent with modular configuration."""
 
 import asyncio
-import inspect
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple, Union
@@ -10,7 +9,7 @@ import yaml
 from jinja2 import Environment
 from lxml import etree
 
-from quantalogic.tools import Tool, create_tool
+from quantalogic.tools import Tool
 
 from .constants import MAX_HISTORY_TOKENS, MAX_TOKENS
 from .executor import BaseExecutor, Executor
@@ -20,6 +19,7 @@ from .react_agent import ReActAgent
 from .reasoner import BaseReasoner, Reasoner
 from .templates import jinja_env as default_jinja_env
 from .tools_manager import RetrieveStepTool, get_default_tools
+from .utils import process_tools  # New import
 
 
 @dataclass
@@ -62,7 +62,6 @@ class AgentConfig:
             self.toolbox_directory = toolbox_directory
             self.tools = tools
 
-
 class Agent:
     """High-level interface for the Quantalogic Agent with modular configuration."""
     def __init__(
@@ -77,7 +76,7 @@ class Agent:
         self.plugin_manager = PluginManager()
         self.plugin_manager.load_plugins()
         self.model: str = config.model
-        self.default_tools: List[Tool] = self._process_tools(config.tools) if config.tools is not None else get_default_tools(config.model)
+        self.default_tools: List[Tool] = process_tools(config.tools) if config.tools is not None else get_default_tools(config.model)
         self.max_iterations: int = config.max_iterations
         self.personality: Optional[str] = personality
         self.backstory: Optional[str] = backstory
@@ -86,20 +85,6 @@ class Agent:
         self.jinja_env: Environment = jinja_env or default_jinja_env
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.last_solve_context_vars: Dict = {}
-
-    def _process_tools(self, tools: List[Union[Tool, Callable]]) -> List[Tool]:
-        """Process a list of tools or async functions into Tool instances."""
-        processed_tools: List[Tool] = []
-        for tool in tools:
-            if isinstance(tool, Tool):
-                processed_tools.append(tool)
-            elif callable(tool):
-                if not inspect.iscoroutinefunction(tool):
-                    raise ValueError(f"Callable '{tool.__name__}' must be an async function to be used as a tool.")
-                processed_tools.append(create_tool(tool))
-            else:
-                raise ValueError(f"Invalid item type: {type(tool)}. Expected Tool or async function.")
-        return processed_tools
 
     def _build_system_prompt(self) -> str:
         """Builds a system prompt based on personality, backstory, and SOP."""
@@ -127,7 +112,7 @@ class Agent:
         """Single-step interaction with optional custom tools and streaming."""
         system_prompt: str = self._build_system_prompt()
         if use_tools:
-            chat_tools: List[Tool] = self._process_tools(tools) if tools is not None else self.default_tools
+            chat_tools: List[Tool] = process_tools(tools) if tools is not None else self.default_tools
             reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
             executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
             chat_agent = ReActAgent(
@@ -174,7 +159,7 @@ class Agent:
     ) -> List[Dict]:
         """Multi-step task solving with optional custom tools, max_iterations, and streaming."""
         system_prompt: str = self._build_system_prompt()
-        solve_tools: List[Tool] = self._process_tools(tools) if tools is not None else self.default_tools
+        solve_tools: List[Tool] = process_tools(tools) if tools is not None else self.default_tools
         reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
         executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
         solve_agent = ReActAgent(

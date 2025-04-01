@@ -9,7 +9,8 @@ from quantalogic.tools import Tool
 
 from .events import ToolExecutionCompletedEvent, ToolExecutionErrorEvent, ToolExecutionStartedEvent
 from .tools_manager import ToolRegistry
-from .utils import XMLResultHandler, validate_code
+from .utils import validate_code  # Updated import
+from .xml_utils import XMLResultHandler  # Updated import
 
 
 class BaseExecutor(ABC):
@@ -22,7 +23,6 @@ class BaseExecutor(ABC):
     @abstractmethod
     def register_tool(self, tool: Tool) -> None:
         pass
-
 
 class Executor(BaseExecutor):
     """Manages action execution and context updates with dynamic tool registration."""

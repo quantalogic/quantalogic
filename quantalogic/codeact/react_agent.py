@@ -24,7 +24,7 @@ from .history_manager import HistoryManager
 from .llm_util import litellm_completion
 from .reasoner import BaseReasoner, Reasoner
 from .tools_manager import ToolRegistry
-from .utils import XMLResultHandler
+from .xml_utils import XMLResultHandler  # Updated import
 
 
 class ReActAgent:

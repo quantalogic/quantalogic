@@ -9,7 +9,7 @@ from .constants import MAX_GENERATE_PROGRAM_TOKENS
 from .events import PromptGeneratedEvent
 from .llm_util import litellm_completion
 from .templates import jinja_env
-from .utils import XMLResultHandler, validate_xml
+from .xml_utils import XMLResultHandler, validate_xml  # Updated import
 
 
 async def generate_program(
@@ -59,13 +59,11 @@ async def generate_program(
             else:
                 raise Exception(f"Code generation failed with {model} after 3 attempts: {e}")
 
-
 class PromptStrategy(ABC):
     """Abstract base class for prompt generation strategies."""
     @abstractmethod
     async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int) -> str:
         pass
-
 
 class DefaultPromptStrategy(PromptStrategy):
     """Default strategy using Jinja2 templates."""
@@ -76,7 +74,6 @@ class DefaultPromptStrategy(PromptStrategy):
             current_step=step,
             max_iterations=max_iterations
         )
-
 
 class BaseReasoner(ABC):
     """Abstract base class for reasoning components."""
@@ -92,7 +89,6 @@ class BaseReasoner(ABC):
         streaming: bool
     ) -> str:
         pass
-
 
 class Reasoner(BaseReasoner):
     """Handles action generation using the language model."""

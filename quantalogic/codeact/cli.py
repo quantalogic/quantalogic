@@ -27,10 +27,10 @@ from quantalogic.codeact.events import (
     ToolExecutionStartedEvent,
 )
 from quantalogic.codeact.plugin_manager import PluginManager
-from quantalogic.tools import create_tool
 
-from .tools_manager import Tool, ToolRegistry, get_default_tools
-from .utils import XMLResultHandler
+from .tools_manager import Tool, get_default_tools
+from .utils import process_tools  # New import
+from .xml_utils import XMLResultHandler  # Updated import
 
 # Initialize PluginManager at module level to avoid duplicate loading
 plugin_manager = PluginManager()
@@ -38,7 +38,6 @@ plugin_manager.load_plugins()
 
 app = typer.Typer(no_args_is_help=True)
 console = Console()
-
 
 class ProgressMonitor:
     """Handles progress monitoring for agent events."""
@@ -139,7 +138,6 @@ class ProgressMonitor:
         elif isinstance(event, StreamTokenEvent):
             await self.on_stream_token(event)
 
-
 async def run_react_agent(
     task: str,
     model: str,
@@ -158,15 +156,7 @@ async def run_react_agent(
     logger.add(LOG_FILE, level="DEBUG" if debug else "INFO")
 
     tools = tools if tools is not None else get_default_tools(model)
-    
-    processed_tools: List[Tool] = []
-    for tool in tools:
-        if isinstance(tool, Tool):
-            processed_tools.append(tool)
-        elif callable(tool):
-            processed_tools.append(create_tool(tool))
-        else:
-            raise ValueError(f"Invalid tool type: {type(tool)}. Expected Tool or callable.")
+    processed_tools = process_tools(tools)
 
     config = AgentConfig(
         model=model,
@@ -192,7 +182,6 @@ async def run_react_agent(
     console.print(f"[bold green]Starting task: {task}[/bold green]")
     _history = await agent.solve(task, success_criteria, streaming=streaming)
 
-
 @app.command()
 def task(
     task: str = typer.Argument(..., help="The task to solve"),
@@ -217,7 +206,6 @@ def task(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
 
-
 @app.command()
 def install_toolbox(
     toolbox_name: str = typer.Argument(..., help="Name of the toolbox to install (PyPI package or local wheel file)")
@@ -229,7 +217,6 @@ def install_toolbox(
     except subprocess.CalledProcessError as e:
         console.print(f"[red]Failed to install toolbox: {e}[/red]")
         raise typer.Exit(code=1)
-
 
 @app.command()
 def uninstall_toolbox(
@@ -265,7 +252,6 @@ def uninstall_toolbox(
         console.print(f"[red]An error occurred: {e}[/red]")
         raise typer.Exit(code=1)
 
-
 @app.command()
 def list_toolboxes() -> None:
     """List all loaded toolboxes and their associated tools from entry points."""
@@ -289,11 +275,9 @@ def list_toolboxes() -> None:
                 console.print(f"  - {tool_name}")
             console.print("")
 
-
 # Load plugin CLI commands dynamically using the module-level plugin_manager
 for cmd_name, cmd_func in plugin_manager.cli_commands.items():
     app.command(name=cmd_name)(cmd_func)
-
 
 if __name__ == "__main__":
     app()

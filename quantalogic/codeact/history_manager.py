@@ -5,7 +5,7 @@ from typing import Dict, List
 from loguru import logger
 from lxml import etree
 
-from .utils import XMLResultHandler
+from .xml_utils import XMLResultHandler  # Updated import
 
 
 class HistoryManager:
