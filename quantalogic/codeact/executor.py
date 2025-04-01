@@ -1,7 +1,7 @@
 import asyncio
 import types
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional  # Added Optional, Any
 
 from lxml import etree
 from quantalogic_pythonbox import AsyncExecutionResult, execute_async
@@ -29,12 +29,13 @@ class BaseExecutor(ABC):
 class Executor(BaseExecutor):
     """Manages action execution and context updates with dynamic tool registration."""
 
-    def __init__(self, tools: List[Tool], notify_event: Callable, verbose: bool = True):
+    def __init__(self, tools: List[Tool], notify_event: Callable, config: Optional[Dict[str, Any]] = None, verbose: bool = True):
         self.registry = ToolRegistry()
         for tool in tools:
             self.registry.register(tool)
         self.tools: Dict[tuple[str, str], Tool] = self.registry.tools
         self.notify_event = notify_event
+        self.config = config or {}
         self.verbose = verbose
         self.tool_namespace = self._build_tool_namespace()
 
@@ -156,6 +157,7 @@ class Executor(BaseExecutor):
         """Execute the generated code and return the result with local variables, setting the step number."""
         self.tool_namespace["context_vars"] = context_vars
         self.tool_namespace["current_step"] = step
+        timeout = self.config.get("timeout", timeout)  # Use config timeout if provided
         if not validate_code(code):
             return etree.tostring(
                 etree.Element("ExecutionResult", status="Error", message="Code lacks async main()"), encoding="unicode"

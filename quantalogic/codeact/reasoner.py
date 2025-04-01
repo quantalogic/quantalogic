@@ -1,7 +1,7 @@
 import ast
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional  # Added Dict, Any
 
 from quantalogic.tools import Tool
 
@@ -96,9 +96,10 @@ class BaseReasoner(ABC):
 
 class Reasoner(BaseReasoner):
     """Handles action generation using the language model."""
-    def __init__(self, model: str, tools: List[Tool], prompt_strategy: Optional[PromptStrategy] = None):
+    def __init__(self, model: str, tools: List[Tool], config: Optional[Dict[str, Any]] = None, prompt_strategy: Optional[PromptStrategy] = None):
         self.model = model
         self.tools = tools
+        self.config = config or {}
         self.prompt_strategy = prompt_strategy or DefaultPromptStrategy()
 
     async def generate_action(
@@ -122,7 +123,15 @@ class Reasoner(BaseReasoner):
             await notify_event(PromptGeneratedEvent(
                 event_type="PromptGenerated", step_number=step, prompt=task_prompt
             ))
-            program = await generate_program(task_prompt, self.tools, self.model, MAX_GENERATE_PROGRAM_TOKENS, step, notify_event, streaming=streaming)
+            program = await generate_program(
+                task_prompt, 
+                self.tools, 
+                self.model, 
+                self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS), 
+                step, 
+                notify_event, 
+                streaming=streaming
+            )
             program = self._clean_code(program)
             response = jinja_env.get_template("response_format.j2").render(
                 task=task,

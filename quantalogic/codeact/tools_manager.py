@@ -6,7 +6,7 @@ import importlib.metadata
 import inspect
 import os
 from contextlib import AsyncExitStack
-from typing import List, Optional
+from typing import Any, Dict, List, Optional  # Added Dict, Any for config
 
 import litellm
 from loguru import logger
@@ -70,7 +70,7 @@ class ToolRegistry:
 
 class AgentTool(Tool):
     """A specialized tool for generating text using language models, designed for AI agent workflows."""
-    def __init__(self, model: str = None, timeout: int = None) -> None:
+    def __init__(self, model: str = None, timeout: int = None, config: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(
             name="agent_tool",
             description="Generates text using a language model. This is a stateless agent - all necessary context must be explicitly provided in either the system prompt or user prompt.",
@@ -81,8 +81,9 @@ class AgentTool(Tool):
             ],
             return_type="string"
         )
-        self.model: str = model or os.getenv("AGENT_MODEL", "gemini/gemini-2.0-flash")
-        self.timeout: int = timeout or int(os.getenv("AGENT_TIMEOUT", "30"))
+        self.config = config or {}
+        self.model: str = self.config.get("model", model) or os.getenv("AGENT_MODEL", "gemini/gemini-2.0-flash")
+        self.timeout: int = self.config.get("timeout", timeout) or int(os.getenv("AGENT_TIMEOUT", "30"))
 
     @log_tool_method
     async def async_execute(self, **kwargs) -> str:
@@ -117,7 +118,7 @@ class AgentTool(Tool):
 
 class RetrieveStepTool(Tool):
     """Tool to retrieve information from a specific previous step with indexed access."""
-    def __init__(self, history_store: List[dict]) -> None:
+    def __init__(self, history_store: List[dict], config: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(
             name="retrieve_step",
             description="Retrieve the thought, action, and result from a specific step.",
@@ -126,6 +127,7 @@ class RetrieveStepTool(Tool):
             ],
             return_type="string"
         )
+        self.config = config or {}  # Added for consistency, not currently used
         self.history_index: dict[int, dict] = {i + 1: step for i, step in enumerate(history_store)}
 
     @log_tool_method
@@ -149,7 +151,8 @@ class RetrieveStepTool(Tool):
 def get_default_tools(
     model: str,
     history_store: Optional[List[dict]] = None,
-    enabled_toolboxes: Optional[List[str]] = None
+    enabled_toolboxes: Optional[List[str]] = None,
+    tools_config: Optional[List[Dict[str, Any]]] = None  # Added parameter
 ) -> List[Tool]:
     """Dynamically load default tools and toolboxes via entry points."""
     registry = ToolRegistry()
@@ -162,6 +165,25 @@ def get_default_tools(
         registry.register(tool)
 
     registry.load_toolboxes(toolbox_names=enabled_toolboxes)
-    combined_tools = registry.get_tools()
-    logger.info(f"Loaded {len(combined_tools)} default tools: {[(tool.toolbox_name or 'default', tool.name) for tool in combined_tools]}")
-    return combined_tools
+    tools = registry.get_tools()
+    
+    # Apply tools_config if provided
+    if tools_config:
+        filtered_tools = []
+        processed_names = set()
+        for tool_conf in tools_config:
+            if tool_conf.get("enabled", True):
+                tool = next((t for t in tools if t.name == tool_conf["name"] or t.toolbox_name == tool_conf["name"]), None)
+                if tool and tool.name not in processed_names:
+                    for key, value in tool_conf.items():
+                        if key not in ["name", "enabled"]:
+                            setattr(tool, key, value)
+                    filtered_tools.append(tool)
+                    processed_names.add(tool.name)
+        for tool in tools:
+            if tool.name not in processed_names:
+                filtered_tools.append(tool)
+        tools = filtered_tools
+    
+    logger.info(f"Loaded {len(tools)} default tools: {[(tool.toolbox_name or 'default', tool.name) for tool in tools]}")
+    return tools

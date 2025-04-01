@@ -4,7 +4,7 @@ import asyncio
 import importlib.metadata
 import subprocess
 import sys
-from typing import Callable, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import typer
 from loguru import logger
@@ -153,13 +153,17 @@ async def run_react_agent(
     streaming: bool = False,
     reasoner_name: Optional[str] = None,
     executor_name: Optional[str] = None,
+    # New parameters
+    tools_config: Optional[List[Dict[str, Any]]] = None,
+    profile: Optional[str] = None,
+    customizations: Optional[Dict[str, Any]] = None
 ) -> None:
     """Run the Agent with detailed event monitoring."""
     logger.remove()
     logger.add(sys.stderr, level="DEBUG" if debug else "INFO")
     logger.add(LOG_FILE, level="DEBUG" if debug else "INFO")
 
-    tools = tools if tools is not None else get_default_tools(model)
+    tools = tools if tools is not None else get_default_tools(model, tools_config=tools_config)
     processed_tools = process_tools(tools)
 
     # Create AgentConfig with all parameters
@@ -172,6 +176,9 @@ async def run_react_agent(
         sop=sop,
         reasoner_name=reasoner_name if reasoner_name else "default",
         executor_name=executor_name if executor_name else "default",
+        tools_config=tools_config,
+        profile=profile,
+        customizations=customizations
     )
     
     agent = Agent(config=config)
@@ -203,13 +210,22 @@ def task(
     streaming: bool = typer.Option(False, help="Enable streaming output for real-time token generation"),
     reasoner: Optional[str] = typer.Option(None, help="Name of the reasoner to use"),
     executor: Optional[str] = typer.Option(None, help="Name of the executor to use"),
+    # New options
+    tools_config: Optional[str] = typer.Option(None, help="JSON/YAML string for tools_config"),
+    profile: Optional[str] = typer.Option(None, help="Agent profile (e.g., 'math_expert')"),
+    customizations: Optional[str] = typer.Option(None, help="JSON/YAML string for customizations")
 ) -> None:
     """CLI command to run the Agent with detailed event monitoring."""
+    import json
     try:
+        # Parse optional JSON/YAML strings
+        tools_config_list = json.loads(tools_config) if tools_config else None
+        customizations_dict = json.loads(customizations) if customizations else None
         asyncio.run(run_react_agent(
             task, model, max_iterations, success_criteria,
             personality=personality, backstory=backstory, sop=sop, debug=debug,
-            streaming=streaming, reasoner_name=reasoner, executor_name=executor
+            streaming=streaming, reasoner_name=reasoner, executor_name=executor,
+            tools_config=tools_config_list, profile=profile, customizations=customizations_dict
         ))
     except Exception as e:
         logger.error(f"Agent failed: {e}")

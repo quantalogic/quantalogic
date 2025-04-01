@@ -1,9 +1,10 @@
 """High-level interface for the Quantalogic Agent with modular configuration."""
 
 import asyncio
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
 from jinja2 import Environment
@@ -36,7 +37,14 @@ class AgentConfig:
     personality: Optional[str] = None
     backstory: Optional[str] = None
     sop: Optional[str] = None
-    jinja_env: Optional[Environment] = None  # Note: Not serialized to YAML directly
+    jinja_env: Optional[Environment] = None
+    
+    # New fields with defaults ensuring compatibility
+    tools_config: Optional[List[Dict[str, Any]]] = None
+    reasoner: Optional[Dict[str, Any]] = field(default_factory=lambda: {"name": "default"})
+    executor: Optional[Dict[str, Any]] = field(default_factory=lambda: {"name": "default"})
+    profile: Optional[str] = None
+    customizations: Optional[Dict[str, Any]] = None
 
     def __init__(
         self,
@@ -52,7 +60,12 @@ class AgentConfig:
         backstory: Optional[str] = None,
         sop: Optional[str] = None,
         jinja_env: Optional[Environment] = None,
-        config_file: Optional[str] = None
+        config_file: Optional[str] = None,
+        tools_config: Optional[List[Dict[str, Any]]] = None,
+        reasoner: Optional[Dict[str, Any]] = None,
+        executor: Optional[Dict[str, Any]] = None,
+        profile: Optional[str] = None,
+        customizations: Optional[Dict[str, Any]] = None
     ) -> None:
         if config_file:
             try:
@@ -62,38 +75,76 @@ class AgentConfig:
                 self.max_iterations = config.get("max_iterations", max_iterations)
                 self.max_history_tokens = config.get("max_history_tokens", max_history_tokens)
                 self.toolbox_directory = config.get("toolbox_directory", toolbox_directory)
-                self.tools = tools  # Tools remain a parameter override
+                self.tools = tools if tools is not None else config.get("tools")
                 self.enabled_toolboxes = config.get("enabled_toolboxes", enabled_toolboxes)
-                self.reasoner_name = config.get("reasoner", reasoner_name)
-                self.executor_name = config.get("executor", executor_name)
+                self.reasoner = config.get("reasoner", {"name": config.get("reasoner_name", reasoner_name)})
+                self.executor = config.get("executor", {"name": config.get("executor_name", executor_name)})
                 self.personality = config.get("personality", personality)
                 self.backstory = config.get("backstory", backstory)
                 self.sop = config.get("sop", sop)
-                self.jinja_env = jinja_env or default_jinja_env  # YAML won't override this directly
+                self.jinja_env = jinja_env or default_jinja_env
+                self.tools_config = config.get("tools_config", tools_config)
+                self.profile = config.get("profile", profile)
+                self.customizations = config.get("customizations", customizations)
             except FileNotFoundError:
                 self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                   tools, enabled_toolboxes, reasoner_name, executor_name,
-                                   personality, backstory, sop, jinja_env)
+                                 tools, enabled_toolboxes, reasoner_name, executor_name,
+                                 personality, backstory, sop, jinja_env, tools_config,
+                                 reasoner, executor, profile, customizations)
         else:
             self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                               tools, enabled_toolboxes, reasoner_name, executor_name,
-                               personality, backstory, sop, jinja_env)
+                             tools, enabled_toolboxes, reasoner_name, executor_name,
+                             personality, backstory, sop, jinja_env, tools_config,
+                             reasoner, executor, profile, customizations)
+        self.__post_init__()
 
     def _set_defaults(self, model, max_iterations, max_history_tokens, toolbox_directory,
-                      tools, enabled_toolboxes, reasoner_name, executor_name,
-                      personality, backstory, sop, jinja_env):
+                     tools, enabled_toolboxes, reasoner_name, executor_name,
+                     personality, backstory, sop, jinja_env, tools_config,
+                     reasoner, executor, profile, customizations):
         self.model = model
         self.max_iterations = max_iterations
         self.max_history_tokens = max_history_tokens
         self.toolbox_directory = toolbox_directory
         self.tools = tools
         self.enabled_toolboxes = enabled_toolboxes
-        self.reasoner_name = reasoner_name
-        self.executor_name = executor_name
+        self.reasoner = reasoner if reasoner is not None else {"name": reasoner_name}
+        self.executor = executor if executor is not None else {"name": executor_name}
         self.personality = personality
         self.backstory = backstory
         self.sop = sop
         self.jinja_env = jinja_env or default_jinja_env
+        self.tools_config = tools_config
+        self.profile = profile
+        self.customizations = customizations
+
+    def __post_init__(self):
+        """Apply profile defaults and customizations."""
+        profiles = {
+            "math_expert": {
+                "personality": {"traits": ["precise", "logical"]},
+                "tools_config": [{"name": "math_tools", "enabled": True}],
+                "sop": "Focus on accuracy and clarity in mathematical solutions."
+            },
+            "creative_writer": {
+                "personality": {"traits": ["creative", "expressive"]},
+                "tools_config": [{"name": "text_tools", "enabled": True}],
+                "sop": "Generate engaging and imaginative content."
+            }
+        }
+        if self.profile and self.profile in profiles:
+            base_config = profiles[self.profile]
+            for key, value in base_config.items():
+                if not getattr(self, key) or (key == "personality" and isinstance(getattr(self, key), str)):
+                    setattr(self, key, value)
+            if self.customizations:
+                for key, value in self.customizations.items():
+                    if hasattr(self, key):
+                        current = getattr(self, key)
+                        if isinstance(current, dict):
+                            current.update(value)
+                        elif current is None or (key in ["personality", "backstory"] and isinstance(current, str)):
+                            setattr(self, key, value)
 
 
 class Agent:
@@ -109,32 +160,89 @@ class Agent:
         elif not isinstance(config, AgentConfig):
             raise ValueError("config must be an AgentConfig instance or a string path to a config file.")
 
+        self.config = config  # Store the full config object
         self.plugin_manager = PluginManager()
         self.plugin_manager.load_plugins()
         self.model: str = config.model
-        self.default_tools: List[Tool] = (
-            process_tools(config.tools)
-            if config.tools is not None
-            else get_default_tools(self.model, enabled_toolboxes=config.enabled_toolboxes)
-        )
+        self.default_tools: List[Tool] = self._get_tools()  # Changed to not pass config explicitly
         self.max_iterations: int = config.max_iterations
-        self.personality: Optional[str] = config.personality
-        self.backstory: Optional[str] = config.backstory
+        self.personality = config.personality
+        self.backstory = config.backstory
         self.sop: Optional[str] = config.sop
         self.max_history_tokens: int = config.max_history_tokens
         self.jinja_env: Environment = config.jinja_env
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.last_solve_context_vars: Dict = {}
-        self.default_reasoner_name: str = config.reasoner_name
-        self.default_executor_name: str = config.executor_name
+        self.default_reasoner_name: str = config.reasoner.get("name", config.reasoner_name)
+        self.default_executor_name: str = config.executor.get("name", config.executor_name)
+
+    def _get_tools(self) -> List[Tool]:
+        """Load tools, applying tools_config if provided."""
+        base_tools = (
+            process_tools(self.config.tools)
+            if self.config.tools is not None
+            else get_default_tools(self.model, enabled_toolboxes=self.config.enabled_toolboxes)
+        )
+        if not self.config.tools_config:
+            return base_tools
+        
+        self._resolve_secrets(self.config.tools_config)
+        filtered_tools = []
+        processed_names = set()
+        for tool_conf in self.config.tools_config:
+            tool_name = tool_conf.get("name")
+            if tool_conf.get("enabled", True):
+                tool = next((t for t in base_tools if t.name == tool_name or t.toolbox_name == tool_name), None)
+                if tool and tool.name not in processed_names:
+                    for key, value in tool_conf.items():
+                        if key not in ["name", "enabled"]:
+                            setattr(tool, key, value)
+                    filtered_tools.append(tool)
+                    processed_names.add(tool.name)
+        for tool in base_tools:
+            if tool.name not in processed_names:
+                filtered_tools.append(tool)
+        return filtered_tools
+
+    def _resolve_secrets(self, config_dict: List[Dict[str, Any]]) -> None:
+        """Resolve environment variable placeholders in tools_config."""
+        for item in config_dict:
+            for key, value in item.items():
+                if isinstance(value, str) and "{{ env." in value:
+                    env_var = value.split("{{ env.")[1].split("}}")[0]
+                    item[key] = os.getenv(env_var, value)
+                elif isinstance(value, dict):
+                    self._resolve_secrets([value])
 
     def _build_system_prompt(self) -> str:
         """Builds a system prompt based on personality, backstory, and SOP."""
-        prompt: str = "You are an AI assistant."
+        prompt = "You are an AI assistant."
         if self.personality:
-            prompt += f" You have a {self.personality} personality."
+            if isinstance(self.personality, str):
+                prompt += f" You have a {self.personality} personality."
+            elif isinstance(self.personality, dict):
+                traits = self.personality.get("traits", [])
+                if traits:
+                    prompt += f" You have the following personality traits: {', '.join(traits)}."
+                tone = self.personality.get("tone")
+                if tone:
+                    prompt += f" Your tone is {tone}."
+                humor = self.personality.get("humor_level")
+                if humor:
+                    prompt += f" Your humor level is {humor}."
         if self.backstory:
-            prompt += f" Your backstory is: {self.backstory}"
+            if isinstance(self.backstory, str):
+                prompt += f" Your backstory is: {self.backstory}"
+            elif isinstance(self.backstory, dict):
+                origin = self.backstory.get("origin")
+                if origin:
+                    prompt += f" You were created by {origin}."
+                purpose = self.backstory.get("purpose")
+                if purpose:
+                    prompt += f" Your purpose is {purpose}."
+                experience = self.backstory.get("experience")
+                if experience:
+                    prompt += f" Your experience includes: {experience}"
         if self.sop:
             prompt += f" Follow this standard operating procedure: {self.sop}"
         return prompt
@@ -159,13 +267,15 @@ class Agent:
             executor_name = executor_name or self.default_executor_name
             reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
             executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
+            reasoner_config = self.config.reasoner.get("config", {})
+            executor_config = self.config.executor.get("config", {})
             chat_agent = ReActAgent(
                 model=self.model,
                 tools=chat_tools,
                 max_iterations=1,
                 max_history_tokens=self.max_history_tokens,
-                reasoner=reasoner_cls(self.model, chat_tools),
-                executor=executor_cls(chat_tools, self._notify_observers)
+                reasoner=reasoner_cls(self.model, chat_tools, **reasoner_config),
+                executor=executor_cls(chat_tools, self._notify_observers, **executor_config)
             )
             chat_agent.executor.register_tool(RetrieveStepTool(chat_agent.history_manager.store))
             for observer, event_types in self._observers:
@@ -208,13 +318,15 @@ class Agent:
         executor_name = executor_name or self.default_executor_name
         reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
         executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
+        reasoner_config = self.config.reasoner.get("config", {})
+        executor_config = self.config.executor.get("config", {})
         solve_agent = ReActAgent(
             model=self.model,
             tools=solve_tools,
             max_iterations=max_iterations if max_iterations is not None else self.max_iterations,
             max_history_tokens=self.max_history_tokens,
-            reasoner=reasoner_cls(self.model, solve_tools),
-            executor=executor_cls(solve_tools, self._notify_observers)
+            reasoner=reasoner_cls(self.model, solve_tools, **reasoner_config),
+            executor=executor_cls(solve_tools, self._notify_observers, **executor_config)
         )
         solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.history_manager.store))
         for observer, event_types in self._observers:
