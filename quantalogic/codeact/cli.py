@@ -39,6 +39,7 @@ plugin_manager.load_plugins()
 app = typer.Typer(no_args_is_help=True)
 console = Console()
 
+
 class ProgressMonitor:
     """Handles progress monitoring for agent events."""
     def __init__(self):
@@ -138,6 +139,7 @@ class ProgressMonitor:
         elif isinstance(event, StreamTokenEvent):
             await self.on_stream_token(event)
 
+
 async def run_react_agent(
     task: str,
     model: str,
@@ -160,17 +162,19 @@ async def run_react_agent(
     tools = tools if tools is not None else get_default_tools(model)
     processed_tools = process_tools(tools)
 
+    # Create AgentConfig with all parameters
     config = AgentConfig(
         model=model,
         max_iterations=max_iterations,
         tools=processed_tools,
-    )
-    agent = Agent(
-        config=config,
         personality=personality,
         backstory=backstory,
-        sop=sop
+        sop=sop,
+        reasoner_name=reasoner_name if reasoner_name else "default",
+        executor_name=executor_name if executor_name else "default",
     )
+    
+    agent = Agent(config=config)
     
     progress_monitor = ProgressMonitor()
     solve_agent = agent
@@ -184,6 +188,7 @@ async def run_react_agent(
     console.print(f"[bold green]Starting task: {task}[/bold green]")
     _history = await agent.solve(task, success_criteria, streaming=streaming,
                                 reasoner_name=reasoner_name, executor_name=executor_name)
+
 
 @app.command()
 def task(
@@ -211,6 +216,7 @@ def task(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
 
+
 @app.command()
 def install_toolbox(
     toolbox_name: str = typer.Argument(..., help="Name of the toolbox to install (PyPI package or local wheel file)")
@@ -222,6 +228,7 @@ def install_toolbox(
     except subprocess.CalledProcessError as e:
         console.print(f"[red]Failed to install toolbox: {e}[/red]")
         raise typer.Exit(code=1)
+
 
 @app.command()
 def uninstall_toolbox(
@@ -257,6 +264,7 @@ def uninstall_toolbox(
         console.print(f"[red]An error occurred: {e}[/red]")
         raise typer.Exit(code=1)
 
+
 @app.command()
 def list_toolboxes() -> None:
     """List all loaded toolboxes and their associated tools from entry points."""
@@ -280,6 +288,7 @@ def list_toolboxes() -> None:
                 console.print(f"  - {tool_name}")
             console.print("")
 
+
 @app.command()
 def list_reasoners() -> None:
     """List all available reasoners."""
@@ -287,12 +296,14 @@ def list_reasoners() -> None:
     for name in plugin_manager.reasoners.keys():
         console.print(f"- {name}")
 
+
 @app.command()
 def list_executors() -> None:
     """List all available executors."""
     console.print("[bold cyan]Available Executors:[/bold cyan]")
     for name in plugin_manager.executors.keys():
         console.print(f"- {name}")
+
 
 @app.command()
 def tool_info(tool_name: str = typer.Argument(..., help="Name of the tool")) -> None:
@@ -310,9 +321,11 @@ def tool_info(tool_name: str = typer.Argument(..., help="Name of the tool")) -> 
     else:
         console.print(f"[red]Tool '{tool_name}' not found[/red]")
 
+
 # Load plugin CLI commands dynamically using the module-level plugin_manager
 for cmd_name, cmd_func in plugin_manager.cli_commands.items():
     app.command(name=cmd_name)(cmd_func)
+
 
 if __name__ == "__main__":
     app()

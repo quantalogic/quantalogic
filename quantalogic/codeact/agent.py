@@ -24,7 +24,7 @@ from .utils import process_tools
 
 @dataclass
 class AgentConfig:
-    """Configuration for the Agent loaded from a YAML file or direct arguments."""
+    """Comprehensive configuration for the Agent, loadable from a YAML file or direct arguments."""
     model: str = "gemini/gemini-2.0-flash"
     max_iterations: int = 5
     tools: Optional[List[Union[Tool, Callable]]] = None
@@ -33,6 +33,10 @@ class AgentConfig:
     enabled_toolboxes: Optional[List[str]] = None
     reasoner_name: str = "default"
     executor_name: str = "default"
+    personality: Optional[str] = None
+    backstory: Optional[str] = None
+    sop: Optional[str] = None
+    jinja_env: Optional[Environment] = None  # Note: Not serialized to YAML directly
 
     def __init__(
         self,
@@ -44,6 +48,10 @@ class AgentConfig:
         enabled_toolboxes: Optional[List[str]] = None,
         reasoner_name: str = "default",
         executor_name: str = "default",
+        personality: Optional[str] = None,
+        backstory: Optional[str] = None,
+        sop: Optional[str] = None,
+        jinja_env: Optional[Environment] = None,
         config_file: Optional[str] = None
     ) -> None:
         if config_file:
@@ -54,19 +62,26 @@ class AgentConfig:
                 self.max_iterations = config.get("max_iterations", max_iterations)
                 self.max_history_tokens = config.get("max_history_tokens", max_history_tokens)
                 self.toolbox_directory = config.get("toolbox_directory", toolbox_directory)
-                self.tools = tools  # Tools still come from parameter, not config
+                self.tools = tools  # Tools remain a parameter override
                 self.enabled_toolboxes = config.get("enabled_toolboxes", enabled_toolboxes)
                 self.reasoner_name = config.get("reasoner", reasoner_name)
                 self.executor_name = config.get("executor", executor_name)
+                self.personality = config.get("personality", personality)
+                self.backstory = config.get("backstory", backstory)
+                self.sop = config.get("sop", sop)
+                self.jinja_env = jinja_env or default_jinja_env  # YAML won't override this directly
             except FileNotFoundError:
-                self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory, 
-                                 tools, enabled_toolboxes, reasoner_name, executor_name)
+                self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
+                                   tools, enabled_toolboxes, reasoner_name, executor_name,
+                                   personality, backstory, sop, jinja_env)
         else:
-            self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory, 
-                             tools, enabled_toolboxes, reasoner_name, executor_name)
+            self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
+                               tools, enabled_toolboxes, reasoner_name, executor_name,
+                               personality, backstory, sop, jinja_env)
 
-    def _set_defaults(self, model, max_iterations, max_history_tokens, toolbox_directory, 
-                     tools, enabled_toolboxes, reasoner_name, executor_name):
+    def _set_defaults(self, model, max_iterations, max_history_tokens, toolbox_directory,
+                      tools, enabled_toolboxes, reasoner_name, executor_name,
+                      personality, backstory, sop, jinja_env):
         self.model = model
         self.max_iterations = max_iterations
         self.max_history_tokens = max_history_tokens
@@ -75,19 +90,25 @@ class AgentConfig:
         self.enabled_toolboxes = enabled_toolboxes
         self.reasoner_name = reasoner_name
         self.executor_name = executor_name
+        self.personality = personality
+        self.backstory = backstory
+        self.sop = sop
+        self.jinja_env = jinja_env or default_jinja_env
 
 
 class Agent:
-    """High-level interface for the Quantalogic Agent with modular configuration."""
+    """High-level interface for the Quantalogic Agent with unified configuration."""
     def __init__(
         self,
-        config: Optional[AgentConfig] = None,
-        personality: Optional[str] = None,
-        backstory: Optional[str] = None,
-        sop: Optional[str] = None,
-        jinja_env: Optional[Environment] = None
+        config: Union[AgentConfig, str, None] = None
     ) -> None:
-        config = config or AgentConfig()
+        if isinstance(config, str):
+            config = AgentConfig(config_file=config)
+        elif config is None:
+            config = AgentConfig()
+        elif not isinstance(config, AgentConfig):
+            raise ValueError("config must be an AgentConfig instance or a string path to a config file.")
+
         self.plugin_manager = PluginManager()
         self.plugin_manager.load_plugins()
         self.model: str = config.model
@@ -97,11 +118,11 @@ class Agent:
             else get_default_tools(self.model, enabled_toolboxes=config.enabled_toolboxes)
         )
         self.max_iterations: int = config.max_iterations
-        self.personality: Optional[str] = personality
-        self.backstory: Optional[str] = backstory
-        self.sop: Optional[str] = sop
+        self.personality: Optional[str] = config.personality
+        self.backstory: Optional[str] = config.backstory
+        self.sop: Optional[str] = config.sop
         self.max_history_tokens: int = config.max_history_tokens
-        self.jinja_env: Environment = jinja_env or default_jinja_env
+        self.jinja_env: Environment = config.jinja_env
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.last_solve_context_vars: Dict = {}
         self.default_reasoner_name: str = config.reasoner_name

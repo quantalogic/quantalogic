@@ -1,0 +1,24 @@
+# Model configuration
+model: "deepseek/deepseek-chat"  # The LLM model to use (matches your CLI example)
+
+# Task-solving parameters
+max_iterations: 5  # Maximum number of reasoning steps
+max_history_tokens: 2000  # Maximum tokens for history storage
+
+# Toolbox and tool configuration
+toolbox_directory: "toolboxes"  # Directory where toolboxes are stored (if applicable)
+enabled_toolboxes:  # List of toolboxes to enable
+  - math_tools  # Enables math-related tools like symbolic_solve
+  - text_tools  # Hypothetical example for additional toolbox
+
+# Component selection
+reasoner: "default"  # Name of the reasoner plugin to use
+executor: "default"  # Name of the executor plugin to use
+
+# Agent personality and behavior
+personality: "witty"  # Personality trait for system prompt
+backstory: "A seasoned AI assistant with a knack for solving mathematical puzzles and a dash of humor."
+sop: |  # Standard operating procedure (multi-line string)
+  Always provide clear, concise answers.
+  Prioritize mathematical accuracy and user satisfaction.
+  Inject humor where appropriate to keep interactions engaging.
