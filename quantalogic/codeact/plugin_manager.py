@@ -7,8 +7,8 @@ from loguru import logger
 
 from quantalogic.tools import Tool
 
-from .executor import BaseExecutor
-from .reasoner import BaseReasoner
+from .executor import BaseExecutor, Executor  # Import Executor explicitly
+from .reasoner import BaseReasoner, Reasoner  # Import Reasoner explicitly
 from .tools_manager import ToolRegistry
 
 
@@ -16,8 +16,8 @@ class PluginManager:
     """Manages dynamic loading of plugins for tools, reasoners, executors, and CLI commands."""
     def __init__(self):
         self.tools = ToolRegistry()
-        self.reasoners: Dict[str, Type[BaseReasoner]] = {"default": BaseReasoner}
-        self.executors: Dict[str, Type[BaseExecutor]] = {"default": BaseExecutor}
+        self.reasoners: Dict[str, Type[BaseReasoner]] = {"default": Reasoner}  # Map to concrete Reasoner
+        self.executors: Dict[str, Type[BaseExecutor]] = {"default": Executor}  # Map to concrete Executor
         self.cli_commands: Dict[str, Callable] = {}
 
     def load_plugins(self) -> None:

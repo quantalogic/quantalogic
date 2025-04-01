@@ -45,13 +45,16 @@ class ToolRegistry:
         if not tools_found:
             logger.warning(f"No @create_tool generated tools found in {module.__name__}")
 
-    def load_toolboxes(self) -> None:
-        """Load all toolboxes from registered entry points and assign toolbox names."""
+    def load_toolboxes(self, toolbox_names: Optional[List[str]] = None) -> None:
+        """Load toolboxes from registered entry points, optionally filtering by name."""
         try:
             entry_points = importlib.metadata.entry_points(group="quantalogic.tools")
         except Exception as e:
             logger.error(f"Failed to retrieve entry points: {e}")
             entry_points = []
+
+        if toolbox_names is not None:
+            entry_points = [ep for ep in entry_points if ep.name in toolbox_names]
 
         logger.debug(f"Found {len(entry_points)} toolbox entry points")
         for ep in entry_points:
@@ -141,7 +144,11 @@ class RetrieveStepTool(Tool):
         return result
 
 
-def get_default_tools(model: str, history_store: Optional[List[dict]] = None) -> List[Tool]:
+def get_default_tools(
+    model: str,
+    history_store: Optional[List[dict]] = None,
+    enabled_toolboxes: Optional[List[str]] = None  # New parameter for selective loading
+) -> List[Tool]:
     """Dynamically load default tools and toolboxes via entry points."""
     registry = ToolRegistry()
     
@@ -152,7 +159,7 @@ def get_default_tools(model: str, history_store: Optional[List[dict]] = None) ->
     for tool in static_tools:
         registry.register(tool)
 
-    registry.load_toolboxes()
+    registry.load_toolboxes(toolbox_names=enabled_toolboxes)  # Pass enabled_toolboxes
     combined_tools = registry.get_tools()
     logger.info(f"Loaded {len(combined_tools)} default tools: {[tool.name for tool in combined_tools]}")
     return combined_tools
