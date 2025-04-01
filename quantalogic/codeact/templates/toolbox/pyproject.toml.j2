@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "{{ name }}"
+version = "0.1.0"
+description = "A custom toolbox for Quantalogic"
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+quantalogic = ">0.60.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.plugins."quantalogic.tools"]
+"{{ name }}" = "{{ package_name }}"

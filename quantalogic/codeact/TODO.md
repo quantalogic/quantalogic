@@ -1,5 +1,5 @@
-- name clash between functions of tools
-- agent configurable using a Yaml file
+- [X] name clash between functions of tools
+- [X] agent configurable using a Yaml file
     - agent config
         - name
         - sop
@@ -9,6 +9,6 @@
         - style
 - persistence of the agent state between tasks
 - create toolbox
-- configurable tools
+- [X] configurable tools
     - Keys 
     - secrets

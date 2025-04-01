@@ -4,7 +4,11 @@ version = "0.61.3"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
-packages = [{include = "quantalogic"}]
+packages = [
+    { include = "quantalogic" },
+    { include = "quantalogic/codeact" },
+    { include = "quantalogic/codeact/cli_commands" }
+]
 
 # Core dependencies required for the base Agent and ToolManager
 [tool.poetry.dependencies]
@@ -51,6 +55,8 @@ psutil = "^7.0.0"
 openai = "^1.68.0"
 aiofiles = "^24.1.0"
 quantalogic-pythonbox = "^0.8.9"
+
+
 
 [tool.poetry.group.file-tools]
 optional = false
@@ -170,9 +176,6 @@ ollama = "^0.4.4"
 # Scripts for CLI and documentation
 [tool.poetry.scripts]
 quantalogic = "quantalogic.main:cli"
-docs-serve = "quantalogic.docs_cli:serve_docs"
-docs-build = "quantalogic.docs_cli:build_docs"
-docs-deploy = "quantalogic.docs_cli:deploy_docs"
 
 # Build system configuration
 [build-system]
