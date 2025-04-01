@@ -38,8 +38,8 @@ class AgentConfig:
     backstory: Optional[str] = None
     sop: Optional[str] = None
     jinja_env: Optional[Environment] = None
-    
     # New fields with defaults ensuring compatibility
+    name: Optional[str] = None  # Added
     tools_config: Optional[List[Dict[str, Any]]] = None
     reasoner: Optional[Dict[str, Any]] = field(default_factory=lambda: {"name": "default"})
     executor: Optional[Dict[str, Any]] = field(default_factory=lambda: {"name": "default"})
@@ -61,6 +61,7 @@ class AgentConfig:
         sop: Optional[str] = None,
         jinja_env: Optional[Environment] = None,
         config_file: Optional[str] = None,
+        name: Optional[str] = None,  # Added
         tools_config: Optional[List[Dict[str, Any]]] = None,
         reasoner: Optional[Dict[str, Any]] = None,
         executor: Optional[Dict[str, Any]] = None,
@@ -83,24 +84,25 @@ class AgentConfig:
                 self.backstory = config.get("backstory", backstory)
                 self.sop = config.get("sop", sop)
                 self.jinja_env = jinja_env or default_jinja_env
+                self.name = config.get("name", name)  # Added
                 self.tools_config = config.get("tools_config", tools_config)
                 self.profile = config.get("profile", profile)
                 self.customizations = config.get("customizations", customizations)
             except FileNotFoundError:
                 self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
                                  tools, enabled_toolboxes, reasoner_name, executor_name,
-                                 personality, backstory, sop, jinja_env, tools_config,
+                                 personality, backstory, sop, jinja_env, name, tools_config,
                                  reasoner, executor, profile, customizations)
         else:
             self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
                              tools, enabled_toolboxes, reasoner_name, executor_name,
-                             personality, backstory, sop, jinja_env, tools_config,
+                             personality, backstory, sop, jinja_env, name, tools_config,
                              reasoner, executor, profile, customizations)
         self.__post_init__()
 
     def _set_defaults(self, model, max_iterations, max_history_tokens, toolbox_directory,
                      tools, enabled_toolboxes, reasoner_name, executor_name,
-                     personality, backstory, sop, jinja_env, tools_config,
+                     personality, backstory, sop, jinja_env, name, tools_config,
                      reasoner, executor, profile, customizations):
         self.model = model
         self.max_iterations = max_iterations
@@ -114,6 +116,7 @@ class AgentConfig:
         self.backstory = backstory
         self.sop = sop
         self.jinja_env = jinja_env or default_jinja_env
+        self.name = name  # Added
         self.tools_config = tools_config
         self.profile = profile
         self.customizations = customizations
@@ -160,15 +163,16 @@ class Agent:
         elif not isinstance(config, AgentConfig):
             raise ValueError("config must be an AgentConfig instance or a string path to a config file.")
 
-        self.config = config  # Store the full config object
+        self.config = config
         self.plugin_manager = PluginManager()
         self.plugin_manager.load_plugins()
         self.model: str = config.model
-        self.default_tools: List[Tool] = self._get_tools()  # Changed to not pass config explicitly
+        self.default_tools: List[Tool] = self._get_tools()
         self.max_iterations: int = config.max_iterations
         self.personality = config.personality
         self.backstory = config.backstory
         self.sop: Optional[str] = config.sop
+        self.name: Optional[str] = config.name  # Added
         self.max_history_tokens: int = config.max_history_tokens
         self.jinja_env: Environment = config.jinja_env
         self._observers: List[Tuple[Callable, List[str]]] = []
@@ -215,34 +219,34 @@ class Agent:
                     self._resolve_secrets([value])
 
     def _build_system_prompt(self) -> str:
-        """Builds a system prompt based on personality, backstory, and SOP."""
-        prompt = "You are an AI assistant."
+        """Builds a system prompt based on name, personality, backstory, and SOP."""
+        prompt = f"I am {self.name}, an AI assistant." if self.name else "You are an AI assistant."
         if self.personality:
             if isinstance(self.personality, str):
-                prompt += f" You have a {self.personality} personality."
+                prompt += f" I have a {self.personality} personality."
             elif isinstance(self.personality, dict):
                 traits = self.personality.get("traits", [])
                 if traits:
-                    prompt += f" You have the following personality traits: {', '.join(traits)}."
+                    prompt += f" I have the following personality traits: {', '.join(traits)}."
                 tone = self.personality.get("tone")
                 if tone:
-                    prompt += f" Your tone is {tone}."
+                    prompt += f" My tone is {tone}."
                 humor = self.personality.get("humor_level")
                 if humor:
-                    prompt += f" Your humor level is {humor}."
+                    prompt += f" My humor level is {humor}."
         if self.backstory:
             if isinstance(self.backstory, str):
-                prompt += f" Your backstory is: {self.backstory}"
+                prompt += f" My backstory is: {self.backstory}"
             elif isinstance(self.backstory, dict):
                 origin = self.backstory.get("origin")
                 if origin:
-                    prompt += f" You were created by {origin}."
+                    prompt += f" I was created by {origin}."
                 purpose = self.backstory.get("purpose")
                 if purpose:
-                    prompt += f" Your purpose is {purpose}."
+                    prompt += f" My purpose is {purpose}."
                 experience = self.backstory.get("experience")
                 if experience:
-                    prompt += f" Your experience includes: {experience}"
+                    prompt += f" My experience includes: {experience}"
         if self.sop:
             prompt += f" Follow this standard operating procedure: {self.sop}"
         return prompt
