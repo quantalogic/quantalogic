@@ -24,7 +24,7 @@ async def generate_program(
     """Generate a Python program using the specified model with streaming support and retries."""
     tools_by_toolbox = {}
     for tool in tools:
-        toolbox_name = tool.toolbox_name if tool.toolbox_name else "Default Toolbox"
+        toolbox_name = tool.toolbox_name if tool.toolbox_name else "default"
         if toolbox_name not in tools_by_toolbox:
             tools_by_toolbox[toolbox_name] = []
         tools_by_toolbox[toolbox_name].append(tool.to_docstring())
@@ -59,11 +59,13 @@ async def generate_program(
             else:
                 raise Exception(f"Code generation failed with {model} after 3 attempts: {e}")
 
+
 class PromptStrategy(ABC):
     """Abstract base class for prompt generation strategies."""
     @abstractmethod
     async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int) -> str:
         pass
+
 
 class DefaultPromptStrategy(PromptStrategy):
     """Default strategy using Jinja2 templates."""
@@ -74,6 +76,7 @@ class DefaultPromptStrategy(PromptStrategy):
             current_step=step,
             max_iterations=max_iterations
         )
+
 
 class BaseReasoner(ABC):
     """Abstract base class for reasoning components."""
@@ -89,6 +92,7 @@ class BaseReasoner(ABC):
         streaming: bool
     ) -> str:
         pass
+
 
 class Reasoner(BaseReasoner):
     """Handles action generation using the language model."""

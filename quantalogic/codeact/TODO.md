@@ -1,0 +1,14 @@
+- name clash between functions of tools
+- agent configurable using a Yaml file
+    - agent config
+        - name
+        - sop
+        - backstory
+        - personality
+        - interests
+        - style
+- persistence of the agent state between tasks
+- create toolbox
+- configurable tools
+    - Keys 
+    - secrets

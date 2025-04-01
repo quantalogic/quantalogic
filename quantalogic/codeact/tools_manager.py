@@ -19,14 +19,16 @@ from .utils import log_tool_method
 class ToolRegistry:
     """Manages tool registration with dependency and conflict checking."""
     def __init__(self):
-        self.tools: dict[str, Tool] = {}
+        # Use tuple (toolbox_name, tool_name) as key to allow same names across toolboxes
+        self.tools: dict[tuple[str, str], Tool] = {}
 
     def register(self, tool: Tool) -> None:
-        """Register a tool, checking for conflicts."""
-        if tool.name in self.tools:
-            raise ValueError(f"Tool '{tool.name}' is already registered")
-        self.tools[tool.name] = tool
-        logger.debug(f"Tool registered: {tool.name}")
+        """Register a tool, checking for conflicts within the same toolbox."""
+        key = (tool.toolbox_name or "default", tool.name)
+        if key in self.tools:
+            raise ValueError(f"Tool '{tool.name}' in toolbox '{tool.toolbox_name or 'default'}' is already registered")
+        self.tools[key] = tool
+        logger.debug(f"Tool registered: {tool.name} in toolbox {tool.toolbox_name or 'default'}")
 
     def get_tools(self) -> List[Tool]:
         """Return all registered tools."""
@@ -147,7 +149,7 @@ class RetrieveStepTool(Tool):
 def get_default_tools(
     model: str,
     history_store: Optional[List[dict]] = None,
-    enabled_toolboxes: Optional[List[str]] = None  # New parameter for selective loading
+    enabled_toolboxes: Optional[List[str]] = None
 ) -> List[Tool]:
     """Dynamically load default tools and toolboxes via entry points."""
     registry = ToolRegistry()
@@ -159,7 +161,7 @@ def get_default_tools(
     for tool in static_tools:
         registry.register(tool)
 
-    registry.load_toolboxes(toolbox_names=enabled_toolboxes)  # Pass enabled_toolboxes
+    registry.load_toolboxes(toolbox_names=enabled_toolboxes)
     combined_tools = registry.get_tools()
-    logger.info(f"Loaded {len(combined_tools)} default tools: {[tool.name for tool in combined_tools]}")
+    logger.info(f"Loaded {len(combined_tools)} default tools: {[(tool.toolbox_name or 'default', tool.name) for tool in combined_tools]}")
     return combined_tools
