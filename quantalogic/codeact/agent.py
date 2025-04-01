@@ -19,7 +19,7 @@ from .react_agent import ReActAgent
 from .reasoner import BaseReasoner, Reasoner
 from .templates import jinja_env as default_jinja_env
 from .tools_manager import RetrieveStepTool, get_default_tools
-from .utils import process_tools  # New import
+from .utils import process_tools
 
 
 @dataclass
@@ -30,9 +30,9 @@ class AgentConfig:
     tools: Optional[List[Union[Tool, Callable]]] = None
     max_history_tokens: int = MAX_HISTORY_TOKENS
     toolbox_directory: str = "toolboxes"
-    enabled_toolboxes: Optional[List[str]] = None  # New field for selective toolbox loading
-    reasoner_name: str = "default"  # New field for default reasoner
-    executor_name: str = "default"  # New field for default executor
+    enabled_toolboxes: Optional[List[str]] = None
+    reasoner_name: str = "default"
+    executor_name: str = "default"
 
     def __init__(
         self,
@@ -41,9 +41,9 @@ class AgentConfig:
         tools: Optional[List[Union[Tool, Callable]]] = None,
         max_history_tokens: int = MAX_HISTORY_TOKENS,
         toolbox_directory: str = "toolboxes",
-        enabled_toolboxes: Optional[List[str]] = None,  # New parameter
-        reasoner_name: str = "default",  # New parameter
-        executor_name: str = "default",  # New parameter
+        enabled_toolboxes: Optional[List[str]] = None,
+        reasoner_name: str = "default",
+        executor_name: str = "default",
         config_file: Optional[str] = None
     ) -> None:
         if config_file:
@@ -59,23 +59,22 @@ class AgentConfig:
                 self.reasoner_name = config.get("reasoner", reasoner_name)
                 self.executor_name = config.get("executor", executor_name)
             except FileNotFoundError:
-                self.model = model
-                self.max_iterations = max_iterations
-                self.max_history_tokens = max_history_tokens
-                self.toolbox_directory = toolbox_directory
-                self.tools = tools
-                self.enabled_toolboxes = enabled_toolboxes
-                self.reasoner_name = reasoner_name
-                self.executor_name = executor_name
+                self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory, 
+                                 tools, enabled_toolboxes, reasoner_name, executor_name)
         else:
-            self.model = model
-            self.max_iterations = max_iterations
-            self.max_history_tokens = max_history_tokens
-            self.toolbox_directory = toolbox_directory
-            self.tools = tools
-            self.enabled_toolboxes = enabled_toolboxes
-            self.reasoner_name = reasoner_name
-            self.executor_name = executor_name
+            self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory, 
+                             tools, enabled_toolboxes, reasoner_name, executor_name)
+
+    def _set_defaults(self, model, max_iterations, max_history_tokens, toolbox_directory, 
+                     tools, enabled_toolboxes, reasoner_name, executor_name):
+        self.model = model
+        self.max_iterations = max_iterations
+        self.max_history_tokens = max_history_tokens
+        self.toolbox_directory = toolbox_directory
+        self.tools = tools
+        self.enabled_toolboxes = enabled_toolboxes
+        self.reasoner_name = reasoner_name
+        self.executor_name = executor_name
 
 
 class Agent:
@@ -105,8 +104,8 @@ class Agent:
         self.jinja_env: Environment = jinja_env or default_jinja_env
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.last_solve_context_vars: Dict = {}
-        self.default_reasoner_name: str = config.reasoner_name  # Store default reasoner name
-        self.default_executor_name: str = config.executor_name  # Store default executor name
+        self.default_reasoner_name: str = config.reasoner_name
+        self.default_executor_name: str = config.executor_name
 
     def _build_system_prompt(self) -> str:
         """Builds a system prompt based on personality, backstory, and SOP."""
@@ -135,8 +134,8 @@ class Agent:
         system_prompt: str = self._build_system_prompt()
         if use_tools:
             chat_tools: List[Tool] = process_tools(tools) if tools is not None else self.default_tools
-            reasoner_name = reasoner_name or self.default_reasoner_name  # Use default if not specified
-            executor_name = executor_name or self.default_executor_name  # Use default if not specified
+            reasoner_name = reasoner_name or self.default_reasoner_name
+            executor_name = executor_name or self.default_executor_name
             reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
             executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
             chat_agent = ReActAgent(
@@ -184,8 +183,8 @@ class Agent:
         """Multi-step task solving with optional custom tools, max_iterations, and streaming."""
         system_prompt: str = self._build_system_prompt()
         solve_tools: List[Tool] = process_tools(tools) if tools is not None else self.default_tools
-        reasoner_name = reasoner_name or self.default_reasoner_name  # Use default if not specified
-        executor_name = executor_name or self.default_executor_name  # Use default if not specified
+        reasoner_name = reasoner_name or self.default_reasoner_name
+        executor_name = executor_name or self.default_executor_name
         reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
         executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
         solve_agent = ReActAgent(

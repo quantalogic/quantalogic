@@ -29,8 +29,8 @@ from quantalogic.codeact.events import (
 from quantalogic.codeact.plugin_manager import PluginManager
 
 from .tools_manager import Tool, get_default_tools
-from .utils import process_tools  # New import
-from .xml_utils import XMLResultHandler  # Updated import
+from .utils import process_tools
+from .xml_utils import XMLResultHandler
 
 # Initialize PluginManager at module level to avoid duplicate loading
 plugin_manager = PluginManager()
@@ -149,6 +149,8 @@ async def run_react_agent(
     sop: Optional[str] = None,
     debug: bool = False,
     streaming: bool = False,
+    reasoner_name: Optional[str] = None,
+    executor_name: Optional[str] = None,
 ) -> None:
     """Run the Agent with detailed event monitoring."""
     logger.remove()
@@ -180,7 +182,8 @@ async def run_react_agent(
     ])
     
     console.print(f"[bold green]Starting task: {task}[/bold green]")
-    _history = await agent.solve(task, success_criteria, streaming=streaming)
+    _history = await agent.solve(task, success_criteria, streaming=streaming,
+                                reasoner_name=reasoner_name, executor_name=executor_name)
 
 @app.command()
 def task(
@@ -193,13 +196,15 @@ def task(
     sop: Optional[str] = typer.Option(None, help="Standard operating procedure"),
     debug: bool = typer.Option(False, help="Enable debug logging to stderr"),
     streaming: bool = typer.Option(False, help="Enable streaming output for real-time token generation"),
+    reasoner: Optional[str] = typer.Option(None, help="Name of the reasoner to use"),
+    executor: Optional[str] = typer.Option(None, help="Name of the executor to use"),
 ) -> None:
     """CLI command to run the Agent with detailed event monitoring."""
     try:
         asyncio.run(run_react_agent(
             task, model, max_iterations, success_criteria,
             personality=personality, backstory=backstory, sop=sop, debug=debug,
-            streaming=streaming,
+            streaming=streaming, reasoner_name=reasoner, executor_name=executor
         ))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
@@ -274,6 +279,36 @@ def list_toolboxes() -> None:
             for tool_name in sorted(tool_names):
                 console.print(f"  - {tool_name}")
             console.print("")
+
+@app.command()
+def list_reasoners() -> None:
+    """List all available reasoners."""
+    console.print("[bold cyan]Available Reasoners:[/bold cyan]")
+    for name in plugin_manager.reasoners.keys():
+        console.print(f"- {name}")
+
+@app.command()
+def list_executors() -> None:
+    """List all available executors."""
+    console.print("[bold cyan]Available Executors:[/bold cyan]")
+    for name in plugin_manager.executors.keys():
+        console.print(f"- {name}")
+
+@app.command()
+def tool_info(tool_name: str = typer.Argument(..., help="Name of the tool")) -> None:
+    """Display information about a specific tool."""
+    tools = plugin_manager.tools.get_tools()
+    tool = next((t for t in tools if t.name == tool_name), None)
+    if tool:
+        console.print(f"[bold green]Tool: {tool.name}[/bold green]")
+        console.print(f"Description: {tool.description}")
+        console.print(f"Toolbox: {tool.toolbox_name or 'N/A'}")
+        console.print("Arguments:")
+        for arg in tool.arguments:
+            console.print(f"  - {arg.name} ({arg.arg_type}): {arg.description} {'(required)' if arg.required else ''}")
+        console.print(f"Return Type: {tool.return_type}")
+    else:
+        console.print(f"[red]Tool '{tool_name}' not found[/red]")
 
 # Load plugin CLI commands dynamically using the module-level plugin_manager
 for cmd_name, cmd_func in plugin_manager.cli_commands.items():

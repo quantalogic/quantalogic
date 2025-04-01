@@ -9,7 +9,7 @@ from .constants import MAX_GENERATE_PROGRAM_TOKENS
 from .events import PromptGeneratedEvent
 from .llm_util import litellm_completion
 from .templates import jinja_env
-from .xml_utils import XMLResultHandler, validate_xml  # Updated import
+from .xml_utils import XMLResultHandler, validate_xml
 
 
 async def generate_program(
@@ -122,7 +122,7 @@ class Reasoner(BaseReasoner):
             program = self._clean_code(program)
             response = jinja_env.get_template("response_format.j2").render(
                 task=task,
-                history_str=history_str,
+                included_stepsincluded_stepshistory_str=history_str,
                 program=program,
                 current_step=step,
                 max_iterations=max_iterations
