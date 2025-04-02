@@ -7,8 +7,8 @@
         - personality
         - interests
         - style
-- persistence of the agent state between tasks
-- create toolbox
+- [ ] persistence of the agent state between tasks
+- [X] create toolbox
 - [X] configurable tools
     - Keys 
     - secrets
