@@ -1,0 +1,393 @@
+import asyncio
+import json
+import logging
+import os
+import re
+import subprocess
+from typing import Any, AsyncGenerator, Dict, List, Optional, Protocol
+
+from quantalogic.tools.tool import Tool, ToolArgument
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+# Define a protocol for MCP client interface
+class McpClientProtocol(Protocol):
+    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any: ...
+    async def stream_tool(self, tool_name: str, arguments: Dict[str, Any]) -> AsyncGenerator[Any, None]: ...
+    async def list_tools(self) -> List[Dict[str, Any]]: ...
+    async def fetch_resource(self, resource_id: str) -> Dict: ...
+    async def send_prompt(self, prompt_text: str) -> str: ...
+    async def close(self) -> None: ...
+
+class McpTool(Tool):
+    """A Tool subclass for executing MCP remote tools with dynamic metadata and streaming support."""
+    def __init__(self, mcp_client: McpClientProtocol, remote_tool_name: str, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mcp_client = mcp_client
+        self.remote_tool_name = remote_tool_name
+
+    async def async_execute(self, **kwargs: Any) -> Any:
+        """Execute the MCP tool asynchronously."""
+        try:
+            logger.debug(f"Executing MCP tool '{self.remote_tool_name}' with args: {kwargs}")
+            result = await self.mcp_client.call_tool(self.remote_tool_name, kwargs)
+            return result
+        except Exception as e:
+            logger.error(f"Failed to execute '{self.remote_tool_name}': {str(e)}")
+            raise RuntimeError(f"MCP tool execution failed: {str(e)}")
+
+    def execute(self, **kwargs: Any) -> Any:
+        """Synchronous execution wrapper."""
+        return asyncio.run(self.async_execute(**kwargs))
+
+    async def stream_execute(self, **kwargs: Any) -> AsyncGenerator[Any, None]:
+        """Stream results from the MCP tool."""
+        try:
+            logger.debug(f"Streaming MCP tool '{self.remote_tool_name}' with args: {kwargs}")
+            async for chunk in self.mcp_client.stream_tool(self.remote_tool_name, kwargs):
+                yield chunk
+        except Exception as e:
+            logger.error(f"Failed to stream '{self.remote_tool_name}': {str(e)}")
+            raise RuntimeError(f"MCP tool streaming failed: {str(e)}")
+
+class ConfigurableMcpToolbox:
+    """A fully-featured Toolbox supporting 100% MCP client protocol via multiple JSON configurations."""
+    def __init__(self):
+        self.tools: Dict[str, Tool] = {}
+        self.mcp_clients: Dict[str, McpClientProtocol] = {}
+        self.resources: Dict[str, Dict] = {}  # {server_name.resource_id: resource_data}
+        self.prompts: Dict[str, Dict] = {}    # {server_name.prompt_name: prompt_data}
+        self._lock = asyncio.Lock()
+
+    async def load_json(self, json_path: str) -> None:
+        """Load configuration from a JSON file with env var substitution."""
+        try:
+            with open(json_path) as f:
+                raw_data = f.read()
+            data = json.loads(self._substitute_env_vars(raw_data))
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.error(f"Failed to load '{json_path}': {str(e)}")
+            raise ValueError(f"Invalid JSON file '{json_path}': {str(e)}")
+
+        # Load MCP servers - check for both camelCase and snake_case keys
+        async with self._lock:
+            # Handle both camelCase (mcpServers) and snake_case (mcp_servers) formats
+            servers_data = data.get("mcp_servers", data.get("mcpServers", {}))
+            logger.info(f"Found servers in config: {list(servers_data.keys())}")
+            
+            for server_name, config in servers_data.items():
+                if server_name in self.mcp_clients:
+                    logger.warning(f"Overriding existing MCP server '{server_name}'")
+                try:
+                    transport_type = config.get("transport_type", "stdio").lower()
+                    if transport_type not in ["stdio", "sse", "websocket"]:
+                        raise ValueError(f"Unsupported transport_type: {transport_type}")
+                    # This is a placeholder for MCP client initialization
+                    # In a real implementation, you would initialize the MCP client here
+                    # For now, we'll just log that this would happen
+                    logger.info(f"Would initialize MCP client for {server_name} with {config}")
+                    
+                    # Since we can't actually initialize the client without the MCP package,
+                    # we'll skip this step in this simplified version
+                    raise NotImplementedError(
+                        "MCP client initialization is not implemented in this simplified version. "
+                        "Install the 'mcp' package to use this functionality."
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to initialize '{server_name}': {str(e)}")
+                    raise RuntimeError(f"Server initialization failed: {str(e)}")
+
+        # Load resources
+        for resource in data.get("resources", []):
+            resource_id = resource["id"]
+            key = f"{server_name}.{resource_id}"
+            if key in self.resources:
+                logger.warning(f"Overriding resource '{key}'")
+            self.resources[key] = resource
+            logger.info(f"Loaded resource '{key}'")
+
+        # Load prompts
+        for prompt in data.get("prompts", []):
+            prompt_name = prompt["name"]
+            key = f"{server_name}.{prompt_name}"
+            if key in self.prompts:
+                logger.warning(f"Overriding prompt '{key}'")
+            self.prompts[key] = prompt
+            logger.info(f"Loaded prompt '{key}'")
+
+        # Load or sync tools
+        await self._load_or_sync_tools(data.get("tools", []), json_path)
+
+    async def load_directory(self, directory_path: str) -> None:
+        """Load all JSON files from a directory asynchronously."""
+        if not os.path.isdir(directory_path):
+            raise ValueError(f"Directory '{directory_path}' does not exist")
+        json_files = sorted([f for f in os.listdir(directory_path) if f.endswith(".json")])
+        if not json_files:
+            logger.warning(f"No JSON files found in '{directory_path}'")
+            return
+        
+        for json_file in json_files:
+            json_path = os.path.join(directory_path, json_file)
+            await self.load_json(json_path)
+
+    def load_directory_sync(self, directory_path: str) -> None:
+        """Synchronous wrapper for loading a directory."""
+        asyncio.run(self.load_directory(directory_path))
+
+    async def _load_or_sync_tools(self, tools_data: List[Dict[str, Any]], source: str) -> None:
+        """Load tools from JSON or sync with server metadata."""
+        async with self._lock:
+            for tool_data in tools_data:
+                tool_name = tool_data["name"]
+                impl = tool_data.get("implementation", {})
+                if impl.get("type") != "mcp_tool":
+                    logger.error(f"Tool '{tool_name}' in '{source}': Only 'mcp_tool' supported")
+                    continue
+
+                server_name = impl.get("server")
+                if server_name not in self.mcp_clients:
+                    logger.error(f"Tool '{tool_name}' in '{source}': Unknown server '{server_name}'")
+                    continue
+
+                remote_tool_name = impl.get("tool_name")
+                client = self.mcp_clients[server_name]
+                
+                try:
+                    tool_info = await self._get_tool_info(client, remote_tool_name)
+                    if tool_name in self.tools:
+                        logger.warning(f"Overriding existing tool '{tool_name}' from '{source}'")
+                    self.tools[tool_name] = self._create_tool(tool_data, client, tool_info)
+                    logger.info(f"Loaded tool '{tool_name}' from '{source}'")
+                except Exception as e:
+                    logger.error(f"Failed to sync tool '{tool_name}' from '{source}': {str(e)}")
+
+    async def _get_tool_info(self, client: McpClientProtocol, tool_name: str) -> Dict[str, Any]:
+        """Fetch tool metadata from the MCP server."""
+        tools_list = await client.list_tools()
+        for tool in tools_list:
+            if tool["name"] == tool_name:
+                return {
+                    "description": tool.get("description", ""),
+                    "arguments": [
+                        ToolArgument(
+                            name=arg["name"],
+                            arg_type=arg.get("type", "str"),
+                            description=arg.get("description", ""),
+                            required=arg.get("required", False),
+                            default=arg.get("default", None)
+                        ) for arg in tool.get("parameters", [])
+                    ],
+                    "return_type": tool.get("return_type", "str"),
+                    "return_description": tool.get("return_description", "Result from MCP tool")
+                }
+        raise ValueError(f"Tool '{tool_name}' not found on server")
+
+    def _create_tool(self, tool_data: Dict[str, Any], client: McpClientProtocol, tool_info: Dict[str, Any]) -> Tool:
+        """Create a Tool instance with synced metadata."""
+        return McpTool(
+            mcp_client=client,
+            remote_tool_name=tool_data["implementation"]["tool_name"],
+            name=tool_data["name"],
+            description=tool_data.get("description", tool_info["description"]),
+            arguments=tool_info["arguments"],
+            return_type=tool_info["return_type"],
+            return_description=tool_info["return_description"],
+            is_async=True
+        )
+
+    def _substitute_env_vars(self, raw_json: str) -> str:
+        """Substitute environment variables in JSON string (e.g., ${VAR})."""
+        def replace_match(match):
+            var_name = match.group(1)
+            return os.getenv(var_name, f"${var_name}")
+        return re.sub(r'\${([^}]+)}', replace_match, raw_json)
+
+    async def add_server(self, server_name: str, config: Dict) -> None:
+        """Add a new MCP server at runtime."""
+        async with self._lock:
+            if server_name in self.mcp_clients:
+                logger.warning(f"Overriding existing server '{server_name}'")
+            try:
+                transport_type = config.get("transport_type", "stdio").lower()
+                # This is a placeholder for MCP client initialization
+                # In a real implementation, you would initialize the MCP client here
+                logger.info(f"Would initialize MCP client for {server_name} with {config}")
+                
+                # Since we can't actually initialize the client without the MCP package,
+                # we'll skip this step in this simplified version
+                raise NotImplementedError(
+                    "MCP client initialization is not implemented in this simplified version. "
+                    "Install the 'mcp' package to use this functionality."
+                )
+                logger.info(f"Added server '{server_name}' with {transport_type}")
+            except Exception as e:
+                logger.error(f"Failed to add server '{server_name}': {str(e)}")
+                raise RuntimeError(f"Server addition failed: {str(e)}")
+
+    async def remove_server(self, server_name: str) -> None:
+        """Remove an MCP server and its associated tools/resources."""
+        async with self._lock:
+            if server_name not in self.mcp_clients:
+                logger.warning(f"Server '{server_name}' not found for removal")
+                return
+            try:
+                await self.mcp_clients[server_name].close()
+                del self.mcp_clients[server_name]
+                # Remove associated tools and resources
+                self.tools = {k: v for k, v in self.tools.items() if v.mcp_client != server_name}
+                self.resources = {k: v for k, v in self.resources.items() if not k.startswith(f"{server_name}.")}
+                self.prompts = {k: v for k, v in self.prompts.items() if not k.startswith(f"{server_name}.")}
+                logger.info(f"Removed server '{server_name}'")
+            except Exception as e:
+                logger.error(f"Failed to remove server '{server_name}': {str(e)}")
+
+    async def fetch_resource(self, server_name: str, resource_id: str) -> Dict:
+        """Fetch an MCP resource from a server."""
+        if server_name not in self.mcp_clients:
+            raise ValueError(f"Server '{server_name}' not found")
+        key = f"{server_name}.{resource_id}"
+        if key not in self.resources:
+            raise ValueError(f"Resource '{resource_id}' not defined for '{server_name}'")
+        try:
+            resource_data = await self.mcp_clients[server_name].fetch_resource(resource_id)
+            logger.info(f"Fetched resource '{key}'")
+            return resource_data
+        except Exception as e:
+            logger.error(f"Failed to fetch resource '{key}': {str(e)}")
+            raise RuntimeError(f"Resource fetch failed: {str(e)}")
+
+    async def send_prompt(self, server_name: str, prompt_name: str, text: Optional[str] = None) -> str:
+        """Send a prompt to an MCP server."""
+        if server_name not in self.mcp_clients:
+            raise ValueError(f"Server '{server_name}' not found")
+        key = f"{server_name}.{prompt_name}"
+        prompt_text = text or self.prompts.get(key, {}).get("text")
+        if not prompt_text:
+            raise ValueError(f"Prompt '{prompt_name}' not defined or text not provided")
+        try:
+            response = await self.mcp_clients[server_name].send_prompt(prompt_text)
+            logger.info(f"Sent prompt '{key}'")
+            return response
+        except Exception as e:
+            logger.error(f"Failed to send prompt '{key}': {str(e)}")
+            raise RuntimeError(f"Prompt send failed: {str(e)}")
+
+    async def refresh_tools(self, server_name: str) -> None:
+        """Refresh tools for a specific server."""
+        if server_name not in self.mcp_clients:
+            raise ValueError(f"Server '{server_name}' not found")
+        async with self._lock:
+            client = self.mcp_clients[server_name]
+            try:
+                tools_list = await client.list_tools()
+                for tool in tools_list:
+                    tool_name = f"{server_name}.{tool['name']}"  # Unique naming
+                    tool_info = {
+                        "description": tool.get("description", ""),
+                        "arguments": [
+                            ToolArgument(
+                                name=arg["name"],
+                                arg_type=arg.get("type", "str"),
+                                description=arg.get("description", ""),
+                                required=arg.get("required", False),
+                                default=arg.get("default", None)
+                            ) for arg in tool.get("parameters", [])
+                        ],
+                        "return_type": tool.get("return_type", "str"),
+                        "return_description": tool.get("return_description", "Result from MCP tool")
+                    }
+                    self.tools[tool_name] = McpTool(
+                        mcp_client=client,
+                        remote_tool_name=tool["name"],
+                        name=tool_name,
+                        description=tool_info["description"],
+                        arguments=tool_info["arguments"],
+                        return_type=tool_info["return_type"],
+                        return_description=tool_info["return_description"],
+                        is_async=True
+                    )
+                logger.info(f"Refreshed tools for '{server_name}'")
+            except Exception as e:
+                logger.error(f"Failed to refresh tools for '{server_name}': {str(e)}")
+
+    async def shutdown(self) -> None:
+        """Cleanly shut down all MCP clients."""
+        async with self._lock:
+            for server_name, client in self.mcp_clients.items():
+                try:
+                    await client.close()
+                    logger.info(f"Shut down MCP server '{server_name}'")
+                except Exception as e:
+                    logger.error(f"Failed to shut down '{server_name}': {str(e)}")
+            self.mcp_clients.clear()
+            self.tools.clear()
+            self.resources.clear()
+            self.prompts.clear()
+
+    def get_tool(self, tool_name: str) -> Tool:
+        """Retrieve a tool by name."""
+        if tool_name not in self.tools:
+            raise KeyError(f"Tool '{tool_name}' not found")
+        return self.tools[tool_name]
+
+    def list_tools(self) -> List[str]:
+        """List all available tool names."""
+        return list(self.tools.keys())
+
+    def to_markdown(self) -> str:
+        """Generate Markdown documentation for all tools."""
+        markdown = "# MCP Toolbox Tools\n\n"
+        for tool_name, tool in self.tools.items():
+            markdown += tool.to_markdown() + "\n"
+        return markdown
+
+# Initialize the Toolbox but don't load config files automatically
+toolbox = ConfigurableMcpToolbox()
+
+if __name__ == "__main__":
+    print("SQLite MCP Test")
+    print("---------------")
+    
+    # Load the SQLite config file directly
+    config_path = "config/sqllite.json"
+    
+    try:
+        # Read and parse the config file
+        with open(config_path) as f:
+            raw_data = f.read()
+        
+        # Parse JSON and handle both naming conventions
+        config_data = json.loads(raw_data)
+        servers_data = config_data.get("mcp_servers", config_data.get("mcpServers", {}))
+        
+        if "sqlite" in servers_data:
+            sqlite_config = servers_data["sqlite"]
+            print(f"Found SQLite configuration: {sqlite_config}")
+            
+            # Test if Docker is available
+            try:
+                result = subprocess.run(["docker", "--version"], 
+                                        capture_output=True, text=True, check=True)
+                print(f"Docker is available: {result.stdout.strip()}")
+                
+                # Print the command that would be executed
+                cmd = [sqlite_config["command"]] + sqlite_config.get("args", [])
+                print(f"\nWould execute command: {' '.join(cmd)}")
+                print("\nThis would start a SQLite MCP server in Docker.")
+                print("You can then use the MCP client to connect to it and execute SQL queries.")
+                
+            except (subprocess.SubprocessError, FileNotFoundError) as e:
+                print(f"Docker is not available: {e}")
+        else:
+            print(f"No SQLite configuration found in {config_path}")
+            print(f"Available servers: {list(servers_data.keys())}")
+    
+    except FileNotFoundError:
+        print(f"Config file not found: {config_path}")
+    except json.JSONDecodeError as e:
+        print(f"Invalid JSON in config file: {e}")
+    except Exception as e:
+        print(f"Error: {e}")

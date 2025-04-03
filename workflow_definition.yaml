@@ -40,7 +40,7 @@ functions:
   update_progress:
     type: embedded
     code: |-
-      @Nodes.define(output={'chapters': 'chapters', 'completed_chapters': 'completed_chapters'})
+      @Nodes.define(output=None)
       async def update_progress(chapters: List[str], chapter: str, completed_chapters: int):
           """Update the chapter list and completion count."""
           updated_chapters = chapters + [chapter]
