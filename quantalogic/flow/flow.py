@@ -253,6 +253,10 @@ class Workflow:
         self._observers: List[WorkflowObserver] = []
         self._register_node(start_node)
         self.current_node = start_node
+        # Loop-specific attributes
+        self.in_loop = False
+        self.loop_nodes = []
+        self.loop_entry_node = None
 
     def _register_node(self, name: str):
         """Register a node without modifying the current node."""
@@ -274,6 +278,8 @@ class Workflow:
             Self for method chaining.
         """
         self._register_node(name)
+        if self.in_loop:
+            self.loop_nodes.append(name)
         if inputs_mapping:
             self.node_input_mappings[name] = inputs_mapping
             logger.debug(f"Added inputs mapping for node {name}: {inputs_mapping}")
@@ -420,6 +426,66 @@ class Workflow:
         self.node_outputs[name] = output
         self.current_node = name
         logger.debug(f"Added sub-workflow {name} with inputs {inputs} and output {output}")
+        return self
+
+    def start_loop(self):
+        """Begin defining a loop in the workflow.
+
+        Raises:
+            ValueError: If called without a current node.
+
+        Returns:
+            Self for method chaining.
+        """
+        if self.current_node is None:
+            raise ValueError("Cannot start loop without a current node")
+        self.loop_entry_node = self.current_node
+        self.in_loop = True
+        self.loop_nodes = []
+        return self
+
+    def end_loop(self, condition: Callable[[Dict[str, Any]], bool], next_node: str):
+        """End the loop, setting up transitions based on the condition.
+
+        Args:
+            condition: Callable taking context and returning True when the loop should exit.
+            next_node: Name of the node to transition to after the loop exits.
+
+        Raises:
+            ValueError: If no loop nodes are defined.
+
+        Returns:
+            Self for method chaining.
+        """
+        if not self.in_loop or not self.loop_nodes:
+            raise ValueError("No loop nodes defined")
+        
+        first_node = self.loop_nodes[0]
+        last_node = self.loop_nodes[-1]
+        
+        # Transition from the node before the loop to the first loop node
+        self.transitions.setdefault(self.loop_entry_node, []).append((first_node, None))
+        
+        # Transitions within the loop
+        for i in range(len(self.loop_nodes) - 1):
+            self.transitions.setdefault(self.loop_nodes[i], []).append((self.loop_nodes[i + 1], None))
+        
+        # Conditional transitions from the last loop node
+        # If condition is False, loop back to the first node
+        self.transitions.setdefault(last_node, []).append((first_node, lambda ctx: not condition(ctx)))
+        # If condition is True, exit to the next node
+        self.transitions.setdefault(last_node, []).append((next_node, condition))
+        
+        # Register the next_node if not already present
+        if next_node not in self.nodes:
+            self._register_node(next_node)
+        
+        # Update state
+        self.current_node = next_node
+        self.in_loop = False
+        self.loop_nodes = []
+        self.loop_entry_node = None
+        
         return self
 
     def build(self, parent_engine: Optional["WorkflowEngine"] = None) -> WorkflowEngine:

@@ -3,7 +3,6 @@ import os
 import re
 from typing import Dict, Optional
 
-from quantalogic.flow.flow import Nodes
 from quantalogic.flow.flow_manager_schema import BranchCondition, WorkflowDefinition
 
 
@@ -27,7 +26,7 @@ def generate_executable_script(
     - Metadata specifying the required Python version and dependencies.
     - Global variables from the original script.
     - Functions defined with appropriate Nodes decorators (e.g., @Nodes.define, @Nodes.llm_node).
-    - Workflow instantiation using direct chaining syntax with function names, including branch and converge.
+    - Workflow instantiation using direct chaining syntax with function names, including branch, converge, and loop support.
     - Support for input mappings and template nodes via workflow configuration and decorators.
     - A default initial_context inferred from the workflow with customization guidance.
     """
@@ -90,6 +89,22 @@ def generate_executable_script(
                 for key, value in node_def.inputs_mapping.items():
                     if not value.startswith("lambda ctx:"):  # Static mappings only
                         initial_context[value] = ""
+
+    # Detect loops
+    loop_nodes = []
+    loop_condition = None
+    loop_exit_node = None
+    for trans in workflow_def.workflow.transitions:
+        if isinstance(trans.to_node, str) and trans.condition:
+            # Check for loop-back transition
+            if any(t.from_node == trans.to_node and t.to_node == trans.from_node for t in workflow_def.workflow.transitions):
+                loop_nodes.append(trans.from_node)
+                loop_nodes.append(trans.to_node)
+                loop_condition = trans.condition
+            # Check for exit transition
+            elif loop_nodes and trans.from_node == loop_nodes[-1] and f"not ({loop_condition})" in trans.condition:
+                loop_exit_node = trans.to_node
+    loop_nodes = list(dict.fromkeys(loop_nodes))  # Remove duplicates, preserve order
 
     with open(output_file, "w") as f:
         # Shebang and metadata
@@ -159,15 +174,20 @@ def generate_executable_script(
                         decorator = f"@Nodes.define(output={repr(node_def.output or f'{node_name}_result')})\n"
                     f.write(f"{decorator}{func_body}\n\n")
 
-        # Define workflow using chaining syntax
-        f.write("# Define the workflow with branch and converge support\n")
+        # Define workflow using chaining syntax with loop support
+        f.write("# Define the workflow with branch, converge, and loop support\n")
         f.write("workflow = (\n")
         start_node = workflow_def.workflow.start
         start_func = workflow_def.nodes[start_node].function if start_node in workflow_def.nodes and workflow_def.nodes[start_node].function else start_node
         f.write(f'    Workflow("{start_func}")\n')
 
+        added_nodes = set()
         for node_name, node_def in workflow_def.nodes.items():
+            if node_name in added_nodes:
+                continue
             func_name = node_def.function if node_def.function else node_name
+            if loop_nodes and node_name == loop_nodes[0]:
+                f.write("    .start_loop()\n")
             if node_def.sub_workflow:
                 sub_start = node_def.sub_workflow.start or f"{node_name}_start"
                 sub_start_func = workflow_def.nodes[sub_start].function if sub_start in workflow_def.nodes and workflow_def.nodes[sub_start].function else sub_start
@@ -208,15 +228,23 @@ def generate_executable_script(
                     f.write(f'    .node("{func_name}", inputs_mapping={inputs_mapping_str})\n')
                 else:
                     f.write(f'    .node("{func_name}")\n')
+            added_nodes.add(node_name)
 
         for trans in workflow_def.workflow.transitions:
             from_node = trans.from_node
-            from_func = workflow_def.nodes[from_node].function if from_node in workflow_def.nodes and workflow_def.nodes[from_node].function else from_node
+            _from_func = workflow_def.nodes[from_node].function if from_node in workflow_def.nodes and workflow_def.nodes[from_node].function else from_node
+            if from_node not in added_nodes:
+                continue  # Skip if already added via .node()
             to_node = trans.to_node
             if isinstance(to_node, str):
+                if loop_nodes and from_node in loop_nodes and to_node in loop_nodes:
+                    continue  # Skip loop-back transition, handled by end_loop
                 to_func = workflow_def.nodes[to_node].function if to_node in workflow_def.nodes and workflow_def.nodes[to_node].function else to_node
                 condition = f"lambda ctx: {trans.condition}" if trans.condition else "None"
-                f.write(f'    .then("{to_func}", condition={condition})\n')
+                if loop_nodes and from_node == loop_nodes[-1] and to_node == loop_exit_node:
+                    f.write(f'    .end_loop(condition=lambda ctx: {loop_condition}, next_node="{to_func}")\n')
+                else:
+                    f.write(f'    .then("{to_func}", condition={condition})\n')
             elif all(isinstance(tn, str) for tn in to_node):
                 to_funcs = [workflow_def.nodes[tn].function if tn in workflow_def.nodes and workflow_def.nodes[tn].function else tn for tn in to_node]
                 f.write(f'    .parallel({", ".join(f"{n!r}" for n in to_funcs)})\n')

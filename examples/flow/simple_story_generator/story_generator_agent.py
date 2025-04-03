@@ -1,98 +1,106 @@
 #!/usr/bin/env python
-# A simple workflow example for story generation
+# Improved story generator workflow
+
+from typing import List
+
+import anyio
 
 from quantalogic.flow import Nodes, Workflow
 
-# Global variables
 MODEL = "gemini/gemini-2.0-flash"
 DEFAULT_LLM_PARAMS = {
     "model": MODEL,
     "temperature": 0.7,
-    "max_tokens": 1000,
+    "max_tokens": 2000,
+    "top_p": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
 }
 
-@Nodes.llm_node(system_prompt="You are a creative writer skilled at generating stories.", 
-                prompt_template="Create a story outline for a {genre} story with {num_chapters} chapters.", 
-                output="outline", **DEFAULT_LLM_PARAMS)
-def generate_outline(genre, num_chapters):
-    """Generate a story outline based on genre and number of chapters."""
-    return {}
+@Nodes.validate_node(output="validation_result")
+async def validate_input(genre: str, num_chapters: int):
+    """Validate input parameters."""
+    if not (1 <= num_chapters <= 20 and genre.lower() in ["science fiction", "fantasy", "mystery", "romance"]):
+        raise ValueError("Invalid input: num_chapters must be 1-20, genre must be one of science fiction, fantasy, mystery, romance")
+    return "Input validated"
 
-@Nodes.llm_node(system_prompt="You are a creative writer.", 
-                prompt_template="Write chapter {chapter_num} for this story outline: {outline}. Style: {style}.", 
-                output="chapter", **DEFAULT_LLM_PARAMS)
-def generate_chapter(outline, chapter_num, style):
-    """Generate a single chapter based on the outline."""
-    return {}
+@Nodes.llm_node(
+    system_prompt="You are a creative writer specializing in story titles.",
+    prompt_template="Generate a creative title for a {{ genre }} story. Output only the title.",
+    output="title",
+    **DEFAULT_LLM_PARAMS
+)
+async def generate_title(genre: str):
+    """Generate a title based on the genre."""
+    pass
 
-@Nodes.define(output="updated_context")
-async def update_progress(**context):
-    """Update the progress of chapter generation.
-    
-    Takes the entire context dictionary and handles missing keys gracefully.
-    """
-    # Get the values with defaults if not present
-    chapters = context.get('chapters', [])
-    completed_chapters = context.get('completed_chapters', 0)
-    chapter = context.get('chapter', {})
-    
-    # Create a new list to avoid modifying the original
-    updated_chapters = chapters.copy()
-    updated_chapters.append(chapter)
-    
-    # Create updated context with all original values preserved
-    updated_context = {
-        **context,  # Keep all other context values
-        "chapters": updated_chapters,
-        "completed_chapters": completed_chapters + 1
-    }
-    
-    # Return the updated context
-    return updated_context
+@Nodes.llm_node(
+    system_prompt="You are an expert in story structuring and outlining.",
+    prompt_template="Create a detailed outline for a {{ genre }} story titled '{{ title }}' with {{ num_chapters }} chapters. Only the outline in markdown, no comments.",
+    output="outline",
+    **DEFAULT_LLM_PARAMS
+)
+async def generate_outline(genre: str, title: str, num_chapters: int):
+    """Generate a chapter outline for the story."""
+    pass
 
-@Nodes.define(output="continue_generating")
-async def check_if_complete(completed_chapters=0, num_chapters=0, **kwargs):
-    """Check if all chapters have been generated.
-    
-    Args:
-        completed_chapters: Number of chapters completed so far
-        num_chapters: Total number of chapters to generate
-        kwargs: Additional context parameters
-        
-    Returns:
-        bool: True if we should continue generating chapters, False otherwise
-    """
-    # Check if we should continue
-    return completed_chapters < num_chapters
+@Nodes.llm_node(
+    system_prompt="You are a skilled storyteller with a knack for vivid descriptions.",
+    prompt_template="Write chapter {{ completed_chapters + 1 }} of {{ num_chapters }} for the story '{{ title }}'. Outline: {{ outline }}. Style: {{ style }}. Output only the chapter content, markdown format",
+    output="chapter",
+    **DEFAULT_LLM_PARAMS
+)
+async def generate_chapter(title: str, outline: str, completed_chapters: int, num_chapters: int, style: str):
+    """Generate content for a specific chapter."""
+    pass
+
+@Nodes.define(output=None)
+async def update_progress(chapters: List[str], chapter: str, completed_chapters: int):
+    """Update the chapter list and completion count."""
+    updated_chapters = chapters + [chapter]
+    return {"chapters": updated_chapters, "completed_chapters": completed_chapters + 1}
+
+@Nodes.define(output="manuscript")
+async def compile_book(title: str, outline: str, chapters: List[str]):
+    """Compile the full manuscript from title, outline, and chapters."""
+    return f"Title: {title}\n\nOutline:\n{outline}\n\n" + "\n\n".join(
+        f"Chapter {i}:\n{chap}" for i, chap in enumerate(chapters, 1)
+    )
+
+@Nodes.llm_node(
+    system_prompt="You are a meticulous editor reviewing manuscripts for quality.",
+    prompt_template="Review this manuscript for coherence, grammar, and quality:\n\n{{ manuscript }}",
+    output="quality_check_result",
+    **DEFAULT_LLM_PARAMS
+)
+async def quality_check(manuscript: str):
+    """Perform a quality check on the compiled manuscript."""
+    pass
 
 # Define the workflow
 workflow = (
-    Workflow("generate_outline")
-    .then("generate_chapter")
-    .then("update_progress")
-    .then("check_if_complete")
-    .then("generate_chapter", condition=lambda ctx: ctx.get("continue_generating", False))
-    .then("update_progress")
-    .then("check_if_complete")
+    Workflow("validate_input")
+    .then("generate_title")
+    .then("generate_outline")
+    .start_loop()
+    .node("generate_chapter")
+    .node("update_progress")
+    .end_loop(
+        condition=lambda ctx: ctx["completed_chapters"] >= ctx["num_chapters"],
+        next_node="compile_book"
+    )
+    .then("quality_check")
 )
 
 def story_observer(event_type, data=None):
-    """Observer function to log workflow events.
-    
-    Args:
-        event_type: The type of event (workflow_started, node_started, etc.)
-        data: The event data (optional)
-    """
+    """Observer function to log workflow events."""
     print(f"Event: {event_type} - Data: {data}")
 
 # Add an observer to the workflow
 workflow.add_observer(story_observer)
 
 if __name__ == "__main__":
-    import anyio
-    
     async def main():
-        # Set up initial context
         initial_context = {
             "genre": "science fiction",
             "num_chapters": 3,
@@ -100,16 +108,11 @@ if __name__ == "__main__":
             "completed_chapters": 0,
             "style": "descriptive"
         }
-        
         try:
-            # Build the workflow engine
             engine = workflow.build()
-            
-            # Run the workflow
             result = await engine.run(initial_context)
-            
             print("\nWorkflow completed successfully!")
-            print("Completed chapters: {result.get('completed_chapters', 0)}")
+            print(f"Quality check result: {result.get('quality_check_result')}")
             return result
         except Exception as e:
             print(f"\nWorkflow failed with error: {e}")

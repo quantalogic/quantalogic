@@ -4,9 +4,14 @@ functions:
     code: 'def greet(user_name): return f''Hello, {user_name}!'''
     module: null
     function: null
-  check_condition:
+  check_length:
     type: embedded
-    code: 'def check_condition(user_name): return len(user_name) > 3'
+    code: 'def check_length(user_name): return len(user_name) < 5'
+    module: null
+    function: null
+  append_char:
+    type: embedded
+    code: 'def append_char(user_name): return user_name + ''x'''
     module: null
     function: null
   farewell:
@@ -38,41 +43,26 @@ nodes:
     delay: 1.0
     timeout: null
     parallel: false
-  format_greeting:
-    function: null
-    sub_workflow: null
-    llm_config: null
-    template_config:
-      template: 'User: {{ user_name }} greeted on {{ date }}'
-      template_file: null
-    inputs_mapping:
-      user_name: name_input
-      date: 'lambda ctx: ''2025-03-06'''
-    output: format_greeting_result
-    retries: 3
-    delay: 1.0
-    timeout: null
-    parallel: false
-  branch_true:
-    function: check_condition
+  check:
+    function: check_length
     sub_workflow: null
     llm_config: null
     template_config: null
     inputs_mapping:
       user_name: name_input
-    output: branch_true_result
+    output: continue_loop
     retries: 3
     delay: 1.0
     timeout: null
     parallel: false
-  branch_false:
-    function: check_condition
+  append:
+    function: append_char
     sub_workflow: null
     llm_config: null
     template_config: null
     inputs_mapping:
       user_name: name_input
-    output: branch_false_result
+    output: name_input
     retries: 3
     delay: 1.0
     timeout: null
@@ -93,17 +83,19 @@ workflow:
   start: start
   transitions:
   - from_node: start
-    to_node: format_greeting
+    to_node: check
     condition: null
-  - from_node: format_greeting
-    to_node:
-    - to_node: branch_true
-      condition: ctx.get('user_name') == 'Alice'
-    - to_node: branch_false
-      condition: ctx.get('user_name') != 'Alice'
+  - from_node: check
+    to_node: append
     condition: null
-  convergence_nodes:
-  - end
+  - from_node: append
+    to_node: start
+    condition: ctx.get('continue_loop', False)
+  - from_node: append
+    to_node: end
+    condition: not (ctx.get('continue_loop', False))
+  loops: []
+  convergence_nodes: []
 observers:
 - monitor
 dependencies:

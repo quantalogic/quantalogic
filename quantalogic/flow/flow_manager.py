@@ -195,6 +195,27 @@ class WorkflowManager:
         )
         self.workflow.workflow.transitions.append(transition)
 
+    def add_loop(self, loop_nodes: List[str], condition: str, exit_node: str) -> None:
+        """Add a loop construct to the workflow.
+
+        Args:
+            loop_nodes: List of node names to execute in the loop.
+            condition: Python expression using 'ctx' that, when True, keeps the loop running.
+            exit_node: Node to transition to when the loop condition is False.
+        """
+        if not loop_nodes:
+            raise ValueError("Loop must contain at least one node")
+        for node in loop_nodes + [exit_node]:
+            if node not in self.workflow.nodes:
+                raise ValueError(f"Node '{node}' does not exist")
+        # Add transitions between loop nodes
+        for i in range(len(loop_nodes) - 1):
+            self.add_transition(from_node=loop_nodes[i], to_node=loop_nodes[i + 1])
+        # Add loop-back transition
+        self.add_transition(from_node=loop_nodes[-1], to_node=loop_nodes[0], condition=condition)
+        # Add exit transition
+        self.add_transition(from_node=loop_nodes[-1], to_node=exit_node, condition=f"not ({condition})")
+
     def set_start_node(self, name: str) -> None:
         """Set the start node of the workflow."""
         if name not in self.workflow.nodes:
@@ -288,7 +309,7 @@ class WorkflowManager:
                 )
 
     def instantiate_workflow(self) -> Workflow:
-        """Instantiate a Workflow object with full support for template_node and inputs_mapping."""
+        """Instantiate a Workflow object with full support for template_node, inputs_mapping, and loops."""
         self._ensure_dependencies()
 
         functions: Dict[str, Callable] = {}
@@ -471,10 +492,30 @@ class WorkflowManager:
             else:
                 wf.node(node_name, inputs_mapping=inputs_mapping if inputs_mapping else None)
 
+        # Detect loops by finding cycles with conditions
+        loop_nodes = []
+        loop_condition = None
+        loop_exit_node = None
+        for trans in self.workflow.workflow.transitions:
+            if isinstance(trans.to_node, str) and trans.condition:
+                if trans.to_node in loop_nodes and trans.from_node in loop_nodes:
+                    continue  # Already identified as part of loop
+                if any(t.from_node == trans.to_node and t.to_node == trans.from_node for t in self.workflow.workflow.transitions):
+                    # Found a potential loop
+                    loop_nodes.append(trans.from_node)
+                    loop_nodes.append(trans.to_node)
+                    loop_condition = trans.condition
+                elif trans.from_node in loop_nodes:
+                    # Check for exit transition
+                    if f"not ({loop_condition})" in trans.condition:
+                        loop_exit_node = trans.to_node
+
         added_nodes = set()
         for trans in self.workflow.workflow.transitions:
             from_node = trans.from_node
             if from_node not in added_nodes and from_node not in sub_workflows:
+                if loop_nodes and from_node == loop_nodes[0]:  # Start of loop
+                    wf.start_loop()
                 wf.node(from_node)
                 added_nodes.add(from_node)
             if isinstance(trans.to_node, str):
@@ -483,7 +524,10 @@ class WorkflowManager:
                 if to_nodes[0] not in added_nodes and to_nodes[0] not in sub_workflows:
                     wf.node(to_nodes[0])
                     added_nodes.add(to_nodes[0])
-                wf.then(to_nodes[0], condition=condition)
+                if loop_nodes and to_nodes[0] == loop_exit_node and loop_condition:  # End of loop
+                    wf.end_loop(condition=eval(f"lambda ctx: {loop_condition}"), next_node=to_nodes[0])
+                else:
+                    wf.then(to_nodes[0], condition=condition)
             elif all(isinstance(tn, str) for tn in trans.to_node):
                 to_nodes = trans.to_node
                 for to_node in to_nodes:
@@ -544,7 +588,7 @@ class WorkflowManager:
 
 
 async def test_workflow():
-    """Test the workflow execution."""
+    """Test the workflow execution with a loop."""
     manager = WorkflowManager()
     manager.workflow.dependencies = ["requests>=2.28.0"]
     manager.add_function(
@@ -553,9 +597,14 @@ async def test_workflow():
         code="def greet(user_name): return f'Hello, {user_name}!'",
     )
     manager.add_function(
-        name="check_condition",
+        name="check_length",
         type_="embedded",
-        code="def check_condition(user_name): return len(user_name) > 3",
+        code="def check_length(user_name): return len(user_name) < 5",
+    )
+    manager.add_function(
+        name="append_char",
+        type_="embedded",
+        code="def append_char(user_name): return user_name + 'x'",
     )
     manager.add_function(
         name="farewell",
@@ -578,19 +627,16 @@ async def test_workflow():
         inputs_mapping={"user_name": "name_input"},
     )
     manager.add_node(
-        name="format_greeting",
-        template_config={"template": "User: {{ user_name }} greeted on {{ date }}"},
-        inputs_mapping={"user_name": "name_input", "date": "lambda ctx: '2025-03-06'"},
+        name="check",
+        function="check_length",
+        inputs_mapping={"user_name": "name_input"},
+        output="continue_loop"
     )
     manager.add_node(
-        name="branch_true",
-        function="check_condition",
+        name="append",
+        function="append_char",
         inputs_mapping={"user_name": "name_input"},
-    )
-    manager.add_node(
-        name="branch_false",
-        function="check_condition",
-        inputs_mapping={"user_name": "name_input"},
+        output="name_input"
     )
     manager.add_node(
         name="end",
@@ -598,18 +644,11 @@ async def test_workflow():
         inputs_mapping={"user_name": "name_input"},
     )
     manager.set_start_node("start")
-    manager.add_transition(
-        from_node="start",
-        to_node="format_greeting"
+    manager.add_loop(
+        loop_nodes=["start", "check", "append"],
+        condition="ctx.get('continue_loop', False)",
+        exit_node="end"
     )
-    manager.add_transition(
-        from_node="format_greeting",
-        to_node=[
-            BranchCondition(to_node="branch_true", condition="ctx.get('user_name') == 'Alice'"),
-            BranchCondition(to_node="branch_false", condition="ctx.get('user_name') != 'Alice'")
-        ]
-    )
-    manager.add_convergence_node("end")
     manager.add_observer("monitor")
     manager.save_to_yaml("workflow.yaml")
 

@@ -21,7 +21,7 @@ class WorkflowExtractor(ast.NodeVisitor):
     AST visitor to extract workflow nodes and structure from a Python file.
 
     This class parses Python source code to identify workflow components defined with Nodes decorators
-    and Workflow construction, including branch and converge patterns, building a WorkflowDefinition
+    and Workflow construction, including branch, converge, and loop patterns, building a WorkflowDefinition
     compatible with WorkflowManager. Fully supports input mappings and template nodes.
     """
 
@@ -34,6 +34,10 @@ class WorkflowExtractor(ast.NodeVisitor):
         self.global_vars = {}  # Tracks global variable assignments (e.g., DEFAULT_LLM_PARAMS)
         self.observers = []  # List of observer function names
         self.convergence_nodes = []  # List of convergence nodes
+        # Added for loop support
+        self.in_loop = False           # Flag indicating if we're inside a loop
+        self.loop_nodes = []           # List of nodes within the current loop
+        self.loop_entry_node = None    # Node before the loop starts
 
     def visit_Module(self, node):
         """Log and explicitly process top-level statements in the module."""
@@ -468,6 +472,10 @@ class WorkflowExtractor(ast.NodeVisitor):
                     if previous_node:
                         self.transitions.append(TransitionDefinition(from_node=previous_node, to_node=node_name))
                         logger.debug(f"Added node transition: {previous_node} -> {node_name}")
+                    # Add node to loop_nodes if inside a loop
+                    if self.in_loop:
+                        self.loop_nodes.append(node_name)
+                        logger.debug(f"Added '{node_name}' to loop_nodes in '{var_name}'")
                 return node_name
 
             elif method_name == "add_sub_workflow":
@@ -518,6 +526,58 @@ class WorkflowExtractor(ast.NodeVisitor):
                 else:
                     logger.warning(f"Unsupported observer argument in 'add_observer' for '{var_name}'")
                 return previous_node
+
+            elif method_name == "start_loop":
+                if previous_node is None:
+                    logger.warning(f"start_loop called without a previous node in '{var_name}'")
+                    return None
+                self.in_loop = True
+                self.loop_entry_node = previous_node
+                self.loop_nodes = []
+                logger.debug(f"Started loop after node '{previous_node}' in '{var_name}'")
+                return previous_node
+
+            elif method_name == "end_loop":
+                cond = None
+                next_node = None
+                for keyword in expr.keywords:
+                    if keyword.arg == "condition":
+                        cond = ast.unparse(keyword.value)
+                    elif keyword.arg == "next_node":
+                        next_node = (keyword.value.value 
+                                   if isinstance(keyword.value, ast.Constant) 
+                                   else ast.unparse(keyword.value))
+                if not cond or not next_node:
+                    logger.warning(f"end_loop in '{var_name}' missing condition or next_node")
+                    return None
+                if not self.loop_nodes:
+                    logger.warning(f"end_loop called without loop nodes in '{var_name}'")
+                    return None
+                first_loop_node = self.loop_nodes[0]
+                last_loop_node = self.loop_nodes[-1]
+                # Loop-back transition: last node to first node when condition is false
+                negated_cond = f"not ({cond})"
+                self.transitions.append(
+                    TransitionDefinition(
+                        from_node=last_loop_node,
+                        to_node=first_loop_node,
+                        condition=negated_cond
+                    )
+                )
+                # Exit transition: last node to next_node when condition is true
+                self.transitions.append(
+                    TransitionDefinition(
+                        from_node=last_loop_node,
+                        to_node=next_node,
+                        condition=cond
+                    )
+                )
+                logger.debug(f"Added loop transitions: '{last_loop_node}' -> '{first_loop_node}' "
+                            f"(not {cond}), '{last_loop_node}' -> '{next_node}' ({cond})")
+                self.in_loop = False
+                self.loop_nodes = []
+                self.loop_entry_node = None
+                return next_node
 
             else:
                 logger.warning(f"Unsupported Workflow method '{method_name}' in variable '{var_name}'")
