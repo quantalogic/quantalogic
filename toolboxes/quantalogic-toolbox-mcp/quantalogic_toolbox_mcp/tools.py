@@ -6,21 +6,23 @@ and core tools are provided to interact with any server by specifying its name.
 Tools are automatically queried from servers during initialization.
 """
 
+import ast
 import asyncio
 import json
-import ast
+import keyword
 import os
+import re
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List
 
 from loguru import logger
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from quantalogic.tools import ToolArgument, create_tool
 from quantalogic.codeact.tools_manager import ToolRegistry
+from quantalogic.tools import ToolArgument, create_tool
 
 # **Configure Logging**
 logger.remove()
@@ -96,6 +98,25 @@ def parse_text_content(content: Any) -> Any:
     # Return as-is for other types
     logger.debug(f"Content is already a native type: {content}")
     return content
+
+def sanitize_name(name: str) -> str:
+    """Sanitize a string to be a valid Python identifier.
+
+    Args:
+        name: The original name to sanitize.
+
+    Returns:
+        A string that is a valid Python identifier.
+    """
+    # Replace all non-alphanumeric characters (except underscores) with underscores
+    sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    # Prefix with underscore if it starts with a digit
+    if sanitized and sanitized[0].isdigit():
+        sanitized = '_' + sanitized
+    # Append underscore if it’s a Python keyword
+    if keyword.iskeyword(sanitized):
+        sanitized += '_'
+    return sanitized
 
 # **Configuration Loading Functions**
 def load_mcp_config(config_path: str) -> Dict[str, Any]:
@@ -399,7 +420,7 @@ async def fetch_tool_details(server_name: str, tool_name: str, server_params: St
                             description=f"Unknown argument for {tool_name}",
                             required=True
                         ))
-                        logger.debug(f"Added default argument due to parsing error")
+                        logger.debug("Added default argument due to parsing error")
             else:
                 logger.debug(f"No argument attributes found for tool '{tool_name}' in server response")
 
@@ -435,7 +456,7 @@ async def create_dynamic_tool(server_name: str, tool_name: str, server_params: S
     Returns:
         A Tool instance configured for asynchronous execution, or None if creation fails.
     """
-    logger.debug(f"Creating dynamic tool '{server_name}_{tool_name}'")
+    logger.debug(f"Creating dynamic tool for server '{server_name}' and tool '{tool_name}'")
     tool_details = await fetch_tool_details(server_name, tool_name, server_params)
     
     if not tool_details:
@@ -454,14 +475,18 @@ async def create_dynamic_tool(server_name: str, tool_name: str, server_params: S
             return processed_content
 
     tool = create_tool(tool_func)
-    tool.name = f"{server_name}_{tool_name}"
+    # Note: Tool names are sanitized to be Python-compatible identifiers (e.g., "mcp-hn_tool" becomes "mcp_hn_tool").
+    # Original names with special characters are preserved as metadata and valid as dictionary keys.
+    original_name = f"{server_name}_{tool_name}"
+    tool.name = sanitize_name(original_name)
+    tool.original_name = original_name  # Store original name for reference
     tool.description = tool_details.get('description', f"Dynamic tool {tool_name} from {server_name}")
     tool.arguments = tool_details.get('arguments', [])
     tool.return_type = tool_details.get('return_type', 'Any')
     tool.return_description = tool_details.get('return_description', "The result of the tool execution, type varies by tool.")
     tool.is_async = tool_details.get('is_async', True)
     tool.toolbox_name = f"dynamic_{server_name}"
-    logger.debug(f"Dynamic tool created: name={tool.name}, args={tool.arguments}, toolbox={tool.toolbox_name}, is_async={tool.is_async}")
+    logger.debug(f"Dynamic tool created: name={tool.name}, original_name={tool.original_name}, args={tool.arguments}, toolbox={tool.toolbox_name}, is_async={tool.is_async}")
     return tool
 
 # **Toolbox Initialization**
@@ -509,8 +534,9 @@ async def create_all_tools(registry: ToolRegistry) -> Dict[str, Any]:
                 continue
 
             for tool_name in server_tools:
-                unique_tool_name = f"{server_name}_{tool_name}"
-                logger.debug(f"Creating dynamic tool: {unique_tool_name}")
+                original_unique_tool_name = f"{server_name}_{tool_name}"
+                unique_tool_name = sanitize_name(original_unique_tool_name)
+                logger.debug(f"Creating dynamic tool: {unique_tool_name} (original: {original_unique_tool_name})")
                 
                 tool = await create_dynamic_tool(server_name, tool_name, server_params)
                 if tool:
@@ -541,7 +567,8 @@ async def create_all_tools(registry: ToolRegistry) -> Dict[str, Any]:
                 logger.debug(f"Config-defined tools for '{server_name}': {explicit_tools}")
                 for tool_config in explicit_tools:
                     mcp_tool_name = tool_config["name"]
-                    unique_tool_name = f"{server_name}_{mcp_tool_name}"
+                    original_unique_tool_name = f"{server_name}_{mcp_tool_name}"
+                    unique_tool_name = sanitize_name(original_unique_tool_name)
                     if unique_tool_name not in tools:
                         tool = await create_dynamic_tool(server_name, mcp_tool_name, server_params)
                         if tool:
@@ -624,7 +651,7 @@ if __name__ == "__main__":
         )
         logger.info(f"SQLite version via mcp_call_tool: {version_result}")
 
-        dynamic_tool_name = f"{test_server}_read_query"
+        dynamic_tool_name = sanitize_name(f"{test_server}_read_query")
         if dynamic_tool_name in toolbox["tools"]:
             dynamic_result = await toolbox["tools"][dynamic_tool_name].async_execute(query="SELECT sqlite_version();")
             logger.info(f"SQLite version via dynamic tool: {dynamic_result}")
