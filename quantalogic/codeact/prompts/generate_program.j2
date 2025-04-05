@@ -33,6 +33,9 @@ Instructions:
     - Use these variables to build on prior work rather than starting from scratch.
 11. Be careful to avoid programs that cannot terminate.
 12. When defining new variables, prefix them with 'step<current_step>_' (e.g., `step1_result`) to ensure uniqueness across steps.
+13. Never use dangerous functions like eval, or any other unsafe operations.
+14. If a return result is tool complex use an intermediate result to store it.
+15. If the return type of a function is Any or not specified don't call another function after this just return the result, the result will be handled by the runtime.
 
 Example task: "Translate the poem 'The sun rises' into Spanish using the agent_tool"
 Example output:

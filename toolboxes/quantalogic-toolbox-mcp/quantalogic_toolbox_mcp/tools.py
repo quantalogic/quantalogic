@@ -8,11 +8,12 @@ Tools are automatically queried from servers during initialization.
 
 import asyncio
 import json
+import ast
 import os
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from loguru import logger
 from mcp import ClientSession, StdioServerParameters
@@ -34,15 +35,78 @@ logger.add(
 
 # **Global Variables**
 servers: Dict[str, StdioServerParameters] = {}
+tools_cache: Dict[str, Any] = {}  # Cache for storing tools_result per server
 
 toolbox: Dict[str, Any] = {
     "tools": {},  # Dictionary for tool instances
     "state": {}   # Dictionary for tool states
 }
 
+# **Utility Functions**
+def parse_string_content(text: str) -> Any:
+    """Parse a string into a Python object, trying JSON first, then AST.
+
+    Args:
+        text: The string to parse.
+
+    Returns:
+        Parsed content as a Python type (e.g., list, dict, str).
+    """
+    try:
+        # Attempt to parse as JSON (expects double quotes, 'null')
+        parsed = json.loads(text)
+        if isinstance(parsed, (list, dict)):
+            logger.debug(f"Parsed string as JSON: {parsed}")
+            return parsed
+        logger.debug(f"JSON-parsed content is not a list or dict, returning as-is: {parsed}")
+        return parsed
+    except json.JSONDecodeError:
+        try:
+            # Fallback to parsing as a Python literal (handles single quotes, None)
+            parsed = ast.literal_eval(text)
+            if isinstance(parsed, (list, dict)):
+                logger.debug(f"Parsed string as Python literal: {parsed}")
+                return parsed
+            logger.debug(f"AST-parsed content is not a list or dict, returning as-is: {parsed}")
+            return parsed
+        except (ValueError, SyntaxError):
+            logger.debug(f"Failed to parse string as JSON or Python literal, returning as string: {text}")
+            return text
+
+def parse_text_content(content: Any) -> Any:
+    """Parse MCP tool response content into a usable Python type.
+
+    Args:
+        content: The raw content from the server response.
+
+    Returns:
+        Parsed content as a Python type (e.g., list, dict, str).
+    """
+    logger.debug(f"Parsing content: {str(content)[:50]}...")
+    # Handle lists by recursively parsing each element
+    if isinstance(content, list):
+        return [parse_text_content(item) for item in content]
+    # Handle objects with text attribute (e.g., TextContent)
+    elif hasattr(content, 'text'):
+        text_content = content.text
+        return parse_string_content(text_content)
+    # Handle plain strings
+    elif isinstance(content, str):
+        return parse_string_content(content)
+    # Return as-is for other types
+    logger.debug(f"Content is already a native type: {content}")
+    return content
+
 # **Configuration Loading Functions**
 def load_mcp_config(config_path: str) -> Dict[str, Any]:
-    """Load MCP configuration from a JSON file."""
+    """Load MCP configuration from a JSON file.
+
+    Args:
+        config_path: Path to the JSON configuration file.
+
+    Returns:
+        Dictionary containing the configuration data.
+    """
     logger.debug(f"Loading configuration from {config_path}")
     try:
         with open(config_path) as f:
@@ -57,7 +121,11 @@ def load_mcp_config(config_path: str) -> Dict[str, Any]:
         raise
 
 def load_configs(config_dir: str = "./config") -> None:
-    """Load all JSON config files from the specified directory into the servers dictionary."""
+    """Load all JSON config files from the specified directory into the servers dictionary.
+
+    Args:
+        config_dir: Directory containing JSON config files (default: './config').
+    """
     logger.debug(f"Checking config directory: {config_dir}")
     if not os.path.exists(config_dir):
         logger.warning(f"Config directory {config_dir} does not exist, creating it")
@@ -83,7 +151,14 @@ def load_configs(config_dir: str = "./config") -> None:
 # **MCP Session Management**
 @asynccontextmanager
 async def mcp_session_context(server_params: StdioServerParameters) -> AsyncIterator[ClientSession]:
-    """Async context manager for MCP sessions with improved Docker handling."""
+    """Async context manager for MCP sessions with improved Docker handling.
+
+    Args:
+        server_params: Parameters for the MCP server session.
+
+    Yields:
+        An initialized ClientSession for interacting with the MCP server.
+    """
     logger.debug(f"Starting session with params: {server_params}")
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -111,7 +186,15 @@ async def mcp_session_context(server_params: StdioServerParameters) -> AsyncIter
         raise
 
 async def check_docker_ready(server_params: StdioServerParameters, timeout: int = 30) -> bool:
-    """Check if Docker container is ready to accept connections."""
+    """Check if Docker container is ready to accept connections.
+
+    Args:
+        server_params: Parameters for the MCP server.
+        timeout: Maximum time to wait (in seconds, default: 30).
+
+    Returns:
+        Boolean indicating if the Docker container is ready.
+    """
     logger.debug(f"Checking Docker readiness for params: {server_params}")
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -141,13 +224,14 @@ async def mcp_list_resources(server_name: str) -> List[str]:
         server_name: The name of the server to list resources from.
 
     Returns:
-        A list of resource names or an error message if the server is not found.
+        A list of resource names.
+        Example: ['resource1', 'resource2']
     """
     logger.debug(f"Listing resources for server: {server_name}")
     server_params = servers.get(server_name)
     if not server_params:
         logger.warning(f"Server '{server_name}' not found in servers: {servers.keys()}")
-        return [f"Error: Server '{server_name}' not found"]
+        raise ValueError(f"Server '{server_name}' not found")
     async with mcp_session_context(server_params) as session:
         resources = await session.list_resources()
         logger.debug(f"Resources retrieved: {resources}")
@@ -161,26 +245,28 @@ async def mcp_list_tools(server_name: str) -> List[str]:
         server_name: The name of the server to list tools from.
 
     Returns:
-        A list of tool names or an error message if the server is not found.
+        A list of tool names.
+        Example: ['read_query', 'write_query']
     """
     logger.debug(f"Listing tools for server: {server_name}")
     server_params = servers.get(server_name)
     if not server_params:
         logger.warning(f"Server '{server_name}' not found in servers: {servers.keys()}")
-        return [f"Error: Server '{server_name}' not found"]
+        raise ValueError(f"Server '{server_name}' not found")
     try:
         async with mcp_session_context(server_params) as session:
             tools_result = await session.list_tools()
             logger.debug(f"Raw tools result from server: {tools_result}")
+            tools_cache[server_name] = tools_result  # Cache the tools_result
             tool_names = [tool.name for tool in tools_result.tools]
             logger.debug(f"Tool names extracted: {tool_names}")
             return tool_names
     except Exception as e:
         logger.error(f"Failed to list tools for {server_name}: {str(e)}")
-        return [f"Error: Could not connect to server '{server_name}' - {str(e)}"]
+        raise RuntimeError(f"Could not connect to server '{server_name}': {str(e)}")
 
 @create_tool
-async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Any:
     """Call a specific tool on the specified MCP server.
 
     Args:
@@ -189,21 +275,23 @@ async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict[str, A
         arguments: A dictionary of arguments to pass to the tool.
 
     Returns:
-        A dictionary containing the tool's response or an error message.
+        The result of the tool execution, type depends on the tool called.
+        Use specific tools (e.g., sqlite_read_query) for predictable return types.
+        Example (generic success): [{'id': 1, 'name': 'John'}]
     """
     logger.debug(f"Calling tool '{tool_name}' on server '{server_name}' with args: {arguments}")
     server_params = servers.get(server_name)
     if not server_params:
         logger.warning(f"Server '{server_name}' not found in servers: {servers.keys()}")
-        return {"error": f"Server '{server_name}' not found"}
+        raise ValueError(f"Server '{server_name}' not found")
     async with mcp_session_context(server_params) as session:
         result = await session.call_tool(tool_name, arguments)
         logger.debug(f"Tool call result: meta={result.meta}, content={result.content}, isError={result.isError}")
-        return {
-            "meta": str(result.meta) if result.meta else None,
-            "content": str(result.content),
-            "isError": result.isError
-        }
+        if result.isError:
+            raise RuntimeError(str(result.content))
+        processed_content = parse_text_content(result.content)
+        logger.debug(f"Processed content: {processed_content}")
+        return processed_content
 
 @create_tool
 def list_servers() -> List[str]:
@@ -211,6 +299,7 @@ def list_servers() -> List[str]:
 
     Returns:
         A list of server names.
+        Example: ['sqlite', 'mysql']
     """
     logger.debug("Listing all configured servers")
     server_list = list(servers.keys())
@@ -227,98 +316,125 @@ async def fetch_tool_details(server_name: str, tool_name: str, server_params: St
         server_params: Server parameters for establishing the session.
 
     Returns:
-        Dict containing tool details (name, description, arguments, return_type, return_description).
+        Dict containing tool details:
+        - 'name': The tool's name.
+        - 'description': A description of the tool's purpose and usage.
+        - 'arguments': List of ToolArgument instances.
+        - 'return_type': Return type based on server metadata or default 'Any'.
+        - 'return_description': Detailed description of the return value with examples.
+        - 'is_async': Boolean indicating if the tool is asynchronous.
     """
     logger.debug(f"Fetching details for tool '{tool_name}' on server '{server_name}'")
-    async with mcp_session_context(server_params) as session:
-        try:
+    if server_name in tools_cache:
+        tools_result = tools_cache[server_name]
+        logger.debug(f"Using cached tools_result for server '{server_name}'")
+    else:
+        logger.debug(f"No cache found for server '{server_name}', fetching from server")
+        async with mcp_session_context(server_params) as session:
             tools_result = await session.list_tools()
-            logger.debug(f"Raw tools_result from MCP server: {tools_result}")
-            logger.debug(f"Number of tools returned: {len(tools_result.tools)}")
-            for tool in tools_result.tools:
-                logger.debug(f"Examining tool: {tool.name}, full object: {vars(tool) if hasattr(tool, '__dict__') else str(tool)}")
-                if tool.name == tool_name:
-                    args = []
-                    # Check for inputSchema (capital 'S' as per MCP server response)
-                    arg_list = None
-                    if hasattr(tool, 'inputSchema') and tool.inputSchema:
-                        arg_list = tool.inputSchema.get('properties', {})
-                        logger.debug(f"Found 'inputSchema' attribute: {tool.inputSchema}")
-                    elif hasattr(tool, 'arguments') and tool.arguments:
-                        arg_list = tool.arguments
-                        logger.debug(f"Found 'arguments' attribute: {arg_list}")
-                    elif hasattr(tool, 'params') and tool.params:
-                        arg_list = tool.params
-                        logger.debug(f"Found 'params' attribute: {arg_list}")
-                    elif hasattr(tool, 'input_schema') and tool.input_schema:
-                        arg_list = tool.input_schema
-                        logger.debug(f"Found 'input_schema' attribute: {arg_list}")
+            tools_cache[server_name] = tools_result  # Cache for future use
+            logger.debug(f"Cached tools_result for server '{server_name}'")
 
-                    if arg_list:
-                        required_args = getattr(tool.inputSchema, 'required', []) if hasattr(tool, 'inputSchema') else []
-                        logger.debug(f"Required arguments from inputSchema: {required_args}")
-                        logger.debug(f"Processing {len(arg_list)} arguments for tool '{tool_name}'")
-                        for arg_name, arg_details in arg_list.items() if isinstance(arg_list, dict) else enumerate(arg_list):
-                            logger.debug(f"Argument '{arg_name}' raw data: {arg_details}")
-                            try:
-                                if isinstance(arg_list, dict):
-                                    # Dictionary format from inputSchema 'properties'
-                                    name = arg_name
-                                    arg_type = arg_details.get('type', 'str')
-                                    description = arg_details.get('description', f"Argument for {tool_name}")
-                                    required = name in required_args
-                                    default = arg_details.get('default', None)
-                                    example = arg_details.get('example', None)
-                                    logger.debug(f"Parsed dict arg: name={name}, type={arg_type}, desc={description}, req={required}, def={default}, ex={example}")
-                                else:
-                                    # List format (assuming objects)
-                                    name = getattr(arg_details, 'name', f"arg_{len(args) + 1}")
-                                    arg_type = getattr(arg_details, 'type', 'str')
-                                    description = getattr(arg_details, 'description', f"Argument for {tool_name}")
-                                    required = getattr(arg_details, 'required', True)
-                                    default = getattr(arg_details, 'default', None)
-                                    example = getattr(arg_details, 'example', None)
-                                    logger.debug(f"Parsed object arg: name={name}, type={arg_type}, desc={description}, req={required}, def={default}, ex={example}")
-                                
-                                args.append(ToolArgument(
-                                    name=name,
-                                    arg_type=arg_type,
-                                    description=description,
-                                    required=required,
-                                    default=default,
-                                    example=example
-                                ))
-                                logger.debug(f"Added argument: {name} to tool '{tool_name}'")
-                            except Exception as e:
-                                logger.warning(f"Failed to parse argument '{arg_name}' for '{tool_name}': {str(e)}")
-                                args.append(ToolArgument(
-                                    name=f"arg_{len(args) + 1}",
-                                    arg_type="str",
-                                    description=f"Unknown argument for {tool_name}",
-                                    required=True
-                                ))
-                                logger.debug(f"Added default argument due to parsing error")
-                    else:
-                        logger.debug(f"No argument attributes found for tool '{tool_name}' in server response")
+    logger.debug(f"Raw tools_result from MCP server: {tools_result}")
+    logger.debug(f"Number of tools returned: {len(tools_result.tools)}")
+    for tool in tools_result.tools:
+        logger.debug(f"Examining tool: {tool.name}, full object: {vars(tool) if hasattr(tool, '__dict__') else str(tool)}")
+        if tool.name == tool_name:
+            args = []
+            # Check for inputSchema (capital 'S' as per MCP server response)
+            arg_list = None
+            if hasattr(tool, 'inputSchema') and tool.inputSchema:
+                arg_list = tool.inputSchema.get('properties', {})
+                logger.debug(f"Found 'inputSchema' attribute: {tool.inputSchema}")
+            elif hasattr(tool, 'arguments') and tool.arguments:
+                arg_list = tool.arguments
+                logger.debug(f"Found 'arguments' attribute: {arg_list}")
+            elif hasattr(tool, 'params') and tool.params:
+                arg_list = tool.params
+                logger.debug(f"Found 'params' attribute: {arg_list}")
+            elif hasattr(tool, 'input_schema') and tool.input_schema:
+                arg_list = tool.input_schema
+                logger.debug(f"Found 'input_schema' attribute: {arg_list}")
 
-                    tool_details = {
-                        'name': tool.name,
-                        'description': getattr(tool, 'description', f'Tool {tool_name} from {server_name}'),
-                        'arguments': args,
-                        'return_type': getattr(tool, 'return_type', 'Dict[str, Any]'),
-                        'return_description': getattr(tool, 'return_description', 'Tool execution result')
-                    }
-                    logger.debug(f"Tool details constructed for '{tool_name}': {tool_details}")
-                    return tool_details
+            if arg_list:
+                required_args = getattr(tool.inputSchema, 'required', []) if hasattr(tool, 'inputSchema') else []
+                logger.debug(f"Required arguments from inputSchema: {required_args}")
+                logger.debug(f"Processing {len(arg_list)} arguments for tool '{tool_name}'")
+                for arg_name, arg_details in arg_list.items() if isinstance(arg_list, dict) else enumerate(arg_list):
+                    logger.debug(f"Argument '{arg_name}' raw data: {arg_details}")
+                    try:
+                        if isinstance(arg_list, dict):
+                            # Dictionary format from inputSchema 'properties'
+                            name = arg_name
+                            arg_type = arg_details.get('type', 'str')
+                            description = arg_details.get('description', f"Argument for {tool_name}")
+                            required = name in required_args
+                            default = arg_details.get('default', None)
+                            example = arg_details.get('example', None)
+                            logger.debug(f"Parsed dict arg: name={name}, type={arg_type}, desc={description}, req={required}, def={default}, ex={example}")
+                        else:
+                            # List format (assuming objects)
+                            name = getattr(arg_details, 'name', f"arg_{len(args) + 1}")
+                            arg_type = getattr(arg_details, 'type', 'str')
+                            description = getattr(arg_details, 'description', f"Argument for {tool_name}")
+                            required = getattr(arg_details, 'required', True)
+                            default = getattr(arg_details, 'default', None)
+                            example = getattr(arg_details, 'example', None)
+                            logger.debug(f"Parsed object arg: name={name}, type={arg_type}, desc={description}, req={required}, def={default}, ex={example}")
+                        
+                        args.append(ToolArgument(
+                            name=name,
+                            arg_type=arg_type,
+                            description=description,
+                            required=required,
+                            default=default,
+                            example=example
+                        ))
+                        logger.debug(f"Added argument: {name} to tool '{tool_name}'")
+                    except Exception as e:
+                        logger.warning(f"Failed to parse argument '{arg_name}' for '{tool_name}': {str(e)}")
+                        args.append(ToolArgument(
+                            name=f"arg_{len(args) + 1}",
+                            arg_type="str",
+                            description=f"Unknown argument for {tool_name}",
+                            required=True
+                        ))
+                        logger.debug(f"Added default argument due to parsing error")
+            else:
+                logger.debug(f"No argument attributes found for tool '{tool_name}' in server response")
 
-            logger.warning(f"Tool '{tool_name}' not found in server response")
-            return {}
-        except Exception as e:
-            logger.error(f"Failed to fetch tool details for '{tool_name}' on '{server_name}': {str(e)}")
-            return {}
+            # Use server-provided return type if available, otherwise default to 'Any'
+            return_type = getattr(tool, 'return_type', 'Any') if hasattr(tool, 'return_type') else 'Any'
+            return_desc = getattr(tool, 'return_description', "The result of the tool execution, type varies by tool.") if hasattr(tool, 'return_description') else "The result of the tool execution, type varies by tool.\nExample: Could be a list, dictionary, or string depending on the tool."
+
+            tool_details = {
+                'name': tool.name,
+                'description': (
+                    f"{getattr(tool, 'description', f'Tool {tool_name} from {server_name}')}\n"
+                    "Note: This tool is asynchronous and must be awaited using `await` in an async context."
+                ),
+                'arguments': args,
+                'return_type': return_type,
+                'return_description': return_desc,
+                'is_async': True
+            }
+            logger.debug(f"Tool details constructed for '{tool_name}': {tool_details}")
+            return tool_details
+
+    logger.warning(f"Tool '{tool_name}' not found in server response")
+    return {}
 
 async def create_dynamic_tool(server_name: str, tool_name: str, server_params: StdioServerParameters):
-    """Create a dynamic tool based on MCP server tool definition."""
+    """Create a dynamic tool based on MCP server tool definition.
+
+    Args:
+        server_name: The name of the server hosting the tool.
+        tool_name: The name of the tool to create.
+        server_params: Parameters for establishing a session with the server.
+
+    Returns:
+        A Tool instance configured for asynchronous execution, or None if creation fails.
+    """
     logger.debug(f"Creating dynamic tool '{server_name}_{tool_name}'")
     tool_details = await fetch_tool_details(server_name, tool_name, server_params)
     
@@ -330,26 +446,34 @@ async def create_dynamic_tool(server_name: str, tool_name: str, server_params: S
         logger.debug(f"Executing tool '{tool_name}' on '{server_name}' with kwargs: {kwargs}")
         async with mcp_session_context(server_params) as session:
             result = await session.call_tool(tool_name, kwargs)
-            logger.debug(f"Tool execution result: meta={result.meta}, content={result.content}, isError={result.isError}")
-            return {
-                "meta": str(result.meta) if result.meta else None,
-                "content": str(result.content),
-                "isError": result.isError
-            }
+            logger.debug(f"Tool execution result: meta={result.meta}, content={result.content}, isError={result.isError}, type={type(result.content)}")
+            if result.isError:
+                raise RuntimeError(str(result.content))
+            processed_content = parse_text_content(result.content)
+            logger.debug(f"Processed content for '{tool_name}': {processed_content}")
+            return processed_content
 
     tool = create_tool(tool_func)
     tool.name = f"{server_name}_{tool_name}"
     tool.description = tool_details.get('description', f"Dynamic tool {tool_name} from {server_name}")
     tool.arguments = tool_details.get('arguments', [])
-    tool.return_type = tool_details.get('return_type', 'Dict[str, Any]')
-    tool.return_description = tool_details.get('return_description', 'Tool execution result')
+    tool.return_type = tool_details.get('return_type', 'Any')
+    tool.return_description = tool_details.get('return_description', "The result of the tool execution, type varies by tool.")
+    tool.is_async = tool_details.get('is_async', True)
     tool.toolbox_name = f"dynamic_{server_name}"
-    logger.debug(f"Dynamic tool created: name={tool.name}, args={tool.arguments}, toolbox={tool.toolbox_name}")
+    logger.debug(f"Dynamic tool created: name={tool.name}, args={tool.arguments}, toolbox={tool.toolbox_name}, is_async={tool.is_async}")
     return tool
 
 # **Toolbox Initialization**
 async def create_all_tools(registry: ToolRegistry) -> Dict[str, Any]:
-    """Create all tools by querying MCP servers dynamically and track their state."""
+    """Create all tools by querying MCP servers dynamically and track their state.
+
+    Args:
+        registry: ToolRegistry instance to register tools.
+
+    Returns:
+        Dictionary of created tools.
+    """
     tools = {}
     logger.debug("Starting tool creation process")
     
@@ -455,7 +579,11 @@ async def create_all_tools(registry: ToolRegistry) -> Dict[str, Any]:
     return tools
 
 async def initialize_toolbox(registry: ToolRegistry) -> None:
-    """Initialize toolbox with proper async handling and log final state."""
+    """Initialize toolbox with proper async handling and log final state.
+
+    Args:
+        registry: ToolRegistry instance to register tools.
+    """
     logger.debug("Initializing toolbox")
     load_configs()
     toolbox["tools"] = await create_all_tools(registry)
