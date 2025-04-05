@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic_toolbox_mcp"
-version = "0.5.21"
+version = "0.5.32"
 description = "A custom MCP Client for Quantalogic"
 authors = ["Your Name <you@example.com>"]
 
