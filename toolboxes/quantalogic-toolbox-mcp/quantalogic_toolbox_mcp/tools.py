@@ -446,7 +446,7 @@ async def fetch_tool_details(server_name: str, tool_name: str, server_params: St
     return {}
 
 async def create_dynamic_tool(server_name: str, tool_name: str, server_params: StdioServerParameters):
-    """Create a dynamic tool based on MCP server tool definition.
+    """Create a dynamic tool based on MCP server tool definition, supporting only named parameters.
 
     Args:
         server_name: The name of the server hosting the tool.
@@ -455,6 +455,12 @@ async def create_dynamic_tool(server_name: str, tool_name: str, server_params: S
 
     Returns:
         A Tool instance configured for asynchronous execution, or None if creation fails.
+        
+    Note:
+        This function generates a tool that only accepts named parameters (e.g., `key=value`) as
+        keyword arguments. Positional arguments are not supported to ensure compatibility with
+        MCP server expectations and to maintain clarity in argument passing. Use the tool with
+        explicit argument names as specified in its arguments list (accessible via `tool.arguments`).
     """
     logger.debug(f"Creating dynamic tool for server '{server_name}' and tool '{tool_name}'")
     tool_details = await fetch_tool_details(server_name, tool_name, server_params)
@@ -480,7 +486,11 @@ async def create_dynamic_tool(server_name: str, tool_name: str, server_params: S
     original_name = f"{server_name}_{tool_name}"
     tool.name = sanitize_name(original_name)
     tool.original_name = original_name  # Store original name for reference
-    tool.description = tool_details.get('description', f"Dynamic tool {tool_name} from {server_name}")
+    tool.description = (
+        f"{tool_details.get('description', f'Dynamic tool {tool_name} from {server_name}')}\n"
+        "Important: This tool only supports named parameters (e.g., `arg_name=value`). "
+        "Positional arguments are not allowed. Refer to the tool's `arguments` attribute for valid parameter names."
+    )
     tool.arguments = tool_details.get('arguments', [])
     tool.return_type = tool_details.get('return_type', 'Any')
     tool.return_description = tool_details.get('return_description', "The result of the tool execution, type varies by tool.")
@@ -543,7 +553,7 @@ async def create_all_tools(registry: ToolRegistry) -> Dict[str, Any]:
                     key = (tool.toolbox_name, tool.name)
                     if key not in registry.tools:
                         registry.register(tool)
-                        logger.debug(f"Registered dynamic tool: {unique_tool_name} with args: {tool.arguments}")
+                        logger.debug(f"Registered dynamic tool: {unique_tool_name} with args形: {tool.arguments}")
                     tools[unique_tool_name] = tool
                     toolbox["state"][unique_tool_name] = {
                         "status": "success",
