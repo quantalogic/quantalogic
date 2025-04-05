@@ -183,3 +183,4 @@ sample.db
 .venv*/
 
 quantalogic/tools/composio/*.log.*
+mcp-test/test.db
