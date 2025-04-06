@@ -68,6 +68,21 @@ async def fetch_and_parse_item(session: aiohttp.ClientSession, item_id: int) -> 
             raise ValueError(f"Invalid item data for ID {item_id}: {e}")
 
 
+# Helper function to fetch multiple items in batch
+async def fetch_items_batch(session: aiohttp.ClientSession, item_ids: List[int]) -> List[Optional[Union[Item, Story, Comment]]]:
+    """Fetch multiple Hacker News items concurrently in a batch.
+    
+    Args:
+        session: aiohttp ClientSession for making HTTP requests
+        item_ids: List of item IDs to fetch
+        
+    Returns:
+        List of parsed Item, Story, or Comment objects (or None for invalid items)
+    """
+    tasks = [fetch_and_parse_item(session, item_id) for item_id in item_ids]
+    return await asyncio.gather(*tasks, return_exceptions=True)
+
+
 # Helper function to recursively fetch comments
 async def fetch_comments(session: aiohttp.ClientSession, item: Union[Story, Comment]) -> None:
     """Recursively fetch comments for a Hacker News item.
@@ -81,8 +96,8 @@ async def fetch_comments(session: aiohttp.ClientSession, item: Union[Story, Comm
     """
     if item.kids:
         comment_ids = item.kids
-        comments = await asyncio.gather(*[fetch_and_parse_item(session, cid) for cid in comment_ids])
-        comments = [c for c in comments if c is not None]
+        comments = await fetch_items_batch(session, comment_ids)
+        comments = [c for c in comments if c is not None and not isinstance(c, Exception)]
         for comment in comments:
             await fetch_comments(session, comment)
         item.comments = comments
@@ -123,33 +138,52 @@ async def mcp_hn_get_stories(story_type: str, num_stories: int) -> List[Story]:
         
         story_ids = story_ids[:num_stories]
         
-        async def fetch_story(story_id):
-            return await fetch_and_parse_item(session, story_id)
-        
-        stories = await asyncio.gather(*[fetch_story(id) for id in story_ids])
-        return [story for story in stories if isinstance(story, Story)]
+        # Fetch stories in batch using the new helper function
+        stories = await fetch_items_batch(session, story_ids)
+        # Filter out exceptions and non-Story items
+        return [story for story in stories if isinstance(story, Story) and not isinstance(story, Exception)]
 
 
 @create_tool
-async def mcp_hn_get_story_info(story_id: int) -> Story:
-    """Fetch detailed information about a Hacker News story including comments.
+async def mcp_hn_get_story_info(story_ids: List[int], page: int = 1, per_page: int = 10) -> List[Story]:
+    """Fetch detailed information about multiple Hacker News stories including comments, with pagination.
     
     Args:
-        story_id: ID of the story to fetch
+        story_ids: List of story IDs to fetch
+        page: Page number to retrieve (1-based indexing)
+        per_page: Number of stories per page
         
     Returns:
-        Story object with populated comments
+        List of Story objects with populated comments
         
     Raises:
-        ValueError: If story not found or invalid
+        ValueError: If no valid stories are found in the requested page or if parameters are invalid
         RuntimeError: If HTTP request fails
     """
+    if not story_ids:
+        raise ValueError("story_ids list cannot be empty")
+    if page < 1 or per_page < 1:
+        raise ValueError("page and per_page must be positive integers")
+
+    # Calculate pagination boundaries
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    paginated_ids = story_ids[start_idx:end_idx]
+
+    if not paginated_ids:
+        raise ValueError(f"No stories available for page {page} with {per_page} items per page")
+
     async with aiohttp.ClientSession() as session:
-        story = await fetch_and_parse_item(session, story_id)
-        if not isinstance(story, Story):
-            raise ValueError(f"Story with ID {story_id} not found or not a story")
-        await fetch_comments(session, story)
-        return story
+        # Fetch stories in batch
+        items = await fetch_items_batch(session, paginated_ids)
+        stories = [item for item in items if isinstance(item, Story) and not isinstance(item, Exception)]
+
+        if not stories:
+            raise ValueError(f"No valid stories found for the provided IDs on page {page}")
+
+        # Fetch comments for all stories concurrently
+        await asyncio.gather(*[fetch_comments(session, story) for story in stories])
+        return stories
 
 
 @create_tool
@@ -179,13 +213,12 @@ async def mcp_hn_get_user_info(user_name: str, num_stories: int) -> UserInfo:
                 raise ValueError(f"Invalid user data for '{user_name}': {e}")
         
         submitted_ids = user.submitted if user.submitted else []
-        stories = []
-        for item_id in submitted_ids:
-            if len(stories) >= num_stories:
-                break
-            item = await fetch_and_parse_item(session, item_id)
-            if item and isinstance(item, Story):
-                stories.append(item)
+        submitted_ids = submitted_ids[:num_stories]  # Limit to requested number
+        
+        # Fetch submitted items in batch
+        items = await fetch_items_batch(session, submitted_ids)
+        # Filter for valid stories only
+        stories = [item for item in items if isinstance(item, Story) and not isinstance(item, Exception)]
         
         return UserInfo(user=user, submitted_stories=stories)
 
@@ -240,27 +273,55 @@ async def mcp_hn_search_stories(query: str, search_by_date: bool, num_results: i
 
 
 async def main() -> None:
-    """Test all Hacker News API functions.
+    """Test all Hacker News API functions with detailed output.
     
-    Prints sample output from each API function for verification.
+    Prints comprehensive information from each API function for verification.
     """
-    print("Testing mcp_hn_get_stories (top stories):")
+    # Test mcp_hn_get_stories
+    print("=== Testing mcp_hn_get_stories (top stories) ===")
     top_stories = await mcp_hn_get_stories(story_type="top", num_stories=5)
-    print(top_stories[0].title)
-    
-    print("\nTesting mcp_hn_get_story_info:")
-    story_id = top_stories[0].id
-    story_info = await mcp_hn_get_story_info(story_id=story_id)
-    print(story_info.title)
-    
-    print("\nTesting mcp_hn_get_user_info:")
-    user_name = story_info.by
+    print(f"Fetched {len(top_stories)} top stories:")
+    for i, story in enumerate(top_stories[:2], 1):  # Show first 2 for brevity
+        print(f"{i}. Title: {story.title}")
+        print(f"   ID: {story.id}, Author: {story.by}, Score: {story.score}")
+        print(f"   URL: {story.url or 'N/A'}")
+        print()
+
+    # Test mcp_hn_get_story_info
+    print("=== Testing mcp_hn_get_story_info (batch with pagination) ===")
+    story_ids = [s.id for s in top_stories]
+    story_info_batch = await mcp_hn_get_story_info(story_ids=story_ids, page=1, per_page=2)
+    print(f"Fetched {len(story_info_batch)} stories (page 1, 2 per page):")
+    for i, story in enumerate(story_info_batch, 1):
+        comment_count = len(story.comments) if story.comments else 0
+        print(f"{i}. Title: {story.title}")
+        print(f"   ID: {story.id}, Author: {story.by}, Score: {story.score}")
+        print(f"   Comments: {comment_count}")
+        if story.comments:
+            print(f"   First Comment: {story.comments[0].text[:50]}..." if len(story.comments[0].text) > 50 else story.comments[0].text)
+        print()
+
+    # Test mcp_hn_get_user_info
+    print("=== Testing mcp_hn_get_user_info ===")
+    user_name = story_info_batch[0].by
     user_info = await mcp_hn_get_user_info(user_name=user_name, num_stories=2)
-    print(user_info.user.id)
-    
-    print("\nTesting mcp_hn_search_stories:")
+    print(f"User: {user_info.user.id}")
+    print(f"  Karma: {user_info.user.karma}")
+    print(f"  Created: {user_info.user.created} (Unix timestamp)")
+    print(f"  Submitted Stories: {len(user_info.submitted_stories)}")
+    for i, story in enumerate(user_info.submitted_stories, 1):
+        print(f"  {i}. Title: {story.title}, Score: {story.score}")
+    print()
+
+    # Test mcp_hn_search_stories
+    print("=== Testing mcp_hn_search_stories ===")
     search_results = await mcp_hn_search_stories(query="python", search_by_date=False, num_results=3)
-    print(search_results[0].title)
+    print(f"Fetched {len(search_results)} search results for 'python':")
+    for i, story in enumerate(search_results, 1):
+        print(f"{i}. Title: {story.title}")
+        print(f"   ID: {story.id}, Author: {story.by}, Score: {story.score}")
+        print(f"   URL: {story.url or 'N/A'}")
+        print()
 
 if __name__ == "__main__":
     asyncio.run(main())
