@@ -503,19 +503,38 @@ class Tool(ToolDefinition):
             return await asyncio.to_thread(self.execute, **kwargs)
         raise NotImplementedError("This method should be implemented by subclasses.")
 
-    async def __call__(self, **kwargs: Any) -> Any:
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Make the tool callable, handling both synchronous and asynchronous executions.
 
+        The tool can be called with positional and/or keyword arguments, matching the arguments defined in the tool's metadata.
+
         Args:
+            *args: Positional arguments to pass to the tool's execution method, mapped to argument names in the order defined by self.arguments.
             **kwargs: Keyword arguments to pass to the tool's execution method.
 
         Returns:
             The result of the tool execution, preserving the original return type.
 
+        Raises:
+            TypeError: If too many positional arguments are provided or if an argument is specified both positionally and by keyword.
+
         Usage:
-            For synchronous contexts: result = asyncio.run(tool(**kwargs))
-            For asynchronous contexts: result = await tool(**kwargs)
+            For synchronous contexts: result = asyncio.run(tool(*args, **kwargs))
+            For asynchronous contexts: result = await tool(*args, **kwargs)
         """
+        # Extract argument names in the order defined by the tool's metadata
+        arg_names = [arg.name for arg in self.arguments]
+        
+        # Map positional arguments to their corresponding names
+        for i, arg_value in enumerate(args):
+            if i >= len(arg_names):
+                raise TypeError(f"{self.name}() takes {len(arg_names)} positional arguments but {len(args)} were given")
+            arg_name = arg_names[i]
+            if arg_name in kwargs:
+                raise TypeError(f"{self.name}() got multiple values for argument '{arg_name}'")
+            kwargs[arg_name] = arg_value
+        
+        # Execute the tool with the combined kwargs
         if self.is_async:
             return await self.async_execute(**kwargs)
         else:
@@ -834,5 +853,55 @@ if __name__ == "__main__":
     print("Execution result (sync):", hello_tool.execute(name="Alice"))
     print("Execution result (async):", asyncio.run(hello_tool.async_execute(name="Alice")))
     # Call hello tool directly as a callable
-    print("Execution result (callable):", asyncio.run(hello_tool(name="Alice")))
+    print("Execution result (callable named arguments):", asyncio.run(hello_tool(name="Alice")))
+    print()
+    print("Execution result (callable positional arguments):", asyncio.run(hello_tool("Alice")))
+    print()
+
+    def add(a: int, b: int = 0) -> int:
+        """
+        Add two numbers.
+        
+        Args:
+            a: First number.
+            b: Second number (optional).
+        
+        Returns:
+            The sum of a and b.
+        """
+        return a + b
+
+    add_tool = create_tool(add)
+    print("Add Tool Markdown:")
+    print(add_tool.to_markdown())
+    print("Add Tool Docstring:")
+    print(add_tool.to_docstring())
+    print("Execution result (sync):", add_tool.execute(a=5, b=3))
+    print("Execution result (async):", asyncio.run(add_tool.async_execute(a=5, b=3)))
+    print("Execution result (callable named arguments):", asyncio.run(add_tool(a=5, b=3)))
+    print("Execution result (callable positional arguments):", asyncio.run(add_tool(5, 3)))
+    print()
+
+    def subtract(a: int, b: int = 0) -> int:
+        """
+        Subtract two numbers.
+        
+        Args:
+            a: First number.
+            b: Second number (optional).
+        
+        Returns:
+            The difference of a and b.
+        """
+        return a - b
+
+    subtract_tool = create_tool(subtract)
+    print("Subtract Tool Markdown:")
+    print(subtract_tool.to_markdown())
+    print("Subtract Tool Docstring:")
+    print(subtract_tool.to_docstring())
+    print("Execution result (sync):", subtract_tool.execute(a=5, b=3))
+    print("Execution result (async):", asyncio.run(subtract_tool.async_execute(a=5, b=3)))
+    print("Execution result (callable named arguments):", asyncio.run(subtract_tool(a=5, b=3)))
+    print("Execution result (callable positional arguments):", asyncio.run(subtract_tool(5, 3)))
     print()
