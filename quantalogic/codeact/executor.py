@@ -170,6 +170,7 @@ class Executor(BaseExecutor):
                 entry_point="main",
                 allowed_modules=["asyncio", "math", "random", "time"],
                 namespace=self.tool_namespace,
+                ignore_typing=True
             )
             if result.local_variables:
                 context_vars.update(
