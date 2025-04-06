@@ -1,7 +1,7 @@
 import ast
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional  # Added Dict, Any
+from typing import Any, Callable, Dict, List, Optional
 
 from quantalogic.tools import Tool
 
@@ -63,18 +63,19 @@ async def generate_program(
 class PromptStrategy(ABC):
     """Abstract base class for prompt generation strategies."""
     @abstractmethod
-    async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int) -> str:
+    async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int, available_vars: List[str]) -> str:
         pass
 
 
 class DefaultPromptStrategy(PromptStrategy):
     """Default strategy using Jinja2 templates."""
-    async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int) -> str:
+    async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int, available_vars: List[str]) -> str:
         return jinja_env.get_template("generate_action.j2").render(
             task=task,
             history_str=history_str,
             current_step=step,
-            max_iterations=max_iterations
+            max_iterations=max_iterations,
+            available_vars=available_vars
         )
 
 
@@ -89,7 +90,8 @@ class BaseReasoner(ABC):
         max_iterations: int,
         system_prompt: Optional[str],
         notify_event: Callable,
-        streaming: bool
+        streaming: bool,
+        available_vars: List[str]
     ) -> str:
         pass
 
@@ -110,7 +112,8 @@ class Reasoner(BaseReasoner):
         max_iterations: int,
         system_prompt: Optional[str] = None,
         notify_event: Callable = None,
-        streaming: bool = False
+        streaming: bool = False,
+        available_vars: List[str] = None
     ) -> str:
         """Generate an action based on task and history with streaming support."""
         try:
@@ -118,7 +121,8 @@ class Reasoner(BaseReasoner):
                 task if not system_prompt else f"{system_prompt}\nTask: {task}",
                 history_str,
                 step,
-                max_iterations
+                max_iterations,
+                available_vars or []  # Default to empty list if None
             )
             await notify_event(PromptGeneratedEvent(
                 event_type="PromptGenerated", step_number=step, prompt=task_prompt

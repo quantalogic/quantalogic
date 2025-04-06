@@ -74,11 +74,13 @@ class ReActAgent:
         system_prompt: Optional[str] = None,
         streaming: bool = False
     ) -> str:
-        """Generate an action using the Reasoner."""
+        """Generate an action using the Reasoner, passing available variables."""
         history_str: str = self.history_manager.format_history(max_iterations)
+        available_vars: List[str] = list(self.context_vars.keys())  # Extract available variable names
         start: float = time.perf_counter()
         response: str = await self.reasoner.generate_action(
-            task, history_str, step, max_iterations, system_prompt, self._notify_observers, streaming=streaming
+            task, history_str, step, max_iterations, system_prompt, self._notify_observers,
+            streaming=streaming, available_vars=available_vars
         )
         thought, code = XMLResultHandler.parse_action_response(response)
         gen_time: float = time.perf_counter() - start

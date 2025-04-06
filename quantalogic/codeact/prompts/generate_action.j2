@@ -1,3 +1,12 @@
+Before generating the code, follow these steps:
+
+1. **Review the History**: Examine the <History> section below to understand previous thoughts, actions, and results.
+2. **Identify Available Variables**: Check the 'Currently available variables' list and 'Available variables' in the history. These are stored in the `context_vars` dictionary and can be accessed using `context_vars.get('variable_name', default_value)`.
+3. **Use Previous Results**: Incorporate relevant variables from prior steps to avoid redundant calculations and ensure continuity. For example, if `step1_sum` exists, retrieve it with `previous_sum = context_vars.get('step1_sum', 0)` and build upon it.
+4. **Plan Your Approach**: Based on the history and variables, determine the next logical step toward solving the task.
+
+Currently available variables from previous steps: {{ available_vars | join(', ') }}
+
 Solve the following task: 
 
 <Task>
@@ -30,24 +39,31 @@ Variable Naming Convention:
 - Prefix all new variables with 'step{{ current_step }}_' (e.g., `step{{ current_step }}_result = ...`).
 - This ensures variables are unique across steps and traceable to their origin.
 
-Example Scenario:
-Task: "Calculate the running total by adding 10 to the previous sum."
+Example of using variables from previous steps:
+
+Task: "Add 15 to the previous total"
 History: 
 "===== Step 1 of 5 max =====
-Thought: Initialize the sum
-Action: <code>import asyncio\nasync def main():\n    step1_sum = 5\n    return f'Initial sum: {step1_sum}'</code>
-Result: Initial sum: 5
-Available variables: step1_sum"
-Your code should:
+Thought: Initialize the total
+Action: <code>import asyncio\nasync def main():\n    step1_total = 10\n    return f'Initial total: {step1_total}'</code>
+Result: Initial total: 10
+Available variables: step1_total"
+
+Code:
 import asyncio
 
 async def main():
-    # Get previous total, default to 0 if not found
-    previous_total: int = int(context_vars.get('step1_sum', 0))
-    # Calculate new total
-    step2_total: int = previous_total + 10
-    # Return intermediate result
+    # Retrieve previous total with a default of 0
+    previous_total: int = int(context_vars.get('step1_total', 0))
+    # Add 15 to it
+    step2_total: int = previous_total + 15
+    # Return the new total
     return f"Intermediate total: {step2_total}"
+
+Error Reflection:
+- If there were errors in previous steps, review the error messages in the <History> section and adjust your code to avoid similar issues.
+- For example, if a variable was missing, check `context_vars` with a default value.
+- If a tool call failed, verify the arguments and ensure they match the tool's requirements.
 
 The program must:
 
