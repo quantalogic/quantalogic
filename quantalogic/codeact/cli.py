@@ -1,5 +1,6 @@
 """Command-line interface entry point for Quantalogic Agent."""
 
+import asyncio
 import importlib
 from pathlib import Path
 
@@ -14,7 +15,7 @@ console = Console()
 
 # Initialize PluginManager at module level to avoid duplicate loading
 plugin_manager = PluginManager()
-plugin_manager.load_plugins()
+asyncio.run(plugin_manager.load_plugins())
 
 # Dynamically load CLI commands from cli_commands directory
 cli_commands_dir = Path(__file__).parent / "cli_commands"

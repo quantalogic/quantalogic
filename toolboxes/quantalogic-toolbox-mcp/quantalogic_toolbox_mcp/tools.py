@@ -638,14 +638,13 @@ async def initialize_toolbox(registry: ToolRegistry) -> None:
         else:
             logger.warning(f"Tool: {tool_name}, Status: {state['status']}, Toolbox: {state['toolbox_name']}, Error: {state['error']}")
 
-# **Main Execution**
+# **Main Execution (Test Suite Only)**
 if __name__ == "__main__":
     logger.info("Starting MCP toolbox test suite")
     async def test_toolbox():
-        from quantalogic.codeact.plugin_manager import PluginManager
-        plugin_manager = PluginManager()
-        plugin_manager.load_plugins()
-        await initialize_toolbox(plugin_manager.tools)
+        from quantalogic.codeact.tools_manager import ToolRegistry
+        registry = ToolRegistry()
+        await initialize_toolbox(registry)
         
         servers_list = toolbox["tools"]["list_servers"].execute()
         logger.info(f"Available servers: {servers_list}")
@@ -674,6 +673,3 @@ if __name__ == "__main__":
 
     asyncio.run(test_toolbox())
     logger.info("Test suite completed")
-else:
-    # Do not auto-initialize when imported as a module
-    pass
