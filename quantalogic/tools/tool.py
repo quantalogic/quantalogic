@@ -58,41 +58,49 @@ def get_type_description(type_hint):
     if type_hint in basic_types:
         return basic_types[type_hint]
 
-    origin = get_origin(type_hint)
-    if origin is None:
-        if inspect.isclass(type_hint):
-            doc = inspect.getdoc(type_hint)
-            desc_prefix = f"{doc} " if doc else ""
-            if hasattr(type_hint, "__annotations__"):
-                annotations = type_hint.__annotations__
-                attrs = ", ".join(f"{name}: {get_type_description(typ)}" for name, typ in annotations.items())
-                return f"{desc_prefix}an instance of {type_hint.__name__} with attributes: {attrs}"
-            return f"{desc_prefix}{type_hint.__name__}"
-        return str(type_hint)
+    try:
+        origin = get_origin(type_hint)
+        if origin is None:
+            if inspect.isclass(type_hint):
+                doc = inspect.getdoc(type_hint)
+                desc_prefix = f"{doc} " if doc else ""
+                if hasattr(type_hint, "__annotations__"):
+                    annotations = type_hint.__annotations__
+                    attrs = ", ".join(f"{name}: {get_type_description(typ)}" for name, typ in annotations.items())
+                    return f"{desc_prefix}an instance of {type_hint.__name__} with attributes: {attrs}"
+                return f"{desc_prefix}{type_hint.__name__}"
+            return str(type_hint)
 
-    elif origin is list:
-        item_type = get_args(type_hint)[0]
-        return f"a list of {get_type_description(item_type)}"
+        args = get_args(type_hint)
+        
+        if origin is list:
+            if args and len(args) >= 1:
+                return f"a list of {get_type_description(args[0])}"
+            return "a list"
 
-    elif origin is dict:
-        key_type, value_type = get_args(type_hint)
-        return f"a dictionary with {get_type_description(key_type)} keys and {get_type_description(value_type)} values"
+        elif origin is dict:
+            if args and len(args) == 2:  # Explicit key and value types provided
+                return f"a dictionary with {get_type_description(args[0])} keys and {get_type_description(args[1])} values"
+            return "a dictionary with any keys and values"  # Fallback for bare Dict
 
-    elif origin is tuple:
-        tuple_types = get_args(type_hint)
-        types_desc = ", ".join(get_type_description(t) for t in tuple_types)
-        return f"a tuple containing {types_desc}"
+        elif origin is tuple:
+            if args:
+                types_desc = ", ".join(get_type_description(t) for t in args)
+                return f"a tuple containing {types_desc}"
+            return "a tuple"
 
-    elif origin is Union:
-        union_types = get_args(type_hint)
-        if len(union_types) == 2 and type(None) in union_types:
-            non_none_type = next(t for t in union_types if t is not type(None))
-            return f"an optional {get_type_description(non_none_type)} (can be None)"
-        types_desc = ", ".join(get_type_description(t) for t in union_types)
-        return f"one of {types_desc}"
+        elif origin is Union:
+            if args:
+                if len(args) == 2 and type(None) in args:
+                    non_none_type = next(t for t in args if t is not type(None))
+                    return f"an optional {get_type_description(non_none_type)} (can be None)"
+                types_desc = ", ".join(get_type_description(t) for t in args)
+                return f"one of {types_desc}"
+            return "any type"
 
-    else:
         return type_hint_to_str(type_hint)
+    except Exception:
+        return str(type_hint)
 
 
 def get_type_schema(type_hint):
@@ -128,10 +136,13 @@ def get_type_schema(type_hint):
         return f"[{get_type_schema(item_type)}, ...]"
 
     elif origin is dict:
-        key_type, value_type = get_args(type_hint)
-        if key_type is str:
-            return f"{{{get_type_schema(value_type)}}}"
-        return f"dictionary with keys of type {get_type_schema(key_type)} and values of type {get_type_schema(value_type)}"
+        args = get_args(type_hint)
+        if len(args) == 2:
+            key_type, value_type = args
+            if key_type is str:
+                return f"{{{get_type_schema(value_type)}}}"
+            return f"dictionary with keys of type {get_type_schema(key_type)} and values of type {get_type_schema(value_type)}"
+        return "dictionary"
 
     elif origin is tuple:
         tuple_types = get_args(type_hint)
