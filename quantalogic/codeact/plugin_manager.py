@@ -1,6 +1,5 @@
 """Plugin management module for dynamically loading components."""
 
-import asyncio
 from importlib.metadata import entry_points
 from typing import List
 
@@ -27,14 +26,14 @@ class PluginManager:
             cls._instance._plugins_loaded = False
         return cls._instance
 
-    async def load_plugins(self, force: bool = False) -> None:
+    def load_plugins(self, force: bool = False) -> None:
         """Load all plugins from registered entry points, handling duplicates gracefully.
         
         Args:
             force: If True, reload plugins even if they were already loaded
         """
         if self._plugins_loaded and not force:
-            logger.debug("Plugins already loaded, skipping reload")
+            logger.debug("Plugins already loaded, skipping entire load process")
             return
         
         # Clear existing plugins only if forcing reload
@@ -60,11 +59,14 @@ class PluginManager:
                     try:
                         loaded = ep.load()
                         if group == "quantalogic.tools":
-                            # Ensure dynamic tools are initialized after static tools
+                            # Load static tools first
                             store()
+                            # Then initialize dynamic MCP tools if applicable
                             if ep.name == "quantalogic_toolbox_mcp":
+                                import asyncio
+
                                 from quantalogic_toolbox_mcp.tools import initialize_toolbox
-                                await initialize_toolbox(self.tools)
+                                asyncio.run(initialize_toolbox(self.tools))
                         else:
                             store[ep.name] = loaded
                             logger.info(f"Loaded plugin {ep.name} for {group}")
@@ -75,12 +77,16 @@ class PluginManager:
         self._plugins_loaded = True
         logger.info("Plugin loading completed")
 
-    async def get_tools(self, force_reload: bool = False) -> List[Tool]:
+    def get_tools(self, force_reload: bool = False) -> List[Tool]:
         """Return all registered tools.
         
         Args:
             force_reload: If True, reload plugins before getting tools
         """
         if force_reload:
-            await self.load_plugins(force=True)
+            self.load_plugins(force=True)
+        else:
+            # Ensure plugins are loaded at least once, but don’t reload
+            if not self._plugins_loaded:
+                self.load_plugins()
         return self.tools.get_tools()
