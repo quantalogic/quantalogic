@@ -26,11 +26,24 @@ class PluginManager:
             cls._instance._plugins_loaded = False
         return cls._instance
 
-    def load_plugins(self) -> None:
-        """Load all plugins from registered entry points, handling duplicates gracefully."""
-        if self._plugins_loaded:
+    def load_plugins(self, force: bool = False) -> None:
+        """Load all plugins from registered entry points, handling duplicates gracefully.
+        
+        Args:
+            force: If True, reload plugins even if they were already loaded
+        """
+        if self._plugins_loaded and not force:
             logger.debug("Plugins already loaded, skipping reload")
             return
+        
+        # Clear existing plugins if forcing reload
+        if force:
+            self.tools = ToolRegistry()
+            self.reasoners = {"default": Reasoner}
+            self.executors = {"default": Executor}
+            self.cli_commands = {}
+            self._plugins_loaded = False
+
         for group, store in [
             ("quantalogic.tools", self.tools.load_toolboxes),
             ("quantalogic.reasoners", self.reasoners),
@@ -56,6 +69,12 @@ class PluginManager:
                 logger.error(f"Failed to retrieve entry points for {group}: {e}")
         self._plugins_loaded = True
 
-    def get_tools(self) -> List[Tool]:
-        """Return all registered tools."""
+    def get_tools(self, force_reload: bool = False) -> List[Tool]:
+        """Return all registered tools.
+        
+        Args:
+            force_reload: If True, reload plugins before getting tools
+        """
+        if force_reload:
+            self.load_plugins(force=True)
         return self.tools.get_tools()
