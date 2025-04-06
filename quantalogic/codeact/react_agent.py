@@ -24,23 +24,42 @@ from .history_manager import HistoryManager
 from .llm_util import litellm_completion
 from .reasoner import BaseReasoner, Reasoner
 from .tools_manager import ToolRegistry
-from .xml_utils import XMLResultHandler  # Updated import
+from .xml_utils import XMLResultHandler
 
 
 class ReActAgent:
-    """Implements the ReAct framework for reasoning and acting."""
+    """Implements the ReAct framework for reasoning and acting with enhanced memory management."""
+    
     def __init__(
         self,
         model: str,
         tools: List[Tool],
         max_iterations: int = 5,
         max_history_tokens: int = 2000,
+        system_prompt: str = "",  # New parameter for persistent context
+        task_description: str = "",  # New parameter for persistent context
         reasoner: Optional[BaseReasoner] = None,
         executor: Optional[BaseExecutor] = None,
         tool_registry: Optional[ToolRegistry] = None,
         history_manager: Optional[HistoryManager] = None,
         error_handler: Optional[Callable[[Exception, int], bool]] = None
     ) -> None:
+        """
+        Initialize the ReActAgent with tools, reasoning, execution, and memory components.
+
+        Args:
+            model (str): Language model identifier.
+            tools (List[Tool]): List of available tools.
+            max_iterations (int): Maximum reasoning steps (default: 5).
+            max_history_tokens (int): Max tokens for history (default: 2000).
+            system_prompt (str): Persistent system instructions (default: "").
+            task_description (str): Persistent task context (default: "").
+            reasoner (Optional[BaseReasoner]): Custom reasoner instance.
+            executor (Optional[BaseExecutor]): Custom executor instance.
+            tool_registry (Optional[ToolRegistry]): Custom tool registry.
+            history_manager (Optional[HistoryManager]): Custom history manager.
+            error_handler (Optional[Callable[[Exception, int], bool]]): Error handler callback.
+        """
         self.tool_registry = tool_registry or ToolRegistry()
         for tool in tools:
             self.tool_registry.register(tool)
@@ -48,7 +67,11 @@ class ReActAgent:
         self.executor: BaseExecutor = executor or Executor(self.tool_registry.get_tools(), notify_event=self._notify_observers)
         self.max_iterations: int = max_iterations
         self.max_history_tokens: int = max_history_tokens
-        self.history_manager: HistoryManager = history_manager or HistoryManager(max_tokens=max_history_tokens)
+        self.history_manager: HistoryManager = history_manager or HistoryManager(
+            max_tokens=max_history_tokens,
+            system_prompt=system_prompt,
+            task_description=task_description
+        )
         self.context_vars: Dict = {}
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.error_handler = error_handler or (lambda e, step: False)  # Default: no retry
@@ -74,13 +97,26 @@ class ReActAgent:
         system_prompt: Optional[str] = None,
         streaming: bool = False
     ) -> str:
-        """Generate an action using the Reasoner, passing available variables."""
+        """
+        Generate an action using the Reasoner, passing available variables.
+
+        Args:
+            task (str): The task to address.
+            history (List[Dict]): Stored step history.
+            step (int): Current step number.
+            max_iterations (int): Maximum allowed steps.
+            system_prompt (Optional[str]): Override system prompt (optional).
+            streaming (bool): Whether to stream the response.
+
+        Returns:
+            str: Generated action in XML format.
+        """
         history_str: str = self.history_manager.format_history(max_iterations)
-        available_vars: List[str] = list(self.context_vars.keys())  # Extract available variable names
+        available_vars: List[str] = list(self.context_vars.keys())
         start: float = time.perf_counter()
         response: str = await self.reasoner.generate_action(
-            task, history_str, step, max_iterations, system_prompt, self._notify_observers,
-            streaming=streaming, available_vars=available_vars
+            task, history_str, step, max_iterations, system_prompt or self.history_manager.system_prompt,
+            self._notify_observers, streaming=streaming, available_vars=available_vars
         )
         thought, code = XMLResultHandler.parse_action_response(response)
         gen_time: float = time.perf_counter() - start
@@ -95,7 +131,17 @@ class ReActAgent:
         return response
 
     async def execute_action(self, code: str, step: int, timeout: int = 300) -> str:
-        """Execute an action using the Executor, passing the step number."""
+        """
+        Execute an action using the Executor.
+
+        Args:
+            code (str): Code to execute.
+            step (int): Current step number.
+            timeout (int): Execution timeout in seconds (default: 300).
+
+        Returns:
+            str: Execution result in XML format.
+        """
         start: float = time.perf_counter()
         result_xml: str = await self.executor.execute_action(code, self.context_vars, step, timeout)
         execution_time: float = time.perf_counter() - start
@@ -105,7 +151,18 @@ class ReActAgent:
         return result_xml
 
     async def is_task_complete(self, task: str, history: List[Dict], result: str, success_criteria: Optional[str]) -> Tuple[bool, str]:
-        """Check if the task is complete based on the result."""
+        """
+        Check if the task is complete based on the result.
+
+        Args:
+            task (str): The task being solved.
+            history (List[Dict]): Step history.
+            result (str): Result of the latest action.
+            success_criteria (Optional[str]): Optional success criteria.
+
+        Returns:
+            Tuple[bool, str]: (is_complete, final_answer).
+        """
         try:
             root = etree.fromstring(result)
             if root.findtext("Completed") == "true":
@@ -120,7 +177,7 @@ class ReActAgent:
                     temperature=0.1,
                     stream=False
                 )
-                if "yes" in verification.lower():
+                if verification and "yes" in verification.lower():
                     return True, final_answer
                 return True, final_answer
         except etree.XMLSyntaxError:
@@ -132,8 +189,25 @@ class ReActAgent:
 
     async def _run_step(self, task: str, step: int, max_iters: int, 
                        system_prompt: Optional[str], streaming: bool) -> Dict:
-        """Execute a single step of the ReAct loop with retry logic."""
-        await self._notify_observers(StepStartedEvent(event_type="StepStarted", step_number=step))
+        """
+        Execute a single step of the ReAct loop with retry logic.
+
+        Args:
+            task (str): The task to address.
+            step (int): Current step number.
+            max_iters (int): Maximum allowed steps.
+            system_prompt (Optional[str]): System prompt override.
+            streaming (bool): Whether to stream responses.
+
+        Returns:
+            Dict: Step data (step_number, thought, action, result).
+        """
+        await self._notify_observers(StepStartedEvent(
+            event_type="StepStarted",
+            step_number=step,
+            system_prompt=self.history_manager.system_prompt,
+            task_description=self.history_manager.task_description
+        ))
         for attempt in range(3):
             try:
                 response: str = await self.generate_action(task, self.history_manager.store, step, max_iters, system_prompt, streaming)
@@ -152,7 +226,17 @@ class ReActAgent:
 
     async def _finalize_step(self, task: str, step_data: Dict, 
                             success_criteria: Optional[str]) -> Tuple[bool, Dict]:
-        """Check completion and notify observers for a step."""
+        """
+        Check completion and notify observers for a step.
+
+        Args:
+            task (str): The task being solved.
+            step_data (Dict): Current step data.
+            success_criteria (Optional[str]): Optional success criteria.
+
+        Returns:
+            Tuple[bool, Dict]: (is_complete, updated_step_data).
+        """
         is_complete, final_answer = await self.is_task_complete(task, self.history_manager.store, step_data["result"], success_criteria)
         if is_complete:
             try:
@@ -181,10 +265,29 @@ class ReActAgent:
         max_iterations: Optional[int] = None,
         streaming: bool = False
     ) -> List[Dict]:
-        """Solve a task using the ReAct framework."""
+        """
+        Solve a task using the ReAct framework with persistent memory.
+
+        Args:
+            task (str): The task to solve.
+            success_criteria (Optional[str]): Criteria for success.
+            system_prompt (Optional[str]): System prompt override.
+            max_iterations (Optional[int]): Override for max steps.
+            streaming (bool): Whether to stream responses.
+
+        Returns:
+            List[Dict]: History of steps taken.
+        """
         max_iters: int = max_iterations if max_iterations is not None else self.max_iterations
         self.history_manager.store.clear()  # Reset history for new task
-        await self._notify_observers(TaskStartedEvent(event_type="TaskStarted", task_description=task))
+        if system_prompt is not None:
+            self.history_manager.system_prompt = system_prompt
+        self.history_manager.task_description = task
+        await self._notify_observers(TaskStartedEvent(
+            event_type="TaskStarted",
+            task_description=task,
+            system_prompt=self.history_manager.system_prompt
+        ))
 
         for step in range(1, max_iters + 1):
             try:

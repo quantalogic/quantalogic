@@ -11,6 +11,7 @@ class Event(BaseModel):
 
 class TaskStartedEvent(Event):
     task_description: str
+    system_prompt: str = ""  # Added for persistent context
 
 
 class ThoughtGeneratedEvent(Event):
@@ -52,6 +53,8 @@ class TaskCompletedEvent(Event):
 
 class StepStartedEvent(Event):
     step_number: int
+    system_prompt: str = ""  # Added for persistent context
+    task_description: str = ""  # Added for persistent context
 
 
 class ToolExecutionStartedEvent(Event):
