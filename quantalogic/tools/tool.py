@@ -115,6 +115,8 @@ class ToolDefinition(BaseModel):
     return_type: str = Field(default="str", description="The return type of the tool's execution method.")
     return_description: str | None = Field(default=None, description="Description of the return value.")
     return_type_details: str | None = Field(default=None, description="Detailed description of the return type.")
+    return_example: str | None = Field(default=None, description="Example of the return value.")
+    return_structure: str | None = Field(default=None, description="Structure of the return value.")
     need_validation: bool = Field(
         default=False,
         description="When True, requires user confirmation before execution. Useful for tools that perform potentially destructive operations.",
@@ -156,10 +158,13 @@ class ToolDefinition(BaseModel):
             "arguments",
             "return_type",
             "return_description",
+            "return_type_details",
+            "return_example",
+            "return_structure",
             "need_validation",
+            "need_post_process",
             "need_variables",
             "need_caller_context_memory",
-            "return_type_details",
             "is_async",
             "toolbox_name",  # Added to standard fields
         }
@@ -218,7 +223,7 @@ class ToolDefinition(BaseModel):
 
         standard_fields = {
             "name", "description", "arguments", "return_type", "return_description", "return_type_details",
-            "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
+            "return_example", "return_structure", "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
             "toolbox_name"  # Added to standard fields
         }
         additional_fields = [f for f in self.model_fields if f not in standard_fields]
@@ -247,6 +252,12 @@ class ToolDefinition(BaseModel):
         markdown += "```\n\n"
 
         markdown += f"- **Returns**: `{self.return_type}` - {self.return_description or 'The result of the tool execution.'}\n"
+        if self.return_type_details and self.return_type_details != self.return_type:
+            markdown += f"        {self.return_type_details}\n"
+        if self.return_example:
+            markdown += f"- **Example Return Value**: `{self.return_example}`\n"
+        if self.return_structure:
+            markdown += f"- **Return Structure**: `{self.return_structure}`\n"
 
         return markdown
 
@@ -310,6 +321,10 @@ class ToolDefinition(BaseModel):
         docstring += f"\nReturns:\n    {self.return_type}: {return_desc}"
         if self.return_type_details and self.return_type_details != self.return_type:
             docstring += f"\n        {self.return_type_details}"
+        if self.return_example:
+            docstring += f"\n    Example: {self.return_example}"
+        if self.return_structure:
+            docstring += f"\n    Structure: {self.return_structure}"
         docstring += "\n"
 
         docstring += "\nExamples:\n"
@@ -319,7 +334,7 @@ class ToolDefinition(BaseModel):
 
         standard_fields = {
             "name", "description", "arguments", "return_type", "return_description", "return_type_details",
-            "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
+            "return_example", "return_structure", "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
             "toolbox_name"  # Added to standard fields
         }
         additional_fields = [f for f in self.model_fields if f not in standard_fields]
@@ -643,7 +658,9 @@ if __name__ == "__main__":
             ToolArgument(name="verbose", arg_type="boolean", description="Print extra info", default="False")
         ],
         return_type="int",
-        return_description="The computed result of the operation."
+        return_description="The computed result of the operation.",
+        return_example="42",
+        return_structure="A single integer value."
     )
     print("Comprehensive Tool Markdown:")
     print(docstring_tool.to_markdown())

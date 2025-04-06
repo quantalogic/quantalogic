@@ -17,7 +17,7 @@ If applicable, use tools to assess the situation and generate a Python program t
 If applicable, use tools to verify the task is completed.
 
 Instructions:
-1. Generate a very simple Python program, avoid complex logic, return the program as a single string.
+1. Generate a very simple Python program, avoid complex logic, return the program as a single string. No more than 3 functions called.
 2. Include only the import for asyncio (import asyncio).
 3. Define an async function named main() that solves the task.
 4. Use the pre-defined tool functions by calling them with await and prefixing them with their toolbox name (e.g., `await {{ toolbox_name }}.tool_name(arg1, arg2)`). For core tools, use `default.tool_name` (e.g., `await default.agent_tool(...)`).
@@ -35,7 +35,7 @@ Instructions:
 12. When defining new variables, prefix them with 'step<current_step>_' (e.g., `step1_result`) to ensure uniqueness across steps.
 13. Never use dangerous functions like eval, or any other unsafe operations.
 14. If a return result is tool complex use an intermediate result to store it.
-15. If the return type of a function is Any or not specified don't call another function after this just return the result, the result will be handled by the runtime.
+15. VERY IMPORTANT: If the return type of a function is Any or not specified don't call another function after this just return the result, the result will be handled by the runtime.
 
 Example task: "Translate the poem 'The sun rises' into Spanish using the agent_tool"
 Example output:
