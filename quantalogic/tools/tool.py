@@ -492,6 +492,24 @@ class Tool(ToolDefinition):
             return await asyncio.to_thread(self.execute, **kwargs)
         raise NotImplementedError("This method should be implemented by subclasses.")
 
+    async def __call__(self, **kwargs: Any) -> Any:
+        """Make the tool callable, handling both synchronous and asynchronous executions.
+
+        Args:
+            **kwargs: Keyword arguments to pass to the tool's execution method.
+
+        Returns:
+            The result of the tool execution, preserving the original return type.
+
+        Usage:
+            For synchronous contexts: result = asyncio.run(tool(**kwargs))
+            For asynchronous contexts: result = await tool(**kwargs)
+        """
+        if self.is_async:
+            return await self.async_execute(**kwargs)
+        else:
+            return await asyncio.to_thread(self.execute, **kwargs)
+
     def get_injectable_properties_in_execution(self) -> dict[str, Any]:
         """Get injectable properties excluding tool arguments.
 
@@ -619,7 +637,7 @@ def create_tool(func: F) -> Tool:
             if self.is_async:
                 return await self._func(**full_kwargs)
             else:
-                return self._func(**full_kwargs)
+                return await asyncio.to_thread(self._func, **full_kwargs)
 
     return GeneratedTool()
 
@@ -687,6 +705,7 @@ if __name__ == "__main__":
     print(sync_tool.to_docstring())
     print("Execution result (sync):", sync_tool.execute(a=5, b=3))
     print("Execution result (async):", asyncio.run(sync_tool.async_execute(a=5, b=3)))
+    print("Execution result (callable):", asyncio.run(sync_tool(a=5, b=3)))
     print()
 
     # Test create_tool with asynchronous function
@@ -709,6 +728,7 @@ if __name__ == "__main__":
     print(async_tool.to_docstring())
     print("Execution result (sync):", async_tool.execute(name="Alice"))
     print("Execution result (async):", asyncio.run(async_tool.async_execute(name="Alice")))
+    print("Execution result (callable):", asyncio.run(async_tool(name="Alice")))
     print()
 
     # Comprehensive tool with complex types
@@ -732,6 +752,7 @@ if __name__ == "__main__":
     print("Complex Tool Docstring:")
     print(complex_tool.to_docstring())
     print("Execution result (sync):", complex_tool.execute(data=[1, 2, 3]))
+    print("Execution result (callable):", asyncio.run(complex_tool(data=[1, 2, 3])))
     print()
 
     # Comprehensive tool for to_docstring demonstration with custom return type
@@ -779,4 +800,28 @@ if __name__ == "__main__":
     print("Distance Tool Docstring:")
     print(distance_tool.to_docstring())
     print("Execution result (sync):", distance_tool.execute(point1=Point(x=1, y=2), point2=Point(x=4, y=6)))
+    print("Execution result (callable):", asyncio.run(distance_tool(point1=Point(x=1, y=2), point2=Point(x=4, y=6))))
+    print()
+
+    async def hello(name: str) -> str:
+        """
+        Greet a person.
+        
+        Args:
+            name: Name of the person.
+        
+        Returns:
+            A greeting message.
+        """
+        return f"Hello, {name}"
+
+    hello_tool = create_tool(hello)
+    print("Hello Tool Markdown:")
+    print(hello_tool.to_markdown())
+    print("Hello Tool Docstring:")
+    print(hello_tool.to_docstring())
+    print("Execution result (sync):", hello_tool.execute(name="Alice"))
+    print("Execution result (async):", asyncio.run(hello_tool.async_execute(name="Alice")))
+    # Call hello tool directly as a callable
+    print("Execution result (callable):", asyncio.run(hello_tool(name="Alice")))
     print()
