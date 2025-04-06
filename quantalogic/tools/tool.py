@@ -7,7 +7,7 @@ with type-validated arguments and execution methods.
 import ast
 import asyncio
 import inspect
-from typing import Any, Callable, TypeVar, get_args, get_origin
+from typing import Any, Callable, TypeVar, Union, get_args, get_origin
 
 from docstring_parser import parse as parse_docstring
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -38,32 +38,114 @@ def type_hint_to_str(type_hint):
 
 
 def get_type_description(type_hint):
-    """Generate a detailed description of the type hint.
+    """Generate a detailed, natural-language description of a type hint.
 
     Args:
         type_hint: The type hint to describe.
 
     Returns:
-        A string describing the type hint in detail, e.g., 'a list of int', or a structured class description.
+        A string with a detailed description of the type, e.g., 'a list of int', or a structured class description.
     """
+    # Mapping for basic types
+    basic_types = {
+        int: "integer",
+        str: "string",
+        float: "float",
+        bool: "boolean",
+        type(None): "None",
+    }
+
+    if type_hint in basic_types:
+        return basic_types[type_hint]
+
     origin = get_origin(type_hint)
-    if origin is not None:
-        if origin is list:
-            item_type = get_args(type_hint)[0]
-            return f"a list of {get_type_description(item_type)}"
-        elif origin is dict:
-            key_type, value_type = get_args(type_hint)
-            return f"a dictionary with {get_type_description(key_type)} keys and {get_type_description(value_type)} values"
-        else:
-            return type_hint_to_str(type_hint)
-    elif inspect.isclass(type_hint) and hasattr(type_hint, "__annotations__"):
-        annotations = getattr(type_hint, "__annotations__", {})
-        if annotations:
-            field_desc = "\n".join([f"        - {name}: {type_hint_to_str(typ)}" for name, typ in annotations.items()])
-            return f"an instance of {type_hint.__name__} with attributes:\n{field_desc}"
-        return type_hint.__name__
+    if origin is None:
+        if inspect.isclass(type_hint):
+            doc = inspect.getdoc(type_hint)
+            desc_prefix = f"{doc} " if doc else ""
+            if hasattr(type_hint, "__annotations__"):
+                annotations = type_hint.__annotations__
+                attrs = ", ".join(f"{name}: {get_type_description(typ)}" for name, typ in annotations.items())
+                return f"{desc_prefix}an instance of {type_hint.__name__} with attributes: {attrs}"
+            return f"{desc_prefix}{type_hint.__name__}"
+        return str(type_hint)
+
+    elif origin is list:
+        item_type = get_args(type_hint)[0]
+        return f"a list of {get_type_description(item_type)}"
+
+    elif origin is dict:
+        key_type, value_type = get_args(type_hint)
+        return f"a dictionary with {get_type_description(key_type)} keys and {get_type_description(value_type)} values"
+
+    elif origin is tuple:
+        tuple_types = get_args(type_hint)
+        types_desc = ", ".join(get_type_description(t) for t in tuple_types)
+        return f"a tuple containing {types_desc}"
+
+    elif origin is Union:
+        union_types = get_args(type_hint)
+        if len(union_types) == 2 and type(None) in union_types:
+            non_none_type = next(t for t in union_types if t is not type(None))
+            return f"an optional {get_type_description(non_none_type)} (can be None)"
+        types_desc = ", ".join(get_type_description(t) for t in union_types)
+        return f"one of {types_desc}"
+
     else:
-        return f"<class '{str(type_hint)}'>"
+        return type_hint_to_str(type_hint)
+
+
+def get_type_schema(type_hint):
+    """Generate a schema-like string representation of a type hint.
+
+    Args:
+        type_hint: The type hint to convert.
+
+    Returns:
+        A string representing the type's structure, e.g., '[integer, ...]' or "{'x': 'integer', 'y': 'integer'}".
+    """
+    basic_types = {
+        int: "integer",
+        str: "string",
+        float: "float",
+        bool: "boolean",
+        type(None): "null",
+    }
+
+    if type_hint in basic_types:
+        return basic_types[type_hint]
+
+    origin = get_origin(type_hint)
+    if origin is None:
+        if inspect.isclass(type_hint) and hasattr(type_hint, "__annotations__"):
+            annotations = type_hint.__annotations__
+            fields = {name: get_type_schema(typ) for name, typ in annotations.items()}
+            return "{" + ", ".join(f"'{name}': {schema}" for name, schema in fields.items()) + "}"
+        return type_hint.__name__
+
+    elif origin is list:
+        item_type = get_args(type_hint)[0]
+        return f"[{get_type_schema(item_type)}, ...]"
+
+    elif origin is dict:
+        key_type, value_type = get_args(type_hint)
+        if key_type is str:
+            return f"{{{get_type_schema(value_type)}}}"
+        return f"dictionary with keys of type {get_type_schema(key_type)} and values of type {get_type_schema(value_type)}"
+
+    elif origin is tuple:
+        tuple_types = get_args(type_hint)
+        return f"[{', '.join(get_type_schema(t) for t in tuple_types)}]"
+
+    elif origin is Union:
+        union_types = get_args(type_hint)
+        if len(union_types) == 2 and type(None) in union_types:
+            non_none_type = next(t for t in union_types if t is not type(None))
+            return f"{get_type_schema(non_none_type)} or null"
+        return " or ".join(get_type_schema(t) for t in union_types)
+
+    else:
+        return type_hint_to_str(type_hint)
 
 
 class ToolArgument(BaseModel):
@@ -166,7 +248,7 @@ class ToolDefinition(BaseModel):
             "need_variables",
             "need_caller_context_memory",
             "is_async",
-            "toolbox_name",  # Added to standard fields
+            "toolbox_name",
         }
         properties = {}
 
@@ -224,7 +306,7 @@ class ToolDefinition(BaseModel):
         standard_fields = {
             "name", "description", "arguments", "return_type", "return_description", "return_type_details",
             "return_example", "return_structure", "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
-            "toolbox_name"  # Added to standard fields
+            "toolbox_name"
         }
         additional_fields = [f for f in self.model_fields if f not in standard_fields]
         if additional_fields:
@@ -335,7 +417,7 @@ class ToolDefinition(BaseModel):
         standard_fields = {
             "name", "description", "arguments", "return_type", "return_description", "return_type_details",
             "return_example", "return_structure", "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
-            "toolbox_name"  # Added to standard fields
+            "toolbox_name"
         }
         additional_fields = [f for f in self.model_fields if f not in standard_fields]
         if additional_fields:
@@ -422,7 +504,7 @@ class Tool(ToolDefinition):
 
 
 def create_tool(func: F) -> Tool:
-    """Create a Tool instance from a Python function using AST analysis.
+    """Create a Tool instance from a Python function using AST analysis with enhanced return type metadata.
 
     Analyzes the function's source code to extract its name, docstring, and arguments,
     then constructs a Tool subclass with appropriate execution logic for both
@@ -484,8 +566,11 @@ def create_tool(func: F) -> Tool:
             type_details=get_type_description(hint)
         ))
 
-    return_type_str = type_hint_to_str(type_hints.get("return", str))
-    return_type_details = get_type_description(type_hints.get("return", str))
+    # Enhanced return type handling
+    return_type = type_hints.get("return", str)
+    return_type_str = type_hint_to_str(return_type)
+    return_type_details = get_type_description(return_type)
+    return_structure = get_type_schema(return_type)
 
     class GeneratedTool(Tool):
         def __init__(self, *args: Any, **kwargs: Any):
@@ -497,6 +582,7 @@ def create_tool(func: F) -> Tool:
                 return_type=return_type_str,
                 return_description=return_description,
                 return_type_details=return_type_details,
+                return_structure=return_structure,
                 is_async=is_async,
                 toolbox_name=None,  # Explicitly set to None initially
                 **kwargs
