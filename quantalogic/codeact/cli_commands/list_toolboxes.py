@@ -9,8 +9,13 @@ app = typer.Typer()
 console = Console()
 
 @app.command()
-def list_toolboxes() -> None:
-    """List all loaded toolboxes and their associated tools from entry points."""
+def list_toolboxes(
+    detail: bool = typer.Option(False, "--detail", "-d", help="Show detailed documentation for each tool")
+) -> None:
+    """List all loaded toolboxes and their associated tools from entry points.
+    
+    When --detail flag is used, displays the full documentation for each tool.
+    """
     logger.debug("Listing toolboxes from entry points")
     tools = plugin_manager.tools.get_tools()
 
@@ -23,10 +28,17 @@ def list_toolboxes() -> None:
             toolbox_name = tool.toolbox_name if tool.toolbox_name else 'Unknown Toolbox'
             if toolbox_name not in toolbox_dict:
                 toolbox_dict[toolbox_name] = []
-            toolbox_dict[toolbox_name].append(tool.name)
+            toolbox_dict[toolbox_name].append(tool)
 
-        for toolbox_name, tool_names in toolbox_dict.items():
+        for toolbox_name, tools_list in toolbox_dict.items():
             console.print(f"[bold green]Toolbox: {toolbox_name}[/bold green]")
-            for tool_name in sorted(tool_names):
-                console.print(f"  - {tool_name}")
+            for tool in sorted(tools_list, key=lambda x: x.name):
+                if detail:
+                    console.print(f"  - [bold]{tool.name}[/bold]")
+                    console.print(f"    Description: {tool.description}")
+                    console.print(f"    Arguments: {[arg.name for arg in tool.arguments] if hasattr(tool, 'arguments') else 'None'}")
+                    console.print(f"    Return Type: {tool.return_type if hasattr(tool, 'return_type') else 'N/A'}")
+                    console.print("")
+                else:
+                    console.print(f"  - {tool.name}")
             console.print("")
