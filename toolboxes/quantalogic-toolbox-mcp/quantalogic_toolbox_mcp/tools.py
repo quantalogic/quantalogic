@@ -44,6 +44,8 @@ toolbox: Dict[str, Any] = {
     "state": {}   # Dictionary for tool states
 }
 
+_toolbox_initialized = False  # Flag to prevent redundant initialization
+
 # **Utility Functions**
 def parse_string_content(text: str) -> Any:
     """Parse a string into a Python object, trying JSON first, then AST.
@@ -553,7 +555,7 @@ async def create_all_tools(registry: ToolRegistry) -> Dict[str, Any]:
                     key = (tool.toolbox_name, tool.name)
                     if key not in registry.tools:
                         registry.register(tool)
-                        logger.debug(f"Registered dynamic tool: {unique_tool_name} with args形: {tool.arguments}")
+                        logger.debug(f"Registered dynamic tool: {unique_tool_name} with args: {tool.arguments}")
                     tools[unique_tool_name] = tool
                     toolbox["state"][unique_tool_name] = {
                         "status": "success",
@@ -621,9 +623,14 @@ async def initialize_toolbox(registry: ToolRegistry) -> None:
     Args:
         registry: ToolRegistry instance to register tools.
     """
-    logger.debug("Initializing toolbox")
+    global _toolbox_initialized
+    if _toolbox_initialized:
+        logger.debug("MCP toolbox already initialized, skipping")
+        return
+    logger.debug("Initializing MCP toolbox")
     load_configs()
     toolbox["tools"] = await create_all_tools(registry)
+    _toolbox_initialized = True
     logger.info("Toolbox initialization completed. Final tool states:")
     for tool_name, state in toolbox["state"].items():
         if state["status"] == "success":
@@ -632,15 +639,14 @@ async def initialize_toolbox(registry: ToolRegistry) -> None:
             logger.warning(f"Tool: {tool_name}, Status: {state['status']}, Toolbox: {state['toolbox_name']}, Error: {state['error']}")
 
 # **Main Execution**
-if __name__ == "__main__" or __package__:
-    from quantalogic.codeact.plugin_manager import PluginManager
-    plugin_manager = PluginManager()
-    plugin_manager.load_plugins()
-    asyncio.run(initialize_toolbox(plugin_manager.tools))
-
 if __name__ == "__main__":
     logger.info("Starting MCP toolbox test suite")
     async def test_toolbox():
+        from quantalogic.codeact.plugin_manager import PluginManager
+        plugin_manager = PluginManager()
+        plugin_manager.load_plugins()
+        await initialize_toolbox(plugin_manager.tools)
+        
         servers_list = toolbox["tools"]["list_servers"].execute()
         logger.info(f"Available servers: {servers_list}")
         if not servers_list:
@@ -668,3 +674,6 @@ if __name__ == "__main__":
 
     asyncio.run(test_toolbox())
     logger.info("Test suite completed")
+else:
+    # Do not auto-initialize when imported as a module
+    pass

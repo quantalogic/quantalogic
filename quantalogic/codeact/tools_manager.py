@@ -26,7 +26,8 @@ class ToolRegistry:
         try:
             key = (tool.toolbox_name or "default", tool.name)
             if key in self.tools:
-                raise ValueError(f"Tool '{tool.name}' in toolbox '{tool.toolbox_name or 'default'}' is already registered")
+                logger.warning(f"Tool '{tool.name}' in toolbox '{tool.toolbox_name or 'default'}' is already registered. Skipping.")
+                return
             self.tools[key] = tool
             logger.debug(f"Tool registered: {tool.name} in toolbox {tool.toolbox_name or 'default'}")
         except Exception as e:
