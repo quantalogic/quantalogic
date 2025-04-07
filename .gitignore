@@ -184,3 +184,5 @@ sample.db
 
 quantalogic/tools/composio/*.log.*
 mcp-test/test.db
+
+*.db
