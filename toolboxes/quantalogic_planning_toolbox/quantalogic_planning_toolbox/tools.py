@@ -60,7 +60,7 @@ class PlanResult(BaseModel):
 
 # Tool to generate a plan
 @create_tool
-async def generate_plan(task_description: str) -> PlanResult:
+async def create_project_plan(task_description: str) -> PlanResult:
     """Generate a detailed plan by breaking down a task into subtasks.
     
     This function takes a high-level task description and uses an LLM to decompose it into
@@ -76,7 +76,7 @@ async def generate_plan(task_description: str) -> PlanResult:
         Exception: Any exceptions from the LLM completion will be propagated
     
     Example:
-        >>> await generate_plan("Develop a web application")
+        >>> await create_project_plan("Develop a web application")
         PlanResult(
             task_id="abc123",
             task_description="Develop a web application",
@@ -123,19 +123,9 @@ async def generate_plan(task_description: str) -> PlanResult:
         subtasks=subtasks_with_status
     )
 
-def store_subtasks(task_id: str, subtasks: List[SubtaskWithStatus]):
-    """Store subtasks in the database (synchronous)."""
-    cursor = conn.cursor()
-    for subtask in subtasks:
-        cursor.execute(
-            'INSERT INTO subtasks (task_id, step, description, status) VALUES (?, ?, ?, ?)',
-            (task_id, subtask.step, subtask.description, subtask.status.value)
-        )
-    conn.commit()
-
 # Tool to retrieve the plan
 @create_tool
-async def get_plan(task_id: str) -> PlanResult:
+async def retrieve_project_plan(task_id: str) -> PlanResult:
     """Retrieve the current plan for a given task from the database.
     
     Args:
@@ -148,7 +138,7 @@ async def get_plan(task_id: str) -> PlanResult:
         ValueError: If no plan exists for the given task ID
     
     Example:
-        >>> await get_plan("abc123")
+        >>> await retrieve_project_plan("abc123")
         PlanResult(
             task_id="abc123",
             task_description="",  # Not stored in DB
@@ -178,6 +168,16 @@ async def get_plan(task_id: str) -> PlanResult:
         task_description="",  # Not stored in DB
         subtasks=subtasks
     )
+
+def store_subtasks(task_id: str, subtasks: List[SubtaskWithStatus]):
+    """Store subtasks in the database (synchronous)."""
+    cursor = conn.cursor()
+    for subtask in subtasks:
+        cursor.execute(
+            'INSERT INTO subtasks (task_id, step, description, status) VALUES (?, ?, ?, ?)',
+            (task_id, subtask.step, subtask.description, subtask.status.value)
+        )
+    conn.commit()
 
 def fetch_plan(task_id: str):
     """Retrieve subtask details for a specific task from the database.
@@ -210,7 +210,7 @@ def fetch_plan(task_id: str):
 
 # Tool to update subtask status
 @create_tool
-async def update_status(task_id: str, step: int, status: Status) -> str:
+async def update_subtask_status_by_id(task_id: str, step: int, status: Status) -> str:
     """Update the status of a specific subtask within a task.
     
     This asynchronous function allows changing the status of a particular 
@@ -237,9 +237,10 @@ async def update_status(task_id: str, step: int, status: Status) -> str:
         - blocked: Task cannot progress due to external constraints
     
     Example:
-        >>> await update_status("task_abc123", 1, Status.IN_PROGRESS)
+        >>> await update_subtask_status_by_id("task_abc123", 1, Status.IN_PROGRESS)
         "Step 1 of task task_abc123 updated to 'in-progress'."
     """
+    # Use asyncio.to_thread to run database update in a separate thread
     await asyncio.to_thread(update_subtask_status, task_id, step, status.value)
     return f"Step {step} of task {task_id} updated to '{status.value}'."
 
@@ -248,7 +249,7 @@ def update_subtask_status(task_id: str, step: int, status: str):
     
     This low-level function performs the actual database update for 
     changing a subtask's status. It is typically called via the 
-    asynchronous update_status function.
+    asynchronous update_subtask_status_by_id function.
     
     Args:
         task_id: Unique identifier of the task
@@ -258,7 +259,7 @@ def update_subtask_status(task_id: str, step: int, status: str):
     Notes:
         - Executes a direct SQL UPDATE query
         - Commits the transaction immediately
-        - Does not validate the status value (validation happens in update_status)
+        - Does not validate the status value (validation happens in update_subtask_status_by_id)
     
     Raises:
         sqlite3.Error: If the database update fails
@@ -287,9 +288,9 @@ async def main():
     try:
         # 1. Generate a plan for a web application project
         print("🚀 Generating project plan...")
-        project_plan = await generate_plan("Develop a modern web application")
+        project_plan = await create_project_plan("Develop a modern web application")
         
-        print(f"\n📋 Project Details:")
+        print("\n📋 Project Details:")
         print(f"Task ID: {project_plan.task_id}")
         print(f"Task Description: {project_plan.task_description}")
         
@@ -300,7 +301,7 @@ async def main():
         # 2. Update status of first subtask to in-progress
         first_step = project_plan.subtasks[0]
         print(f"\n🔄 Updating first step (Step {first_step.step}) status...")
-        status_update = await update_status(
+        status_update = await update_subtask_status_by_id(
             project_plan.task_id, 
             first_step.step, 
             Status.IN_PROGRESS
@@ -308,7 +309,7 @@ async def main():
         print(status_update)
         
         # 3. Retrieve and display updated plan
-        retrieved_plan = await get_plan(project_plan.task_id)
+        retrieved_plan = await retrieve_project_plan(project_plan.task_id)
         
         print("\n🔍 Updated Subtasks:")
         for subtask in retrieved_plan.subtasks:
@@ -316,7 +317,7 @@ async def main():
         
         # 4. Demonstrate error handling
         try:
-            await update_status(project_plan.task_id, 999, Status.DONE)
+            await update_subtask_status_by_id(project_plan.task_id, 999, Status.DONE)
         except Exception as e:
             print(f"\n❌ Expected error handling: {e}")
         
