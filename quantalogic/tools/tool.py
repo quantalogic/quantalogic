@@ -194,6 +194,7 @@ class ToolDefinition(BaseModel):
         return_type: The return type of the tool's execution method. Defaults to "str".
         return_description: Optional description of the return value.
         return_type_details: Detailed description of the return type.
+        original_docstring: The full original docstring of the function, if applicable.
         need_validation: Flag to indicate if tool requires validation.
         is_async: Flag to indicate if the tool is asynchronous (for documentation purposes).
         toolbox_name: Optional name of the toolbox this tool belongs to.
@@ -209,6 +210,7 @@ class ToolDefinition(BaseModel):
     return_type_details: str | None = Field(default=None, description="Detailed description of the return type.")
     return_example: str | None = Field(default=None, description="Example of the return value.")
     return_structure: str | None = Field(default=None, description="Structure of the return value.")
+    original_docstring: str | None = Field(default=None, description="The full original docstring of the function, if applicable.")
     need_validation: bool = Field(
         default=False,
         description="When True, requires user confirmation before execution. Useful for tools that perform potentially destructive operations.",
@@ -253,6 +255,7 @@ class ToolDefinition(BaseModel):
             "return_type_details",
             "return_example",
             "return_structure",
+            "original_docstring",
             "need_validation",
             "need_post_process",
             "need_variables",
@@ -315,7 +318,7 @@ class ToolDefinition(BaseModel):
 
         standard_fields = {
             "name", "description", "arguments", "return_type", "return_description", "return_type_details",
-            "return_example", "return_structure", "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
+            "return_example", "return_structure", "original_docstring", "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
             "toolbox_name"
         }
         additional_fields = [f for f in self.model_fields if f not in standard_fields]
@@ -373,6 +376,9 @@ class ToolDefinition(BaseModel):
     def to_docstring(self) -> str:
         """Convert the tool definition into a Google-style docstring with function signature.
 
+        If an original_docstring is provided (e.g., from a function via create_tool), it is used directly.
+        Otherwise, constructs a detailed docstring from the tool's metadata.
+
         Returns:
             A string formatted as a valid Python docstring representing the tool's configuration,
             including the function signature, detailed argument types, and return type with descriptions.
@@ -385,70 +391,71 @@ class ToolDefinition(BaseModel):
             signature_parts.append(arg_str)
         signature = f"{'async ' if self.is_async else ''}def {self.name}({', '.join(signature_parts)}) -> {self.return_type}:"
 
-        # Ensure main description is at the top, avoiding duplication
-        docstring = f'"""\n{signature}\n\n{self.description}\n'
-        properties_injectable = self.get_injectable_properties_in_execution()
-        if properties_injectable:
-            docstring += "\n    Note: Some arguments may be injected from the tool's configuration.\n"
-
-        if self.arguments:
-            docstring += "\nArgs:\n"
-            for arg in self.arguments:
-                arg_line = f"    {arg.name} ({arg.arg_type})"
-                details = []
-                if not arg.required:
-                    details.append("optional")
-                if arg.default is not None:
-                    details.append(f"defaults to {arg.default}")
-                if arg.example is not None:
-                    details.append(f"e.g., {arg.example}")
-                if details:
-                    arg_line += f" [{', '.join(details)}]"
-                if arg.description:
-                    arg_line += f": {arg.description}"
-                # Only include type_details if it adds unique information
-                if arg.type_details and arg.type_details != arg.arg_type and arg.type_details != arg.description:
-                    arg_line += f"\n        {arg.type_details}"
-                docstring += f"{arg_line}\n"
-
-        # Improved return type handling with better indentation
-        if self.return_description:
-            docstring += f"\nReturns:\n    {self.return_type}: {self.return_description.split(':')[0]}:\n"
-            # Split and indent fields if a colon is present (common in structured descriptions)
-            if ':' in self.return_description:
-                fields = self.return_description.split(':', 1)[1].strip()
-                for line in fields.split('\n'):
-                    if line.strip():
-                        docstring += f"        {line.strip()}\n"
+        if self.original_docstring:
+            # Use the full original docstring if available, ensuring proper indentation
+            docstring = f'"""\n{signature}\n\n{self.original_docstring.rstrip()}\n"""'
         else:
-            return_desc = self.return_type_details or "The result of the tool execution."
-            docstring += f"\nReturns:\n    {self.return_type}: {return_desc}"
-            if self.return_structure:
-                docstring += f"\n        Structure: {self.return_structure}"
+            # Fall back to constructing the docstring from metadata
+            docstring = f'"""\n{signature}\n\n{self.description}\n'
+            properties_injectable = self.get_injectable_properties_in_execution()
+            if properties_injectable:
+                docstring += "\n    Note: Some arguments may be injected from the tool's configuration.\n"
 
-        if self.return_example:
-            docstring += f"\n    Example: {self.return_example}"
+            if self.arguments:
+                docstring += "\nArgs:\n"
+                for arg in self.arguments:
+                    arg_line = f"    {arg.name} ({arg.arg_type})"
+                    details = []
+                    if not arg.required:
+                        details.append("optional")
+                    if arg.default is not None:
+                        details.append(f"defaults to {arg.default}")
+                    if arg.example is not None:
+                        details.append(f"e.g., {arg.example}")
+                    if details:
+                        arg_line += f" [{', '.join(details)}]"
+                    if arg.description:
+                        arg_line += f": {arg.description}"
+                    if arg.type_details and arg.type_details != arg.arg_type and arg.type_details != arg.description:
+                        arg_line += f"\n        {arg.type_details}"
+                    docstring += f"{arg_line}\n"
 
-        docstring += "\n\nExamples:\n"
-        args_str = ", ".join([f"{arg.name}=\"{arg.example or '...'}\"" for arg in self.arguments if arg.required])
-        prefix = "    result = " if not self.is_async else "    result = await "
-        docstring += f"{prefix}{self.name}({args_str})\n"
+            if self.return_description:
+                docstring += f"\nReturns:\n    {self.return_type}: {self.return_description.split(':')[0]}:\n"
+                if ':' in self.return_description:
+                    fields = self.return_description.split(':', 1)[1].strip()
+                    for line in fields.split('\n'):
+                        if line.strip():
+                            docstring += f"        {line.strip()}\n"
+            else:
+                return_desc = self.return_type_details or "The result of the tool execution."
+                docstring += f"\nReturns:\n    {self.return_type}: {return_desc}"
+                if self.return_structure:
+                    docstring += f"\n        Structure: {self.return_structure}"
 
-        standard_fields = {
-            "name", "description", "arguments", "return_type", "return_description", "return_type_details",
-            "return_example", "return_structure", "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
-            "toolbox_name"
-        }
-        additional_fields = [f for f in self.model_fields if f not in standard_fields]
-        if additional_fields:
-            docstring += "\nConfiguration:\n"
-            for field in additional_fields:
-                field_info = self.model_fields[field]
-                field_type = type_hint_to_str(field_info.annotation)
-                field_desc = field_info.description or "No description provided."
-                docstring += f"    {field} ({field_type}): {field_desc}\n"
+            if self.return_example:
+                docstring += f"\n    Example: {self.return_example}"
 
-        docstring += '\n"""'
+            docstring += "\n\nExamples:\n"
+            args_str = ", ".join([f"{arg.name}=\"{arg.example or '...'}\"" for arg in self.arguments if arg.required])
+            prefix = "    result = " if not self.is_async else "    result = await "
+            docstring += f"{prefix}{self.name}({args_str})\n"
+
+            standard_fields = {
+                "name", "description", "arguments", "return_type", "return_description", "return_type_details",
+                "return_example", "return_structure", "original_docstring", "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
+                "toolbox_name"
+            }
+            additional_fields = [f for f in self.model_fields if f not in standard_fields]
+            if additional_fields:
+                docstring += "\nConfiguration:\n"
+                for field in additional_fields:
+                    field_info = self.model_fields[field]
+                    field_type = type_hint_to_str(field_info.annotation)
+                    field_desc = field_info.description or "No description provided."
+                    docstring += f"    {field} ({field_type}): {field_desc}\n"
+
+            docstring += '\n"""'
         return docstring
 
 
@@ -531,10 +538,8 @@ class Tool(ToolDefinition):
             For synchronous contexts: result = asyncio.run(tool(*args, **kwargs))
             For asynchronous contexts: result = await tool(*args, **kwargs)
         """
-        # Extract argument names in the order defined by the tool's metadata
         arg_names = [arg.name for arg in self.arguments]
         
-        # Map positional arguments to their corresponding names
         for i, arg_value in enumerate(args):
             if i >= len(arg_names):
                 raise TypeError(f"{self.name}() takes {len(arg_names)} positional arguments but {len(args)} were given")
@@ -543,7 +548,6 @@ class Tool(ToolDefinition):
                 raise TypeError(f"{self.name}() got multiple values for argument '{arg_name}'")
             kwargs[arg_name] = arg_value
         
-        # Execute the tool with the combined kwargs
         if self.is_async:
             return await self.async_execute(**kwargs)
         else:
@@ -623,7 +627,6 @@ def create_tool(func: F) -> Tool:
             type_details=get_type_description(hint)
         ))
 
-    # Enhanced return type handling
     return_type = type_hints.get("return", str)
     return_type_str = type_hint_to_str(return_type)
     return_type_details = get_type_description(return_type)
@@ -640,8 +643,9 @@ def create_tool(func: F) -> Tool:
                 return_description=return_description,
                 return_type_details=return_type_details,
                 return_structure=return_structure,
+                original_docstring=docstring,  # Preserve full original docstring
                 is_async=is_async,
-                toolbox_name=None,  # Explicitly set to None initially
+                toolbox_name=None,
                 **kwargs
             )
             self._func = func
@@ -756,6 +760,10 @@ if __name__ == "__main__":
         
         Returns:
             A greeting message.
+            
+        Examples:
+            >>> await greet("Alice")
+            'Hello, Alice'
         """
         await asyncio.sleep(0.1)
         return f"Hello, {name}"
@@ -861,9 +869,7 @@ if __name__ == "__main__":
     print(hello_tool.to_docstring())
     print("Execution result (sync):", hello_tool.execute(name="Alice"))
     print("Execution result (async):", asyncio.run(hello_tool.async_execute(name="Alice")))
-    # Call hello tool directly as a callable
     print("Execution result (callable named arguments):", asyncio.run(hello_tool(name="Alice")))
-    print()
     print("Execution result (callable positional arguments):", asyncio.run(hello_tool("Alice")))
     print()
 
