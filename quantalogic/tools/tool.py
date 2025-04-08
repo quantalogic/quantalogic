@@ -46,7 +46,6 @@ def get_type_description(type_hint):
     Returns:
         A string with a detailed description of the type, e.g., 'a list of int', or a structured class description.
     """
-    # Mapping for basic types
     basic_types = {
         int: "integer",
         str: "string",
@@ -79,9 +78,9 @@ def get_type_description(type_hint):
             return "a list"
 
         elif origin is dict:
-            if args and len(args) == 2:  # Explicit key and value types provided
+            if args and len(args) == 2:
                 return f"a dictionary with {get_type_description(args[0])} keys and {get_type_description(args[1])} values"
-            return "a dictionary with any keys and values"  # Fallback for bare Dict
+            return "a dictionary with any keys and values"
 
         elif origin is tuple:
             if args:
@@ -386,6 +385,7 @@ class ToolDefinition(BaseModel):
             signature_parts.append(arg_str)
         signature = f"{'async ' if self.is_async else ''}def {self.name}({', '.join(signature_parts)}) -> {self.return_type}:"
 
+        # Ensure main description is at the top, avoiding duplication
         docstring = f'"""\n{signature}\n\n{self.description}\n'
         properties_injectable = self.get_injectable_properties_in_execution()
         if properties_injectable:
@@ -406,23 +406,32 @@ class ToolDefinition(BaseModel):
                     arg_line += f" [{', '.join(details)}]"
                 if arg.description:
                     arg_line += f": {arg.description}"
-                if arg.type_details and arg.type_details != arg.arg_type:
+                # Only include type_details if it adds unique information
+                if arg.type_details and arg.type_details != arg.arg_type and arg.type_details != arg.description:
                     arg_line += f"\n        {arg.type_details}"
                 docstring += f"{arg_line}\n"
 
-        return_desc = self.return_description or "The result of the tool execution."
-        docstring += f"\nReturns:\n    {self.return_type}: {return_desc}"
-        if self.return_type_details and self.return_type_details != self.return_type:
-            docstring += f"\n        {self.return_type_details}"
+        # Improved return type handling with better indentation
+        if self.return_description:
+            docstring += f"\nReturns:\n    {self.return_type}: {self.return_description.split(':')[0]}:\n"
+            # Split and indent fields if a colon is present (common in structured descriptions)
+            if ':' in self.return_description:
+                fields = self.return_description.split(':', 1)[1].strip()
+                for line in fields.split('\n'):
+                    if line.strip():
+                        docstring += f"        {line.strip()}\n"
+        else:
+            return_desc = self.return_type_details or "The result of the tool execution."
+            docstring += f"\nReturns:\n    {self.return_type}: {return_desc}"
+            if self.return_structure:
+                docstring += f"\n        Structure: {self.return_structure}"
+
         if self.return_example:
             docstring += f"\n    Example: {self.return_example}"
-        if self.return_structure:
-            docstring += f"\n    Structure: {self.return_structure}"
-        docstring += "\n"
 
-        docstring += "\nExamples:\n"
-        args_str = ", ".join([f"{arg.name}=..." for arg in self.arguments if arg.required])
-        prefix = "        result = " if not self.is_async else "        result = await "
+        docstring += "\n\nExamples:\n"
+        args_str = ", ".join([f"{arg.name}=\"{arg.example or '...'}\"" for arg in self.arguments if arg.required])
+        prefix = "    result = " if not self.is_async else "    result = await "
         docstring += f"{prefix}{self.name}({args_str})\n"
 
         standard_fields = {

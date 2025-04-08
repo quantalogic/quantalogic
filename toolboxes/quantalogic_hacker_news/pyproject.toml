@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic_hacker_news"
-version = "0.2.0"
+version = "0.3.0"
 description = "A custom toolbox for Quantalogic"
 authors = ["Your Name <you@example.com>"]
 

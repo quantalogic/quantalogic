@@ -8,31 +8,13 @@ app = typer.Typer()
 
 console = Console()
 
-def format_return_type(tool):
-    """Format return type information with all available details."""
-    if not hasattr(tool, 'return_type'):
-        return "N/A"
-    
-    parts = [f"[bold]{tool.return_type}[/bold]"]
-    
-    if hasattr(tool, 'return_description') and tool.return_description:
-        parts.append(f"Description: {tool.return_description}")
-        
-    if hasattr(tool, 'return_structure') and tool.return_structure:
-        parts.append(f"Structure: {tool.return_structure}")
-        
-    if hasattr(tool, 'return_example') and tool.return_example:
-        parts.append(f"Example: {tool.return_example}")
-    
-    return "\n    ".join(parts)
-
 @app.command()
 def list_toolboxes(
     detail: bool = typer.Option(False, "--detail", "-d", help="Show detailed documentation for each tool")
 ) -> None:
     """List all loaded toolboxes and their associated tools from entry points.
     
-    When --detail flag is used, displays the full documentation for each tool.
+    When --detail flag is used, displays the full documentation for each tool using its to_docstring() method.
     """
     logger.debug("Listing toolboxes from entry points")
     tools = plugin_manager.tools.get_tools()
@@ -52,11 +34,14 @@ def list_toolboxes(
             console.print(f"[bold green]Toolbox: {toolbox_name}[/bold green]")
             for tool in sorted(tools_list, key=lambda x: x.name):
                 if detail:
+                    # Use to_docstring() method for detailed documentation
+                    docstring = tool.to_docstring()
                     console.print(f"  - [bold]{tool.name}[/bold]")
-                    console.print(f"    Description: {tool.description}")
-                    console.print(f"    Arguments: {[arg.name for arg in tool.arguments] if hasattr(tool, 'arguments') else 'None'}")
-                    console.print(f"    Return Type: {format_return_type(tool)}")
+                    console.print(f"    Documentation:\n    {docstring.replace('\n', '\n    ')}")
                     console.print("")
                 else:
                     console.print(f"  - {tool.name}")
             console.print("")
+
+if __name__ == "__main__":
+    app()

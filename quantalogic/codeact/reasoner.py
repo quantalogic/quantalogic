@@ -117,6 +117,15 @@ class Reasoner(BaseReasoner):
     ) -> str:
         """Generate an action based on task and history with streaming support."""
         try:
+            # Prepare type hints for available variables based on tool return types
+            available_var_types = {}
+            for var_name in available_vars or []:
+                # Infer type from tool documentation if possible (simplified heuristic)
+                if "plan" in var_name.lower():
+                    available_var_types[var_name] = "PlanResult (has attributes: task_id, task_description, subtasks)"
+                else:
+                    available_var_types[var_name] = "Unknown (check history or assume str)"
+
             task_prompt = await self.prompt_strategy.generate_prompt(
                 task if not system_prompt else f"{system_prompt}\nTask: {task}",
                 history_str,
@@ -128,7 +137,7 @@ class Reasoner(BaseReasoner):
                 event_type="PromptGenerated", step_number=step, prompt=task_prompt
             ))
             program = await generate_program(
-                task_prompt, 
+                task_prompt + f"\n\nVariable Types in context_vars:\n{available_var_types}",
                 self.tools, 
                 self.model, 
                 self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS), 
