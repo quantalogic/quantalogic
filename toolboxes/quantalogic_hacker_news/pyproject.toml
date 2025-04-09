@@ -1,14 +1,14 @@
 [tool.poetry]
 name = "quantalogic_hacker_news"
-version = "0.3.0"
+version = "0.4.0"
 description = "A custom toolbox for Quantalogic"
 authors = ["Your Name <you@example.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-quantalogic = ">=0.80.0"
 aiohttp = "^3.11.16"
 aiocache = ">=0.12.3"
+quantalogic = "^0.80.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

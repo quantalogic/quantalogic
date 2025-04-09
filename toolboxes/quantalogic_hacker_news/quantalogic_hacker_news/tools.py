@@ -3,10 +3,10 @@ import html
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional, Union
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 import aiohttp
-from pydantic import BaseModel, Field
 
 from quantalogic.tools import create_tool  # Assuming this is the decorator from your module
 
@@ -21,47 +21,52 @@ if not logger.handlers:
 
 # API Configuration
 class HNConfig:
+    """API configuration for Hacker News."""
     BASE_URL = "https://hacker-news.firebaseio.com/v0"
     ALGOLIA_URL = "https://hn.algolia.com/api/v1"
     TIMEOUT = 10.0  # seconds
     DEFAULT_HEADERS = {"User-Agent": "Enhanced-HN-Client/1.0"}
 
 # Data Models
-class HNItem(BaseModel):
-    """Generic model for Hacker News items (stories, jobs, etc.)."""
+@dataclass
+class HNItem:
+    """Simple dataclass for Hacker News items."""
     id: int
+    time: int
+    type: str
+    by: Optional[str] = None
     title: Optional[str] = None
     url: Optional[str] = None
     score: Optional[int] = None
-    by: Optional[str] = None
-    time: int
     descendants: Optional[int] = None
     kids: Optional[List[int]] = None
     text: Optional[str] = None
-    type: str  # e.g., "story", "job", "comment"
 
-class HNComment(BaseModel):
-    """Model for Hacker News comments."""
+@dataclass
+class HNComment:
+    """Simple dataclass for Hacker News comments."""
     id: int
-    by: Optional[str] = None
-    text: Optional[str] = None
     time: int
-    kids: Optional[List[int]] = None
     parent: int
     type: str = "comment"
+    by: Optional[str] = None
+    text: Optional[str] = None
+    kids: Optional[List[int]] = None
 
+@dataclass
 class HNItemDetails(HNItem):
-    """Extended item model including comments."""
-    comments: Optional[List[HNComment]] = None
+    """Extended item dataclass including comments."""
+    comments: Optional[List[Dict]] = None
 
-class HNUser(BaseModel):
-    """Model for Hacker News user data."""
+@dataclass
+class HNUser:
+    """Simple dataclass for Hacker News user data."""
     id: str
     created: int
     karma: int
     about: Optional[str] = None
     submitted: Optional[List[int]] = None
-    items: Optional[List[HNItem]] = None  # Submitted items (stories, jobs, etc.)
+    items: Optional[List[HNItem]] = None
 
 # Helper Functions
 async def fetch_with_retry(
@@ -157,15 +162,15 @@ class HackerNewsClient:
 
         return HNItem(
             id=data.get("id"),
+            time=data.get("time", 0),
+            type=data.get("type", "story"),
+            by=data.get("by"),
             title=data.get("title"),
             url=data.get("url"),
             score=data.get("score"),
-            by=data.get("by"),
-            time=data.get("time", 0),
             descendants=data.get("descendants"),
             kids=data.get("kids"),
-            text=data.get("text"),
-            type=data.get("type", "story")
+            text=data.get("text")
         )
 
     async def get_item_with_comments(
@@ -179,7 +184,7 @@ class HackerNewsClient:
         if not item or item.type not in ["story", "job"]:
             return None
 
-        item_details = HNItemDetails(**item.model_dump())
+        item_details = HNItemDetails(**item.__dict__)
 
         if not item.kids:
             item_details.comments = []
@@ -191,7 +196,7 @@ class HackerNewsClient:
 
     async def _get_comments(
         self, comment_ids: List[int], depth: int = 1, clean_text: bool = False, current_depth: int = 0
-    ) -> List[HNComment]:
+    ) -> List[Dict]:
         """Recursively fetch comments."""
         if current_depth >= depth or not comment_ids:
             return []
@@ -206,21 +211,21 @@ class HackerNewsClient:
             if clean_text:
                 text = clean_html(text)
 
-            comment = HNComment(
-                id=data.get("id"),
-                by=data.get("by"),
-                text=text,
-                time=data.get("time", 0),
-                kids=data.get("kids"),
-                parent=data.get("parent", 0),
-                type="comment"
-            )
+            comment = {
+                "id": data.get("id"),
+                "by": data.get("by"),
+                "text": text,
+                "time": data.get("time", 0),
+                "kids": data.get("kids"),
+                "parent": data.get("parent", 0),
+                "type": "comment"
+            }
 
-            if current_depth < depth - 1 and comment.kids:
+            if current_depth < depth - 1 and comment["kids"]:
                 child_comments = await self._get_comments(
-                    comment.kids, depth, clean_text, current_depth + 1
+                    comment["kids"], depth, clean_text, current_depth + 1
                 )
-                setattr(comment, "replies", child_comments)  # Dynamic attribute
+                comment["replies"] = child_comments  # Dynamic attribute
 
             comments.append(comment)
 
@@ -285,15 +290,15 @@ class HackerNewsClient:
 
             item = HNItem(
                 id=int(hit.get("objectID")),
+                time=hit.get("created_at_i", 0),
+                type="story",
+                by=hit.get("author"),
                 title=hit.get("title"),
                 url=hit.get("url"),
                 score=hit.get("points"),
-                by=hit.get("author"),
-                time=hit.get("created_at_i", 0),
                 descendants=hit.get("num_comments"),
                 kids=hit.get("children", []),
-                text=hit.get("story_text"),
-                type="story"
+                text=hit.get("story_text")
             )
             items.append(item)
 
@@ -302,15 +307,43 @@ class HackerNewsClient:
 # Simplified Tools with @create_tool
 @create_tool
 async def get_hn_items(item_type: str = "top", num_items: int = 30) -> List[HNItem]:
-    """
-    Get popular items from Hacker News.
+    """Fetch popular items from Hacker News.
     
     Args:
-        item_type: Type of items - 'top', 'new', 'best', 'ask_hn', 'show_hn', or 'job'
-        num_items: Number of items to retrieve (1-50)
-        
+        item_type: Type of items to fetch. One of:
+            - 'top': Top stories (default)
+            - 'new': Newest stories
+            - 'best': Highest voted stories
+            - 'ask_hn': Ask HN posts
+            - 'show_hn': Show HN posts
+            - 'job': Job postings
+        num_items: Number of items to retrieve (1-50, default 30)
+    
     Returns:
-        List of items with title, URL, score, and other information
+        List[HNItem]: A list of HNItem objects containing:
+            - id (int): Unique item ID
+            - title (str): Story title
+            - url (str): Story URL if external link
+            - score (int): Upvotes count
+            - by (str): Author username
+            - time (int): Unix timestamp of posting
+            - descendants (int): Comment count for stories
+            - type (str): Always "story" for this endpoint
+    
+    Example Return:
+        [
+            HNItem(
+                id=12345,
+                title="Show HN: My new project",
+                url="https://example.com",
+                score=42,
+                by="username",
+                time=1672531200,
+                descendants=10,
+                type="story"
+            ),
+            ...
+        ]
     """
     item_type_map = {
         "top": "top_items",
@@ -331,17 +364,20 @@ async def get_hn_items(item_type: str = "top", num_items: int = 30) -> List[HNIt
         return await method(limit=num_items)
 
 @create_tool
-async def get_hn_item_details(item_id: int, comment_depth: int = 2, clean_text: bool = True) -> HNItemDetails:
-    """
-    Get a Hacker News item with its comments.
+async def get_hn_item_details(item_id: int, comment_depth: int = 2, clean_text: bool = True) -> Dict:
+    """Fetch a Hacker News item with its comment hierarchy.
     
     Args:
-        item_id: ID of the item
-        comment_depth: How deep to fetch nested comments (0-3)
-        clean_text: Whether to clean HTML from comments
-        
+        item_id: Unique ID of the item to fetch
+        comment_depth: Depth of nested comments to retrieve (0-3, default 2)
+            - 0: No comments
+            - 1: Top-level comments only
+            - 2: Comments + replies (default)
+            - 3: Full comment tree
+        clean_text: Whether to clean HTML tags from text (default True)
+    
     Returns:
-        Item with its comments
+        Dict: A dictionary containing item details and comments
     """
     if not isinstance(item_id, int) or item_id <= 0:
         raise ValueError(f"Invalid item_id: {item_id}. Must be a positive integer.")
@@ -352,21 +388,48 @@ async def get_hn_item_details(item_id: int, comment_depth: int = 2, clean_text: 
         item = await client.get_item_with_comments(item_id, comment_depth, clean_text)
         if not item:
             raise ValueError(f"Item with id {item_id} not found")
-        return item
+        return item.__dict__ if hasattr(item, '__dict__') else item
 
 @create_tool
 async def get_hn_user(username: str, include_items: bool = True, num_items: int = 10, item_types: List[str] = ["story"]) -> HNUser:
-    """
-    Get information about a Hacker News user.
+    """Fetch detailed information about a Hacker News user.
     
     Args:
-        username: Username to look up
-        include_items: Whether to include user's submitted items
-        num_items: Number of items to include if include_items is True
-        item_types: Types of items to include (e.g., ["story", "job"])
-        
+        username: The user's unique username (case-sensitive)
+        include_items: Whether to fetch user's submitted items (default True)
+        num_items: Number of items to retrieve (1-30, default 10)
+        item_types: List of item types to include. Options:
+            - "story": Story submissions (default)
+            - "comment": Comment submissions
+            - "job": Job postings
+            - "poll": Poll submissions
+            
     Returns:
-        User information with optional submitted items
+        HNUser: User profile containing:
+            - id (str): Username
+            - created (int): Account creation timestamp
+            - karma (int): User's reputation score
+            - about (str): Profile description (HTML cleaned)
+            - submitted (List[int]): IDs of submitted items
+            - items (List[HNItem]): Detailed items if include_items=True
+                - Only includes types specified in item_types
+    
+    Example Return:
+        HNUser(
+            id="username",
+            created=1269374400,
+            karma=1234,
+            about="I build things",
+            submitted=[12345, 54321],
+            items=[
+                HNItem(
+                    id=12345,
+                    title="My Show HN project",
+                    type="story",
+                    score=42
+                )
+            ]
+        )
     """
     if not username or not isinstance(username, str):
         raise ValueError("Username must be a non-empty string")
@@ -432,9 +495,9 @@ async def main():
     # Fetch item with comments
     if top_items:
         item_details = await get_hn_item_details(top_items[0].id, comment_depth=1, clean_text=True)
-        print(f"\nItem Details: {item_details.title}")
-        for comment in item_details.comments[:2]:
-            print(f"  Comment by {comment.by}: {comment.text[:50]}...")
+        print(f"\nItem Details: {item_details['title']}")
+        for comment in item_details.get('comments', [])[:2]:
+            print(f"  Comment by {comment['by']}: {comment['text'][:50]}...")
 
     # Fetch user with items
     user = await get_hn_user("dang", include_items=True, num_items=3, item_types=["story", "job"])
