@@ -1,9 +1,8 @@
-
-
 #!/usr/bin/env python
 # A simple workflow example for story generation with external Jinja2 template
 
 from pathlib import Path
+from typing import List
 
 from quantalogic.flow import Nodes, Workflow
 
@@ -19,8 +18,6 @@ DEFAULT_LLM_PARAMS = {
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 TEMPLATE_FILE = TEMPLATE_DIR / "story_outline.j2"
 
-
-
 @Nodes.llm_node(system_prompt="You are a creative writer skilled at generating stories.",
                 prompt_file=str(TEMPLATE_FILE),  # Use prompt_file to load the external template
                 output="outline", **DEFAULT_LLM_PARAMS)
@@ -29,41 +26,34 @@ def generate_outline(genre, num_chapters):
     return {}
 
 @Nodes.llm_node(system_prompt="You are a creative writer.",
-                prompt_template="Write chapter {chapter_num} for this story outline: {outline}. Style: {style}.",
+                prompt_template="Write chapter {{ completed_chapters + 1 }} for this story outline: {{ outline }}. Style: {{ style }}.",
                 output="chapter", **DEFAULT_LLM_PARAMS)
-def generate_chapter(outline, chapter_num, style):
+def generate_chapter(outline, completed_chapters, style):
     """Generate a single chapter based on the outline."""
     return {}
 
-@Nodes.define(output="updated_context")
-async def update_progress(**context):
+@Nodes.define(output=None)
+async def update_progress(chapters: List[str], chapter: str, completed_chapters: int):
     """Update the progress of chapter generation."""
-    chapters = context.get('chapters', [])
-    completed_chapters = context.get('completed_chapters', 0)
-    chapter = context.get('chapter', {})
-    updated_chapters = chapters.copy()
-    updated_chapters.append(chapter)
-    updated_context = {
-        **context,
-        "chapters": updated_chapters,
-        "completed_chapters": completed_chapters + 1
-    }
-    return updated_context
+    updated_chapters = chapters + [chapter]
+    return {"chapters": updated_chapters, "completed_chapters": completed_chapters + 1}
 
-@Nodes.define(output="continue_generating")
-async def check_if_complete(completed_chapters=0, num_chapters=0, **kwargs):
-    """Check if all chapters have been generated."""
-    return completed_chapters < num_chapters
+@Nodes.define(output="final_result")
+async def workflow_complete(chapters: List[str]):
+    """Mark the workflow as complete and return the final chapters."""
+    return {"final_chapters": chapters}
 
 # Define the workflow
 workflow = (
     Workflow("generate_outline")
-    .then("generate_chapter")
-    .then("update_progress")
-    .then("check_if_complete")
-    .then("generate_chapter", condition=lambda ctx: ctx.get("continue_generating", False))
-    .then("update_progress")
-    .then("check_if_complete")
+    .start_loop()
+    .node("generate_chapter")
+    .node("update_progress")
+    .end_loop(
+        condition=lambda ctx: ctx["completed_chapters"] >= ctx["num_chapters"],
+        next_node="workflow_complete"
+    )
+    .node("workflow_complete")
 )
 
 def story_observer(event_type, data=None):
@@ -94,12 +84,10 @@ if __name__ == "__main__":
             result = await engine.run(initial_context)
 
             print("\nWorkflow completed successfully!")
-            print("Completed chapters: {result.get('completed_chapters', 0)}")
+            print(f"Completed chapters: {result.get('completed_chapters', 0)}")
             return result
         except Exception as e:
             print(f"\nWorkflow failed with error: {e}")
             raise
 
     anyio.run(main)
-
-  

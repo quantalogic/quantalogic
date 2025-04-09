@@ -1,0 +1,29 @@
+# Model configuration
+model: "deepseek/deepseek-chat"
+# Task-solving parameters
+max_iterations: 5
+max_history_tokens: 2000
+# Toolbox and tool configuration
+toolbox_directory: "toolboxes"
+enabled_toolboxes:
+  - math_tools
+# Component selection
+reasoner:
+  name: "default"
+executor:
+  name: "default"
+# Agent personality and behavior
+profile: "math_expert"
+customizations:
+  personality:
+    traits:
+      - witty
+tools_config:
+  - name: "math_tools"
+    enabled: true
+    config:
+      precision: "high"
+sop: |
+  Always provide clear, concise answers.
+  Prioritize mathematical accuracy and user satisfaction.
+  Inject humor where appropriate to keep interactions engaging.

@@ -13,27 +13,8 @@ async def litellm_completion(
     notify_event: Optional[Callable] = None,
     **kwargs
 ) -> str:
-    """
-    A wrapper for litellm.acompletion that supports streaming and non-streaming modes.
-    
-    Args:
-        model (str): The model to use (e.g., "gemini/gemini-2.0-flash").
-        messages (List[dict]): The conversation history as a list of message dictionaries.
-        max_tokens (int): Maximum number of tokens to generate.
-        temperature (float): Sampling temperature for the model.
-        stream (bool): If True, stream tokens; if False, return the full response.
-        step (Optional[int]): Step number for event tracking (used in streaming mode).
-        notify_event (Optional[Callable]): Callback to trigger events during streaming.
-        **kwargs: Additional arguments to pass to litellm.acompletion.
-
-    Returns:
-        str: The generated response (full text in both modes).
-
-    Raises:
-        ValueError: If notify_event is missing when stream=True.
-        Exception: If the completion request fails.
-    """
-    from .events import StreamTokenEvent  # Local import to avoid circular dependency
+    """A wrapper for litellm.acompletion that supports streaming and non-streaming modes."""
+    from .events import StreamTokenEvent
 
     if stream:
         if notify_event is None:

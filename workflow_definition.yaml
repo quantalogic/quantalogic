@@ -1,52 +1,118 @@
 functions:
+  validate_input:
+    type: embedded
+    code: |-
+      @Nodes.validate_node(output='validation_result')
+      async def validate_input(genre: str, num_chapters: int):
+          """Validate input parameters."""
+          if not (1 <= num_chapters <= 20 and genre.lower() in ['science fiction', 'fantasy', 'mystery', 'romance']):
+              raise ValueError('Invalid input: num_chapters must be 1-20, genre must be one of science fiction, fantasy, mystery, romance')
+          return 'Input validated'
+    module: null
+    function: null
+  generate_title:
+    type: embedded
+    code: |-
+      @Nodes.llm_node(system_prompt='You are a creative writer specializing in story titles.', prompt_template='Generate a creative title for a {{ genre }} story. Output only the title.', output='title', **DEFAULT_LLM_PARAMS)
+      async def generate_title(genre: str):
+          """Generate a title based on the genre."""
+          pass
+    module: null
+    function: null
   generate_outline:
     type: embedded
     code: |-
-      @Nodes.llm_node(system_prompt='You are a creative writer skilled at generating stories.', prompt_template='Create a story outline for a {genre} story with {num_chapters} chapters.', output='outline', **DEFAULT_LLM_PARAMS)
-      def generate_outline(genre, num_chapters):
-          """Generate a story outline based on genre and number of chapters."""
-          return {}
+      @Nodes.llm_node(system_prompt='You are an expert in story structuring and outlining.', prompt_template="Create a detailed outline for a {{ genre }} story titled '{{ title }}' with {{ num_chapters }} chapters. Only the outline in markdown, no comments.", output='outline', **DEFAULT_LLM_PARAMS)
+      async def generate_outline(genre: str, title: str, num_chapters: int):
+          """Generate a chapter outline for the story."""
+          pass
     module: null
     function: null
   generate_chapter:
     type: embedded
     code: |-
-      @Nodes.llm_node(system_prompt='You are a creative writer.', prompt_template='Write chapter {chapter_num} for this story outline: {outline}. Style: {style}.', output='chapter', **DEFAULT_LLM_PARAMS)
-      def generate_chapter(outline, chapter_num, style):
-          """Generate a single chapter based on the outline."""
-          return {}
+      @Nodes.llm_node(system_prompt='You are a skilled storyteller with a knack for vivid descriptions.', prompt_template="Write chapter {{ completed_chapters + 1 }} of {{ num_chapters }} for the story '{{ title }}'. Outline: {{ outline }}. Style: {{ style }}. Output only the chapter content, markdown format", output='chapter', **DEFAULT_LLM_PARAMS)
+      async def generate_chapter(title: str, outline: str, completed_chapters: int, num_chapters: int, style: str):
+          """Generate content for a specific chapter."""
+          pass
     module: null
     function: null
   update_progress:
     type: embedded
-    code: "@Nodes.define(output='updated_context')\nasync def update_progress(**context):\n    \"\"\"Update the progress of\
-      \ chapter generation.\n    \n    Takes the entire context dictionary and handles missing keys gracefully.\n    \"\"\"\
-      \n    chapters = context.get('chapters', [])\n    completed_chapters = context.get('completed_chapters', 0)\n    chapter\
-      \ = context.get('chapter', {})\n    updated_chapters = chapters.copy()\n    updated_chapters.append(chapter)\n    updated_context\
-      \ = {**context, 'chapters': updated_chapters, 'completed_chapters': completed_chapters + 1}\n    return updated_context"
+    code: |-
+      @Nodes.define(output=None)
+      async def update_progress(chapters: List[str], chapter: str, completed_chapters: int):
+          """Update the chapter list and completion count."""
+          updated_chapters = chapters + [chapter]
+          return {'chapters': updated_chapters, 'completed_chapters': completed_chapters + 1}
     module: null
     function: null
-  check_if_complete:
+  compile_book:
     type: embedded
-    code: "@Nodes.define(output='continue_generating')\nasync def check_if_complete(completed_chapters=0, num_chapters=0,\
-      \ **kwargs):\n    \"\"\"Check if all chapters have been generated.\n    \n    Args:\n        completed_chapters: Number\
-      \ of chapters completed so far\n        num_chapters: Total number of chapters to generate\n        kwargs: Additional\
-      \ context parameters\n        \n    Returns:\n        bool: True if we should continue generating chapters, False otherwise\n\
-      \    \"\"\"\n    return completed_chapters < num_chapters"
+    code: |-
+      @Nodes.define(output='manuscript')
+      async def compile_book(title: str, outline: str, chapters: List[str]):
+          """Compile the full manuscript from title, outline, and chapters."""
+          return f'Title: {title}\n\nOutline:\n{outline}\n\n' + '\n\n'.join((f'Chapter {i}:\n{chap}' for i, chap in enumerate(chapters, 1)))
+    module: null
+    function: null
+  quality_check:
+    type: embedded
+    code: |-
+      @Nodes.llm_node(system_prompt='You are a meticulous editor reviewing manuscripts for quality.', prompt_template='Review this manuscript for coherence, grammar, and quality:\n\n{{ manuscript }}', output='quality_check_result', **DEFAULT_LLM_PARAMS)
+      async def quality_check(manuscript: str):
+          """Perform a quality check on the compiled manuscript."""
+          pass
     module: null
     function: null
 nodes:
+  validate_input:
+    function: validate_input
+    sub_workflow: null
+    llm_config: null
+    template_config: null
+    inputs_mapping: null
+    output: validation_result
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+  generate_title:
+    function: null
+    sub_workflow: null
+    llm_config:
+      model: gemini/gemini-2.0-flash
+      system_prompt: You are a creative writer specializing in story titles.
+      system_prompt_file: null
+      prompt_template: Generate a creative title for a {{ genre }} story. Output only the title.
+      prompt_file: null
+      temperature: 0.7
+      max_tokens: 2000
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      stop: null
+      response_model: null
+      api_key: null
+    template_config: null
+    inputs_mapping: null
+    output: title
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
   generate_outline:
     function: null
     sub_workflow: null
     llm_config:
       model: gemini/gemini-2.0-flash
-      system_prompt: You are a creative writer skilled at generating stories.
+      system_prompt: You are an expert in story structuring and outlining.
       system_prompt_file: null
-      prompt_template: Create a story outline for a {genre} story with {num_chapters} chapters.
+      prompt_template: Create a detailed outline for a {{ genre }} story titled '{{ title }}' with {{ num_chapters }} chapters.
+        Only the outline in markdown, no comments.
       prompt_file: null
       temperature: 0.7
-      max_tokens: 1000
+      max_tokens: 2000
       top_p: 1.0
       presence_penalty: 0.0
       frequency_penalty: 0.0
@@ -65,12 +131,13 @@ nodes:
     sub_workflow: null
     llm_config:
       model: gemini/gemini-2.0-flash
-      system_prompt: You are a creative writer.
+      system_prompt: You are a skilled storyteller with a knack for vivid descriptions.
       system_prompt_file: null
-      prompt_template: 'Write chapter {chapter_num} for this story outline: {outline}. Style: {style}.'
+      prompt_template: 'Write chapter {{ completed_chapters + 1 }} of {{ num_chapters }} for the story ''{{ title }}''. Outline:
+        {{ outline }}. Style: {{ style }}. Output only the chapter content, markdown format'
       prompt_file: null
       temperature: 0.7
-      max_tokens: 1000
+      max_tokens: 2000
       top_p: 1.0
       presence_penalty: 0.0
       frequency_penalty: 0.0
@@ -90,25 +157,58 @@ nodes:
     llm_config: null
     template_config: null
     inputs_mapping: null
-    output: updated_context
+    output: null
     retries: 3
     delay: 1.0
     timeout: null
     parallel: false
-  check_if_complete:
-    function: check_if_complete
+  compile_book:
+    function: compile_book
     sub_workflow: null
     llm_config: null
     template_config: null
     inputs_mapping: null
-    output: continue_generating
+    output: manuscript
+    retries: 3
+    delay: 1.0
+    timeout: null
+    parallel: false
+  quality_check:
+    function: null
+    sub_workflow: null
+    llm_config:
+      model: gemini/gemini-2.0-flash
+      system_prompt: You are a meticulous editor reviewing manuscripts for quality.
+      system_prompt_file: null
+      prompt_template: |-
+        Review this manuscript for coherence, grammar, and quality:
+
+        {{ manuscript }}
+      prompt_file: null
+      temperature: 0.7
+      max_tokens: 2000
+      top_p: 1.0
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      stop: null
+      response_model: null
+      api_key: null
+    template_config: null
+    inputs_mapping: null
+    output: quality_check_result
     retries: 3
     delay: 1.0
     timeout: null
     parallel: false
 workflow:
-  start: generate_outline
+  start: validate_input
   transitions:
+  - from_node: validate_input
+    to_node: generate_title
+    condition: null
+  - from_node: generate_title
+    to_node: generate_outline
+    condition: null
   - from_node: generate_outline
     to_node: generate_chapter
     condition: null
@@ -116,17 +216,15 @@ workflow:
     to_node: update_progress
     condition: null
   - from_node: update_progress
-    to_node: check_if_complete
-    condition: null
-  - from_node: check_if_complete
     to_node: generate_chapter
-    condition: 'lambda ctx: ctx.get(''continue_generating'', False)'
-  - from_node: generate_chapter
-    to_node: update_progress
-    condition: null
+    condition: 'not (lambda ctx: ctx[''completed_chapters''] >= ctx[''num_chapters''])'
   - from_node: update_progress
-    to_node: check_if_complete
+    to_node: compile_book
+    condition: 'lambda ctx: ctx[''completed_chapters''] >= ctx[''num_chapters'']'
+  - from_node: compile_book
+    to_node: quality_check
     condition: null
+  loops: []
   convergence_nodes: []
 observers: []
 dependencies: []

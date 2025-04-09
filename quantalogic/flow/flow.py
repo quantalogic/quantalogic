@@ -17,7 +17,7 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import instructor
 from jinja2 import Environment, FileSystemLoader, Template, TemplateNotFound
@@ -253,6 +253,10 @@ class Workflow:
         self._observers: List[WorkflowObserver] = []
         self._register_node(start_node)
         self.current_node = start_node
+        # Loop-specific attributes
+        self.in_loop = False
+        self.loop_nodes = []
+        self.loop_entry_node = None
 
     def _register_node(self, name: str):
         """Register a node without modifying the current node."""
@@ -274,6 +278,8 @@ class Workflow:
             Self for method chaining.
         """
         self._register_node(name)
+        if self.in_loop:
+            self.loop_nodes.append(name)
         if inputs_mapping:
             self.node_input_mappings[name] = inputs_mapping
             logger.debug(f"Added inputs mapping for node {name}: {inputs_mapping}")
@@ -420,6 +426,66 @@ class Workflow:
         self.node_outputs[name] = output
         self.current_node = name
         logger.debug(f"Added sub-workflow {name} with inputs {inputs} and output {output}")
+        return self
+
+    def start_loop(self):
+        """Begin defining a loop in the workflow.
+
+        Raises:
+            ValueError: If called without a current node.
+
+        Returns:
+            Self for method chaining.
+        """
+        if self.current_node is None:
+            raise ValueError("Cannot start loop without a current node")
+        self.loop_entry_node = self.current_node
+        self.in_loop = True
+        self.loop_nodes = []
+        return self
+
+    def end_loop(self, condition: Callable[[Dict[str, Any]], bool], next_node: str):
+        """End the loop, setting up transitions based on the condition.
+
+        Args:
+            condition: Callable taking context and returning True when the loop should exit.
+            next_node: Name of the node to transition to after the loop exits.
+
+        Raises:
+            ValueError: If no loop nodes are defined.
+
+        Returns:
+            Self for method chaining.
+        """
+        if not self.in_loop or not self.loop_nodes:
+            raise ValueError("No loop nodes defined")
+        
+        first_node = self.loop_nodes[0]
+        last_node = self.loop_nodes[-1]
+        
+        # Transition from the node before the loop to the first loop node
+        self.transitions.setdefault(self.loop_entry_node, []).append((first_node, None))
+        
+        # Transitions within the loop
+        for i in range(len(self.loop_nodes) - 1):
+            self.transitions.setdefault(self.loop_nodes[i], []).append((self.loop_nodes[i + 1], None))
+        
+        # Conditional transitions from the last loop node
+        # If condition is False, loop back to the first node
+        self.transitions.setdefault(last_node, []).append((first_node, lambda ctx: not condition(ctx)))
+        # If condition is True, exit to the next node
+        self.transitions.setdefault(last_node, []).append((next_node, condition))
+        
+        # Register the next_node if not already present
+        if next_node not in self.nodes:
+            self._register_node(next_node)
+        
+        # Update state
+        self.current_node = next_node
+        self.in_loop = False
+        self.loop_nodes = []
+        self.loop_entry_node = None
+        
         return self
 
     def build(self, parent_engine: Optional["WorkflowEngine"] = None) -> WorkflowEngine:
@@ -575,7 +641,7 @@ class Nodes:
         top_p: float = 1.0,
         presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
-        model: Callable[[Dict[str, Any]], str] = lambda ctx: "gpt-3.5-turbo",
+        model: Union[Callable[[Dict[str, Any]], str], str] = lambda ctx: "gpt-3.5-turbo",
         **kwargs,
     ):
         """Decorator for creating LLM nodes with plain text output, supporting dynamic parameters.
@@ -598,27 +664,45 @@ class Nodes:
             Decorator function wrapping the LLM logic.
         """
         def decorator(func: Callable) -> Callable:
-            async def wrapped_func(model_param: str = None, **func_kwargs):
-                system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
-                system_prompt_file_to_use = func_kwargs.pop("system_prompt_file", system_prompt_file)
-                
+            # Store all decorator parameters in a config dictionary
+            config = {
+                "system_prompt": system_prompt,
+                "system_prompt_file": system_prompt_file,
+                "prompt_template": prompt_template,
+                "prompt_file": prompt_file,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "top_p": top_p,
+                "presence_penalty": presence_penalty,
+                "frequency_penalty": frequency_penalty,
+                "model": model,
+                **kwargs,
+            }
+
+            async def wrapped_func(**func_kwargs):
+                # Use func_kwargs to override config values if provided, otherwise use config defaults
+                system_prompt_to_use = func_kwargs.pop("system_prompt", config["system_prompt"])
+                system_prompt_file_to_use = func_kwargs.pop("system_prompt_file", config["system_prompt_file"])
+                prompt_template_to_use = func_kwargs.pop("prompt_template", config["prompt_template"])
+                prompt_file_to_use = func_kwargs.pop("prompt_file", config["prompt_file"])
+                temperature_to_use = func_kwargs.pop("temperature", config["temperature"])
+                max_tokens_to_use = func_kwargs.pop("max_tokens", config["max_tokens"])
+                top_p_to_use = func_kwargs.pop("top_p", config["top_p"])
+                presence_penalty_to_use = func_kwargs.pop("presence_penalty", config["presence_penalty"])
+                frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", config["frequency_penalty"])
+                model_to_use = func_kwargs.pop("model", config["model"])
+
+                # Handle callable model parameter
+                if callable(model_to_use):
+                    model_to_use = model_to_use(func_kwargs)
+
+                # Load system prompt from file if specified
                 if system_prompt_file_to_use:
                     system_content = cls._load_prompt_from_file(system_prompt_file_to_use, func_kwargs)
                 else:
                     system_content = system_prompt_to_use
-                
-                prompt_template_to_use = func_kwargs.pop("prompt_template", prompt_template)
-                prompt_file_to_use = func_kwargs.pop("prompt_file", prompt_file)
-                temperature_to_use = func_kwargs.pop("temperature", temperature)
-                max_tokens_to_use = func_kwargs.pop("max_tokens", max_tokens)
-                top_p_to_use = func_kwargs.pop("top_p", top_p)
-                presence_penalty_to_use = func_kwargs.pop("presence_penalty", presence_penalty)
-                frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
-                
-                # Prioritize model from func_kwargs (workflow mapping), then model_param, then default
-                model_to_use = func_kwargs.get("model", model_param if model_param is not None else model(func_kwargs))
-                logger.debug(f"Selected model for {func.__name__}: {model_to_use}")
 
+                # Prepare template variables and render prompt
                 sig = inspect.signature(func)
                 template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
                 prompt = cls._render_template(prompt_template_to_use, prompt_file_to_use, template_vars)
@@ -626,12 +710,14 @@ class Nodes:
                     {"role": "system", "content": system_content},
                     {"role": "user", "content": prompt},
                 ]
-                
+
+                # Logging for debugging
                 truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
                 logger.info(f"LLM node {func.__name__} using model: {model_to_use}")
                 logger.debug(f"System prompt: {system_content[:100]}...")
                 logger.debug(f"User prompt preview: {truncated_prompt}")
-                
+
+                # Call the acompletion function with the resolved model
                 try:
                     response = await acompletion(
                         model=model_to_use,
@@ -656,8 +742,10 @@ class Nodes:
                 except Exception as e:
                     logger.error(f"Error in LLM node {func.__name__}: {e}")
                     raise
+
+            # Register the node with its inputs and output
             sig = inspect.signature(func)
-            inputs = ['model'] + [param.name for param in sig.parameters.values()]
+            inputs = [param.name for param in sig.parameters.values()]
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
             cls.NODE_REGISTRY[func.__name__] = (wrapped_func, inputs, output)
             return wrapped_func
@@ -677,7 +765,7 @@ class Nodes:
         top_p: float = 1.0,
         presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
-        model: Callable[[Dict[str, Any]], str] = lambda ctx: "gpt-3.5-turbo",
+        model: Union[Callable[[Dict[str, Any]], str], str] = lambda ctx: "gpt-3.5-turbo",
         **kwargs,
     ):
         """Decorator for creating LLM nodes with structured output, supporting dynamic parameters.
@@ -707,27 +795,45 @@ class Nodes:
             raise ImportError("Instructor is required for structured_llm_node")
 
         def decorator(func: Callable) -> Callable:
-            async def wrapped_func(model_param: str = None, **func_kwargs):
-                system_prompt_to_use = func_kwargs.pop("system_prompt", system_prompt)
-                system_prompt_file_to_use = func_kwargs.pop("system_prompt_file", system_prompt_file)
-                
+            # Store all decorator parameters in a config dictionary
+            config = {
+                "system_prompt": system_prompt,
+                "system_prompt_file": system_prompt_file,
+                "prompt_template": prompt_template,
+                "prompt_file": prompt_file,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "top_p": top_p,
+                "presence_penalty": presence_penalty,
+                "frequency_penalty": frequency_penalty,
+                "model": model,
+                **kwargs,
+            }
+
+            async def wrapped_func(**func_kwargs):
+                # Resolve parameters, prioritizing func_kwargs over config defaults
+                system_prompt_to_use = func_kwargs.pop("system_prompt", config["system_prompt"])
+                system_prompt_file_to_use = func_kwargs.pop("system_prompt_file", config["system_prompt_file"])
+                prompt_template_to_use = func_kwargs.pop("prompt_template", config["prompt_template"])
+                prompt_file_to_use = func_kwargs.pop("prompt_file", config["prompt_file"])
+                temperature_to_use = func_kwargs.pop("temperature", config["temperature"])
+                max_tokens_to_use = func_kwargs.pop("max_tokens", config["max_tokens"])
+                top_p_to_use = func_kwargs.pop("top_p", config["top_p"])
+                presence_penalty_to_use = func_kwargs.pop("presence_penalty", config["presence_penalty"])
+                frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", config["frequency_penalty"])
+                model_to_use = func_kwargs.pop("model", config["model"])
+
+                # Handle callable model parameter
+                if callable(model_to_use):
+                    model_to_use = model_to_use(func_kwargs)
+
+                # Load system prompt from file if specified
                 if system_prompt_file_to_use:
                     system_content = cls._load_prompt_from_file(system_prompt_file_to_use, func_kwargs)
                 else:
                     system_content = system_prompt_to_use
-                
-                prompt_template_to_use = func_kwargs.pop("prompt_template", prompt_template)
-                prompt_file_to_use = func_kwargs.pop("prompt_file", prompt_file)
-                temperature_to_use = func_kwargs.pop("temperature", temperature)
-                max_tokens_to_use = func_kwargs.pop("max_tokens", max_tokens)
-                top_p_to_use = func_kwargs.pop("top_p", top_p)
-                presence_penalty_to_use = func_kwargs.pop("presence_penalty", presence_penalty)
-                frequency_penalty_to_use = func_kwargs.pop("frequency_penalty", frequency_penalty)
-                
-                # Prioritize model from func_kwargs (workflow mapping), then model_param, then default
-                model_to_use = func_kwargs.get("model", model_param if model_param is not None else model(func_kwargs))
-                logger.debug(f"Selected model for {func.__name__}: {model_to_use}")
 
+                # Render prompt using template variables
                 sig = inspect.signature(func)
                 template_vars = {k: v for k, v in func_kwargs.items() if k in sig.parameters}
                 prompt = cls._render_template(prompt_template_to_use, prompt_file_to_use, template_vars)
@@ -735,13 +841,15 @@ class Nodes:
                     {"role": "system", "content": system_content},
                     {"role": "user", "content": prompt},
                 ]
-                
+
+                # Logging for debugging
                 truncated_prompt = prompt[:200] + "..." if len(prompt) > 200 else prompt
                 logger.info(f"Structured LLM node {func.__name__} using model: {model_to_use}")
                 logger.debug(f"System prompt: {system_content[:100]}...")
                 logger.debug(f"User prompt preview: {truncated_prompt}")
                 logger.debug(f"Expected response model: {response_model.__name__}")
-                
+
+                # Generate structured response
                 try:
                     structured_response, raw_response = await client.chat.completions.create_with_completion(
                         model=model_to_use,
@@ -769,8 +877,10 @@ class Nodes:
                 except Exception as e:
                     logger.error(f"Error in structured LLM node {func.__name__}: {e}")
                     raise
+
+            # Register the node
             sig = inspect.signature(func)
-            inputs = ['model'] + [param.name for param in sig.parameters.values()]
+            inputs = [param.name for param in sig.parameters.values()]
             logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
             cls.NODE_REGISTRY[func.__name__] = (wrapped_func, inputs, output)
             return wrapped_func

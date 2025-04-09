@@ -1,0 +1,21 @@
+model: "gemini/gemini-2.0-flash"
+max_iterations: 5
+max_history_tokens: 2000
+enabled_toolboxes:
+  - math_tools
+reasoner:
+  name: "default"
+  config:
+    temperature: 0.7
+executor:
+  name: "default"
+profile: "math_expert"
+personality:
+  traits:
+    - witty
+    - helpful
+tools_config:
+  - name: math_tools
+    enabled: true
+    config:
+      precision: "high"

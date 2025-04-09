@@ -8,8 +8,8 @@ from typing import Callable, Dict, List
 import litellm
 import typer
 from loguru import logger
+from quantalogic_pythonbox.python_interpreter import execute_async
 
-from quantalogic.python_interpreter import execute_async
 from quantalogic.tools.tool import Tool, ToolArgument
 
 # Configure loguru to log to a file with rotation, matching original

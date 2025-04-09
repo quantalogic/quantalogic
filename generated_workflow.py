@@ -18,59 +18,53 @@ from loguru import logger
 from quantalogic.flow import Nodes, Workflow
 
 MODEL = 'gemini/gemini-2.0-flash'
-DEFAULT_LLM_PARAMS = {'model': 'gemini/gemini-2.0-flash', 'temperature': 0.7, 'max_tokens': 1000}
-updated_context = {}
+DEFAULT_LLM_PARAMS = {'model': 'gemini/gemini-2.0-flash', 'temperature': 0.7, 'max_tokens': 2000, 'top_p': 1.0, 'presence_penalty': 0.0, 'frequency_penalty': 0.0}
 initial_context = {'genre': 'science fiction', 'num_chapters': 3, 'completed_chapters': 0, 'style': 'descriptive'}
 
-@Nodes.define(output='updated_context')
-async def update_progress(**context):
-    """Update the progress of chapter generation.
-    
-    Takes the entire context dictionary and handles missing keys gracefully.
-    """
-    chapters = context.get('chapters', [])
-    completed_chapters = context.get('completed_chapters', 0)
-    chapter = context.get('chapter', {})
-    updated_chapters = chapters.copy()
-    updated_chapters.append(chapter)
-    updated_context = {**context, 'chapters': updated_chapters, 'completed_chapters': completed_chapters + 1}
-    return updated_context
+@Nodes.define(output='validation_result')
+async def validate_input(genre: str, num_chapters: int):
+    """Validate input parameters."""
+    if not (1 <= num_chapters <= 20 and genre.lower() in ['science fiction', 'fantasy', 'mystery', 'romance']):
+        raise ValueError('Invalid input: num_chapters must be 1-20, genre must be one of science fiction, fantasy, mystery, romance')
+    return 'Input validated'
 
-@Nodes.define(output='continue_generating')
-async def check_if_complete(completed_chapters=0, num_chapters=0, **kwargs):
-    """Check if all chapters have been generated.
-    
-    Args:
-        completed_chapters: Number of chapters completed so far
-        num_chapters: Total number of chapters to generate
-        kwargs: Additional context parameters
-        
-    Returns:
-        bool: True if we should continue generating chapters, False otherwise
-    """
-    return completed_chapters < num_chapters
+@Nodes.define(output='update_progress_result')
+async def update_progress(chapters: List[str], chapter: str, completed_chapters: int):
+    """Update the chapter list and completion count."""
+    updated_chapters = chapters + [chapter]
+    return {'chapters': updated_chapters, 'completed_chapters': completed_chapters + 1}
 
-# Define the workflow with branch and converge support
+@Nodes.define(output='manuscript')
+async def compile_book(title: str, outline: str, chapters: List[str]):
+    """Compile the full manuscript from title, outline, and chapters."""
+    return f'Title: {title}\n\nOutline:\n{outline}\n\n' + '\n\n'.join((f'Chapter {i}:\n{chap}' for i, chap in enumerate(chapters, 1)))
+
+# Define the workflow with branch, converge, and loop support
 workflow = (
-    Workflow("generate_outline")
+    Workflow("validate_input")
+    .node("validate_input")
+    .node("generate_title")
     .node("generate_outline")
     .node("generate_chapter")
+    .start_loop()
     .node("update_progress")
-    .node("check_if_complete")
+    .node("compile_book")
+    .node("quality_check")
+    .then("generate_title", condition=None)
+    .then("generate_outline", condition=None)
     .then("generate_chapter", condition=None)
-    .then("update_progress", condition=None)
-    .then("check_if_complete", condition=None)
-    .then("generate_chapter", condition=lambda ctx: lambda ctx: ctx.get('continue_generating', False))
-    .then("update_progress", condition=None)
-    .then("check_if_complete", condition=None)
+    .then("compile_book", condition=lambda ctx: lambda ctx: ctx['completed_chapters'] >= ctx['num_chapters'])
+    .then("quality_check", condition=None)
 )
 
 async def main():
     """Main function to run the workflow."""
     # Customize initial_context as needed
     # Inferred required inputs:
-    # None detected
+    # genre, num_chapters
     initial_context = {
+        'genre': '',
+        'num_chapters': '',
     }
     engine = workflow.build()
     result = await engine.run(initial_context)

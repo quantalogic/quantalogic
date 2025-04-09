@@ -11,6 +11,7 @@ class Event(BaseModel):
 
 class TaskStartedEvent(Event):
     task_description: str
+    system_prompt: str = ""  # Added for persistent context
 
 
 class ThoughtGeneratedEvent(Event):
@@ -52,27 +53,33 @@ class TaskCompletedEvent(Event):
 
 class StepStartedEvent(Event):
     step_number: int
+    system_prompt: str = ""  # Added for persistent context
+    task_description: str = ""  # Added for persistent context
 
 
 class ToolExecutionStartedEvent(Event):
     step_number: int
     tool_name: str
-    parameters_summary: dict  # Summary of tool parameters (e.g., {"param1": "value1"})
+    parameters_summary: dict
 
 
 class ToolExecutionCompletedEvent(Event):
     step_number: int
     tool_name: str
-    result_summary: str  # Summary of the execution result
+    result_summary: str
 
 
 class ToolExecutionErrorEvent(Event):
     step_number: int
     tool_name: str
-    error: str  # Error message if execution fails
+    error: str
 
 
-# In quantalogic/codeact/events.py
 class StreamTokenEvent(Event):
     token: str
     step_number: Optional[int] = None
+
+
+class PromptGeneratedEvent(Event):
+    step_number: int
+    prompt: str

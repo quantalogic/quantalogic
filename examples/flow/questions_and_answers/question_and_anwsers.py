@@ -284,6 +284,12 @@ def create_fact_extraction_workflow() -> Workflow:
         "combined_questionnaire": "combined_questionnaire"
     }
     
+    # Added input mapping for extract_facts to use the context-provided model
+    wf.node_input_mappings["extract_facts"] = {
+        "markdown_content": "markdown_content",
+        "model": "model"
+    }
+    
     logger.info("Workflow created with fact-by-fact processing loop")
     return wf
 
@@ -321,6 +327,9 @@ def generate(
         if not os.path.isfile(file_path):
             typer.echo(f"Error: The file '{file_path}' does not exist.")
             raise typer.Exit(code=1)
+
+        # Print model selection
+        typer.echo(f"Selected model: {model}")
 
         # Run the workflow
         result = asyncio.run(run_workflow(file_path, model, num_questions, token_limit))

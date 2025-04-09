@@ -223,15 +223,47 @@ class TransitionDefinition(BaseModel):
     )
 
 
+class LoopDefinition(BaseModel):
+    """Definition of a loop within the workflow."""
+    nodes: List[str] = Field(..., description="List of node names in the loop.")
+    condition: str = Field(..., description="Python expression using 'ctx' for the loop condition.")
+    exit_node: str = Field(..., description="Node to transition to when the loop ends.")
+
+
 class WorkflowStructure(BaseModel):
     """Structure defining the workflow's execution flow."""
     start: Optional[str] = Field(None, description="Name of the starting node.")
     transitions: List[TransitionDefinition] = Field(
         default_factory=list, description="List of transitions between nodes."
     )
+    loops: List[LoopDefinition] = Field(
+        default_factory=list, description="List of loop definitions (optional, for explicit loop support)."
+    )
     convergence_nodes: List[str] = Field(
         default_factory=list, description="List of nodes where branches converge."
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_loop_nodes(cls, data: Any) -> Any:
+        """Ensure all nodes in loops exist in the workflow.
+
+        Args:
+            data: Raw data to validate.
+
+        Returns:
+            Validated data.
+
+        Raises:
+            ValueError: If loop nodes are not defined.
+        """
+        loops = data.get("loops", [])
+        nodes = set(data.get("nodes", {}).keys())
+        for loop in loops:
+            for node in loop["nodes"] + [loop["exit_node"]]:
+                if node not in nodes:
+                    raise ValueError(f"Loop node '{node}' not defined in nodes")
+        return data
 
 
 class WorkflowDefinition(BaseModel):

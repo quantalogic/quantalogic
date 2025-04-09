@@ -28,7 +28,7 @@ async def check(name): return len(name) > 3
 @Nodes.define(output='farewell')
 async def end(greeting): return f'{greeting} Goodbye!'
 
-# Define the workflow with branch and converge support
+# Define the workflow with branch, converge, and loop support
 workflow = (
     Workflow("greet")
     .node("greet", inputs_mapping={'name': 'user_name'})
