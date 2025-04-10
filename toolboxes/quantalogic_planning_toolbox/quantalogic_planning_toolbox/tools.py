@@ -69,7 +69,7 @@ class PlanResult:
     task_description: str
     subtasks: List[SubtaskWithStatus]
 
-# Tools
+# Existing Tools
 @create_tool
 async def create_project_plan(task_description: str, tools_description: str = None) -> PlanResult:
     """Generate an AI-powered project plan by decomposing a task.
@@ -97,7 +97,7 @@ async def create_project_plan(task_description: str, tools_description: str = No
 
     {f"Consider the following tools for the task:\n\n{tools_description}" if tools_description else ""}
 
-    Return the subtasks as a JSON array of objects, each with 'step' (integer) and 'description' (string) fields.
+    Return the subtasks as a JSON array of objects, each with 'step' (integer) and soap 'description' (string) fields.
     """
 
     response = await client.create(
@@ -197,6 +197,75 @@ async def update_subtask_status_by_id(task_id: str, step: int, status: str) -> s
 
     return f"Step {step} of task {task_id} updated to '{status}'."
 
+# New Tools
+@create_tool
+async def get_subtasks_by_status(task_id: str, status: str) -> List[SubtaskWithStatus]:
+    """Retrieve all subtasks of a task that have a specific status.
+    
+    Args:
+        task_id: ID of the task
+        status: Status to filter by. Must be one of: 'todo', 'in-progress', 'review', 'done', 'blocked'
+    
+    Returns:
+        List[SubtaskWithStatus]: List of subtasks matching the status
+    
+    Raises:
+        ValueError: If the status is invalid or task_id does not exist
+    """
+    status = status.lower()
+    if status not in VALID_STATUSES:
+        raise ValueError(f"Invalid status '{status}'. Valid statuses are: {sorted(VALID_STATUSES)}")
+    
+    cursor = conn.cursor()
+    cursor.execute('SELECT task_id FROM tasks WHERE task_id = ?', (task_id,))
+    if cursor.fetchone() is None:
+        raise ValueError(f"Task ID '{task_id}' does not exist")
+    
+    cursor.execute('SELECT step, description, status FROM subtasks WHERE task_id = ? AND status = ? ORDER BY step', 
+                   (task_id, status))
+    subtasks = [SubtaskWithStatus(step=step, description=desc, status=status) 
+                for step, desc, status in cursor.fetchall()]
+    return subtasks
+
+@create_tool
+async def update_subtasks_status(task_id: str, steps: List[int], status: str) -> str:
+    """Update the status of multiple subtasks in a task.
+    
+    Args:
+        task_id: ID of the task
+        steps: List of step numbers to update
+        status: New status for the subtasks. Must be one of: 'todo', 'in-progress', 'review', 'done', 'blocked'
+    
+    Returns:
+        str: Confirmation message of the updates
+    
+    Raises:
+        ValueError: If the status is invalid, task_id does not exist, or any step is invalid
+    """
+    if not steps:
+        return "No steps provided to update."
+    
+    status = status.lower()
+    if status not in VALID_STATUSES:
+        raise ValueError(f"Invalid status '{status}'. Valid statuses are: {sorted(VALID_STATUSES)}")
+    
+    cursor = conn.cursor()
+    cursor.execute('SELECT task_id FROM tasks WHERE task_id = ?', (task_id,))
+    if cursor.fetchone() is None:
+        raise ValueError(f"Task ID '{task_id}' does not exist")
+    
+    cursor.execute('SELECT step FROM subtasks WHERE task_id = ?', (task_id,))
+    existing_steps = {row[0] for row in cursor.fetchall()}
+    invalid_steps = [step for step in steps if step not in existing_steps]
+    if invalid_steps:
+        raise ValueError(f"Invalid step numbers: {invalid_steps}. Valid steps for task '{task_id}' are: {sorted(existing_steps)}")
+    
+    with conn:
+        conn.executemany('UPDATE subtasks SET status = ? WHERE task_id = ? AND step = ?', 
+                         [(status, task_id, step) for step in steps])
+    
+    return f"Updated status to '{status}' for steps {steps} in task '{task_id}'."
+
 # Demonstration
 async def main():
     """Demonstrate the planning toolbox functionality."""
@@ -212,13 +281,23 @@ async def main():
         msg = await update_subtask_status_by_id(plan.task_id, plan.subtasks[0].step, "in-progress")
         print(msg)
 
-        print("\n🔍 Updated Plan:")
-        updated_plan = await retrieve_project_plan(plan.task_id)
-        for s in updated_plan.subtasks:
-            print(f"Step {s.step}: {s.description} (Status: {s.status})")
+        print("\n🔍 Getting all 'todo' subtasks:")
+        todo_subtasks = await get_subtasks_by_status(plan.task_id, "todo")
+        for s in todo_subtasks:
+            print(f"Step {s.step}: {s.description}")
+
+        if len(todo_subtasks) >= 2:
+            steps_to_update = [s.step for s in todo_subtasks[:2]]
+            msg = await update_subtasks_status(plan.task_id, steps_to_update, "in-progress")
+            print(f"\n{msg}")
+
+            print("\n🔍 Updated 'in-progress' subtasks:")
+            in_progress_subtasks = await get_subtasks_by_status(plan.task_id, "in-progress")
+            for s in in_progress_subtasks:
+                print(f"Step {s.step}: {s.description}")
 
         try:
-            await update_subtask_status_by_id(plan.task_id, 999, "done")
+            await update_subtasks_status(plan.task_id, [999], "done")
         except ValueError as e:
             print(f"\n❌ Expected error: {e}")
 
