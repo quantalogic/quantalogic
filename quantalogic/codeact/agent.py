@@ -176,6 +176,14 @@ class AgentConfig:
                             current.update(value)
                         elif current is None or (key in ["personality", "backstory"] and isinstance(current, str)):
                             setattr(self, key, value)
+        # Load enabled_toolboxes from default config if not set
+        if self.enabled_toolboxes is None:
+            default_config_path = Path.home() / "quantalogic-config.yaml"
+            if default_config_path.exists():
+                with open(default_config_path) as f:
+                    default_config = yaml.safe_load(f) or {}
+                self.enabled_toolboxes = [tb["name"] for tb in default_config.get("installed_toolboxes", [])]
+
 
 class Agent:
     """High-level interface for the Quantalogic Agent with unified configuration."""

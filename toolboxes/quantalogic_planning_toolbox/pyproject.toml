@@ -6,10 +6,10 @@ authors = ["Your Name <you@example.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-quantalogic = ">0.60.0"
 nanoid = "^2.0.0"
 instructor = "^1.7.9"
 litellm = "^1.65.4.post1"
+quantalogic = {path = "/Users/raphaelmansuy/Github/03-working/quantalogic/dist/quantalogic-0.80.tar.gz"}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
