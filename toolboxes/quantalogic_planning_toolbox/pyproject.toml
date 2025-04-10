@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic_planning_toolbox"
-version = "0.2.0"
+version = "0.4.0"
 description = "A custom toolbox for Quantalogic"
 authors = ["Your Name <you@example.com>"]
 
@@ -9,7 +9,7 @@ python = "^3.10"
 nanoid = "^2.0.0"
 instructor = "^1.7.9"
 litellm = "^1.65.4.post1"
-quantalogic = {path = "/Users/raphaelmansuy/Github/03-working/quantalogic/dist/quantalogic-0.80.tar.gz"}
+quantalogic = "^0.80"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
