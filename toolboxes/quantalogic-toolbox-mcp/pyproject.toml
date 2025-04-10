@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "quantalogic_toolbox_mcp"
-version = "0.5.95"
+version = "0.6.0"
 description = "A custom MCP Client for Quantalogic"
 authors = ["Your Name <you@example.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-quantalogic = ">0.60.0"
+quantalogic = ">=0.80.0"
 mcp = "^1.6.0"
 
 [build-system]
