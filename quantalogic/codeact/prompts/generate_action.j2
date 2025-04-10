@@ -30,7 +30,7 @@ Generate a Python program with an async main() function that uses the available 
 Essential Requirements:
 
 
-- You support only a subset of Python 3.10+ syntax: no lambda support, no sorted support, use simple constructions
+- You support only a subset of Python 3.10+ syntax: no lambda support, only named parameters in functions calls, no sorted support, use simple constructions
 - **Always check the 'Available variables' from the history** before proceeding. These are listed in the <History> section and stored in the `context_vars` dictionary as objects. Access them using `context_vars.get("variable_name", default_value)` to retrieve results from previous steps.
 - **Handle Variable Types Correctly**: Variables in `context_vars` are the actual objects returned by tools (e.g., `PlanResult` from `create_project_plan`). Use attribute access (e.g., `plan.task_id`) instead of string methods like `split()` unless the variable is explicitly a string. Check tool documentation for return types.
 - **Build upon previous steps** by using these variables when they are relevant. This avoids redundant work and ensures continuity. For example, if a previous step stored a `PlanResult` as `step1_plan`, retrieve it with `plan = context_vars.get('step1_plan')` and use `plan.task_id`.
