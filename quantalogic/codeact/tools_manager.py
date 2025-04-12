@@ -44,38 +44,64 @@ class ToolRegistry:
             return []
 
     def register_tools_from_module(self, module, toolbox_name: str) -> None:
-        """Register tools from a module, supporting both @create_tool and get_tools approaches."""
+        """Register tools from a module, supporting both @create_tool, get_tools, and DynamicTool approaches."""
         try:
             tools_found = False
-            logger.debug(f"Processing module {module.__name__} for toolbox {toolbox_name}")
+            logger.debug(f"Processing module {getattr(module, '__name__', str(module))} for toolbox {toolbox_name}")
             # Check for get_tools function to register dependency-free tools
             if hasattr(module, 'get_tools'):
                 tool_funcs = module.get_tools()
                 for func in tool_funcs:
                     # Ensure function is async
                     if not inspect.iscoroutinefunction(func):
-                        logger.warning(f"Function '{func.__name__}' in {module.__name__} is not async. Skipping.")
+                        logger.warning(f"Function '{getattr(func, '__name__', str(func))}' in {getattr(module, '__name__', str(module))} is not async. Skipping.")
                         continue
-                    # Relax module name check to allow submodules
                     tool = create_tool(func)
                     tool.toolbox_name = toolbox_name
                     self.register(tool)
                     logger.debug(f"Registered tool from get_tools: {tool.name} in toolbox {toolbox_name}")
                     tools_found = True
 
-            # Existing behavior: register @create_tool-decorated Tool instances
+            # Register @create_tool-decorated Tool instances
             for name, obj in inspect.getmembers(module):
                 if isinstance(obj, Tool) and hasattr(obj, '_func'):
                     obj.toolbox_name = toolbox_name
                     self.register(obj)
-                    logger.debug(f"Registered @create_tool tool: {obj.name} from {module.__name__} in toolbox {toolbox_name}")
+                    logger.debug(f"Registered @create_tool tool: {obj.name} from {getattr(module, '__name__', str(module))} in toolbox {toolbox_name}")
                     tools_found = True
+                # Handle DynamicTool instances (e.g., from MCP)
+                elif hasattr(obj, 'name') and hasattr(obj, 'description') and hasattr(obj, 'inputSchema'):
+                    try:
+                        # Create a Tool instance from DynamicTool
+                        arguments = [
+                            ToolArgument(
+                                name=prop_name,
+                                arg_type=prop.get('type', 'string'),
+                                description=prop.get('description', ''),
+                                required=prop_name in obj.inputSchema.get('required', [])
+                            )
+                            for prop_name, prop in obj.inputSchema.get('properties', {}).items()
+                        ]
+                        tool = Tool(
+                            name=obj.name,
+                            description=obj.description + "\nNote: This tool is asynchronous and must be awaited using `await` in an async context.",
+                            arguments=arguments,
+                            return_type="Any"
+                        )
+                        tool.toolbox_name = toolbox_name
+                        self.register(tool)
+                        logger.debug(f"Registered DynamicTool: {tool.name} in toolbox {toolbox_name}")
+                        tools_found = True
+                    except Exception as e:
+                        logger.warning(f"Failed to register DynamicTool '{getattr(obj, 'name', 'unknown')}' in {toolbox_name}: {e}")
+                        continue
 
             if not tools_found:
-                logger.warning(f"No tools found in {module.__name__}")
+                logger.warning(f"No tools found in {getattr(module, '__name__', str(module))}")
         except Exception as e:
-            logger.error(f"Failed to register tools from module {module.__name__}: {e}")
-            raise
+            logger.error(f"Failed to register tools from module {getattr(module, '__name__', str(module))}: {e}")
+            # Continue without raising to allow other toolboxes to load
+            return
 
     def load_toolboxes(self, toolbox_names: Optional[List[str]] = None) -> None:
         """Load toolboxes from registered entry points, optionally filtering by name."""
@@ -97,6 +123,8 @@ class ToolRegistry:
                     logger.info(f"Successfully loaded toolbox: {ep.name}")
                 except ImportError as e:
                     logger.error(f"Failed to import toolbox {ep.name}: {e}")
+                except Exception as e:
+                    logger.error(f"Failed to load toolbox {ep.name}: {e}")
         except Exception as e:
             logger.error(f"Error loading toolboxes: {e}")
 

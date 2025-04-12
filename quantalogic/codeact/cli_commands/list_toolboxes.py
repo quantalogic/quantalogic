@@ -65,50 +65,59 @@ def list_toolboxes(
         # Basic output: list toolboxes with name, package, version, and module path
         console.print("[bold cyan]Installed Toolboxes:[/bold cyan]")
         for tb in installed_toolboxes:
-            module_path = get_module_path(tb["name"])
-            console.print(
-                f"- {tb['name']} (package: {tb['package']}, version: {tb['version']}, "
-                f"path: [italic]{module_path}[/italic])"
-            )
+            try:
+                module_path = get_module_path(tb["name"])
+                console.print(
+                    f"- {tb['name']} (package: {tb['package']}, version: {tb['version']}, "
+                    f"path: [italic]{module_path}[/italic])"
+                )
+            except Exception as e:
+                console.print(f"[red]Error processing '{tb['name']}': {str(e)}[/red]")
     else:
         # Detailed output: show each toolbox with its tools in a panel
         for tb in installed_toolboxes:
-            toolbox_name = tb["name"]
-            package = tb["package"]
-            version = tb["version"]
-            # Get module path
-            module_path = get_module_path(toolbox_name)
-            # Filter tools by toolbox_name from the ToolRegistry
-            tools = [
-                tool for (tb_name, _), tool in plugin_manager.tools.tools.items()
-                if tb_name == toolbox_name
-            ]
-            # Sort tools alphabetically by name
-            tools.sort(key=lambda t: t.name)
-            
-            # Build the tool list as bullet points
-            tool_list = []
-            for tool in tools:
-                tool_list.append(f"- {tool.name}: {tool.description}")
-            if not tool_list:
-                tool_list.append("- No tools found")
-            
-            # Create the panel content
-            content = Text()
-            content.append(f"Package: {package}\n")
-            content.append(f"Version: {version}\n")
-            content.append("Path: ")
-            content.append_text(Text(module_path, style="italic"))
-            content.append("\n")
-            content.append("Tools:\n")
-            for tool_text in tool_list:
-                content.append(tool_text + "\n")
-            
-            # Display the toolbox in a styled panel
-            panel = Panel(
-                content,
-                title=f"[bold]{toolbox_name}[/bold]",
-                expand=False,
-                border_style="cyan"
-            )
-            console.print(panel)
+            try:
+                toolbox_name = tb["name"]
+                package = tb["package"]
+                version = tb["version"]
+                # Get module path
+                module_path = get_module_path(toolbox_name)
+                # Filter tools by toolbox_name from the ToolRegistry
+                tools = [
+                    tool for (tb_name, _), tool in plugin_manager.tools.tools.items()
+                    if tb_name == toolbox_name
+                ]
+                # Sort tools alphabetically by name
+                tools.sort(key=lambda t: t.name)
+                
+                # Build the tool list as bullet points
+                tool_list = []
+                for tool in tools:
+                    try:
+                        tool_list.append(f"- {tool.name}: {tool.description}")
+                    except Exception as e:
+                        tool_list.append(f"- {tool.name}: Error retrieving description ({str(e)})")
+                if not tool_list:
+                    tool_list.append("- No tools found")
+                
+                # Create the panel content
+                content = Text()
+                content.append(f"Package: {package}\n")
+                content.append(f"Version: {version}\n")
+                content.append("Path: ")
+                content.append_text(Text(module_path, style="italic"))
+                content.append("\n")
+                content.append("Tools:\n")
+                for tool_text in tool_list:
+                    content.append(tool_text + "\n")
+                
+                # Display the toolbox in a styled panel
+                panel = Panel(
+                    content,
+                    title=f"[bold]{toolbox_name}[/bold]",
+                    expand=False,
+                    border_style="cyan"
+                )
+                console.print(panel)
+            except Exception as e:
+                console.print(f"[red]Error processing toolbox '{tb['name']}': {str(e)}[/red]")
