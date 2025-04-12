@@ -15,7 +15,7 @@ scipy = ">=1.10"
 matplotlib = ">=3.7"
 
 [tool.poetry.plugins."quantalogic.tools"]
-math_tools = "quantalogic_toolbox_math"
+"quantalogic_toolbox_math" = "quantalogic_toolbox_math"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
