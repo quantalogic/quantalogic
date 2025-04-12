@@ -21,9 +21,6 @@ from loguru import logger
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from quantalogic.codeact.tools_manager import ToolRegistry
-from quantalogic.tools import ToolArgument, create_tool
-
 # **Configure Logging**
 logger.remove()
 logger.add(
@@ -39,13 +36,7 @@ logger.add(
 servers: Dict[str, StdioServerParameters] = {}
 tools_cache: Dict[str, Any] = {}  # Cache for storing tools_result per server
 USE_DOCKER = os.getenv("MCP_USE_DOCKER", "true").lower() == "true"  # Configurable Docker usage
-
-toolbox: Dict[str, Any] = {
-    "tools": {},  # Dictionary for tool instances
-    "state": {}   # Dictionary for tool states
-}
-
-_toolbox_initialized = False  # Flag to prevent redundant initialization
+CONFIG_DIR = os.getenv("MCP_CONFIG_DIR", "./config")
 
 # **Utility Functions**
 def parse_string_content(text: str) -> Any:
@@ -176,7 +167,7 @@ def resolve_secrets(config: Dict) -> Dict:
             config[key] = resolve_secrets(value)
     return config
 
-def load_configs(config_dir: str = os.getenv("MCP_CONFIG_DIR", "./config")) -> None:
+def load_configs(config_dir: str = CONFIG_DIR) -> None:
     """Load all JSON config files from the specified directory into the servers dictionary.
 
     Args:
@@ -282,16 +273,15 @@ async def check_docker_ready(server_params: StdioServerParameters, timeout: int 
     logger.warning(f"Docker not ready within {timeout} seconds")
     return False
 
-# **Core Generic Tools**
-@create_tool
+# **Core Tools**
 async def mcp_list_resources(server_name: str) -> List[str]:
     """List available resources on the specified MCP server.
 
     Args:
-        server_name: The name of the server to list resources from.
+        server_name (str): The name of the server to list resources from.
 
     Returns:
-        A list of resource names.
+        List[str]: A list of resource names.
         Example: ['resource1', 'resource2']
     """
     logger.debug(f"Listing resources for server: {server_name}")
@@ -304,15 +294,14 @@ async def mcp_list_resources(server_name: str) -> List[str]:
         logger.debug(f"Resources retrieved: {resources}")
         return [str(resource) for resource in resources]
 
-@create_tool
 async def mcp_list_tools(server_name: str) -> List[str]:
     """List available tools on the specified MCP server.
 
     Args:
-        server_name: The name of the server to list tools from.
+        server_name (str): The name of the server to list tools from.
 
     Returns:
-        A list of tool names.
+        List[str]: A list of tool names.
         Example: ['read_query', 'write_query']
     """
     logger.debug(f"Listing tools for server: {server_name}")
@@ -332,17 +321,16 @@ async def mcp_list_tools(server_name: str) -> List[str]:
         logger.error(f"Failed to list tools for {server_name}: {str(e)}")
         raise RuntimeError(f"Could not connect to server '{server_name}': {str(e)}")
 
-@create_tool
 async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Any:
     """Call a specific tool on the specified MCP server.
 
     Args:
-        server_name: The name of the server to call the tool on.
-        tool_name: The name of the tool to call.
-        arguments: A dictionary of arguments to pass to the tool.
+        server_name (str): The name of the server to call the tool on.
+        tool_name (str): The name of the tool to call.
+        arguments (Dict[str, Any]): A dictionary of arguments to pass to the tool.
 
     Returns:
-        The result of the tool execution, type depends on the tool called.
+        Any: The result of the tool execution, type depends on the tool called.
         Use specific tools (e.g., sqlite_read_query) for predictable return types.
         Example (generic success): [{'id': 1, 'name': 'John'}]
     """
@@ -360,18 +348,50 @@ async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict[str, A
         logger.debug(f"Processed content: {processed_content}")
         return processed_content
 
-@create_tool
-def list_servers() -> List[str]:
+async def list_servers() -> List[str]:
     """List all configured MCP servers.
 
     Returns:
-        A list of server names.
+        List[str]: A list of server names.
         Example: ['sqlite', 'mysql']
     """
     logger.debug("Listing all configured servers")
     server_list = list(servers.keys())
     logger.debug(f"Server list: {server_list}")
     return server_list
+
+# **Dynamic Tool Class**
+class DynamicTool:
+    """A callable class representing a dynamic tool for MCP servers.
+
+    Attributes:
+        name (str): The unique name of the tool.
+        description (str): Description of the tool.
+        server_name (str): The server name associated with the tool.
+        tool_name (str): The original tool name on the server.
+        tool_config (Dict[str, Any]): Configuration for the tool.
+    """
+    def __init__(self, server_name: str, tool_name: str, tool_config: Dict[str, Any]):
+        self.name = f"{server_name}_{sanitize_name(tool_name)}"
+        self.description = tool_config.get("description", f"Execute {tool_name} on {server_name}")
+        self.server_name = server_name
+        self.tool_name = tool_name
+        self.tool_config = tool_config
+
+    async def __call__(self, **kwargs):
+        """Execute the tool by calling mcp_call_tool with the server and tool name.
+
+        Args:
+            **kwargs: Arguments to pass to the tool.
+
+        Returns:
+            Any: The result of the tool execution.
+        """
+        logger.debug(f"Executing dynamic tool '{self.name}' with args: {kwargs}")
+        return await mcp_call_tool(self.server_name, self.tool_name, kwargs)
+
+    def __repr__(self):
+        return f"<DynamicTool {self.name}>"
 
 # **Dynamic Tool Creation**
 async def fetch_tool_details(server_name: str, tool_name: str, server_params: StdioServerParameters) -> Dict[str, Any]:
@@ -386,10 +406,8 @@ async def fetch_tool_details(server_name: str, tool_name: str, server_params: St
         Dict containing tool details:
         - 'name': The tool's name.
         - 'description': A description of the tool's purpose and usage.
-        - 'arguments': List of ToolArgument instances.
+        - 'arguments': List of argument dictionaries.
         - 'return_type': Return type based on server metadata or default 'Any'.
-        - 'return_description': Detailed description of the return value with examples.
-        - 'is_async': Boolean indicating if the tool is asynchronous.
     """
     logger.debug(f"Fetching details for tool '{tool_name}' on server '{server_name}'")
     if server_name in tools_cache:
@@ -399,7 +417,7 @@ async def fetch_tool_details(server_name: str, tool_name: str, server_params: St
         logger.debug(f"No cache found for server '{server_name}', fetching from server")
         async with mcp_session_context(server_params) as session:
             tools_result = await session.list_tools()
-            tools_cache[server_name] = tools_result  # Cache for future use
+            tools_cache[server_name] = tools_result
             logger.debug(f"Cached tools_result for server '{server_name}'")
 
     logger.debug(f"Raw tools_result from MCP server: {tools_result}")
@@ -408,10 +426,7 @@ async def fetch_tool_details(server_name: str, tool_name: str, server_params: St
         logger.debug(f"Examining tool: {tool.name}, full object: {vars(tool) if hasattr(tool, '__dict__') else str(tool)}")
         if tool.name == tool_name:
             args = normalize_args(tool)
-            # Use server-provided return type if available, otherwise default to 'Any'
             return_type = getattr(tool, 'return_type', 'Any') if hasattr(tool, 'return_type') else 'Any'
-            return_desc = getattr(tool, 'return_description', "The result of the tool execution, type varies by tool.") if hasattr(tool, 'return_description') else "The result of the tool execution, type varies by tool.\nExample: Could be a list, dictionary, or string depending on the tool."
-
             tool_details = {
                 'name': tool.name,
                 'description': (
@@ -419,9 +434,7 @@ async def fetch_tool_details(server_name: str, tool_name: str, server_params: St
                     "Note: This tool is asynchronous and must be awaited using `await` in an async context."
                 ),
                 'arguments': args,
-                'return_type': return_type,
-                'return_description': return_desc,
-                'is_async': True
+                'return_type': return_type
             }
             logger.debug(f"Tool details constructed for '{tool_name}': {tool_details}")
             return tool_details
@@ -429,14 +442,14 @@ async def fetch_tool_details(server_name: str, tool_name: str, server_params: St
     logger.warning(f"Tool '{tool_name}' not found in server response")
     return {}
 
-def normalize_args(tool: Any) -> List[ToolArgument]:
+def normalize_args(tool: Any) -> List[Dict[str, Any]]:
     """Normalize tool arguments into a consistent schema.
 
     Args:
         tool: The tool object from the MCP server response.
 
     Returns:
-        List of ToolArgument instances.
+        List of argument dictionaries with name, type, description, etc.
     """
     args = []
     arg_list = None
@@ -463,7 +476,6 @@ def normalize_args(tool: Any) -> List[ToolArgument]:
             logger.debug(f"Argument '{arg_name}' raw data: {arg_details}")
             try:
                 if isinstance(arg_list, dict):
-                    # Dictionary format from inputSchema 'properties'
                     name = arg_name
                     arg_type = arg_details.get('type', 'str')
                     description = arg_details.get('description', f"Argument for {tool.name}")
@@ -472,7 +484,6 @@ def normalize_args(tool: Any) -> List[ToolArgument]:
                     example = arg_details.get('example', None)
                     logger.debug(f"Parsed dict arg: name={name}, type={arg_type}, desc={description}, req={required}, def={default}, ex={example}")
                 else:
-                    # List format (assuming objects)
                     name = getattr(arg_details, 'name', f"arg_{len(args) + 1}")
                     arg_type = getattr(arg_details, 'type', 'str')
                     description = getattr(arg_details, 'description', f"Argument for {tool.name}")
@@ -481,277 +492,77 @@ def normalize_args(tool: Any) -> List[ToolArgument]:
                     example = getattr(arg_details, 'example', None)
                     logger.debug(f"Parsed object arg: name={name}, type={arg_type}, desc={description}, req={required}, def={default}, ex={example}")
                 
-                args.append(ToolArgument(
-                    name=name,
-                    arg_type=arg_type,
-                    description=description,
-                    required=required,
-                    default=default,
-                    example=example
-                ))
+                args.append({
+                    'name': name,
+                    'type': arg_type,
+                    'description': description,
+                    'required': required,
+                    'default': default,
+                    'example': example
+                })
                 logger.debug(f"Added argument: {name} to tool '{tool.name}'")
             except Exception as e:
                 logger.warning(f"Failed to parse argument '{arg_name}' for '{tool.name}': {str(e)}")
-                args.append(ToolArgument(
-                    name=f"arg_{len(args) + 1}",
-                    arg_type="str",
-                    description=f"Unknown argument for {tool.name}",
-                    required=True
-                ))
+                args.append({
+                    'name': f"arg_{len(args) + 1}",
+                    'type': 'str',
+                    'description': f"Unknown argument for {tool.name}",
+                    'required': True
+                })
                 logger.debug("Added default argument due to parsing error")
     else:
         logger.debug(f"No argument attributes found for tool '{tool.name}' in server response")
     return args
 
-async def create_dynamic_tool(server_name: str, tool_name: str, server_params: StdioServerParameters):
-    """Create a dynamic tool based on MCP server tool definition, supporting only named parameters.
-
-    Args:
-        server_name: The name of the server hosting the tool.
-        tool_name: The name of the tool to create.
-        server_params: Parameters for establishing a session with the server.
+# **Tool List Generation**
+def get_tools() -> List:
+    """Return a list of core tools and dynamically created specific tool wrappers.
 
     Returns:
-        A Tool instance configured for asynchronous execution, or None if creation fails.
-        
-    Note:
-        This function generates a tool that only accepts named parameters (e.g., `key=value`) as
-        keyword arguments. Positional arguments are not supported to ensure compatibility with
-        MCP server expectations and to maintain clarity in argument passing. Use the tool with
-        explicit argument names as specified in its arguments list (accessible via `tool.arguments`).
+        List: A list of callable objects representing the tools.
     """
-    logger.debug(f"Creating dynamic tool for server '{server_name}' and tool '{tool_name}'")
-    tool_details = await fetch_tool_details(server_name, tool_name, server_params)
+    logger.debug("Generating tool list")
+    tools = [
+        mcp_list_resources,
+        mcp_list_tools,
+        mcp_call_tool,
+        list_servers,
+    ]
     
-    if not tool_details:
-        logger.warning(f"No details found for tool '{tool_name}' on server '{server_name}'")
-        return None
-
-    async def tool_func(**kwargs):
-        logger.debug(f"Executing tool '{tool_name}' on '{server_name}' with kwargs: {kwargs}")
-        async with mcp_session_context(server_params) as session:
-            result = await session.call_tool(tool_name, kwargs)
-            logger.debug(f"Tool execution result: meta={result.meta}, content={result.content}, isError={result.isError}, type={type(result.content)}")
-            if result.isError:
-                raise RuntimeError(str(result.content))
-            processed_content = parse_text_content(result.content)
-            logger.debug(f"Processed content for '{tool_name}': {processed_content}")
-            return processed_content
-
-    tool = create_tool(tool_func)
-    # Use server-prefixed name to avoid conflicts
-    original_name = f"{server_name}_{tool_name}"
-    tool.name = f"{server_name}_{sanitize_name(tool_name)}"
-    tool.original_name = original_name  # Store original name for reference
-    tool.description = (
-        f"{tool_details.get('description', f'Dynamic tool {tool_name} from {server_name}')}\n"
-        "Important: This tool only supports named parameters (e.g., `arg_name=value`). "
-        "Positional arguments are not allowed. Refer to the tool's `arguments` attribute for valid parameter names."
-    )
-    tool.arguments = tool_details.get('arguments', [])
-    tool.return_type = tool_details.get('return_type', 'Any')
-    tool.return_description = tool_details.get('return_description', "The result of the tool execution, type varies by tool.")
-    tool.is_async = tool_details.get('is_async', True)
-    tool.toolbox_name = f"dynamic_{server_name}"
-    logger.debug(f"Dynamic tool created: name={tool.name}, original_name={tool.original_name}, args={tool.arguments}, toolbox={tool.toolbox_name}, is_async={tool.is_async}")
-    return tool
-
-# **Toolbox Initialization**
-async def fetch_and_register_tools(server_name: str, server_params: StdioServerParameters, registry: ToolRegistry) -> None:
-    """Fetch and register tools for a single server.
-
-    Args:
-        server_name: The name of the server.
-        server_params: Parameters for the server.
-        registry: ToolRegistry instance to register tools.
-    """
-    logger.debug(f"Processing server: {server_name}")
-    try:
-        server_tools = await mcp_list_tools.async_execute(server_name=server_name)
-        logger.debug(f"Tools listed for '{server_name}': {server_tools}")
-        if f"Error: Server '{server_name}' not found" in server_tools:
-            logger.error(f"Server '{server_name}' not found")
-            return
-
-        for tool_name in server_tools:
-            original_unique_tool_name = f"{server_name}_{tool_name}"
-            unique_tool_name = f"{server_name}_{sanitize_name(tool_name)}"
-            logger.debug(f"Creating dynamic tool: {unique_tool_name} (original: {original_unique_tool_name})")
-            
-            tool = await create_dynamic_tool(server_name, tool_name, server_params)
-            if tool:
-                key = (tool.toolbox_name, tool.name)
-                if key not in registry.tools:
-                    registry.register(tool)
-                    logger.debug(f"Registered dynamic tool: {unique_tool_name} with args: {tool.arguments}")
-                toolbox["tools"][unique_tool_name] = tool
-                toolbox["state"][unique_tool_name] = {
-                    "status": "success",
-                    "toolbox_name": tool.toolbox_name,
-                    "error": None
-                }
-                logger.info(f"Registered dynamic tool: {unique_tool_name} with toolbox: {tool.toolbox_name}")
-            else:
-                toolbox["state"][unique_tool_name] = {
-                    "status": "failed",
-                    "toolbox_name": f"dynamic_{server_name}",
-                    "error": "Failed to fetch tool details or create tool"
-                }
-                logger.warning(f"Failed to create tool: {unique_tool_name}")
-
-        # Handle config-defined tools
-        config_path = os.path.join(os.getenv("MCP_CONFIG_DIR", "./config"), f"{server_name}.json")
+    # Load configuration
+    config_path = os.path.join(CONFIG_DIR, "mcp.json")
+    if os.path.exists(config_path):
         try:
             config = load_mcp_config(config_path)
-            explicit_tools = config.get("tools", [])
-            logger.debug(f"Config-defined tools for '{server_name}': {explicit_tools}")
-            for tool_config in explicit_tools:
-                mcp_tool_name = tool_config["name"]
-                original_unique_tool_name = f"{server_name}_{mcp_tool_name}"
-                unique_tool_name = f"{server_name}_{sanitize_name(mcp_tool_name)}"
-                if unique_tool_name not in toolbox["tools"]:
-                    tool = await create_dynamic_tool(server_name, mcp_tool_name, server_params)
-                    if tool:
-                        tool.description = tool_config.get("description", tool.description)
-                        tool.arguments = [
-                            ToolArgument(**arg) for arg in tool_config.get("arguments", tool.arguments)
-                        ]
-                        tool.return_type = tool_config.get("return_type", tool.return_type)
-                        tool.return_description = tool_config.get("return_description", tool.return_description)
-                        key = (tool.toolbox_name, tool.name)
-                        if key not in registry.tools:
-                            registry.register(tool)
-                            logger.debug(f"Registered config-defined tool: {unique_tool_name} with args: {tool.arguments}")
-                        toolbox["tools"][unique_tool_name] = tool
-                        toolbox["state"][unique_tool_name] = {
-                            "status": "success",
-                            "toolbox_name": tool.toolbox_name,
-                            "error": None
-                        }
-                        logger.info(f"Added config-defined tool: {unique_tool_name} with toolbox: {tool.toolbox_name}")
-                    else:
-                        toolbox["state"][unique_tool_name] = {
-                            "status": "failed",
-                            "toolbox_name": f"dynamic_{server_name}",
-                            "error": "Failed to create config-defined tool"
-                        }
-                        logger.warning(f"Failed to create config-defined tool: {unique_tool_name}")
+            server_configs = config.get("mcpServers", {})
+            for server_name, server_data in server_configs.items():
+                # Handle explicitly defined tools in config
+                for tool_name, tool_config in server_data.get("tools", {}).items():
+                    tool = DynamicTool(server_name, tool_name, tool_config)
+                    tools.append(tool)
+                    logger.debug(f"Added config-defined tool: {tool.name}")
+                
+                # Query server for additional tools
+                server_params = servers.get(server_name)
+                if server_params:
+                    try:
+                        server_tools = asyncio.run(mcp_list_tools(server_name=server_name))
+                        logger.debug(f"Tools listed for '{server_name}': {server_tools}")
+                        for tool_name in server_tools:
+                            tool_details = asyncio.run(fetch_tool_details(server_name, tool_name, server_params))
+                            if tool_details:
+                                tool = DynamicTool(server_name, tool_name, tool_details)
+                                tools.append(tool)
+                                logger.debug(f"Added dynamically fetched tool: {tool.name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to query tools for server '{server_name}': {str(e)}")
         except Exception as e:
-            logger.debug(f"No config tools processed for {server_name}: {str(e)}")
-
-    except Exception as e:
-        logger.error(f"Failed to process tools for server {server_name}: {str(e)}")
-
-async def create_all_tools(registry: ToolRegistry) -> Dict[str, Any]:
-    """Create all tools by querying MCP servers dynamically in parallel and track their state.
-
-    Args:
-        registry: ToolRegistry instance to register tools.
-
-    Returns:
-        Dictionary of created tools.
-    """
-    tools = {}
-    logger.debug("Starting tool creation process")
-    
-    # Add core tools with state tracking
-    core_tools = {
-        "mcp_list_resources": mcp_list_resources,
-        "mcp_list_tools": mcp_list_tools,
-        "mcp_call_tool": mcp_call_tool,
-        "list_servers": list_servers
-    }
-    for tool_name, tool in core_tools.items():
-        tool.toolbox_name = "quantalogic_toolbox_mcp"
-        key = (tool.toolbox_name, tool.name)
-        if key not in registry.tools:
-            registry.register(tool)
-            logger.debug(f"Registered core tool: {tool_name} in toolbox {tool.toolbox_name}")
-        tools[tool_name] = tool
-        toolbox["state"][tool_name] = {
-            "status": "success",
-            "toolbox_name": "quantalogic_toolbox_mcp",
-            "error": None
-        }
-    logger.debug("Added core tools to toolbox")
-
-    # Add dynamic tools from each server in parallel
-    tasks = []
-    for server_name, server_params in servers.items():
-        tasks.append(fetch_and_register_tools(server_name, server_params, registry))
-    await asyncio.gather(*tasks, return_exceptions=True)
-
-    logger.debug(f"Tool creation completed. Total tools: {len(toolbox['tools'])}")
-    return toolbox["tools"]
-
-async def refresh_tools_cache(server_name: str) -> None:
-    """Refresh the tools cache for a specific server.
-
-    Args:
-        server_name: The name of the server to refresh tools for.
-    """
-    logger.debug(f"Refreshing tools cache for {server_name}")
-    server_params = servers.get(server_name)
-    if server_params:
-        async with mcp_session_context(server_params) as session:
-            tools_cache[server_name] = await session.list_tools()
-            logger.info(f"Tools cache refreshed for {server_name}")
+            logger.error(f"Failed to load dynamic tools from {config_path}: {str(e)}")
     else:
-        logger.warning(f"Server '{server_name}' not found, skipping cache refresh")
+        logger.warning(f"Configuration file {config_path} not found, using core tools only")
+    
+    logger.info(f"Returning {len(tools)} tools: {[getattr(t, 'name', t.__name__) for t in tools]}")
+    return tools
 
-async def initialize_toolbox(registry: ToolRegistry) -> None:
-    """Initialize toolbox with proper async handling and log final state.
-
-    Args:
-        registry: ToolRegistry instance to register tools.
-    """
-    global _toolbox_initialized
-    if _toolbox_initialized:
-        logger.debug("MCP toolbox already initialized, skipping")
-        return
-    logger.debug("Initializing MCP toolbox")
-    load_configs()
-    toolbox["tools"] = await create_all_tools(registry)
-    _toolbox_initialized = True
-    logger.info("Toolbox initialization completed. Final tool states:")
-    for tool_name, state in toolbox["state"].items():
-        if state["status"] == "success":
-            logger.info(f"Tool: {tool_name}, Status: {state['status']}, Toolbox: {state['toolbox_name']}")
-        else:
-            logger.warning(f"Tool: {tool_name}, Status: {state['status']}, Toolbox: {state['toolbox_name']}, Error: {state['error']}")
-
-# **Main Execution (Test Suite Only)**
-if __name__ == "__main__":
-    logger.info("Starting MCP toolbox test suite")
-    async def test_toolbox():
-        from quantalogic.codeact.tools_manager import ToolRegistry
-        registry = ToolRegistry()
-        await initialize_toolbox(registry)
-        
-        servers_list = toolbox["tools"]["list_servers"].execute()
-        logger.info(f"Available servers: {servers_list}")
-        if not servers_list:
-            logger.error("No servers configured")
-            return
-
-        test_server = servers_list[0]
-        resources = await toolbox["tools"]["mcp_list_resources"].async_execute(server_name=test_server)
-        logger.info(f"Resources on {test_server}: {resources}")
-
-        tools_list = await toolbox["tools"]["mcp_list_tools"].async_execute(server_name=test_server)
-        logger.info(f"Tools on {test_server}: {tools_list}")
-
-        version_result = await toolbox["tools"]["mcp_call_tool"].async_execute(
-            server_name=test_server,
-            tool_name="read_query",
-            arguments={"query": "SELECT sqlite_version();"}
-        )
-        logger.info(f"SQLite version via mcp_call_tool: {version_result}")
-
-        dynamic_tool_name = f"{test_server}_{sanitize_name('read_query')}"
-        if dynamic_tool_name in toolbox["tools"]:
-            dynamic_result = await toolbox["tools"][dynamic_tool_name].async_execute(query="SELECT sqlite_version();")
-            logger.info(f"SQLite version via dynamic tool: {dynamic_result}")
-
-    asyncio.run(test_toolbox())
-    logger.info("Test suite completed")
+# **Module Initialization**
+load_configs()
