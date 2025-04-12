@@ -6,7 +6,6 @@ from typing import List
 import instructor
 import litellm
 from nanoid import generate
-from pydantic import BaseModel
 
 # Constants
 MODEL_NAME = "gemini/gemini-2.0-flash"
@@ -56,7 +55,8 @@ class SubtaskWithStatus:
     description: str
     status: str = "todo"
 
-class SubtaskResponse(BaseModel):
+@dataclass
+class SubtaskResponse:
     step: int
     description: str
 
