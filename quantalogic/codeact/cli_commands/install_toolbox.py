@@ -1,14 +1,14 @@
-import importlib.metadata
-import subprocess
+import re
 from pathlib import Path
-
+import subprocess
+import importlib.metadata
 import typer
 import yaml
 from rich.console import Console
 
 app = typer.Typer()
 console = Console()
-CONFIG_PATH = Path.home() / "quantalogic-config.yaml"
+CONFIG_PATH = Path.home() / ".quantalogic/config.yaml"
 
 def load_config():
     """Load or initialize the config file."""
@@ -19,56 +19,73 @@ def load_config():
 
 def save_config(config):
     """Save the config to file."""
+    CONFIG_PATH.parent.mkdir(exist_ok=True)
     with open(CONFIG_PATH, "w") as f:
         yaml.safe_dump(config, f, default_flow_style=False)
+
+def parse_package_info_from_filename(filename):
+    """Parse package name and version from filename like 'package_name-1.0.0.tar.gz'"""
+    match = re.match(r"(.+)-(\d+\.\d+\.\d+)", Path(filename).stem)
+    if match:
+        return match.group(1), match.group(2)
+    return None, None
 
 @app.command()
 def install_toolbox(
     toolbox_name: str = typer.Argument(..., help="Name of the toolbox to install (PyPI package or local wheel file)")
 ) -> None:
-    """Install a toolbox and update the config file."""
+    """Install a toolbox and update the config file with proper package names and versions."""
     try:
-        # Install the toolbox using uv pip install (original feature)
+        # Determine package name and version based on input
+        if Path(toolbox_name).exists():
+            parsed_package_name, parsed_version = parse_package_info_from_filename(toolbox_name)
+            if not parsed_package_name:
+                raise ValueError("Cannot parse package name from filename")
+            package_name = parsed_package_name
+            version = parsed_version or "unknown"
+        else:
+            package_name = toolbox_name
+            version = "unknown"
+        
+        # Install the toolbox
         subprocess.run(["uv", "pip", "install", toolbox_name], check=True)
+        
+        # Try to get the actual version after installation
+        try:
+            version = importlib.metadata.version(package_name)
+        except importlib.metadata.PackageNotFoundError:
+            pass
         
         # Load existing config
         config = load_config()
         
-        # Check if the package is already installed to avoid duplicates
-        if any(tb["package"] == toolbox_name for tb in config["installed_toolboxes"]):
-            console.print(f"[yellow]Toolbox package '{toolbox_name}' is already installed.[/yellow]")
-            return
+        # Remove existing entries for this package
+        config["installed_toolboxes"] = [tb for tb in config["installed_toolboxes"] if tb["package"] != package_name]
         
-        # Retrieve toolbox details from entry points
+        # Get entry points for this package
         eps = importlib.metadata.entry_points(group="quantalogic.tools")
-        installed_eps = [ep for ep in eps if ep.dist.name == toolbox_name]
+        installed_eps = [ep for ep in eps if ep.dist.name == package_name]
+        
         if not installed_eps:
-            console.print(f"[yellow]Installed '{toolbox_name}' but no quantalogic.tools entry points found.[/yellow]")
-            entry_name = toolbox_name  # Fallback to package name if no entry points
+            console.print(f"[yellow]Installed '{package_name}' but no quantalogic.tools entry points found.[/yellow]")
+            config["installed_toolboxes"].append({
+                "name": package_name,
+                "package": package_name,
+                "version": version
+            })
         else:
-            entry_name = installed_eps[0].name  # Use the first entry point name
+            for ep in installed_eps:
+                config["installed_toolboxes"].append({
+                    "name": ep.name,
+                    "package": package_name,
+                    "version": version
+                })
         
-        # Get the package version, with fallback for robustness
-        try:
-            version = importlib.metadata.version(toolbox_name)
-        except importlib.metadata.PackageNotFoundError:
-            version = "unknown"
-        
-        # Update the config with the new toolbox details
-        config["installed_toolboxes"].append({
-            "name": entry_name,
-            "package": toolbox_name,
-            "version": version
-        })
         save_config(config)
-        
-        # Success message styled with rich.console (preserving original style)
-        console.print(f"[green]Toolbox '{entry_name}' (package '{toolbox_name}') installed and added to config.[/green]")
+        console.print(f"[green]Toolbox '{package_name}' installed and added to config.[/green]")
     except subprocess.CalledProcessError as e:
-        # Original error handling preserved
         console.print(f"[red]Failed to install toolbox: {e}[/red]")
         raise typer.Exit(code=1)
     except Exception as e:
-        # Additional error handling for config operations
-        console.print(f"[red]Error updating config: {e}[/red]")
+        console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(code=1)

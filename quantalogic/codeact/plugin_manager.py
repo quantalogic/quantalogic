@@ -59,9 +59,7 @@ class PluginManager:
                     try:
                         loaded = ep.load()
                         if group == "quantalogic.tools":
-                            # Load static tools first
                             store()
-                            # Then initialize dynamic MCP tools if applicable
                             if ep.name == "quantalogic_toolbox_mcp":
                                 import asyncio
 
@@ -78,15 +76,10 @@ class PluginManager:
         logger.info("Plugin loading completed")
 
     def get_tools(self, force_reload: bool = False) -> List[Tool]:
-        """Return all registered tools.
-        
-        Args:
-            force_reload: If True, reload plugins before getting tools
-        """
+        """Return all registered tools."""
         if force_reload:
             self.load_plugins(force=True)
         else:
-            # Ensure plugins are loaded at least once, but don’t reload
             if not self._plugins_loaded:
                 self.load_plugins()
         return self.tools.get_tools()
