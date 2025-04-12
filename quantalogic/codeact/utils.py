@@ -51,12 +51,17 @@ def process_tools(tools: List[Union[Tool, Callable]]) -> List[Tool]:
     """Convert a list of tools or callables into Tool instances."""
     processed_tools: List[Tool] = []
     for tool in tools:
-        if isinstance(tool, Tool):
+        if isinstance(tool, Tool) or (
+            hasattr(tool, 'name') and 
+            hasattr(tool, 'description') and 
+            hasattr(tool, 'async_execute')
+        ):
             processed_tools.append(tool)
         elif callable(tool):
             if not inspect.iscoroutinefunction(tool):
-                raise ValueError(f"Callable '{tool.__name__}' must be an async function to be used as a tool.")
+                tool_name = getattr(tool, 'name', getattr(tool, '__name__', str(tool)))
+                raise ValueError(f"Callable '{tool_name}' must be an async function to be used as a tool.")
             processed_tools.append(create_tool(tool))
         else:
-            raise ValueError(f"Invalid item type: {type(tool)}. Expected Tool or async function.")
+            raise ValueError(f"Invalid item type: {type(tool)}. Expected Tool, tool-like instance, or async function.")
     return processed_tools

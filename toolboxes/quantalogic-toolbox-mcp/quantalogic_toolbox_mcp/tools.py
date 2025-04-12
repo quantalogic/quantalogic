@@ -402,6 +402,29 @@ class DynamicTool:
         logger.debug(f"Executing dynamic tool '{self.name}' with args: {kwargs}")
         return await mcp_call_tool(self.server_name, self.tool_name, kwargs)
 
+    async def async_execute(self, **kwargs) -> Any:
+        """Execute the tool by invoking the __call__ method.
+
+        Args:
+            **kwargs: Keyword arguments to pass to the tool, matching the expected arguments.
+
+        Returns:
+            Any: The result of the tool execution, as returned by the MCP server.
+        """
+        return await self(**kwargs)
+
+    def to_docstring(self) -> str:
+        """Generate a docstring-like representation of the tool.
+
+        Returns:
+            str: A string describing the tool's name, description, and arguments.
+        """
+        args_str = ", ".join(
+            f"{arg['name']}: {arg['type']}" for arg in self.arguments
+        )
+        toolbox_name = "quantalogic_toolbox_mcp"
+        return f"{toolbox_name}.{self.name}({args_str}) -> {self.return_type}\n{self.description}"
+
     def __repr__(self) -> str:
         return f"<DynamicTool {self.name}>"
 
