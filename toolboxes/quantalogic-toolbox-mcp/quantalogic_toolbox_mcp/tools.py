@@ -37,6 +37,7 @@ servers: Dict[str, StdioServerParameters] = {}
 tools_cache: Dict[str, Any] = {}  # Cache for storing tools_result per server
 USE_DOCKER = os.getenv("MCP_USE_DOCKER", "true").lower() == "true"  # Configurable Docker usage
 CONFIG_DIR = os.getenv("MCP_CONFIG_DIR", "./config")
+_tools_cache = None  # Cache for get_tools() results
 
 # **Utility Functions**
 def parse_string_content(text: str) -> Any:
@@ -364,33 +365,44 @@ async def list_servers() -> List[str]:
 class DynamicTool:
     """A callable class representing a dynamic tool for MCP servers.
 
+    This class encapsulates a tool hosted on an MCP server, allowing it to be called
+    asynchronously with specified arguments. It provides metadata required for tool
+    registration and execution without external dependencies.
+
     Attributes:
-        name (str): The unique name of the tool.
-        description (str): Description of the tool.
-        server_name (str): The server name associated with the tool.
+        name (str): The unique identifier for the tool (e.g., 'server_toolname').
+        description (str): A description of the tool's purpose and usage.
+        arguments (List[Dict[str, Any]]): List of argument definitions, each with name, type, description, required, default, and example.
+        return_type (str): The expected type of the tool's return value.
+        server_name (str): The name of the MCP server hosting the tool.
         tool_name (str): The original tool name on the server.
-        tool_config (Dict[str, Any]): Configuration for the tool.
+        tool_config (Dict[str, Any]): Configuration data for the tool.
     """
     def __init__(self, server_name: str, tool_name: str, tool_config: Dict[str, Any]):
         self.name = f"{server_name}_{sanitize_name(tool_name)}"
-        self.description = tool_config.get("description", f"Execute {tool_name} on {server_name}")
+        self.description = tool_config.get('description', f'Execute {tool_name} on {server_name}')
+        self.arguments = tool_config.get("arguments", [])
+        self.return_type = tool_config.get("return_type", "Any")
         self.server_name = server_name
         self.tool_name = tool_name
         self.tool_config = tool_config
 
-    async def __call__(self, **kwargs):
-        """Execute the tool by calling mcp_call_tool with the server and tool name.
+    async def __call__(self, **kwargs) -> Any:
+        """Execute the tool by invoking mcp_call_tool with the server and tool name.
 
         Args:
-            **kwargs: Arguments to pass to the tool.
+            **kwargs: Keyword arguments to pass to the tool, matching the expected arguments.
 
         Returns:
-            Any: The result of the tool execution.
+            Any: The result of the tool execution, as returned by the MCP server.
+
+        Example:
+            result = await tool_name(param1="value1", param2=42)
         """
         logger.debug(f"Executing dynamic tool '{self.name}' with args: {kwargs}")
         return await mcp_call_tool(self.server_name, self.tool_name, kwargs)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<DynamicTool {self.name}>"
 
 # **Dynamic Tool Creation**
@@ -429,10 +441,7 @@ async def fetch_tool_details(server_name: str, tool_name: str, server_params: St
             return_type = getattr(tool, 'return_type', 'Any') if hasattr(tool, 'return_type') else 'Any'
             tool_details = {
                 'name': tool.name,
-                'description': (
-                    f"{getattr(tool, 'description', f'Tool {tool_name} from {server_name}')}\n"
-                    "Note: This tool is asynchronous and must be awaited using `await` in an async context."
-                ),
+                'description': getattr(tool, 'description', f'Tool {tool_name} from {server_name}'),
                 'arguments': args,
                 'return_type': return_type
             }
@@ -521,6 +530,11 @@ def get_tools() -> List:
     Returns:
         List: A list of callable objects representing the tools.
     """
+    global _tools_cache
+    if _tools_cache is not None:
+        logger.debug("Returning cached tools")
+        return _tools_cache
+
     logger.debug("Generating tool list")
     tools = [
         mcp_list_resources,
@@ -557,11 +571,12 @@ def get_tools() -> List:
                     except Exception as e:
                         logger.warning(f"Failed to query tools for server '{server_name}': {str(e)}")
         except Exception as e:
-            logger.error(f"Failed to load dynamic tools from {config_path}: {str(e)}")
+            logger.error(f"Failed to load dynamic tools from {config_path}: {e}")
     else:
         logger.warning(f"Configuration file {config_path} not found, using core tools only")
     
-    logger.info(f"Returning {len(tools)} tools: {[getattr(t, 'name', t.__name__) for t in tools]}")
+    _tools_cache = tools
+    logger.info(f"Returning {len(tools)} tools: {[tool.name if hasattr(tool, 'name') else tool.__name__ for tool in tools]}")
     return tools
 
 # **Module Initialization**

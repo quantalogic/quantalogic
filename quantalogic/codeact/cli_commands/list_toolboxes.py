@@ -52,7 +52,6 @@ def list_toolboxes(
     """List installed toolboxes, optionally with detailed tool information."""
     config, status = load_config()
     
-    # Display config file path and status
     console.print(f"[bold]Config file:[/bold] {CONFIG_PATH} ([italic]{status}[/italic])")
     
     installed_toolboxes = config.get("installed_toolboxes", [])
@@ -94,7 +93,11 @@ def list_toolboxes(
                 tool_list = []
                 for tool in tools:
                     try:
-                        tool_list.append(f"- {tool.name}: {tool.description}")
+                        # Use the raw description without appended notes
+                        description = tool.description.strip()
+                        # Add async note only for tools that are async (DynamicTool instances)
+                        tool_text = f"- {tool.name}: {description}"
+                        tool_list.append(tool_text)
                     except Exception as e:
                         tool_list.append(f"- {tool.name}: Error retrieving description ({str(e)})")
                 if not tool_list:
