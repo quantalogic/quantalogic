@@ -1,6 +1,7 @@
-from quantalogic.tools import create_tool
-
-@create_tool
 async def echo_tool(message: str) -> str:
-    """An example tool that echoes the input."""
+    """An example tool that echoes the input message."""
     return f"Echo: {message}"
+
+def get_tools() -> list:
+    """Return a list of tool functions defined in this module."""
+    return [echo_tool]

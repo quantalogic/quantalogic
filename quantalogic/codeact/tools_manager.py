@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 import litellm
 from loguru import logger
 
-from quantalogic.tools import Tool, ToolArgument
+from quantalogic.tools import Tool, ToolArgument, create_tool
 
 from .utils import log_tool_method
 
@@ -44,17 +44,35 @@ class ToolRegistry:
             return []
 
     def register_tools_from_module(self, module, toolbox_name: str) -> None:
-        """Register all @create_tool generated Tool instances from a module with toolbox name."""
+        """Register tools from a module, supporting both @create_tool and get_tools approaches."""
         try:
             tools_found = False
+            logger.debug(f"Processing module {module.__name__} for toolbox {toolbox_name}")
+            # Check for get_tools function to register dependency-free tools
+            if hasattr(module, 'get_tools'):
+                tool_funcs = module.get_tools()
+                for func in tool_funcs:
+                    # Ensure function is async
+                    if not inspect.iscoroutinefunction(func):
+                        logger.warning(f"Function '{func.__name__}' in {module.__name__} is not async. Skipping.")
+                        continue
+                    # Relax module name check to allow submodules
+                    tool = create_tool(func)
+                    tool.toolbox_name = toolbox_name
+                    self.register(tool)
+                    logger.debug(f"Registered tool from get_tools: {tool.name} in toolbox {toolbox_name}")
+                    tools_found = True
+
+            # Existing behavior: register @create_tool-decorated Tool instances
             for name, obj in inspect.getmembers(module):
                 if isinstance(obj, Tool) and hasattr(obj, '_func'):
                     obj.toolbox_name = toolbox_name
                     self.register(obj)
-                    logger.debug(f"Registered tool: {obj.name} from {module.__name__} in toolbox {toolbox_name}")
+                    logger.debug(f"Registered @create_tool tool: {obj.name} from {module.__name__} in toolbox {toolbox_name}")
                     tools_found = True
+
             if not tools_found:
-                logger.warning(f"No @create_tool generated tools found in {module.__name__}")
+                logger.warning(f"No tools found in {module.__name__}")
         except Exception as e:
             logger.error(f"Failed to register tools from module {module.__name__}: {e}")
             raise
@@ -209,14 +227,12 @@ def get_default_tools(
     tools_config: Optional[List[Dict[str, Any]]] = None
 ) -> List[Tool]:
     """Dynamically load default tools using the pre-loaded registry from PluginManager."""
-    from .cli import plugin_manager  # Import shared singleton plugin_manager
+    from .cli import plugin_manager
 
     try:
-        # Ensure plugins are loaded
         plugin_manager.load_plugins()
         registry = plugin_manager.tools
         
-        # Register static tools if not already present
         static_tools: List[Tool] = [AgentTool(model=model)]
         if history_store is not None:
             static_tools.append(RetrieveStepTool(history_store))
@@ -227,13 +243,11 @@ def get_default_tools(
             except ValueError as e:
                 logger.debug(f"Static tool {tool.name} already registered: {e}")
 
-        # Filter tools based on enabled_toolboxes
         if enabled_toolboxes:
             tools = [t for t in registry.get_tools() if t.toolbox_name in enabled_toolboxes]
         else:
             tools = registry.get_tools()
 
-        # Apply tools_config if provided
         if tools_config:
             filtered_tools = []
             processed_names = set()

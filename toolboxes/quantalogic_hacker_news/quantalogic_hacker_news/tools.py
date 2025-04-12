@@ -9,8 +9,6 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
-from quantalogic.tools import create_tool  # Assuming this is the decorator from your module
-
 logger = logging.getLogger(__name__)
 
 # Configure logger
@@ -403,7 +401,6 @@ class HackerNewsClient:
         return items
 
 # Simplified Tools with @create_tool
-@create_tool
 async def get_hn_items(item_type: str = "top", page: int = 1, per_page: int = 30) -> List[HNItem]:
     """Fetch popular items from Hacker News.
     
@@ -462,7 +459,6 @@ async def get_hn_items(item_type: str = "top", page: int = 1, per_page: int = 30
         method = getattr(client, f"get_{item_type_map[item_type]}")
         return await method(page=page, per_page=per_page)
 
-@create_tool
 async def get_hn_item_details(item_id: int, comment_depth: int = 2, clean_text: bool = True) -> Dict:
     """Fetch a Hacker News item with its comment hierarchy.
     
@@ -489,7 +485,6 @@ async def get_hn_item_details(item_id: int, comment_depth: int = 2, clean_text: 
             raise ValueError(f"Item with id {item_id} not found")
         return item.__dict__ if hasattr(item, '__dict__') else item
 
-@create_tool
 async def get_hn_user(username: str, include_items: bool = True, num_items: int = 10, item_types: List[str] = ["story"]) -> HNUser:
     """Fetch detailed information about a Hacker News user.
     
@@ -545,7 +540,6 @@ async def get_hn_user(username: str, include_items: bool = True, num_items: int 
             raise ValueError(f"User '{username}' not found")
         return user
 
-@create_tool
 async def search_hn(
     query: str,
     sort_by_date: bool = False,
