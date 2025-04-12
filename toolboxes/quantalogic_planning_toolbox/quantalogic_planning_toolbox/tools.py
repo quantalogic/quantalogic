@@ -8,8 +8,6 @@ import litellm
 from nanoid import generate
 from pydantic import BaseModel
 
-from quantalogic.tools import create_tool
-
 # Constants
 MODEL_NAME = "gemini/gemini-2.0-flash"
 DB_PATH = "agent_tasks.db"
@@ -70,7 +68,6 @@ class PlanResult:
     subtasks: List[SubtaskWithStatus]
 
 # Existing Tools
-@create_tool
 async def create_project_plan(task_description: str, tools_description: str = None) -> PlanResult:
     """Generate an AI-powered project plan by decomposing a task.
 
@@ -136,7 +133,6 @@ async def create_project_plan(task_description: str, tools_description: str = No
 
     return PlanResult(task_id=task_id, task_description=task_description, subtasks=subtasks_with_status)
 
-@create_tool
 async def retrieve_project_plan(task_id: str) -> PlanResult:
     """Retrieve a project plan for a specific task."""
     cursor = conn.cursor()
@@ -159,7 +155,6 @@ async def retrieve_project_plan(task_id: str) -> PlanResult:
 
     return PlanResult(task_id=task_id, task_description=task_row[0], subtasks=subtasks)
 
-@create_tool
 async def update_subtask_status_by_id(task_id: str, step: int, status: str) -> str:
     """Update status of a specific subtask within a project plan.
     
@@ -198,7 +193,6 @@ async def update_subtask_status_by_id(task_id: str, step: int, status: str) -> s
     return f"Step {step} of task {task_id} updated to '{status}'."
 
 # New Tools
-@create_tool
 async def get_subtasks_by_status(task_id: str, status: str) -> List[SubtaskWithStatus]:
     """Retrieve all subtasks of a task that have a specific status.
     
@@ -227,7 +221,6 @@ async def get_subtasks_by_status(task_id: str, status: str) -> List[SubtaskWithS
                 for step, desc, status in cursor.fetchall()]
     return subtasks
 
-@create_tool
 async def update_subtasks_status(task_id: str, steps: List[int], status: str) -> str:
     """Update the status of multiple subtasks in a task.
     
