@@ -25,6 +25,16 @@
                 "-y",
                 "fetcher-mcp"
             ]
-        }
+        },
+        "mcp-server-firecrawl": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "firecrawl-mcp"
+            ],
+            "env": {
+                "FIRECRAWL_API_KEY": "{{ env.FIRECRAWL_API_KEY }}"
+            }
+        }    
     }
 }
