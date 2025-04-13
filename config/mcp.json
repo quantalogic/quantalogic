@@ -26,7 +26,7 @@
                 "fetcher-mcp"
             ]
         },
-        "mcp-server-firecrawl": {
+        "firecrawl": {
             "command": "npx",
             "args": [
                 "-y",

@@ -138,14 +138,38 @@ def load_mcp_config(config_path: str) -> Dict[str, Any]:
         raise
 
 def resolve_secrets(config: Dict) -> Dict:
-    """Resolve environment variable placeholders in a config dictionary."""
+    """Resolve environment variable placeholders in a config dictionary.
+    
+    Recursively processes nested dictionaries and resolves environment variables
+    in the format {{ env.VARIABLE_NAME }}.
+    
+    Args:
+        config: The configuration dictionary to process
+        
+    Returns:
+        The processed configuration with environment variables resolved
+    """
+    if not isinstance(config, dict):
+        return config
+        
+    result = {}
     for key, value in config.items():
         if isinstance(value, str) and "{{ env." in value:
             env_var = value.split("{{ env.")[1].split("}}")[0]
-            config[key] = os.getenv(env_var, value)
+            env_value = os.getenv(env_var)
+            if env_value is None:
+                logger.warning(f"Environment variable {env_var} not found, using original value")
+                result[key] = value
+            else:
+                logger.debug(f"Resolved environment variable {env_var}")
+                result[key] = env_value
         elif isinstance(value, dict):
-            config[key] = resolve_secrets(value)
-    return config
+            result[key] = resolve_secrets(value)
+        elif isinstance(value, list):
+            result[key] = [resolve_secrets(item) if isinstance(item, dict) else item for item in value]
+        else:
+            result[key] = value
+    return result
 
 def load_configs(config_dir: str = CONFIG_DIR) -> None:
     """Load all JSON config files from the specified directory into the servers dictionary."""
@@ -161,10 +185,21 @@ def load_configs(config_dir: str = CONFIG_DIR) -> None:
                 servers.clear()
                 tools_cache.clear()
                 for server_name, server_data in cache_data["servers"].items():
-                    server_params = StdioServerParameters(
-                        command=server_data["command"],
-                        args=server_data["args"]
-                    )
+                    # Create params dictionary with required fields
+                    params = {
+                        "command": server_data["command"],
+                        "args": server_data["args"]
+                    }
+                    
+                    # Add optional parameters if they exist and are not None
+                    if "env" in server_data and server_data["env"] is not None:
+                        params["env"] = server_data["env"]
+                        logger.debug(f"Loaded environment variables for server {server_name} from cache: {list(params['env'].keys())}")
+                        
+                    if "cwd" in server_data and server_data["cwd"] is not None:
+                        params["cwd"] = server_data["cwd"]
+                    
+                    server_params = StdioServerParameters(**params)
                     servers[server_name] = server_params
                     tools_cache[server_name] = type('ToolsResult', (), {'tools': [
                         type('Tool', (), {
@@ -204,10 +239,22 @@ def load_configs(config_dir: str = CONFIG_DIR) -> None:
                 config = load_mcp_config(config_path)
                 server_configs = config.get("mcpServers", config.get("mcp_servers", {config.get("server_name", filename[:-5]): config}))
                 for server_name, server_data in server_configs.items():
-                    server_params = StdioServerParameters(
-                        command=server_data["command"],
-                        args=server_data["args"]
-                    )
+                    # Create server parameters with environment variables if provided
+                    params = {
+                        "command": server_data["command"],
+                        "args": server_data["args"]
+                    }
+                    
+                    # Add environment variables if specified
+                    if "env" in server_data:
+                        params["env"] = server_data["env"]
+                        logger.debug(f"Using environment variables for server {server_name}: {list(params['env'].keys())}")
+                    
+                    # Add working directory if specified
+                    if "cwd" in server_data:
+                        params["cwd"] = server_data["cwd"]
+                    
+                    server_params = StdioServerParameters(**params)
                     servers[server_name] = server_params
                     cache_tools[server_name] = {}
                     try:
@@ -229,6 +276,8 @@ def load_configs(config_dir: str = CONFIG_DIR) -> None:
             name: {
                 "command": params.command,
                 "args": params.args,
+                "env": params.env if hasattr(params, 'env') and params.env else None,
+                "cwd": params.cwd if hasattr(params, 'cwd') and params.cwd else None,
                 "tools": cache_tools.get(name, {})
             }
             for name, params in servers.items()
