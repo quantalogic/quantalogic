@@ -145,10 +145,10 @@ def load_mcp_config(config_path: str) -> Dict[str, Any]:
         logger.info(f"Successfully loaded config from {config_path}: {config}")
         return config
     except FileNotFoundError as e:
-        logger.error(f"Config file not found: {config_path}")
+        logger.error(f"Config file not found: {config_path} - {str(e)}")
         raise
     except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in config file: {config_path}")
+        logger.error(f"Invalid JSON in config file: {config_path} - {str(e)}")
         raise
 
 def resolve_secrets(config: Dict) -> Dict:
@@ -426,6 +426,11 @@ class DynamicTool:
         return f"{toolbox_name}.{self.name}({args_str}) -> {self.return_type}\n{self.description}"
 
     def __repr__(self) -> str:
+        """Return the official string representation of the DynamicTool.
+        
+        Returns:
+            str: A string representation in format '<DynamicTool tool_name>'
+        """
         return f"<DynamicTool {self.name}>"
 
 # **Dynamic Tool Creation**
