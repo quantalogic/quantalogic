@@ -8,6 +8,7 @@ Tools are automatically queried from servers during initialization with caching 
 
 import ast
 import asyncio
+import hashlib
 import json
 import keyword
 import os
@@ -124,6 +125,28 @@ def sanitize_name(name: str) -> str:
     return sanitized
 
 # **Configuration Loading Functions**
+def compute_config_hash(config_dir: str) -> str:
+    """Compute a hash based on the contents of all JSON config files in the directory, excluding the cache file.
+
+    Args:
+        config_dir (str): Directory containing the JSON config files.
+
+    Returns:
+        str: A hexadecimal hash string representing the state of all config files.
+    """
+    hashes = []
+    for filename in sorted(os.listdir(config_dir)):
+        if filename.endswith(".json") and filename != "config_cache.json":
+            config_path = os.path.join(config_dir, filename)
+            try:
+                with open(config_path, "rb") as f:
+                    file_hash = hashlib.md5(f.read()).hexdigest()
+                hashes.append(file_hash)
+            except FileNotFoundError:
+                logger.debug(f"Config file {config_path} not found during hash computation, skipping")
+    combined_hash = hashlib.md5("".join(hashes).encode()).hexdigest()
+    return combined_hash
+
 def load_mcp_config(config_path: str) -> Dict[str, Any]:
     """Load MCP configuration from a JSON file with secret resolution.
 
@@ -169,17 +192,69 @@ def resolve_secrets(config: Dict) -> Dict:
     return config
 
 def load_configs(config_dir: str = CONFIG_DIR) -> None:
-    """Load all JSON config files from the specified directory into the servers dictionary.
+    """Load all JSON config files from the specified directory into the servers dictionary, using cache if possible.
 
     Args:
         config_dir: Directory containing JSON config files (default: env var MCP_CONFIG_DIR or './config').
     """
+    global tools_cache
+    cache_file = os.path.join(config_dir, "config_cache.json")
+    current_hash = compute_config_hash(config_dir)
+    
+    # Check if cache exists and is valid
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file, "r") as f:
+                cache_data = json.load(f)
+            if cache_data.get("config_hash") == current_hash:
+                # Load servers and tools from cache
+                servers.clear()
+                tools_cache.clear()
+                for server_name, server_data in cache_data["servers"].items():
+                    server_params = StdioServerParameters(
+                        command=server_data["command"],
+                        args=server_data["args"]
+                    )
+                    servers[server_name] = server_params
+                    # Reconstruct tools_result for compatibility
+                    tools_cache[server_name] = type('ToolsResult', (), {'tools': [
+                        type('Tool', (), {
+                            'name': name,
+                            'description': details.get('description', f'Tool {name} from {server_name}'),
+                            'inputSchema': {
+                                'properties': {
+                                    arg['name']: {
+                                        'type': arg.get('type', 'str'),
+                                        'description': arg.get('description', ''),
+                                        'default': arg.get('default', None),
+                                        'example': arg.get('example', None)
+                                    } for arg in details.get('arguments', [])
+                                },
+                                'required': [arg['name'] for arg in details.get('arguments', []) if arg.get('required', False)]
+                            },
+                            'return_type': details.get('return_type', 'Any')
+                        })()
+                        for name, details in server_data.get("tools", {}).items()
+                    ]})()
+                logger.info("Loaded servers and tools from cache")
+                return
+            else:
+                logger.info("Cache hash mismatch, reloading configs")
+        except Exception as e:
+            logger.warning(f"Failed to load cache: {str(e)}, reloading configs")
+    
+    # Cache is invalid or doesn't exist, load from config files
+    servers.clear()
+    tools_cache.clear()
     logger.debug(f"Checking config directory: {config_dir}")
     if not os.path.exists(config_dir):
         logger.warning(f"Config directory {config_dir} does not exist, creating it")
         os.makedirs(config_dir)
+    
+    # Load server configs and tools
+    cache_tools = {}
     for filename in os.listdir(config_dir):
-        if filename.endswith(".json"):
+        if filename.endswith(".json") and filename != "config_cache.json":
             config_path = os.path.join(config_dir, filename)
             logger.debug(f"Processing config file: {config_path}")
             try:
@@ -193,8 +268,43 @@ def load_configs(config_dir: str = CONFIG_DIR) -> None:
                     )
                     servers[server_name] = server_params
                     logger.info(f"Registered server: {server_name} with params: {server_params}")
+                    # Fetch tools dynamically
+                    cache_tools[server_name] = {}
+                    try:
+                        server_tools = asyncio.run(mcp_list_tools(server_name))
+                        logger.debug(f"Tools listed for '{server_name}': {server_tools}")
+                        for tool_name in server_tools:
+                            tool_details = asyncio.run(fetch_tool_details(server_name, tool_name, server_params))
+                            if tool_details:
+                                cache_tools[server_name][tool_name] = tool_details
+                                logger.debug(f"Cached tool {tool_name} for {server_name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch tools for server '{server_name}': {str(e)}")
+                    # Include config-defined tools
+                    for tool_name, tool_config in server_data.get("tools", {}).items():
+                        cache_tools[server_name][tool_name] = tool_config
+                        logger.debug(f"Added config-defined tool {tool_name} for {server_name}")
             except Exception as e:
                 logger.error(f"Failed to load config {config_path}: {str(e)}")
+    
+    # Save to cache
+    cache_data = {
+        "config_hash": current_hash,
+        "servers": {
+            name: {
+                "command": params.command,
+                "args": params.args,
+                "tools": cache_tools.get(name, {})
+            }
+            for name, params in servers.items()
+        }
+    }
+    try:
+        with open(cache_file, "w") as f:
+            json.dump(cache_data, f, indent=2)
+        logger.info("Saved servers and tools to cache")
+    except Exception as e:
+        logger.warning(f"Failed to save cache: {str(e)}")
 
 # **MCP Session Management**
 @asynccontextmanager
@@ -584,20 +694,34 @@ def get_tools() -> List:
                     tools.append(tool)
                     logger.debug(f"Added config-defined tool: {tool.name}")
                 
-                # Query server for additional tools
-                server_params = servers.get(server_name)
-                if server_params:
-                    try:
-                        server_tools = asyncio.run(mcp_list_tools(server_name=server_name))
-                        logger.debug(f"Tools listed for '{server_name}': {server_tools}")
-                        for tool_name in server_tools:
-                            tool_details = asyncio.run(fetch_tool_details(server_name, tool_name, server_params))
-                            if tool_details:
-                                tool = DynamicTool(server_name, tool_name, tool_details)
-                                tools.append(tool)
-                                logger.debug(f"Added dynamically fetched tool: {tool.name}")
-                    except Exception as e:
-                        logger.warning(f"Failed to query tools for server '{server_name}': {str(e)}")
+                # Use cached tools if available
+                if server_name in tools_cache:
+                    logger.debug(f"Using cached tools for server '{server_name}'")
+                    for tool in tools_cache[server_name].tools:
+                        tool_config = {
+                            'name': tool.name,
+                            'description': getattr(tool, 'description', f'Tool {tool.name} from {server_name}'),
+                            'arguments': normalize_args(tool),
+                            'return_type': getattr(tool, 'return_type', 'Any')
+                        }
+                        tool_instance = DynamicTool(server_name, tool.name, tool_config)
+                        tools.append(tool_instance)
+                        logger.debug(f"Added cached tool: {tool_instance.name}")
+                else:
+                    # Query server for additional tools
+                    server_params = servers.get(server_name)
+                    if server_params:
+                        try:
+                            server_tools = asyncio.run(mcp_list_tools(server_name=server_name))
+                            logger.debug(f"Tools listed for '{server_name}': {server_tools}")
+                            for tool_name in server_tools:
+                                tool_details = asyncio.run(fetch_tool_details(server_name, tool_name, server_params))
+                                if tool_details:
+                                    tool = DynamicTool(server_name, tool_name, tool_details)
+                                    tools.append(tool)
+                                    logger.debug(f"Added dynamically fetched tool: {tool.name}")
+                        except Exception as e:
+                            logger.warning(f"Failed to query tools for server '{server_name}': {str(e)}")
         except Exception as e:
             logger.error(f"Failed to load dynamic tools from {config_path}: {e}")
     else:
