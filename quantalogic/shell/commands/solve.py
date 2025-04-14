@@ -1,6 +1,7 @@
 """Solve command implementation."""
 from typing import List
 
+
 async def solve_command(shell, args: List[str]) -> str:
     """Handle the /solve command."""
     if not args:
@@ -10,8 +11,11 @@ async def solve_command(shell, args: List[str]) -> str:
     shell.message_history.append({"role": "user", "content": task})
     
     try:
-        result = await shell.agent.solve(task)
-        final_answer = shell._extract_final_answer(result)
+        history = await shell.agent.solve(task, streaming=shell.streaming)
+        if history:
+            final_answer = shell.agent._extract_response(history)
+        else:
+            final_answer = "No steps were executed."
         shell.message_history.append({"role": "assistant", "content": final_answer})
         return final_answer
     except Exception as e:

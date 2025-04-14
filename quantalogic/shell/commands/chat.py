@@ -11,7 +11,7 @@ async def chat_command(shell, args: List[str]) -> str:
     shell.message_history.append({"role": "user", "content": message})
     
     try:
-        response = await shell.agent.chat(message)
+        response = await shell.agent.chat(message, streaming=shell.streaming)
         shell.message_history.append({"role": "assistant", "content": response})
         return response
     except Exception as e:

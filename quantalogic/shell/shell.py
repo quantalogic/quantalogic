@@ -12,18 +12,10 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
 from rich import print as rprint
+from rich.panel import Panel  # Added for styled display
 
 from quantalogic.codeact.agent import Agent, AgentConfig
-from quantalogic.codeact.events import (
-    ActionExecutedEvent,
-    ActionGeneratedEvent,
-    ErrorOccurredEvent,
-    StepCompletedEvent,
-    StepStartedEvent,
-    StreamTokenEvent,
-    TaskCompletedEvent,
-    ThoughtGeneratedEvent,
-)
+from quantalogic.codeact.events import StreamTokenEvent
 
 from .command_registry import CommandRegistry
 from .commands import (
@@ -42,6 +34,7 @@ class Shell:
     """Interactive CLI shell for dialog with Quantalogic agents."""
     def __init__(self, agent_config: Optional[AgentConfig] = None):
         self.agent = Agent(config=agent_config or AgentConfig(enabled_toolboxes=None, tools_config=None))
+        self.agent.add_observer(self._stream_token_observer, ["StreamToken"])  # Attach streaming observer
         self.message_history: List[Dict[str, str]] = []
         self.streaming: bool = True
         self.mode: str = "codeact"  # Default mode set to "codeact"
@@ -78,46 +71,6 @@ class Shell:
         if isinstance(event, StreamTokenEvent) and self.streaming:
             print(event.token, end="", flush=True)
 
-    async def _on_step_started(self, event: StepStartedEvent) -> None:
-        rprint(f"[bold yellow]Step {event.step_number}: Started[/bold yellow]")
-
-    async def _on_thought_generated(self, event: ThoughtGeneratedEvent) -> None:
-        rprint(f"[bold blue]Thought:[/bold blue] {event.thought}")
-
-    async def _on_action_generated(self, event: ActionGeneratedEvent) -> None:
-        rprint(f"[bold magenta]Action:[/bold magenta] {event.action}")
-
-    async def _on_action_executed(self, event: ActionExecutedEvent) -> None:
-        rprint(f"[bold green]Action Executed:[/bold green] {event.output}")
-
-    async def _on_step_completed(self, event: StepCompletedEvent) -> None:
-        if event.final_answer:
-            rprint(event.final_answer)
-        else:
-            rprint(f"[bold yellow]Step {event.step_number}: Completed[/bold yellow]")
-
-    async def _on_task_completed(self, event: TaskCompletedEvent) -> None:
-        rprint("[bold green]Task Completed[/bold green]")
-        if event.final_answer:
-            rprint(f"[bold]Final Answer:[/bold] {event.final_answer}")
-        else:
-            rprint(f"[bold red]Reason for incompletion:[/bold red] {event.reason}")
-        rprint()
-
-    async def _on_error_occurred(self, event: ErrorOccurredEvent) -> None:
-        rprint(f"[bold red]Error at Step {event.step_number}: {event.error_message}[/bold red]")
-
-    def _extract_final_answer(self, result: str) -> str:
-        """Extract the final answer from a solve result."""
-        try:
-            from lxml import etree
-            root = etree.fromstring(result)
-            final_answer = root.findtext("FinalAnswer") or root.findtext("Value") or "No final answer found."
-            return final_answer.strip()
-        except Exception as e:
-            logger.error(f"Failed to parse result XML: {e}")
-            return result
-
     async def run(self) -> None:
         """Run the interactive shell loop."""
         history_file = Path.home() / ".quantalogic_shell_history"
@@ -137,20 +90,22 @@ class Shell:
             history=FileHistory(str(history_file)),
             key_bindings=kb
         )
-        rprint("Welcome to Quantalogic Shell.")
-        rprint(f"Mode: {self.mode} - plain messages are {'tasks to solve' if self.mode == 'codeact' else 'chat messages'}.")
-        rprint("Type /help for commands. Press Enter to send, Ctrl+J for new lines.")
+        welcome_message = f"""Welcome to Quantalogic Shell.
+
+Mode: {self.mode} - plain messages are {'tasks to solve' if self.mode == 'codeact' else 'chat messages'}.
+
+Type /help for commands. Press Enter to send, Ctrl+J for new lines."""
+        rprint(Panel(welcome_message, title="Quantalogic Shell", border_style="blue"))
         while True:
             try:
                 user_input = await session.prompt_async()
                 user_input = user_input.strip()
                 if not user_input:
                     continue
-                # Handle commands (start with /) or default to mode-based action
                 if user_input.startswith('/'):
                     command_input = user_input[1:].strip()  # Remove leading /
                     if not command_input:
-                        rprint("Error: No command provided. Try /help.")
+                        rprint("[red]Error: No command provided. Try /help.[/red]")
                         continue
                     parts = command_input.split(maxsplit=1)
                     command_name = parts[0]
@@ -160,22 +115,25 @@ class Shell:
                         if result:
                             rprint(result)
                     else:
-                        rprint(f"Unknown command: /{command_name}. Try /help.")
+                        rprint(f"[red]Unknown command: /{command_name}. Try /help.[/red]")
                 else:
-                    # Default action based on current mode
                     if self.mode == "codeact":
                         result = await solve_command(self, [user_input])
+                        if result:
+                            rprint(Panel(result, title="Final Answer", border_style="green"))
                     else:  # react mode
                         result = await chat_command(self, [user_input])
-                    if result:
-                        rprint(result)
+                        if result:
+                            rprint(result)
             except KeyboardInterrupt:
                 rprint("\nUse '/exit' to quit the shell.")
             except SystemExit:
                 rprint("Goodbye!")
                 break
             except Exception as e:
-                rprint(f"Error: {e}")
+                rprint(f"[red]Error: {e}[/red]")
+
+
 
 
 def main() -> None:

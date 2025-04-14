@@ -10,6 +10,7 @@ async def history_command(shell, args: List[str]) -> str:
     history = []
     for msg in shell.message_history:
         role = "User" if msg["role"] == "user" else "Assistant"
-        history.append(f"{role}: {msg['content']}")
+        color = "blue" if role == "User" else "green"
+        history.append(f"[{color}]{role}: {msg['content']}[/{color}]")
     
     return "\n".join(history)
