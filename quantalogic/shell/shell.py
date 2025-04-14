@@ -1,4 +1,4 @@
-# quantalogic/shell.py
+# quantalogic/shell/shell.py
 """Quantalogic Shell CLI system integrated with the Quantalogic CodeAct agent."""
 import asyncio
 from importlib.metadata import entry_points
@@ -12,7 +12,8 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
 from rich import print as rprint
-from rich.panel import Panel  # Added for styled display
+from rich.markdown import Markdown
+from rich.panel import Panel
 
 from quantalogic.codeact.agent import Agent, AgentConfig
 from quantalogic.codeact.events import StreamTokenEvent
@@ -69,7 +70,7 @@ class Shell:
     async def _stream_token_observer(self, event: object) -> None:
         """Observer for streaming tokens."""
         if isinstance(event, StreamTokenEvent) and self.streaming:
-            print(event.token, end="", flush=True)
+            rprint(event.token, end="", flush=True)  # Stream tokens with rich for color support
 
     async def run(self) -> None:
         """Run the interactive shell loop."""
@@ -120,11 +121,12 @@ Type /help for commands. Press Enter to send, Ctrl+J for new lines."""
                     if self.mode == "codeact":
                         result = await solve_command(self, [user_input])
                         if result:
-                            rprint(Panel(result, title="Final Answer", border_style="green"))
+                            # Render final answer as markdown in a green panel
+                            rprint(Panel(Markdown(result), title="Final Answer", border_style="green"))
                     else:  # react mode
                         result = await chat_command(self, [user_input])
                         if result:
-                            rprint(result)
+                            rprint(Markdown(result))  # Render chat responses as markdown
             except KeyboardInterrupt:
                 rprint("\nUse '/exit' to quit the shell.")
             except SystemExit:
@@ -132,9 +134,6 @@ Type /help for commands. Press Enter to send, Ctrl+J for new lines."""
                 break
             except Exception as e:
                 rprint(f"[red]Error: {e}[/red]")
-
-
-
 
 def main() -> None:
     shell = Shell()
