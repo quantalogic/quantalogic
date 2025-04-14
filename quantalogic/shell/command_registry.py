@@ -1,5 +1,6 @@
 from typing import Callable, Dict, List, Optional
 
+
 class CommandRegistry:
     """Manages registration and storage of shell commands."""
     def __init__(self):
