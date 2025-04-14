@@ -1,7 +1,6 @@
 # quantalogic/shell.py
 """Quantalogic Shell CLI system integrated with the Quantalogic CodeAct agent."""
 import asyncio
-import shlex
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
