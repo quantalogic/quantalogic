@@ -26,15 +26,18 @@
                 "fetcher-mcp"
             ]
         },
-        "firecrawl": {
+        "job_search": {
             "command": "npx",
             "args": [
                 "-y",
-                "firecrawl-mcp"
-            ],
-            "env": {
-                "FIRECRAWL_API_KEY": "{{ env.FIRECRAWL_API_KEY }}"
-            }
-        }    
+                "job-searchoor"
+            ]
+        },
+        "edgeone": {
+            "command": "npx",
+            "args": [
+                "edgeone-pages-mcp"
+            ]
+        }
     }
 }

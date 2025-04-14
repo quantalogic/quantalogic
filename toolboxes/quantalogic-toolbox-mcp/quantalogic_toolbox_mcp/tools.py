@@ -155,13 +155,16 @@ def resolve_secrets(config: Dict) -> Dict:
     result = {}
     for key, value in config.items():
         if isinstance(value, str) and "{{ env." in value:
-            env_var = value.split("{{ env.")[1].split("}}")[0]
+            env_var = value.split("{{ env.")[1].split("}}")[0].strip()
             env_value = os.getenv(env_var)
             if env_value is None:
-                logger.warning(f"Environment variable {env_var} not found, using original value")
+                logger.warning(f"Environment variable '{env_var}' not found. This may cause API authentication failures.")
+                # For API keys, provide a more specific message
+                if "API_KEY" in env_var or "APIKEY" in env_var:
+                    logger.error(f"Missing API key: '{env_var}'. Please set this environment variable before using this tool.")
                 result[key] = value
             else:
-                logger.debug(f"Resolved environment variable {env_var}")
+                logger.debug(f"Resolved environment variable '{env_var}'")
                 result[key] = env_value
         elif isinstance(value, dict):
             result[key] = resolve_secrets(value)
@@ -179,7 +182,7 @@ def load_configs(config_dir: str = CONFIG_DIR) -> None:
 
     if os.path.exists(cache_file):
         try:
-            with open(cache_file, "r") as f:
+            with open(cache_file) as f:
                 cache_data = json.load(f)
             if cache_data.get("config_hash") == current_hash:
                 servers.clear()
@@ -306,52 +309,93 @@ async def mcp_session_context(server_params: StdioServerParameters) -> AsyncIter
 
     Note:
         Added retry mechanism for direct commands to match Docker logic, improving robustness.
+        Handles GeneratorExit exceptions gracefully to prevent session context issues.
     """
     logger.debug(f"Starting session with params: {server_params}")
 
-    if server_params.command == "docker":
-        proc = await asyncio.create_subprocess_exec(
-            "docker", "version",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await proc.communicate()
-        logger.debug(f"Docker version check: returncode={proc.returncode}, stdout={stdout.decode()}, stderr={stderr.decode()}")
-        if proc.returncode != 0:
-            raise RuntimeError("Docker is not available or not running")
+    try:
+        if server_params.command == "docker":
+            proc = await asyncio.create_subprocess_exec(
+                "docker", "version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            logger.debug(f"Docker version check: returncode={proc.returncode}, stdout={stdout.decode()}, stderr={stderr.decode()}")
+            if proc.returncode != 0:
+                raise RuntimeError("Docker is not available or not running")
 
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                for attempt in range(5):
+            try:
+                async with stdio_client(server_params) as (read, write):
                     try:
-                        await session.initialize()
-                        logger.debug("Docker session initialized successfully")
-                        yield session
-                        return
+                        async with ClientSession(read, write) as session:
+                            for attempt in range(5):
+                                try:
+                                    await session.initialize()
+                                    logger.debug("Docker session initialized successfully")
+                                    yield session
+                                    return
+                                except Exception as e:
+                                    if attempt < 4:
+                                        logger.debug(f"Docker session init failed, retrying in 1s: {str(e)}")
+                                        await asyncio.sleep(1)
+                                    else:
+                                        logger.error(f"Docker session init failed after 5 attempts: {str(e)}")
+                                        raise RuntimeError(f"Failed to initialize Docker session: {str(e)}")
+                    except GeneratorExit:
+                        logger.debug("Generator exited during Docker session")
+                        # Let the GeneratorExit propagate after cleanup
+                        raise
                     except Exception as e:
-                        if attempt < 4:
-                            logger.debug(f"Docker session init failed, retrying in 1s: {str(e)}")
-                            await asyncio.sleep(1)
-                        else:
-                            logger.error(f"Docker session init failed after 5 attempts: {str(e)}")
-                            raise RuntimeError(f"Failed to initialize Docker session: {str(e)}")
-    else:
-        # Direct command logic with retries
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                for attempt in range(5):
+                        logger.error(f"Error in Docker ClientSession: {str(e)}")
+                        raise
+            except GeneratorExit:
+                logger.debug("Generator exited during Docker stdio_client")
+                # Let the GeneratorExit propagate after cleanup
+                raise
+            except Exception as e:
+                logger.error(f"Error in Docker stdio_client: {str(e)}")
+                raise
+        else:
+            # Direct command logic with retries
+            try:
+                async with stdio_client(server_params) as (read, write):
                     try:
-                        await session.initialize()
-                        logger.debug("Direct session initialized successfully")
-                        yield session
-                        return
+                        async with ClientSession(read, write) as session:
+                            for attempt in range(5):
+                                try:
+                                    await session.initialize()
+                                    logger.debug("Direct session initialized successfully")
+                                    yield session
+                                    return
+                                except Exception as e:
+                                    if attempt < 4:
+                                        logger.debug(f"Direct session init failed, retrying in 1s: {str(e)}")
+                                        await asyncio.sleep(1)
+                                    else:
+                                        logger.error(f"Direct session init failed after 5 attempts: {str(e)}")
+                                        raise RuntimeError(f"Failed to initialize direct session: {str(e)}")
+                    except GeneratorExit:
+                        logger.debug("Generator exited during direct session")
+                        # Let the GeneratorExit propagate after cleanup
+                        raise
                     except Exception as e:
-                        if attempt < 4:
-                            logger.debug(f"Direct session init failed, retrying in 1s: {str(e)}")
-                            await asyncio.sleep(1)
-                        else:
-                            logger.error(f"Direct session init failed after 5 attempts: {str(e)}")
-                            raise RuntimeError(f"Failed to initialize direct session: {str(e)}")
+                        logger.error(f"Error in direct ClientSession: {str(e)}")
+                        raise
+            except GeneratorExit:
+                logger.debug("Generator exited during direct stdio_client")
+                # Let the GeneratorExit propagate after cleanup
+                raise
+            except Exception as e:
+                logger.error(f"Error in direct stdio_client: {str(e)}")
+                raise
+    except GeneratorExit:
+        logger.debug("Generator exited during mcp_session_context")
+        # Let the GeneratorExit propagate
+        raise
+    except Exception as e:
+        logger.error(f"Unhandled error in mcp_session_context: {str(e)}")
+        raise
 
 async def check_docker_ready(server_params: StdioServerParameters, timeout: int = 30) -> bool:
     """Check if Docker container is ready to accept connections."""
@@ -461,6 +505,7 @@ class DynamicTool:
         return f"{toolbox_name}.{self.name}({args_str}) -> {self.return_type}\n{self.description}"
 
     def __repr__(self) -> str:
+        """Return a string representation of the DynamicTool instance."""
         return f"<DynamicTool {self.name}>"
 
 # **Dynamic Tool Creation**
