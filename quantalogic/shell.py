@@ -32,7 +32,7 @@ class Shell:
     def __init__(self, agent_config: Optional[AgentConfig] = None):
         self.agent = Agent(config=agent_config or AgentConfig())
         self.message_history: List[Dict[str, str]] = []
-        self.streaming: bool = False
+        self.streaming: bool = True
         self.command_registry = CommandRegistry()
         self._register_builtin_commands()
         self._load_plugin_commands()
