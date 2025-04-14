@@ -314,6 +314,7 @@ class Agent:
     async def chat(
         self,
         message: str,
+        history: Optional[List[Dict[str, str]]] = None,
         use_tools: bool = False,
         tools: Optional[List[Union[Tool, Callable]]] = None,
         timeout: int = 30,
@@ -323,7 +324,7 @@ class Agent:
         reasoner_name: Optional[str] = None,
         executor_name: Optional[str] = None
     ) -> str:
-        """Single-step interaction with optional custom tools and streaming."""
+        """Single-step interaction with optional custom tools, history, and streaming."""
         system_prompt: str = self._build_system_prompt()
         try:
             if use_tools:
@@ -348,12 +349,13 @@ class Agent:
                 history: List[Dict] = await chat_agent.solve(message, system_prompt=system_prompt, streaming=streaming)
                 return self._extract_response(history)
             else:
+                messages = [{"role": "system", "content": system_prompt}]
+                if history:
+                    messages.extend(history)  # Include previous conversation history
+                messages.append({"role": "user", "content": message})  # Add current user message
                 response: str = await litellm_completion(
                     model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": message}
-                    ],
+                    messages=messages,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     stream=streaming,
