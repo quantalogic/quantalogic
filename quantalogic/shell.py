@@ -15,7 +15,17 @@ from prompt_toolkit.keys import Keys
 from rich import print as rprint
 
 from quantalogic.codeact.agent import Agent, AgentConfig
-from quantalogic.codeact.events import StreamTokenEvent, TaskCompletedEvent
+from quantalogic.codeact.events import (
+    ActionExecutedEvent,
+    ActionGeneratedEvent,
+    ErrorOccurredEvent,
+    StepCompletedEvent,
+    StepStartedEvent,
+    StreamTokenEvent,
+    TaskCompletedEvent,
+    ThoughtGeneratedEvent,
+)
+from quantalogic.codeact.xml_utils import XMLResultHandler
 
 
 class CommandRegistry:
@@ -30,7 +40,7 @@ class CommandRegistry:
 class Shell:
     """Interactive CLI shell for dialog with Quantalogic agents."""
     def __init__(self, agent_config: Optional[AgentConfig] = None):
-        self.agent = Agent(config=agent_config or AgentConfig())
+        self.agent = Agent(config=agent_config or AgentConfig(enabled_toolboxes=None, tools_config=None))
         self.message_history: List[Dict[str, str]] = []
         self.streaming: bool = True
         self.command_registry = CommandRegistry()
@@ -104,22 +114,46 @@ class Shell:
         task = args[0]  # Entire input after '/solve' is the task
         try:
             if self.streaming:
-                self.agent.add_observer(self._stream_token_observer, ["StreamToken"])
+                observers_to_add = [
+                    (self._stream_token_observer, ["StreamToken"]),
+                    (self._on_step_started, ["StepStarted"]),
+                    (self._on_thought_generated, ["ThoughtGenerated"]),
+                    (self._on_action_generated, ["ActionGenerated"]),
+                    (self._on_action_executed, ["ActionExecuted"]),
+                    (self._on_step_completed, ["StepCompleted"]),
+                    (self._on_task_completed, ["TaskCompleted"]),
+                    (self._on_error_occurred, ["ErrorOccurred"]),
+                ]
+                for observer, event_types in observers_to_add:
+                    self.agent.add_observer(observer, event_types)
+            
             history = await self.agent.solve(task, streaming=self.streaming)
+            
             if self.streaming:
-                self.agent._observers = [obs for obs in self.agent._observers if obs[0] != self._stream_token_observer]
-                rprint()
-            if history and "result" in history[-1]:
-                final_answer = self._extract_final_answer(history[-1]["result"])
-                self.message_history.append({"role": "user", "content": task})
-                self.message_history.append({"role": "assistant", "content": final_answer})
-                return final_answer
-            return "Task did not complete successfully."
+                for observer, _ in observers_to_add:
+                    self.agent._observers = [obs for obs in self.agent._observers if obs[0] != observer]
+                rprint()  # Add a newline for clean output
+            
+            # Handle non-streaming case
+            if not self.streaming:
+                if history and "result" in history[-1]:
+                    final_answer = self._extract_final_answer(history[-1]["result"])
+                    self.message_history.append({"role": "user", "content": task})
+                    self.message_history.append({"role": "assistant", "content": final_answer})
+                    return final_answer
+                else:
+                    error_msg = "Task did not complete successfully."
+                    self.message_history.append({"role": "user", "content": task})
+                    self.message_history.append({"role": "assistant", "content": error_msg})
+                    return error_msg
+            else:
+                # When streaming, output is handled by observers
+                return None
         except Exception as e:
             error_msg = f"Solve error: {str(e)}"
             self.message_history.append({"role": "user", "content": task})
             self.message_history.append({"role": "assistant", "content": error_msg})
-            return error_msg
+            return error_msg if not self.streaming else None
 
     async def exit_command(self, args: List[str]) -> None:
         raise SystemExit
@@ -142,6 +176,43 @@ class Shell:
     async def _stream_token_observer(self, event: object) -> None:
         if isinstance(event, StreamTokenEvent):
             rprint(event.token, end="", flush=True)
+
+    async def _on_step_started(self, event: StepStartedEvent):
+        rprint(f"[bold yellow]Starting Step {event.step_number}[/bold yellow]")
+
+    async def _on_thought_generated(self, event: ThoughtGeneratedEvent):
+        rprint(f"[bold cyan]Step {event.step_number}: Thought[/bold cyan]")
+        rprint(event.thought)
+        rprint()
+
+    async def _on_action_generated(self, event: ActionGeneratedEvent):
+        rprint(f"[bold blue]Step {event.step_number}: Action[/bold blue]")
+        rprint(event.action_code)
+        rprint()
+
+    async def _on_action_executed(self, event: ActionExecutedEvent):
+        summary = XMLResultHandler.format_result_summary(event.result_xml)
+        rprint(f"[bold magenta]Step {event.step_number}: Result[/bold magenta]")
+        rprint(summary)
+        rprint()
+
+    async def _on_step_completed(self, event: StepCompletedEvent):
+        if event.is_complete:
+            rprint(f"[bold green]Step {event.step_number}: Completed with final answer[/bold green]")
+            rprint(event.final_answer)
+        else:
+            rprint(f"[bold yellow]Step {event.step_number}: Completed[/bold yellow]")
+
+    async def _on_task_completed(self, event: TaskCompletedEvent):
+        rprint("[bold green]Task Completed[/bold green]")
+        if event.final_answer:
+            rprint(f"[bold]Final Answer:[/bold] {event.final_answer}")
+        else:
+            rprint(f"[bold red]Reason for incompletion:[/bold red] {event.reason}")
+        rprint()
+
+    async def _on_error_occurred(self, event: ErrorOccurredEvent):
+        rprint(f"[bold red]Error at Step {event.step_number}: {event.error_message}[/bold red]")
 
     def _extract_final_answer(self, result: str) -> str:
         try:

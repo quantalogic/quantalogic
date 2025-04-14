@@ -187,6 +187,7 @@ class AgentConfig:
 
 class Agent:
     """High-level interface for the Quantalogic Agent with unified configuration."""
+    
     def __init__(
         self,
         config: Union[AgentConfig, str, None] = None
@@ -211,6 +212,10 @@ class Agent:
             logger.error(f"Failed to load plugins: {e}")
         self.model: str = config.model
         self.default_tools: List[Tool] = self._get_tools()
+        # Fallback: If no tools are loaded, use all registered tools
+        if not self.default_tools:
+            self.default_tools = self.plugin_manager.tools.get_tools()
+            logger.warning(f"No tools loaded from configuration; falling back to all registered tools: {[(t.toolbox_name or 'default', t.name) for t in self.default_tools]}")
         self.max_iterations: int = config.max_iterations
         self.personality = config.personality
         self.backstory = config.backstory

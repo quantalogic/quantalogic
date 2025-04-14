@@ -18,6 +18,7 @@ from .utils import log_tool_method
 
 class ToolRegistry:
     """Manages tool registration with dependency and conflict checking."""
+    
     def __init__(self):
         self.tools: Dict[tuple[str, str], Tool] = {}
 
@@ -118,6 +119,7 @@ class ToolRegistry:
 
 class AgentTool(Tool):
     """A specialized tool for generating text using language models, designed for AI agent workflows."""
+    
     def __init__(self, model: str = None, timeout: int = None, config: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the AgentTool with configurable model and timeout."""
         try:
@@ -195,6 +197,7 @@ class AgentTool(Tool):
 
 class RetrieveStepTool(Tool):
     """Tool to retrieve information from a specific previous step with indexed access."""
+    
     def __init__(self, history_store: List[dict], config: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the RetrieveStepTool with history store."""
         try:
@@ -258,7 +261,8 @@ def get_default_tools(
             except ValueError as e:
                 logger.debug(f"Static tool {tool.name} already registered: {e}")
 
-        if enabled_toolboxes:
+        # Only filter tools if enabled_toolboxes is explicitly provided and non-empty
+        if enabled_toolboxes is not None and enabled_toolboxes:
             tools = [t for t in registry.get_tools() if t.toolbox_name in enabled_toolboxes]
         else:
             tools = registry.get_tools()
