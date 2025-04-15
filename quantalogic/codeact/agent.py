@@ -14,8 +14,8 @@ from lxml import etree
 from quantalogic.tools import Tool
 
 from .constants import MAX_HISTORY_TOKENS, MAX_TOKENS
+from .conversation_history_manager import ConversationHistoryManager
 from .executor import BaseExecutor, Executor
-from .llm_util import litellm_completion
 from .plugin_manager import PluginManager
 from .react_agent import ReActAgent
 from .reasoner import BaseReasoner, Reasoner
@@ -45,8 +45,8 @@ class AgentConfig:
     executor: Optional[Dict[str, Any]] = field(default_factory=lambda: {"name": "default"})
     profile: Optional[str] = None
     customizations: Optional[Dict[str, Any]] = None
-    agent_tool_model: str = "gemini/gemini-2.0-flash"  # Configurable model for AgentTool
-    agent_tool_timeout: int = 30  # Configurable timeout for AgentTool
+    agent_tool_model: str = "gemini/gemini-2.0-flash"
+    agent_tool_timeout: int = 30
 
     def __init__(
         self,
@@ -73,116 +73,132 @@ class AgentConfig:
         agent_tool_timeout: int = 30
     ) -> None:
         """Initialize configuration from arguments or a YAML file."""
-        if config_file:
-            try:
-                with open(Path(__file__).parent / config_file) as f:
-                    config: Dict = yaml.safe_load(f) or {}
-                self._load_from_config(config, model, max_iterations, max_history_tokens, toolbox_directory,
-                                      tools, enabled_toolboxes, reasoner_name, executor_name, personality,
-                                      backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                      profile, customizations, agent_tool_model, agent_tool_timeout)
-            except FileNotFoundError as e:
-                logger.warning(f"Config file {config_file} not found: {e}. Using defaults.")
+        try:
+            if config_file:
+                try:
+                    with open(Path(__file__).parent / config_file) as f:
+                        config: Dict = yaml.safe_load(f) or {}
+                    self._load_from_config(config, model, max_iterations, max_history_tokens, toolbox_directory,
+                                        tools, enabled_toolboxes, reasoner_name, executor_name, personality,
+                                        backstory, sop, jinja_env, name, tools_config, reasoner, executor,
+                                        profile, customizations, agent_tool_model, agent_tool_timeout)
+                except FileNotFoundError as e:
+                    logger.warning(f"Config file {config_file} not found: {e}. Using defaults.")
+                    self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
+                                    tools, enabled_toolboxes, reasoner_name, executor_name, personality,
+                                    backstory, sop, jinja_env, name, tools_config, reasoner, executor,
+                                    profile, customizations, agent_tool_model, agent_tool_timeout)
+                except yaml.YAMLError as e:
+                    logger.error(f"Error parsing YAML config {config_file}: {e}. Falling back to defaults.")
+                    self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
+                                    tools, enabled_toolboxes, reasoner_name, executor_name, personality,
+                                    backstory, sop, jinja_env, name, tools_config, reasoner, executor,
+                                    profile, customizations, agent_tool_model, agent_tool_timeout)
+            else:
                 self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                  tools, enabled_toolboxes, reasoner_name, executor_name, personality,
-                                  backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                  profile, customizations, agent_tool_model, agent_tool_timeout)
-            except yaml.YAMLError as e:
-                logger.error(f"Error parsing YAML config {config_file}: {e}. Falling back to defaults.")
-                self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                  tools, enabled_toolboxes, reasoner_name, executor_name, personality,
-                                  backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                  profile, customizations, agent_tool_model, agent_tool_timeout)
-        else:
-            self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                              tools, enabled_toolboxes, reasoner_name, executor_name, personality,
-                              backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                              profile, customizations, agent_tool_model, agent_tool_timeout)
-        self.__post_init__()
+                                tools, enabled_toolboxes, reasoner_name, executor_name, personality,
+                                backstory, sop, jinja_env, name, tools_config, reasoner, executor,
+                                profile, customizations, agent_tool_model, agent_tool_timeout)
+            self.__post_init__()
+        except Exception as e:
+            logger.error(f"Failed to initialize AgentConfig: {e}")
+            raise
 
     def _load_from_config(self, config: Dict, *args) -> None:
         """Load configuration from a dictionary, overriding with explicit arguments if provided."""
-        model, max_iterations, max_history_tokens, toolbox_directory, tools, enabled_toolboxes, \
-        reasoner_name, executor_name, personality, backstory, sop, jinja_env, name, tools_config, \
-        reasoner, executor, profile, customizations, agent_tool_model, agent_tool_timeout = args
-        
-        self.model = config.get("model", model)
-        self.max_iterations = config.get("max_iterations", max_iterations)
-        self.max_history_tokens = config.get("max_history_tokens", max_history_tokens)
-        self.toolbox_directory = config.get("toolbox_directory", toolbox_directory)
-        self.tools = tools if tools is not None else config.get("tools")
-        self.enabled_toolboxes = config.get("enabled_toolboxes", enabled_toolboxes)
-        self.reasoner = config.get("reasoner", {"name": config.get("reasoner_name", reasoner_name)})
-        self.executor = config.get("executor", {"name": config.get("executor_name", executor_name)})
-        self.personality = config.get("personality", personality)
-        self.backstory = config.get("backstory", backstory)
-        self.sop = config.get("sop", sop)
-        self.jinja_env = jinja_env or default_jinja_env
-        self.name = config.get("name", name)
-        self.tools_config = config.get("tools_config", tools_config)
-        self.profile = config.get("profile", profile)
-        self.customizations = config.get("customizations", customizations)
-        self.agent_tool_model = config.get("agent_tool_model", agent_tool_model)
-        self.agent_tool_timeout = config.get("agent_tool_timeout", agent_tool_timeout)
+        try:
+            model, max_iterations, max_history_tokens, toolbox_directory, tools, enabled_toolboxes, \
+            reasoner_name, executor_name, personality, backstory, sop, jinja_env, name, tools_config, \
+            reasoner, executor, profile, customizations, agent_tool_model, agent_tool_timeout = args
+            
+            self.model = config.get("model", model)
+            self.max_iterations = config.get("max_iterations", max_iterations)
+            self.max_history_tokens = config.get("max_history_tokens", max_history_tokens)
+            self.toolbox_directory = config.get("toolbox_directory", toolbox_directory)
+            self.tools = tools if tools is not None else config.get("tools")
+            self.enabled_toolboxes = config.get("enabled_toolboxes", enabled_toolboxes)
+            self.reasoner = config.get("reasoner", {"name": config.get("reasoner_name", reasoner_name)})
+            self.executor = config.get("executor", {"name": config.get("executor_name", executor_name)})
+            self.personality = config.get("personality", personality)
+            self.backstory = config.get("backstory", backstory)
+            self.sop = config.get("sop", sop)
+            self.jinja_env = jinja_env or default_jinja_env
+            self.name = config.get("name", name)
+            self.tools_config = config.get("tools_config", tools_config)
+            self.profile = config.get("profile", profile)
+            self.customizations = config.get("customizations", customizations)
+            self.agent_tool_model = config.get("agent_tool_model", agent_tool_model)
+            self.agent_tool_timeout = config.get("agent_tool_timeout", agent_tool_timeout)
+        except Exception as e:
+            logger.error(f"Error loading config: {e}")
+            raise
 
     def _set_defaults(self, model, max_iterations, max_history_tokens, toolbox_directory,
                      tools, enabled_toolboxes, reasoner_name, executor_name, personality,
                      backstory, sop, jinja_env, name, tools_config, reasoner, executor,
                      profile, customizations, agent_tool_model, agent_tool_timeout) -> None:
         """Set default values for all configuration fields."""
-        self.model = model
-        self.max_iterations = max_iterations
-        self.max_history_tokens = max_history_tokens
-        self.toolbox_directory = toolbox_directory
-        self.tools = tools
-        self.enabled_toolboxes = enabled_toolboxes
-        self.reasoner = reasoner if reasoner is not None else {"name": reasoner_name}
-        self.executor = executor if executor is not None else {"name": executor_name}
-        self.personality = personality
-        self.backstory = backstory
-        self.sop = sop
-        self.jinja_env = jinja_env or default_jinja_env
-        self.name = name
-        self.tools_config = tools_config
-        self.profile = profile
-        self.customizations = customizations
-        self.agent_tool_model = agent_tool_model
-        self.agent_tool_timeout = agent_tool_timeout
+        try:
+            self.model = model
+            self.max_iterations = max_iterations
+            self.max_history_tokens = max_history_tokens
+            self.toolbox_directory = toolbox_directory
+            self.tools = tools
+            self.enabled_toolboxes = enabled_toolboxes
+            self.reasoner = reasoner if reasoner is not None else {"name": reasoner_name}
+            self.executor = executor if executor is not None else {"name": executor_name}
+            self.personality = personality
+            self.backstory = backstory
+            self.sop = sop
+            self.jinja_env = jinja_env or default_jinja_env
+            self.name = name
+            self.tools_config = tools_config
+            self.profile = profile
+            self.customizations = customizations
+            self.agent_tool_model = agent_tool_model
+            self.agent_tool_timeout = agent_tool_timeout
+        except Exception as e:
+            logger.error(f"Error setting defaults: {e}")
+            raise
 
     def __post_init__(self) -> None:
         """Apply profile defaults and customizations after initialization."""
-        profiles = {
-            "math_expert": {
-                "personality": {"traits": ["precise", "logical"]},
-                "tools_config": [{"name": "math_tools", "enabled": True}],
-                "sop": "Focus on accuracy and clarity in mathematical solutions."
-            },
-            "creative_writer": {
-                "personality": {"traits": ["creative", "expressive"]},
-                "tools_config": [{"name": "text_tools", "enabled": True}],
-                "sop": "Generate engaging and imaginative content."
+        try:
+            profiles = {
+                "math_expert": {
+                    "personality": {"traits": ["precise", "logical"]},
+                    "tools_config": [{"name": "math_tools", "enabled": True}],
+                    "sop": "Focus on accuracy and clarity in mathematical solutions."
+                },
+                "creative_writer": {
+                    "personality": {"traits": ["creative", "expressive"]},
+                    "tools_config": [{"name": "text_tools", "enabled": True}],
+                    "sop": "Generate engaging and imaginative content."
+                }
             }
-        }
-        if self.profile and self.profile in profiles:
-            base_config = profiles[self.profile]
-            for key, value in base_config.items():
-                if not getattr(self, key) or (key == "personality" and isinstance(getattr(self, key), str)):
-                    setattr(self, key, value)
-            if self.customizations:
-                for key, value in self.customizations.items():
-                    if hasattr(self, key):
-                        current = getattr(self, key)
-                        if isinstance(current, dict):
-                            current.update(value)
-                        elif current is None or (key in ["personality", "backstory"] and isinstance(current, str)):
-                            setattr(self, key, value)
-        # Load enabled_toolboxes from default config if not set
-        if self.enabled_toolboxes is None:
-            default_config_path = Path.home() / "quantalogic-config.yaml"
-            if default_config_path.exists():
-                with open(default_config_path) as f:
-                    default_config = yaml.safe_load(f) or {}
-                self.enabled_toolboxes = [tb["name"] for tb in default_config.get("installed_toolboxes", [])]
+            if self.profile and self.profile in profiles:
+                base_config = profiles[self.profile]
+                for key, value in base_config.items():
+                    if not getattr(self, key) or (key == "personality" and isinstance(getattr(self, key), str)):
+                        setattr(self, key, value)
+                if self.customizations:
+                    for key, value in self.customizations.items():
+                        if hasattr(self, key):
+                            current = getattr(self, key)
+                            if isinstance(current, dict):
+                                current.update(value)
+                            elif current is None or (key in ["personality", "backstory"] and isinstance(current, str)):
+                                setattr(self, key, value)
+            # Load enabled_toolboxes from default config if not set
+            if self.enabled_toolboxes is None:
+                default_config_path = Path.home() / "quantalogic-config.yaml"
+                if default_config_path.exists():
+                    with open(default_config_path) as f:
+                        default_config = yaml.safe_load(f) or {}
+                    self.enabled_toolboxes = [tb["name"] for tb in default_config.get("installed_toolboxes", [])]
+        except Exception as e:
+            logger.error(f"Error in post_init: {e}")
+            raise
 
 
 class Agent:
@@ -227,6 +243,17 @@ class Agent:
         self.last_solve_context_vars: Dict = {}
         self.default_reasoner_name: str = config.reasoner.get("name", config.reasoner_name)
         self.default_executor_name: str = config.executor.get("name", config.executor_name)
+        self.conversation_history_manager = ConversationHistoryManager(max_tokens=self.max_history_tokens)
+        self.react_agent = ReActAgent(
+            model=self.model,
+            tools=self.default_tools,
+            max_iterations=self.max_iterations,
+            max_history_tokens=self.max_history_tokens,
+            system_prompt=self._build_system_prompt(),
+            reasoner=Reasoner(self.model, self.default_tools),
+            executor=Executor(self.default_tools, self._notify_observers),
+            conversation_history_manager=self.conversation_history_manager
+        )
 
     def _get_tools(self) -> List[Tool]:
         """Load tools, applying tools_config if provided."""
@@ -325,8 +352,8 @@ class Agent:
         executor_name: Optional[str] = None
     ) -> str:
         """Single-step interaction with optional custom tools, history, and streaming."""
-        system_prompt: str = self._build_system_prompt()
         try:
+            system_prompt: str = self._build_system_prompt()
             if use_tools:
                 chat_tools: List[Tool] = process_tools(tools) if tools is not None else self.default_tools
                 reasoner_name = reasoner_name or self.default_reasoner_name
@@ -342,27 +369,24 @@ class Agent:
                     max_history_tokens=self.max_history_tokens,
                     system_prompt=system_prompt,
                     reasoner=reasoner_cls(self.model, chat_tools, **reasoner_config),
-                    executor=executor_cls(chat_tools, self._notify_observers, **executor_config)
+                    executor=executor_cls(chat_tools, self._notify_observers, **executor_config),
+                    conversation_history_manager=self.conversation_history_manager
                 )
                 chat_agent.executor.register_tool(RetrieveStepTool(chat_agent.history_manager.store))
                 for observer, event_types in self._observers:
                     chat_agent.add_observer(observer, event_types)
                 history_result: List[Dict] = await chat_agent.solve(message, streaming=streaming)
-                return self._extract_response(history_result)
+                response = self._extract_response(history_result)
+                # Update conversation history
+                self.conversation_history_manager.add_message("user", message)
+                self.conversation_history_manager.add_message("assistant", response)
+                return response
             else:
-                messages = [{"role": "system", "content": system_prompt}]
-                if history:
-                    messages.extend(history)  # Include previous conversation history
-                messages.append({"role": "user", "content": message})  # Add current user message
-                response: str = await litellm_completion(
-                    model=self.model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    stream=streaming,
-                    notify_event=self._notify_observers if streaming else None
-                )
-                return response.strip()
+                response: str = await self.react_agent.chat(message, streaming=streaming)
+                # Update conversation history
+                self.conversation_history_manager.add_message("user", message)
+                self.conversation_history_manager.add_message("assistant", response)
+                return response
         except Exception as e:
             logger.error(f"Chat failed: {e}")
             return f"Error: Unable to process chat request due to {str(e)}"
@@ -380,6 +404,7 @@ class Agent:
         task: str,
         history: Optional[List[Dict[str, str]]] = None,
         success_criteria: Optional[str] = None,
+        task_goal: Optional[str] = None,
         max_iterations: Optional[int] = None,
         tools: Optional[List[Union[Tool, Callable]]] = None,
         timeout: int = 300,
@@ -388,8 +413,8 @@ class Agent:
         executor_name: Optional[str] = None
     ) -> List[Dict]:
         """Multi-step task solving with optional custom tools, history, max_iterations, and streaming."""
-        system_prompt: str = self._build_system_prompt()
         try:
+            system_prompt: str = self._build_system_prompt()
             solve_tools: List[Tool] = process_tools(tools) if tools is not None else self.default_tools
             reasoner_name = reasoner_name or self.default_reasoner_name
             executor_name = executor_name or self.default_executor_name
@@ -412,7 +437,8 @@ class Agent:
                 max_history_tokens=self.max_history_tokens,
                 system_prompt=system_prompt,
                 reasoner=reasoner_cls(self.model, solve_tools, **reasoner_config),
-                executor=executor_cls(solve_tools, self._notify_observers, **executor_config)
+                executor=executor_cls(solve_tools, self._notify_observers, **executor_config),
+                conversation_history_manager=self.conversation_history_manager
             )
             solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.history_manager.store))
             for observer, event_types in self._observers:
@@ -421,28 +447,37 @@ class Agent:
             history_result: List[Dict] = await solve_agent.solve(
                 task,
                 success_criteria,
+                task_goal=task_goal,
                 system_prompt=system_prompt,
                 max_iterations=max_iterations,
                 streaming=streaming
             )
             self.last_solve_context_vars = solve_agent.context_vars.copy()
+            # Update conversation history
+            self.conversation_history_manager.add_message("user", f"Task: {task}")
+            final_answer = self._extract_response(history_result)
+            self.conversation_history_manager.add_message("assistant", final_answer)
             return history_result
         except Exception as e:
             logger.error(f"Solve failed: {e}")
             return [{"error": f"Failed to solve task: {str(e)}"}]
 
-    def sync_solve(self, task: str, success_criteria: Optional[str] = None, timeout: int = 300) -> List[Dict]:
+    def sync_solve(self, task: str, success_criteria: Optional[str] = None, task_goal: Optional[str] = None, timeout: int = 300) -> List[Dict]:
         """Synchronous wrapper for solve."""
         try:
-            return asyncio.run(self.solve(task, success_criteria, timeout=timeout))
+            return asyncio.run(self.solve(task, success_criteria=success_criteria, task_goal=task_goal, timeout=timeout))
         except Exception as e:
             logger.error(f"Synchronous solve failed: {e}")
             return [{"error": f"Failed to solve task synchronously: {str(e)}"}]
 
     def add_observer(self, observer: Callable, event_types: List[str]) -> 'Agent':
         """Add an observer to be applied to agents created in chat and solve."""
-        self._observers.append((observer, event_types))
-        return self
+        try:
+            self._observers.append((observer, event_types))
+            return self
+        except Exception as e:
+            logger.error(f"Failed to add observer: {e}")
+            raise
 
     def register_tool(self, tool: Tool) -> None:
         """Register a new tool dynamically at runtime."""
@@ -453,6 +488,7 @@ class Agent:
             self.plugin_manager.tools.register(tool)
         except Exception as e:
             logger.error(f"Failed to register tool {tool.name}: {e}")
+            raise
 
     def register_reasoner(self, reasoner: BaseReasoner, name: str) -> None:
         """Register a new reasoner dynamically at runtime."""
@@ -460,6 +496,7 @@ class Agent:
             self.plugin_manager.reasoners[name] = reasoner.__class__
         except Exception as e:
             logger.error(f"Failed to register reasoner {name}: {e}")
+            raise
 
     def register_executor(self, executor: BaseExecutor, name: str) -> None:
         """Register a new executor dynamically at runtime."""
@@ -467,31 +504,44 @@ class Agent:
             self.plugin_manager.executors[name] = executor.__class__
         except Exception as e:
             logger.error(f"Failed to register executor {name}: {e}")
+            raise
 
     def list_tools(self) -> List[str]:
         """Return a list of available tool names."""
-        return [tool.name for tool in self.default_tools]
+        try:
+            return [tool.name for tool in self.default_tools]
+        except Exception as e:
+            logger.error(f"Error listing tools: {e}")
+            return []
 
     def get_context_vars(self) -> Dict:
         """Return the context variables from the last solve call."""
-        return self.last_solve_context_vars
+        try:
+            return self.last_solve_context_vars
+        except Exception as e:
+            logger.error(f"Error getting context vars: {e}")
+            return {}
 
     def _extract_response(self, history: List[Dict]) -> str:
         """Extract a clean response from the history."""
-        if not history:
-            return "No response generated."
-        last_result: str = history[-1].get("result", "")
         try:
-            root = etree.fromstring(last_result)
-            if root.findtext("Status") == "Success":
-                value: str = root.findtext("Value") or ""
-                final_answer: Optional[str] = root.findtext("FinalAnswer")
-                return final_answer.strip() if final_answer else value.strip()
-            else:
-                return f"Error: {root.findtext('Value') or 'Unknown error'}"
-        except etree.XMLSyntaxError as e:
-            logger.error(f"Failed to parse response XML: {e}")
-            return last_result
+            if not history:
+                return "No response generated."
+            last_result: str = history[-1].get("result", "")
+            try:
+                root = etree.fromstring(last_result)
+                if root.findtext("Status") == "Success":
+                    value: str = root.findtext("Value") or ""
+                    final_answer: Optional[str] = root.findtext("FinalAnswer")
+                    return final_answer.strip() if final_answer else value.strip()
+                else:
+                    return f"Error: {root.findtext('Value') or 'Unknown error'}"
+            except etree.XMLSyntaxError as e:
+                logger.error(f"Failed to parse response XML: {e}")
+                return last_result
+        except Exception as e:
+            logger.error(f"Error extracting response: {e}")
+            return "Error extracting response."
 
     async def _notify_observers(self, event: object) -> None:
         """Notify all subscribed observers of an event."""
