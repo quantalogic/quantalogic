@@ -26,6 +26,8 @@ from .reasoner import BaseReasoner, Reasoner
 from .tools_manager import ToolRegistry
 from .xml_utils import XMLResultHandler
 
+MAX_HISTORY_TOKENS = 64*1024
+MAX_ITERATIONS = 5
 
 class ReActAgent:
     """Implements the ReAct framework for reasoning and acting with enhanced memory management."""
@@ -34,8 +36,8 @@ class ReActAgent:
         self,
         model: str,
         tools: List[Tool],
-        max_iterations: int = 5,
-        max_history_tokens: int = 2000,
+        max_iterations: int = MAX_ITERATIONS,
+        max_history_tokens: int = MAX_HISTORY_TOKENS,
         system_prompt: str = "",  # New parameter for persistent context
         task_description: str = "",  # New parameter for persistent context
         reasoner: Optional[BaseReasoner] = None,
@@ -179,7 +181,7 @@ class ReActAgent:
                         "role": "user",
                         "content": f"Does '{final_answer}' solve '{task}' given history:\n{self.history_manager.format_history(self.max_iterations)}?"
                     }],
-                    max_tokens=100,
+                    max_tokens=300,
                     temperature=0.1,
                     stream=False
                 )

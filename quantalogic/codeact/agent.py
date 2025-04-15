@@ -340,14 +340,15 @@ class Agent:
                     tools=chat_tools,
                     max_iterations=1,
                     max_history_tokens=self.max_history_tokens,
+                    system_prompt=system_prompt,
                     reasoner=reasoner_cls(self.model, chat_tools, **reasoner_config),
                     executor=executor_cls(chat_tools, self._notify_observers, **executor_config)
                 )
                 chat_agent.executor.register_tool(RetrieveStepTool(chat_agent.history_manager.store))
                 for observer, event_types in self._observers:
                     chat_agent.add_observer(observer, event_types)
-                history: List[Dict] = await chat_agent.solve(message, system_prompt=system_prompt, streaming=streaming)
-                return self._extract_response(history)
+                history_result: List[Dict] = await chat_agent.solve(message, streaming=streaming)
+                return self._extract_response(history_result)
             else:
                 messages = [{"role": "system", "content": system_prompt}]
                 if history:
@@ -377,6 +378,7 @@ class Agent:
     async def solve(
         self,
         task: str,
+        history: Optional[List[Dict[str, str]]] = None,
         success_criteria: Optional[str] = None,
         max_iterations: Optional[int] = None,
         tools: Optional[List[Union[Tool, Callable]]] = None,
@@ -385,7 +387,7 @@ class Agent:
         reasoner_name: Optional[str] = None,
         executor_name: Optional[str] = None
     ) -> List[Dict]:
-        """Multi-step task solving with optional custom tools, max_iterations, and streaming."""
+        """Multi-step task solving with optional custom tools, history, max_iterations, and streaming."""
         system_prompt: str = self._build_system_prompt()
         try:
             solve_tools: List[Tool] = process_tools(tools) if tools is not None else self.default_tools
@@ -395,11 +397,20 @@ class Agent:
             executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
             reasoner_config = self.config.reasoner.get("config", {})
             executor_config = self.config.executor.get("config", {})
+            # Format history as a string for the system prompt
+            history_str = ""
+            if history:
+                history_str = "\n".join(
+                    f"{msg['role'].capitalize()}: {msg['content']}" 
+                    for msg in history
+                )
+                system_prompt += f"\n\nPrevious conversation:\n{history_str}"
             solve_agent = ReActAgent(
                 model=self.model,
                 tools=solve_tools,
                 max_iterations=max_iterations if max_iterations is not None else self.max_iterations,
                 max_history_tokens=self.max_history_tokens,
+                system_prompt=system_prompt,
                 reasoner=reasoner_cls(self.model, solve_tools, **reasoner_config),
                 executor=executor_cls(solve_tools, self._notify_observers, **executor_config)
             )
@@ -407,7 +418,7 @@ class Agent:
             for observer, event_types in self._observers:
                 solve_agent.add_observer(observer, event_types)
             
-            history: List[Dict] = await solve_agent.solve(
+            history_result: List[Dict] = await solve_agent.solve(
                 task,
                 success_criteria,
                 system_prompt=system_prompt,
@@ -415,7 +426,7 @@ class Agent:
                 streaming=streaming
             )
             self.last_solve_context_vars = solve_agent.context_vars.copy()
-            return history
+            return history_result
         except Exception as e:
             logger.error(f"Solve failed: {e}")
             return [{"error": f"Failed to solve task: {str(e)}"}]
