@@ -20,7 +20,8 @@ from .plugin_manager import PluginManager
 from .react_agent import ReActAgent
 from .reasoner import BaseReasoner, Reasoner
 from .templates import jinja_env as default_jinja_env
-from .tools_manager import RetrieveStepTool, get_default_tools
+from .tools import RetrieveStepTool
+from .tools_manager import get_default_tools
 from .utils import process_tools
 
 
