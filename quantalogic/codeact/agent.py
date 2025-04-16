@@ -11,11 +11,11 @@ from lxml import etree
 from quantalogic.tools import Tool
 
 from .agent_config import AgentConfig
+from .codeact_agent import CodeActAgent
 from .constants import MAX_TOKENS
 from .conversation_history_manager import ConversationHistoryManager
 from .executor import BaseExecutor, Executor
 from .plugin_manager import PluginManager
-from .react_agent import ReActAgent
 from .reasoner import BaseReasoner, Reasoner
 from .tools import RetrieveStepTool
 from .tools_manager import get_default_tools
@@ -65,7 +65,7 @@ class Agent:
         self.default_reasoner_name: str = config.reasoner.get("name", config.reasoner_name)
         self.default_executor_name: str = config.executor.get("name", config.executor_name)
         self.conversation_history_manager = ConversationHistoryManager(max_tokens=self.max_history_tokens)
-        self.react_agent = ReActAgent(
+        self.react_agent = CodeActAgent(
             model=self.model,
             tools=self.default_tools,
             max_iterations=self.max_iterations,
@@ -183,7 +183,7 @@ class Agent:
                 executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
                 reasoner_config = self.config.reasoner.get("config", {})
                 executor_config = self.config.executor.get("config", {})
-                chat_agent = ReActAgent(
+                chat_agent = CodeActAgent(
                     model=self.model,
                     tools=chat_tools,
                     max_iterations=1,
@@ -251,7 +251,7 @@ class Agent:
                     for msg in history
                 )
                 system_prompt += f"\n\nPrevious conversation:\n{history_str}"
-            solve_agent = ReActAgent(
+            solve_agent = CodeActAgent(
                 model=self.model,
                 tools=solve_tools,
                 max_iterations=max_iterations if max_iterations is not None else self.max_iterations,

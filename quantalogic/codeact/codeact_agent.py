@@ -31,7 +31,7 @@ MAX_HISTORY_TOKENS = 64*1024
 MAX_ITERATIONS = 5
 
 
-class ReActAgent:
+class CodeActAgent:
     """Implements the ReAct framework for reasoning and acting with enhanced memory management."""
     
     def __init__(
@@ -50,7 +50,7 @@ class ReActAgent:
         error_handler: Optional[Callable[[Exception, int], bool]] = None
     ) -> None:
         """
-        Initialize the ReActAgent with tools, reasoning, execution, and memory components.
+        Initialize the CdeActAgent with tools, reasoning, execution, and memory components.
 
         Args:
             model (str): Language model identifier.
@@ -85,7 +85,7 @@ class ReActAgent:
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.error_handler = error_handler or (lambda e, step: False)  # Default: no retry
 
-    def add_observer(self, observer: Callable, event_types: List[str]) -> 'ReActAgent':
+    def add_observer(self, observer: Callable, event_types: List[str]) -> 'CodeActAgent':
         """Add an observer for specific event types."""
         try:
             self._observers.append((observer, event_types))
