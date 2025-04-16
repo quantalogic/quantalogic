@@ -97,6 +97,20 @@ def parse_text_content(content: Any) -> Any:
     logger.debug(f"Content is already a native type: {content}")
     return content
 
+def flatten_singleton_lists(data):
+    """
+    Recursively flatten lists that contain only a single list element.
+    
+    Args:
+        data: The data to be flattened, which could be a list or any other type.
+    
+    Returns:
+        The flattened data, with singleton lists unwrapped.
+    """
+    while isinstance(data, list) and len(data) == 1 and isinstance(data[0], list):
+        data = data[0]
+    return data
+
 def sanitize_name(name: str) -> str:
     """Sanitize a string to be a valid Python identifier."""
     sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
@@ -454,6 +468,7 @@ async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict[str, A
 
     Note:
         Enhanced logging to capture tool execution details and errors.
+        Added flattening of singleton lists to improve result parsing.
     """
     logger.debug(f"Calling tool '{tool_name}' on server '{server_name}' with args: {arguments}")
     server_params = servers.get(server_name)
@@ -467,6 +482,8 @@ async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict[str, A
             if result.isError:
                 raise RuntimeError(str(result.content))
             processed_content = parse_text_content(result.content)
+            if isinstance(processed_content, list):
+                processed_content = flatten_singleton_lists(processed_content)
             logger.debug(f"Processed content: {processed_content}")
             return processed_content
     except Exception as e:
