@@ -353,6 +353,8 @@ class ReActAgent:
             if system_prompt is not None:
                 self.history_manager.system_prompt = system_prompt
             self.history_manager.task_description = task
+            # Add conversation history to context_vars
+            self.context_vars["conversation_history"] = self.conversation_history_manager.get_messages()
             await self._notify_observers(TaskStartedEvent(
                 event_type="TaskStarted",
                 task_description=task,

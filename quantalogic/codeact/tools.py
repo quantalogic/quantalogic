@@ -21,11 +21,17 @@ class AgentTool(Tool):
         try:
             super().__init__(
                 name="agent_tool",
-                description="Generates text using a language model. This is a stateless agent - all necessary context must be explicitly provided in either the system prompt or user prompt.",
+                description="Generates text using a language model with optional conversation history for context.",
                 arguments=[
                     ToolArgument(name="system_prompt", arg_type="string", description="System prompt to guide the model", required=True),
                     ToolArgument(name="prompt", arg_type="string", description="User prompt to generate a response", required=True),
-                    ToolArgument(name="temperature", arg_type="float", description="Temperature for generation (0 to 1)", required=True)
+                    ToolArgument(name="temperature", arg_type="float", description="Temperature for generation (0 to 1)", required=True),
+                    ToolArgument(
+                        name="history",
+                        arg_type="list",
+                        description="Optional list of previous messages, each with 'role' and 'content' (e.g., [{'role': 'user', 'content': 'Hi'}])",
+                        required=False
+                    )
                 ],
                 return_type="string"
             )
@@ -59,20 +65,28 @@ class AgentTool(Tool):
             system_prompt: str = kwargs["system_prompt"]
             prompt: str = kwargs["prompt"]
             temperature: float = float(kwargs["temperature"])
+            history: Optional[List[Dict[str, str]]] = kwargs.get("history", None)
 
             if not 0 <= temperature <= 1:
                 raise ValueError("Temperature must be between 0 and 1")
 
-            logger.info(f"Generating with {self.model}, temp={temperature}, timeout={self.timeout}s")
+            messages = [{"role": "system", "content": system_prompt}]
+            if history:
+                if not isinstance(history, list):
+                    raise ValueError("history must be a list")
+                for msg in history:
+                    if not isinstance(msg, dict) or "role" not in msg or "content" not in msg:
+                        raise ValueError("Each message in history must be a dict with 'role' and 'content'")
+                messages.extend(history)
+            messages.append({"role": "user", "content": prompt})
+
+            logger.info(f"Generating with {self.model}, temp={temperature}, timeout={self.timeout}s, history={len(history or [])} messages")
             async with AsyncExitStack() as stack:
                 await stack.enter_async_context(asyncio.timeout(self.timeout))
                 try:
                     response = await litellm.acompletion(
                         model=self.model,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": prompt}
-                        ],
+                        messages=messages,
                         temperature=temperature,
                         max_tokens=1000
                     )
