@@ -1,22 +1,28 @@
 from typing import List
 
+from rich.text import Text
 
-async def help_command(shell, args: List[str]) -> str:
+
+async def help_command(shell, args: List[str]) -> Text:
     """Display help text, including mode information."""
     if args:
         command = args[0]
         if command in shell.command_registry.commands:
-            return shell.command_registry.commands[command]["help"]
-        return f"Command '/{command}' not found."
+            return Text(shell.command_registry.commands[command]["help"])
+        return Text(f"Command '/{command}' not found.", style="red")
     
-    help_text = "Available commands:\n" + "\n".join(
-        f"- /{cmd}: {info['help']}" for cmd, info in shell.command_registry.commands.items()
-    )
+    text = Text()
+    text.append("Available commands:\n", style="bold")
+    for cmd, info in shell.command_registry.commands.items():
+        text.append(f"- /{cmd}: ", style="cyan")
+        text.append(info["help"] + "\n")
     
+    text.append("\nCurrent mode: ", style="bold")
+    text.append(shell.state.mode, style="green")
     mode_info = (
-        f"\n\nCurrent mode: {shell.state.mode}\n"
-        f"- In 'codeact' mode, plain messages are treated as tasks to solve.\n"
-        f"- In 'react' mode, plain messages are treated as chat messages."
+        "\n- In 'codeact' mode, plain messages are treated as tasks to solve.\n"
+        "- In 'react' mode, plain messages are treated as chat messages."
     )
+    text.append(mode_info)
     
-    return help_text + mode_info
+    return text

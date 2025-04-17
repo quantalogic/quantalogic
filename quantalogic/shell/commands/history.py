@@ -1,15 +1,18 @@
 from typing import List
 
+from rich.text import Text
 
-async def history_command(shell, args: List[str]) -> str:
+
+async def history_command(shell, args: List[str]) -> Text:
     """Handle the /history command."""
     if not shell.current_message_history:
-        return "No history yet."
+        return Text("No history yet.")
     
-    history = []
+    text = Text()
     for msg in shell.current_message_history:
         role = "User" if msg["role"] == "user" else "Assistant"
         color = "blue" if role == "User" else "green"
-        history.append(f"[{color}]{role}: {msg['content']}[/{color}]")
+        text.append(f"{role}: ", style=f"bold {color}")
+        text.append(msg["content"] + "\n")
     
-    return "\n".join(history)
+    return text

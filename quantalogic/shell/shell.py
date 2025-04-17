@@ -12,7 +12,6 @@ from prompt_toolkit.keys import Keys
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-
 from quantalogic.codeact.agent import Agent, AgentConfig
 from quantalogic.codeact.events import StreamTokenEvent
 
@@ -139,6 +138,10 @@ class Shell:
         if isinstance(event, StreamTokenEvent) and self.state.streaming:
             print(event.token, end="", flush=True)
 
+    def bottom_toolbar(self) -> str:
+        """Render a bottom toolbar with mode and agent information."""
+        return f"Mode: {self.state.mode} | Agent: {self.current_agent.name or 'Default'}"
+
     async def run(self) -> None:
         """Run the interactive shell loop."""
         history_file = Path.home() / ".quantalogic_shell_history"
@@ -162,11 +165,12 @@ class Shell:
             for cmd, info in self.command_registry.commands.items()
         })
         session = PromptSession(
-            message=f"[{self.current_agent.name or 'Agent'}]> ",
+            message=lambda: f"[{self.current_agent.name or 'Agent'} | {self.state.mode}]> ",
             completer=completer,
             multiline=False,  # Single-line input, Ctrl+J for newlines
             history=FileHistory(str(history_file)),
-            key_bindings=kb
+            key_bindings=kb,
+            bottom_toolbar=self.bottom_toolbar
         )
 
         # Welcome message with rich formatting
@@ -199,11 +203,13 @@ class Shell:
                         result = await self.command_registry.commands[command_name]["func"](args)
                         if result:
                             if command_name == "chat":
-                                print(Markdown(result))
+                                console.print(Panel(Markdown(result), title="Chat Response", border_style="blue"))
                             elif command_name == "solve":
                                 console.print(Panel(Markdown(result), title="Final Answer", border_style="green"))
                             else:
-                                console.print(Panel(result, title=f"{command_name.capitalize()} Command", border_style="blue"))
+                                # Customize titles for specific commands
+                                title = "Conversation History" if command_name == "history" else f"{command_name.capitalize()} Command"
+                                console.print(Panel(result, title=title, border_style="blue"))
                     else:
                         print(f"[red]Unknown command: /{command_name}. Try /help.[/red]")
                 else:
@@ -215,7 +221,7 @@ class Shell:
                     else:  # react mode
                         result = await chat_command(self, [user_input])
                         if result:
-                            print(Markdown(result))
+                            console.print(Panel(Markdown(result), title="Chat Response", border_style="blue"))
 
             except KeyboardInterrupt:
                 print("\nUse '/exit' to quit the shell.")
