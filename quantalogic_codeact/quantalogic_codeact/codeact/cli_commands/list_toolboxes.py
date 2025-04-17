@@ -1,6 +1,7 @@
 import importlib.metadata
-import typer
 from pathlib import Path
+
+import typer
 import yaml
 from rich.console import Console
 from rich.panel import Panel
