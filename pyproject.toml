@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic"
-version = "0.91"
+version = "0.92"
 description = "QuantaLogic ReAct Agents"
 authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
@@ -55,6 +55,7 @@ psutil = "^7.0.0"
 openai = "^1.68.0"
 aiofiles = "^24.1.0"
 quantalogic-pythonbox = "^0.9.11"
+quantalogic-toolbox = "^0.8.0"
 
 
 
