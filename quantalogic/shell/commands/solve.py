@@ -1,9 +1,6 @@
-# quantalogic/shell/commands/solve.py
-"""Solve command implementation."""
 from typing import List
 
 from rich import print as rprint
-from rich.markdown import Markdown
 from rich.panel import Panel
 
 
@@ -14,11 +11,11 @@ async def solve_command(shell, args: List[str]) -> str:
     
     task = " ".join(args)
     try:
-        # Pass the current message_history to the agent for context
-        history = await shell.agent.solve(
+        # Pass the current agent's message_history to the agent for context
+        history = await shell.current_agent.solve(
             task,
-            history=shell.message_history,
-            streaming=shell.streaming
+            history=shell.current_message_history,
+            streaming=shell.state.streaming
         )
         if history:
             # Display intermediate steps with color and formatting
@@ -33,12 +30,12 @@ async def solve_command(shell, args: List[str]) -> str:
                     f"[yellow]Result:[/yellow] {result}",
                     border_style="cyan"
                 ))
-            final_answer = shell.agent._extract_response(history)
+            final_answer = shell.current_agent._extract_response(history)
         else:
             final_answer = "No steps were executed."
         # Append task and response to message_history
-        shell.message_history.append({"role": "user", "content": task})
-        shell.message_history.append({"role": "assistant", "content": final_answer})
+        shell.current_message_history.append({"role": "user", "content": task})
+        shell.current_message_history.append({"role": "assistant", "content": final_answer})
         return final_answer
     except Exception as e:
         return f"Error solving task: {e}"

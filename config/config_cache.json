@@ -1,4 +1,465 @@
 {
-  "config_hash": "d41d8cd98f00b204e9800998ecf8427e",
-  "servers": {}
+  "config_hash": "1693adf9edc8861485f97330cd222c04",
+  "servers": {
+    "sqlite": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v",
+        "mcp-test:/mcp",
+        "mcp/sqlite",
+        "--db-path",
+        "/mcp/test.db"
+      ],
+      "env": null,
+      "cwd": null,
+      "tools": {
+        "read_query": {
+          "name": "read_query",
+          "description": "Execute a SELECT query on the SQLite database",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "string",
+              "description": "SELECT SQL query to execute",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "write_query": {
+          "name": "write_query",
+          "description": "Execute an INSERT, UPDATE, or DELETE query on the SQLite database",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "string",
+              "description": "SQL query to execute",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "create_table": {
+          "name": "create_table",
+          "description": "Create a new table in the SQLite database",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "string",
+              "description": "CREATE TABLE SQL statement",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "list_tables": {
+          "name": "list_tables",
+          "description": "List all tables in the SQLite database",
+          "arguments": [],
+          "return_type": "Any"
+        },
+        "describe_table": {
+          "name": "describe_table",
+          "description": "Get the schema information for a specific table",
+          "arguments": [
+            {
+              "name": "table_name",
+              "type": "string",
+              "description": "Name of the table to describe",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "append_insight": {
+          "name": "append_insight",
+          "description": "Add a business insight to the memo",
+          "arguments": [
+            {
+              "name": "insight",
+              "type": "string",
+              "description": "Business insight discovered from data analysis",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        }
+      }
+    },
+    "mcp_hn": {
+      "command": "uvx",
+      "args": [
+        "mcp-hn"
+      ],
+      "env": null,
+      "cwd": null,
+      "tools": {
+        "get_stories": {
+          "name": "get_stories",
+          "description": "Get stories from Hacker News. The options are `top`, `new`, `ask_hn`, `show_hn` for types of stories. This doesn't include the comments. Use `get_story_info` to get the comments.",
+          "arguments": [
+            {
+              "name": "story_type",
+              "type": "string",
+              "description": "Type of stories to get, one of: `top`, `new`, `ask_hn`, `show_hn`",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "num_stories",
+              "type": "integer",
+              "description": "Number of stories to get",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "get_user_info": {
+          "name": "get_user_info",
+          "description": "Get user info from Hacker News, including the stories they've submitted",
+          "arguments": [
+            {
+              "name": "user_name",
+              "type": "string",
+              "description": "Username of the user",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "num_stories",
+              "type": "integer",
+              "description": "Number of stories to get, defaults to 10",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "search_stories": {
+          "name": "search_stories",
+          "description": "Search stories from Hacker News. It is generally recommended to use simpler queries to get a broader set of results (less than 5 words). Very targetted queries may not return any results.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "string",
+              "description": "Search query",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "search_by_date",
+              "type": "boolean",
+              "description": "Search by date, defaults to False. If this is False, then we search by relevance, then points, then number of comments.",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "num_results",
+              "type": "integer",
+              "description": "Number of results to get, defaults to 10",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "get_story_info": {
+          "name": "get_story_info",
+          "description": "Get detailed story info from Hacker News, including the comments",
+          "arguments": [
+            {
+              "name": "story_id",
+              "type": "integer",
+              "description": "Story ID",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        }
+      }
+    },
+    "fetcher": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "fetcher-mcp"
+      ],
+      "env": null,
+      "cwd": null,
+      "tools": {
+        "fetch_url": {
+          "name": "fetch_url",
+          "description": "Retrieve web page content from a specified URL",
+          "arguments": [
+            {
+              "name": "url",
+              "type": "string",
+              "description": "URL to fetch",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "timeout",
+              "type": "number",
+              "description": "Page loading timeout in milliseconds, default is 30000 (30 seconds)",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "waitUntil",
+              "type": "string",
+              "description": "Specifies when navigation is considered complete, options: 'load', 'domcontentloaded', 'networkidle', 'commit', default is 'load'",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "extractContent",
+              "type": "boolean",
+              "description": "Whether to intelligently extract the main content, default is true",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "maxLength",
+              "type": "number",
+              "description": "Maximum length of returned content (in characters), default is no limit",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "returnHtml",
+              "type": "boolean",
+              "description": "Whether to return HTML content instead of Markdown, default is false",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "waitForNavigation",
+              "type": "boolean",
+              "description": "Whether to wait for additional navigation after initial page load (useful for sites with anti-bot verification), default is false",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "navigationTimeout",
+              "type": "number",
+              "description": "Maximum time to wait for additional navigation in milliseconds, default is 10000 (10 seconds)",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "disableMedia",
+              "type": "boolean",
+              "description": "Whether to disable media resources (images, stylesheets, fonts, media), default is true",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "debug",
+              "type": "boolean",
+              "description": "Whether to enable debug mode (showing browser window), overrides the --debug command line flag if specified",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "fetch_urls": {
+          "name": "fetch_urls",
+          "description": "Retrieve web page content from multiple specified URLs",
+          "arguments": [
+            {
+              "name": "urls",
+              "type": "array",
+              "description": "Array of URLs to fetch",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "timeout",
+              "type": "number",
+              "description": "Page loading timeout in milliseconds, default is 30000 (30 seconds)",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "waitUntil",
+              "type": "string",
+              "description": "Specifies when navigation is considered complete, options: 'load', 'domcontentloaded', 'networkidle', 'commit', default is 'load'",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "extractContent",
+              "type": "boolean",
+              "description": "Whether to intelligently extract the main content, default is true",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "maxLength",
+              "type": "number",
+              "description": "Maximum length of returned content (in characters), default is no limit",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "returnHtml",
+              "type": "boolean",
+              "description": "Whether to return HTML content instead of Markdown, default is false",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "waitForNavigation",
+              "type": "boolean",
+              "description": "Whether to wait for additional navigation after initial page load (useful for sites with anti-bot verification), default is false",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "navigationTimeout",
+              "type": "number",
+              "description": "Maximum time to wait for additional navigation in milliseconds, default is 10000 (10 seconds)",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "disableMedia",
+              "type": "boolean",
+              "description": "Whether to disable media resources (images, stylesheets, fonts, media), default is true",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "debug",
+              "type": "boolean",
+              "description": "Whether to enable debug mode (showing browser window), overrides the --debug command line flag if specified",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        }
+      }
+    },
+    "job_search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "job-searchoor"
+      ],
+      "env": null,
+      "cwd": null,
+      "tools": {
+        "get_jobs": {
+          "name": "get_jobs",
+          "description": "Get the available jobs",
+          "arguments": [
+            {
+              "name": "sinceWhen",
+              "type": "string",
+              "description": "Since when to get available jobs. e.g., '1d' or '1w' (only days and weeks are supported)",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "excludeKeywords",
+              "type": "array",
+              "description": "Keywords to exclude from the jobs (if any of the results contains one of these keywords, it will be filtered out)",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "isRemote",
+              "type": "boolean",
+              "description": "Whether to filter jobs by remote work",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "keywords",
+              "type": "array",
+              "description": "Keywords to filter jobs by",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        }
+      }
+    },
+    "edgeone": {
+      "command": "npx",
+      "args": [
+        "edgeone-pages-mcp"
+      ],
+      "env": null,
+      "cwd": null,
+      "tools": {
+        "deploy-html": {
+          "name": "deploy-html",
+          "description": "Deploy HTML content to EdgeOne Pages, return the public URL",
+          "arguments": [
+            {
+              "name": "value",
+              "type": "string",
+              "description": "HTML or text content to deploy. Provide complete HTML or text content you want to publish, and the system will return a public URL where your content can be accessed.",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        }
+      }
+    }
+  }
 }

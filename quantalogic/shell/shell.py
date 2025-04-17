@@ -29,17 +29,49 @@ from .commands import (
 )
 
 
+class ShellState:
+    """Encapsulates shell-wide state."""
+    def __init__(self, streaming: bool = True, mode: str = "codeact"):
+        self.streaming: bool = streaming
+        self.mode: str = mode
+
+
+class AgentState:
+    """Encapsulates agent-specific state."""
+    def __init__(self, agent: Agent):
+        self.agent = agent
+        self.message_history: List[Dict[str, str]] = []
+
+
 class Shell:
     """Interactive CLI shell for dialog with Quantalogic agents."""
     def __init__(self, agent_config: Optional[AgentConfig] = None):
-        self.agent = Agent(config=agent_config or AgentConfig())
-        self.agent.add_observer(self._stream_token_observer, ["StreamToken"])
-        self.message_history: List[Dict[str, str]] = []
-        self.streaming: bool = True
-        self.mode: str = "codeact"
+        # Initialize shell state
+        self.state = ShellState(streaming=True, mode="codeact")
+        
+        # Initialize agents dictionary with a default agent
+        default_config = agent_config or AgentConfig()
+        default_agent = Agent(config=default_config)
+        default_agent.add_observer(self._stream_token_observer, ["StreamToken"])
+        self.agents: Dict[str, AgentState] = {
+            "default": AgentState(default_agent)
+        }
+        self.current_agent_name: str = "default"
+        
+        # Initialize command registry
         self.command_registry = CommandRegistry()
         self._register_builtin_commands()
         self._load_plugin_commands()
+
+    @property
+    def current_agent(self) -> Agent:
+        """Get the current agent."""
+        return self.agents[self.current_agent_name].agent
+
+    @property
+    def current_message_history(self) -> List[Dict[str, str]]:
+        """Get the current agent's message history."""
+        return self.agents[self.current_agent_name].message_history
 
     def _register_builtin_commands(self) -> None:
         """Register all built-in commands with their arguments for autocompletion."""
@@ -109,7 +141,7 @@ class Shell:
 
     async def _stream_token_observer(self, event: object) -> None:
         """Observer for streaming tokens."""
-        if isinstance(event, StreamTokenEvent) and self.streaming:
+        if isinstance(event, StreamTokenEvent) and self.state.streaming:
             rprint(event.token, end="", flush=True)
 
     async def run(self) -> None:
@@ -135,7 +167,7 @@ class Shell:
             for cmd, info in self.command_registry.commands.items()
         })
         session = PromptSession(
-            message=f"[{self.agent.name or 'Agent'}]> ",
+            message=f"[{self.current_agent.name or 'Agent'}]> ",
             completer=completer,
             multiline=False,  # Single-line input, Ctrl+J for newlines
             history=FileHistory(str(history_file)),
@@ -145,8 +177,9 @@ class Shell:
         # Welcome message with rich formatting
         welcome_message = (
             f"Welcome to Quantalogic Shell.\n\n"
-            f"Mode: {self.mode} - plain messages are "
-            f"{'tasks to solve' if self.mode == 'codeact' else 'chat messages'}.\n\n"
+            f"Interacting with agent: {self.current_agent.name or 'Agent'}\n"
+            f"Mode: {self.state.mode} - plain messages are "
+            f"{'tasks to solve' if self.state.mode == 'codeact' else 'chat messages'}.\n\n"
             f"Type /help for commands. Press Enter to send, Ctrl+J for new lines."
         )
         rprint(Panel(welcome_message, title="Quantalogic Shell", border_style="blue"))
@@ -179,7 +212,7 @@ class Shell:
                         rprint(f"[red]Unknown command: /{command_name}. Try /help.[/red]")
                 else:
                     # Handle non-command input based on mode
-                    if self.mode == "codeact":
+                    if self.state.mode == "codeact":
                         result = await solve_command(self, [user_input])
                         if result:
                             rprint(Panel(Markdown(result), title="Final Answer", border_style="green"))

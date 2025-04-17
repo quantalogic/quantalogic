@@ -1,4 +1,3 @@
-"""Help command implementation."""
 from typing import List
 
 
@@ -15,7 +14,7 @@ async def help_command(shell, args: List[str]) -> str:
     )
     
     mode_info = (
-        f"\n\nCurrent mode: {shell.mode}\n"
+        f"\n\nCurrent mode: {shell.state.mode}\n"
         f"- In 'codeact' mode, plain messages are treated as tasks to solve.\n"
         f"- In 'react' mode, plain messages are treated as chat messages."
     )

@@ -1,4 +1,3 @@
-"""Chat command implementation."""
 from typing import List
 
 
@@ -9,15 +8,15 @@ async def chat_command(shell, args: List[str]) -> str:
     
     message = " ".join(args)
     try:
-        # Pass the current message_history to the agent for context
-        response = await shell.agent.chat(
+        # Pass the current agent's message_history to the agent for context
+        response = await shell.current_agent.chat(
             message,
-            history=shell.message_history,
-            streaming=shell.streaming
+            history=shell.current_message_history,
+            streaming=shell.state.streaming
         )
         # Append user message and agent response to history
-        shell.message_history.append({"role": "user", "content": message})
-        shell.message_history.append({"role": "assistant", "content": response})
+        shell.current_message_history.append({"role": "user", "content": message})
+        shell.current_message_history.append({"role": "assistant", "content": response})
         return response
     except Exception as e:
         return f"Error in chat: {e}"

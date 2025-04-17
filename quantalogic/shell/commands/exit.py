@@ -1,4 +1,3 @@
-"""Exit command implementation."""
 from typing import List
 
 
