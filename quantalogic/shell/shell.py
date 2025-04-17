@@ -194,7 +194,7 @@ class Shell:
                 if user_input.startswith('/'):
                     command_input = user_input[1:].strip()
                     if not command_input:
-                        print("[red]Error: No command provided. Try /help.[/red]")
+                        console.print("[red]Error: No command provided. Try /help.[/red]")
                         continue
                     parts = command_input.split(maxsplit=1)
                     command_name = parts[0]
@@ -211,7 +211,7 @@ class Shell:
                                 title = "Conversation History" if command_name == "history" else f"{command_name.capitalize()} Command"
                                 console.print(Panel(result, title=title, border_style="blue"))
                     else:
-                        print(f"[red]Unknown command: /{command_name}. Try /help.[/red]")
+                        console.print(f"[red]Unknown command: /{command_name}. Try /help.[/red]")
                 else:
                     # Handle non-command input based on mode
                     if self.state.mode == "codeact":
@@ -224,9 +224,9 @@ class Shell:
                             console.print(Panel(Markdown(result), title="Chat Response", border_style="blue"))
 
             except KeyboardInterrupt:
-                print("\nUse '/exit' to quit the shell.")
+                console.print("\nUse '/exit' to quit the shell.")
             except SystemExit:
-                print("Goodbye!")
+                console.print("Goodbye!")
                 break
             except Exception as e:
                 logger.debug(f"Error: {e}")
