@@ -243,7 +243,3 @@ class Shell:
                 break
             except Exception as e:
                 logger.debug(f"Error: {e}")
-
-def main() -> None:
-    shell = Shell()
-    asyncio.run(shell.run())
