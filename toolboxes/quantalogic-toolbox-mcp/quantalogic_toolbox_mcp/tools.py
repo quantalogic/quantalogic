@@ -26,7 +26,6 @@ from mcp.client.stdio import stdio_client
 logger.remove()
 logger.add(
     sink=sys.stderr,
-    level="DEBUG",
     format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
     colorize=True,
     backtrace=True,

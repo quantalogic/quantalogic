@@ -6,6 +6,7 @@ from .clear import clear_command
 from .exit import exit_command
 from .help import help_command
 from .history import history_command
+from .loglevel import loglevel_command  # Added
 from .mode import mode_command
 from .solve import solve_command
 from .stream import stream_command
@@ -18,5 +19,6 @@ __all__ = [
     'history_command',
     'clear_command',
     'stream_command',
-    'mode_command'
+    'mode_command',
+    'loglevel_command'  # Added
 ]

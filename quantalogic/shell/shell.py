@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -12,6 +13,7 @@ from prompt_toolkit.keys import Keys
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+
 from quantalogic.codeact.agent import Agent, AgentConfig
 from quantalogic.codeact.events import StreamTokenEvent
 
@@ -22,6 +24,7 @@ from .commands.clear import clear_command
 from .commands.exit import exit_command
 from .commands.help import help_command
 from .commands.history import history_command
+from .commands.loglevel import loglevel_command
 from .commands.mode import mode_command
 from .commands.solve import solve_command
 from .commands.stream import stream_command
@@ -31,6 +34,11 @@ from .shell_state import ShellState
 class Shell:
     """Interactive CLI shell for dialog with Quantalogic agents."""
     def __init__(self, agent_config: Optional[AgentConfig] = None):
+        # Configure logger to INFO by default, clearing all existing handlers
+        logger.remove()  # Remove all existing handlers to prevent DEBUG logs
+        self.logger_sink_id = logger.add(sys.stderr, level="INFO")
+        self.log_level = "INFO"
+        
         # Initialize shell state
         self.state = ShellState(
             model_name="deepseek/deepseek-chat",
@@ -116,6 +124,12 @@ class Shell:
             lambda args: mode_command(self, args),
             "Set or show the current mode: /mode [react|codeact]",
             args=["react", "codeact"]  # Specific argument options
+        )
+        self.command_registry.register(
+            "loglevel",
+            lambda args: loglevel_command(self, args),
+            "Set or show the log level: /loglevel [DEBUG|INFO|WARNING|ERROR|CRITICAL]",
+            args=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         )
         # Set args for /help to include all command names for autocompletion
         self.command_registry.commands["help"]["args"] = list(self.command_registry.commands.keys())
@@ -234,6 +248,3 @@ class Shell:
 def main() -> None:
     shell = Shell()
     asyncio.run(shell.run())
-
-if __name__ == "__main__":
-    main()
