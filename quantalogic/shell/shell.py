@@ -33,14 +33,23 @@ class Shell:
     """Interactive CLI shell for dialog with Quantalogic agents."""
     def __init__(self, agent_config: Optional[AgentConfig] = None):
         # Initialize shell state
-        self.state = ShellState(streaming=True, mode="codeact")
+        self.state = ShellState(
+            model_name="deepseek/deepseek-chat",
+            max_iterations=10,
+            streaming=True,
+            mode="codeact"
+        )
         
         # Initialize agents dictionary with a default agent
         default_config = agent_config or AgentConfig()
         default_agent = Agent(config=default_config)
         default_agent.add_observer(self._stream_token_observer, ["StreamToken"])
         self.agents: Dict[str, AgentState] = {
-            "default": AgentState(default_agent)
+            "default": AgentState(
+                agent=default_agent,
+                model_name="deepseek/deepseek-chat",
+                max_iterations=10
+            )
         }
         self.current_agent_name: str = "default"
         
