@@ -148,9 +148,8 @@ class Shell:
             print(f"Error retrieving shell command entry points: {e}")
 
     async def _stream_token_observer(self, event: object) -> None:
-        """Observer for streaming tokens."""
-        if isinstance(event, StreamTokenEvent) and self.state.streaming:
-            print(event.token, end="", flush=True)
+        """Observer for streaming tokens (placeholder, handled in commands)."""
+        pass  # No direct printing; let chat_command and solve_command handle display
 
     def bottom_toolbar(self) -> str:
         """Render a bottom toolbar with mode and agent information."""
@@ -158,6 +157,7 @@ class Shell:
 
     async def run(self) -> None:
         """Run the interactive shell loop."""
+        console = Console()
         history_file = Path.home() / ".quantalogic_shell_history"
         kb = KeyBindings()
 
@@ -188,7 +188,6 @@ class Shell:
         )
 
         # Welcome message with rich formatting
-        console = Console()
         welcome_message = (
             f"Welcome to Quantalogic Shell.\n\n"
             f"Interacting with agent: {self.current_agent.name or 'Agent'}\n"

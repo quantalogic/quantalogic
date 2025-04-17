@@ -1,6 +1,7 @@
 """Core implementation of the ReAct framework for reasoning and acting."""
 
 import asyncio
+import inspect
 import time
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -97,10 +98,17 @@ class CodeActAgent:
     async def _notify_observers(self, event: object) -> None:
         """Notify all subscribed observers of an event."""
         try:
-            await asyncio.gather(
-                *(observer(event) for observer, types in self._observers if event.event_type in types),
-                return_exceptions=True
-            )
+            coroutines = []
+            for observer, types in self._observers:
+                if event.event_type in types:
+                    result = observer(event)
+                    if inspect.isawaitable(result):
+                        coroutines.append(result)
+                    else:
+                        # Wrap sync observer in coroutine
+                        coroutines.append(asyncio.to_thread(lambda: result))
+            
+            await asyncio.gather(*coroutines, return_exceptions=True)
         except Exception as e:
             logger.error(f"Error notifying observers: {e}")
 
