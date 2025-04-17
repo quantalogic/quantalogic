@@ -1,4 +1,3 @@
-import asyncio
 import sys
 from importlib.metadata import entry_points
 from pathlib import Path
@@ -15,7 +14,6 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from quantalogic.codeact.agent import Agent, AgentConfig
-from quantalogic.codeact.events import StreamTokenEvent
 
 from .agent_state import AgentState
 from .command_registry import CommandRegistry
