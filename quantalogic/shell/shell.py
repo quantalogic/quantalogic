@@ -9,38 +9,24 @@ from prompt_toolkit.completion import NestedCompleter
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
-from rich import print as rprint
+from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
 from quantalogic.codeact.agent import Agent, AgentConfig
 from quantalogic.codeact.events import StreamTokenEvent
 
+from .agent_state import AgentState
 from .command_registry import CommandRegistry
-from .commands import (
-    chat_command,
-    clear_command,
-    exit_command,
-    help_command,
-    history_command,
-    mode_command,
-    solve_command,
-    stream_command,
-)
-
-
-class ShellState:
-    """Encapsulates shell-wide state."""
-    def __init__(self, streaming: bool = True, mode: str = "codeact"):
-        self.streaming: bool = streaming
-        self.mode: str = mode
-
-
-class AgentState:
-    """Encapsulates agent-specific state."""
-    def __init__(self, agent: Agent):
-        self.agent = agent
-        self.message_history: List[Dict[str, str]] = []
+from .commands.chat import chat_command
+from .commands.clear import clear_command
+from .commands.exit import exit_command
+from .commands.help import help_command
+from .commands.history import history_command
+from .commands.mode import mode_command
+from .commands.solve import solve_command
+from .commands.stream import stream_command
+from .shell_state import ShellState
 
 
 class Shell:
@@ -135,14 +121,14 @@ class Shell:
                     cmd_func = ep.load()
                     self.command_registry.register(ep.name, cmd_func, f"Plugin command: {ep.name}", args=None)
                 except Exception as e:
-                    logger.error(f"Failed to load plugin command {ep.name}: {e}")
+                    print(f"Failed to load plugin command {ep.name}: {e}")
         except Exception as e:
-            logger.error(f"Error retrieving shell command entry points: {e}")
+            print(f"Error retrieving shell command entry points: {e}")
 
     async def _stream_token_observer(self, event: object) -> None:
         """Observer for streaming tokens."""
         if isinstance(event, StreamTokenEvent) and self.state.streaming:
-            rprint(event.token, end="", flush=True)
+            print(event.token, end="", flush=True)
 
     async def run(self) -> None:
         """Run the interactive shell loop."""
@@ -175,6 +161,7 @@ class Shell:
         )
 
         # Welcome message with rich formatting
+        console = Console()
         welcome_message = (
             f"Welcome to Quantalogic Shell.\n\n"
             f"Interacting with agent: {self.current_agent.name or 'Agent'}\n"
@@ -182,7 +169,7 @@ class Shell:
             f"{'tasks to solve' if self.state.mode == 'codeact' else 'chat messages'}.\n\n"
             f"Type /help for commands. Press Enter to send, Ctrl+J for new lines."
         )
-        rprint(Panel(welcome_message, title="Quantalogic Shell", border_style="blue"))
+        console.print(Panel(welcome_message, title="Quantalogic Shell", border_style="blue"))
 
         while True:
             try:
@@ -194,7 +181,7 @@ class Shell:
                 if user_input.startswith('/'):
                     command_input = user_input[1:].strip()
                     if not command_input:
-                        rprint("[red]Error: No command provided. Try /help.[/red]")
+                        print("[red]Error: No command provided. Try /help.[/red]")
                         continue
                     parts = command_input.split(maxsplit=1)
                     command_name = parts[0]
@@ -203,31 +190,31 @@ class Shell:
                         result = await self.command_registry.commands[command_name]["func"](args)
                         if result:
                             if command_name == "chat":
-                                rprint(Markdown(result))
+                                print(Markdown(result))
                             elif command_name == "solve":
-                                rprint(Panel(Markdown(result), title="Final Answer", border_style="green"))
+                                console.print(Panel(Markdown(result), title="Final Answer", border_style="green"))
                             else:
-                                rprint(Panel(result, title=f"{command_name.capitalize()} Command", border_style="blue"))
+                                console.print(Panel(result, title=f"{command_name.capitalize()} Command", border_style="blue"))
                     else:
-                        rprint(f"[red]Unknown command: /{command_name}. Try /help.[/red]")
+                        print(f"[red]Unknown command: /{command_name}. Try /help.[/red]")
                 else:
                     # Handle non-command input based on mode
                     if self.state.mode == "codeact":
                         result = await solve_command(self, [user_input])
                         if result:
-                            rprint(Panel(Markdown(result), title="Final Answer", border_style="green"))
+                            console.print(Panel(Markdown(result), title="Final Answer", border_style="green"))
                     else:  # react mode
                         result = await chat_command(self, [user_input])
                         if result:
-                            rprint(Markdown(result))
+                            print(Markdown(result))
 
             except KeyboardInterrupt:
-                rprint("\nUse '/exit' to quit the shell.")
+                print("\nUse '/exit' to quit the shell.")
             except SystemExit:
-                rprint("Goodbye!")
+                print("Goodbye!")
                 break
             except Exception as e:
-                rprint(f"[red]Error: {e}[/red]")
+                logger.debug(f"Error: {e}")
 
 def main() -> None:
     shell = Shell()
