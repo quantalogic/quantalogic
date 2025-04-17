@@ -5,7 +5,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from quantalogic.codeact.events import StreamTokenEvent
+from ...codeact.events import StreamTokenEvent
 
 console = Console()
 

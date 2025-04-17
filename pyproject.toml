@@ -6,8 +6,6 @@ authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
 readme = "README.md"
 packages = [
     { include = "quantalogic" },
-    { include = "quantalogic/codeact" },
-    { include = "quantalogic/codeact/cli_commands" }
 ]
 
 # Core dependencies required for the base Agent and ToolManager

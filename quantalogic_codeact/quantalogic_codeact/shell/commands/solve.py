@@ -5,8 +5,8 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from quantalogic.codeact.events import ActionExecutedEvent, StreamTokenEvent, TaskCompletedEvent
-from quantalogic.codeact.xml_utils import XMLResultHandler
+from ...codeact.events import ActionExecutedEvent, StreamTokenEvent, TaskCompletedEvent
+from ...codeact.xml_utils import XMLResultHandler
 
 console = Console()
 

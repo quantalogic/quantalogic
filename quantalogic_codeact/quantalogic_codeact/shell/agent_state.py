@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-from quantalogic.codeact.agent import Agent
+from ..codeact.agent import Agent
 
 
 @dataclass

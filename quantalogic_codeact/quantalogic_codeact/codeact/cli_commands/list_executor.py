@@ -1,7 +1,7 @@
 import typer
 from rich.console import Console
 
-from quantalogic.codeact.cli import plugin_manager  # Import shared plugin_manager from cli.py
+from quantalogic_codeact.codeact.cli import plugin_manager  # Import shared plugin_manager from cli.py
 
 app = typer.Typer()
 

@@ -7,7 +7,7 @@ import typer
 from loguru import logger
 from rich.console import Console
 
-from quantalogic.codeact.plugin_manager import PluginManager
+from quantalogic_codeact.codeact.plugin_manager import PluginManager
 
 app = typer.Typer(no_args_is_help=True)
 console = Console()
@@ -20,7 +20,7 @@ plugin_manager.load_plugins()  # This is now synchronous
 cli_commands_dir = Path(__file__).parent / "cli_commands"
 for file in cli_commands_dir.glob("*.py"):
     if file.stem != "__init__":
-        module_name = f"quantalogic.codeact.cli_commands.{file.stem}"
+        module_name = f"quantalogic_codeact.codeact.cli_commands.{file.stem}"
         try:
             module = importlib.import_module(module_name)
             command_name = file.stem.replace("_", "-")

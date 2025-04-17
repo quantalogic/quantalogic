@@ -7,7 +7,7 @@ from typing import Any, List, Optional
 
 from loguru import logger
 
-from quantalogic.tools import Tool, create_tool
+from quantalogic_toolbox import Tool, create_tool
 
 from .tools import AgentTool, RetrieveStepTool
 

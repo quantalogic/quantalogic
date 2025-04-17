@@ -6,9 +6,9 @@ import typer
 from loguru import logger
 from rich.console import Console
 
-from quantalogic.codeact.agent import Agent, AgentConfig
-from quantalogic.codeact.constants import DEFAULT_MODEL, LOG_FILE
-from quantalogic.codeact.events import (
+from quantalogic_codeact.codeact.agent import Agent, AgentConfig
+from quantalogic_codeact.codeact.constants import DEFAULT_MODEL, LOG_FILE
+from quantalogic_codeact.codeact.events import (
     ActionExecutedEvent,
     ActionGeneratedEvent,
     ErrorOccurredEvent,
@@ -22,9 +22,9 @@ from quantalogic.codeact.events import (
     ToolExecutionErrorEvent,
     ToolExecutionStartedEvent,
 )
-from quantalogic.codeact.tools_manager import get_default_tools
-from quantalogic.codeact.utils import process_tools
-from quantalogic.codeact.xml_utils import XMLResultHandler
+from quantalogic_codeact.codeact.tools_manager import get_default_tools
+from quantalogic_codeact.codeact.utils import process_tools
+from quantalogic_codeact.codeact.xml_utils import XMLResultHandler
 
 console = Console()
 

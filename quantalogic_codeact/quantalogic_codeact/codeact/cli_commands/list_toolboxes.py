@@ -6,7 +6,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from quantalogic.codeact.cli import plugin_manager  # Import shared plugin_manager from cli.py
+from quantalogic_codeact.codeact.cli import plugin_manager  # Import shared plugin_manager from cli.py
 
 app = typer.Typer()
 console = Console()

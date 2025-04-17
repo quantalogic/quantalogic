@@ -13,8 +13,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from quantalogic.codeact.agent import Agent, AgentConfig
-
+from ..codeact.agent import Agent, AgentConfig
 from .agent_state import AgentState
 from .command_registry import CommandRegistry
 from .commands.chat import chat_command
