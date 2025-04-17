@@ -292,12 +292,22 @@ class Agent:
             return [{"error": f"Failed to solve task synchronously: {str(e)}"}]
 
     def add_observer(self, observer: Callable, event_types: List[str]) -> 'Agent':
-        """Add an observer to be applied to agents created in chat and solve."""
+        """Add an observer to both the Agent and its internal react_agent."""
         try:
             self._observers.append((observer, event_types))
+            self.react_agent.add_observer(observer, event_types)
             return self
         except Exception as e:
             logger.error(f"Failed to add observer: {e}")
+            raise
+
+    def remove_observer(self, observer: Callable):
+        """Remove an observer from both the Agent and its internal react_agent."""
+        try:
+            self._observers = [obs for obs in self._observers if obs[0] != observer]
+            self.react_agent._observers = [obs for obs in self.react_agent._observers if obs[0] != observer]
+        except Exception as e:
+            logger.error(f"Failed to remove observer: {e}")
             raise
 
     def register_tool(self, tool: Tool) -> None:

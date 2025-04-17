@@ -33,7 +33,7 @@ async def chat_command(shell, args: List[str]) -> str:
                     history=shell.current_message_history,
                     streaming=True
                 )
-                shell.current_agent._observers = [obs for obs in shell.current_agent._observers if obs[0] != stream_observer]
+                shell.current_agent.remove_observer(stream_observer)
             # Append to history after streaming completes
             shell.current_message_history.append({"role": "user", "content": message})
             shell.current_message_history.append({"role": "assistant", "content": response})
