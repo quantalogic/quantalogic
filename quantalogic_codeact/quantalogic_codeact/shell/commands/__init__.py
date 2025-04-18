@@ -16,6 +16,7 @@ from .agent import agent_command
 from .tutorial import tutorial_command
 from .inputmode import inputmode_command
 from .contrast import contrast_command
+from .setmodel import setmodel_command  # Added new command
 
 __all__ = [
     'help_command',
@@ -33,5 +34,6 @@ __all__ = [
     'agent_command',
     'tutorial_command',
     'inputmode_command',
-    'contrast_command'
+    'contrast_command',
+    'setmodel_command',  # Added to export list
 ]

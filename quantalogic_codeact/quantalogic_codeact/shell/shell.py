@@ -29,6 +29,7 @@ from .commands.load import load_command
 from .commands.loglevel import loglevel_command
 from .commands.mode import mode_command
 from .commands.save import save_command
+from .commands.setmodel import setmodel_command  # Added import for new command
 from .commands.solve import solve_command
 from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
@@ -64,12 +65,7 @@ class Shell:
         default_agent = Agent(config=default_config)
         default_agent.add_observer(self._stream_token_observer, ["StreamToken"])
         self.agents: Dict[str, AgentState] = {
-            "default": AgentState(
-                agent=default_agent,
-                model_name="deepseek/deepseek-chat",
-                max_iterations=10,
-                message_history=self.history_manager.get_history()
-            )
+            "default": AgentState(agent=default_agent)
         }
         self.current_agent_name: str = "default"
         
@@ -107,6 +103,7 @@ class Shell:
             {"name": "tutorial", "func": tutorial_command, "help": "Show tutorial: /tutorial", "args": []},
             {"name": "inputmode", "func": inputmode_command, "help": "Set input mode: /inputmode single|multi", "args": ["single", "multi"]},
             {"name": "contrast", "func": contrast_command, "help": "Toggle high-contrast mode: /contrast on|off", "args": ["on", "off"]},
+            {"name": "setmodel", "func": setmodel_command, "help": "Set model and switch to a new agent: /setmodel <model_name>", "args": None},
         ]
         for cmd in builtin_commands:
             self.command_registry.register(
@@ -136,11 +133,11 @@ class Shell:
         pass
 
     def bottom_toolbar(self):
-        """Render a bottom toolbar with mode and agent information as prompt_toolkit HTML."""
+        """Render a bottom toolbar with mode, agent, and model information as prompt_toolkit HTML."""
         if self.high_contrast:
-            return HTML(f'<b><ansiwhite>Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"}</ansiwhite></b>')
+            return HTML(f'<b><ansiwhite>Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"} | Model: {self.current_agent.model}</ansiwhite></b>')
         else:
-            return HTML(f'<b><ansiyellow>Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"}</ansiyellow></b>')
+            return HTML(f'<b><ansiyellow>Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"} | Model: {self.current_agent.model}</ansiyellow></b>')
 
     async def run(self) -> None:
         """Run the interactive shell loop."""
