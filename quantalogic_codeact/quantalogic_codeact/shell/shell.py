@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 from loguru import logger
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import NestedCompleter
+from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
@@ -134,10 +135,12 @@ class Shell:
         """Observer for streaming tokens (handled in commands)."""
         pass
 
-    def bottom_toolbar(self) -> str:
-        """Render a bottom toolbar with mode and agent information."""
-        color = "bright_white" if self.high_contrast else "yellow"
-        return f"[{color}]Mode: {self.state.mode} | Agent: {self.current_agent.name or 'Default'}[/{color}]"
+    def bottom_toolbar(self):
+        """Render a bottom toolbar with mode and agent information as prompt_toolkit HTML."""
+        if self.high_contrast:
+            return HTML(f'<b><ansiwhite>Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"}</ansiwhite></b>')
+        else:
+            return HTML(f'<b><ansiyellow>Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"}</ansiyellow></b>')
 
     async def run(self) -> None:
         """Run the interactive shell loop."""
