@@ -34,6 +34,7 @@ from .commands.load import load_command
 from .commands.loglevel import loglevel_command
 from .commands.mode import mode_command
 from .commands.save import save_command
+from .commands.set import set_command
 from .commands.setmodel import setmodel_command
 from .commands.solve import solve_command
 from .commands.stream import stream_command
@@ -151,6 +152,7 @@ class Shell:
             {"name": "inputmode", "func": inputmode_command, "help": "Set input mode: /inputmode single|multi", "args": ["single", "multi"]},
             {"name": "contrast", "func": contrast_command, "help": "Toggle high-contrast mode: /contrast on|off", "args": ["on", "off"]},
             {"name": "setmodel", "func": setmodel_command, "help": "Set model and switch to a new agent: /setmodel <model_name>", "args": None},
+            {"name": "set", "func": set_command, "help": "Set a config field: /set <field> <value>", "args": None},
             {"name": "config show", "func": config_show, "help": "Show the current configuration", "args": []},
             {"name": "config save", "func": config_save, "help": "Save the current configuration to a file: /config save <filename>", "args": None},
             {"name": "config load", "func": config_load, "help": "Load a configuration from a file: /config load <filename>", "args": None},

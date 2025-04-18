@@ -17,6 +17,9 @@ async def help_command(shell, args: List[str]) -> Text:
         text.append(f"- /{cmd}: ", style="cyan")
         text.append(info["help"] + "\n")
     
+    text.append("\nAdditional commands:\n", style="bold")
+    text.append("- /set: Set a config field: /set <field> <value>\n")
+    
     text.append("\nCurrent mode: ", style="bold")
     text.append(shell.state.mode, style="green")
     mode_info = (

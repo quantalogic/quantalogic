@@ -1,9 +1,9 @@
 from typing import List
-from jinja2 import Environment
 
 import yaml
+from jinja2 import Environment
 from rich.console import Console
-from rich.panel import Panel
+from rich.table import Table
 
 console = Console()
 
@@ -28,6 +28,11 @@ async def config_show(shell, args: List[str]) -> str:
         # Fallback for other non-serializable objects
         return repr(val)
     sanitized = {k: sanitize(v) for k, v in raw.items()}
-    config_str = yaml.safe_dump(sanitized, default_flow_style=False)
-    console.print(Panel(config_str, title="Current Configuration", border_style="blue"))
+    # Render configuration as a styled table
+    table = Table(title="Current Configuration", show_header=True, header_style="bold magenta")
+    table.add_column("Key", style="cyan", no_wrap=True)
+    table.add_column("Value", style="white")
+    for key, value in sanitized.items():
+        table.add_row(str(key), str(value))
+    console.print(table)
     return ""
