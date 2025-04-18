@@ -19,6 +19,7 @@ from .command_registry import CommandRegistry
 from .commands.agent import agent_command
 from .commands.chat import chat_command
 from .commands.clear import clear_command
+from .commands.compose import compose_command  # New import
 from .commands.contrast import contrast_command
 from .commands.debug import debug_command
 from .commands.exit import exit_command
@@ -29,7 +30,7 @@ from .commands.load import load_command
 from .commands.loglevel import loglevel_command
 from .commands.mode import mode_command
 from .commands.save import save_command
-from .commands.setmodel import setmodel_command  # Added import for new command
+from .commands.setmodel import setmodel_command
 from .commands.solve import solve_command
 from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
@@ -90,6 +91,7 @@ class Shell:
             {"name": "help", "func": help_command, "help": "Show help for commands: /help [command]", "args": None},
             {"name": "chat", "func": chat_command, "help": "Chat with the agent: /chat <message>", "args": None},
             {"name": "solve", "func": solve_command, "help": "Solve a task: /solve <task>", "args": None},
+            {"name": "compose", "func": compose_command, "help": "Compose input in external editor: /compose", "args": []},
             {"name": "exit", "func": exit_command, "help": "Exit the shell: /exit", "args": []},
             {"name": "history", "func": history_command, "help": "Show conversation history: /history [n]", "args": None},
             {"name": "clear", "func": clear_command, "help": "Clear conversation history: /clear", "args": []},

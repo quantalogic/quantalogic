@@ -2,6 +2,7 @@
 
 from .chat import chat_command  # noqa: I001
 from .clear import clear_command
+from .compose import compose_command  # New import
 from .exit import exit_command
 from .help import help_command
 from .history import history_command
@@ -16,11 +17,12 @@ from .agent import agent_command
 from .tutorial import tutorial_command
 from .inputmode import inputmode_command
 from .contrast import contrast_command
-from .setmodel import setmodel_command  # Added new command
+from .setmodel import setmodel_command
 
 __all__ = [
     'help_command',
     'chat_command',
+    'compose_command',  # Added to export list
     'solve_command',
     'exit_command',
     'history_command',
@@ -35,5 +37,5 @@ __all__ = [
     'tutorial_command',
     'inputmode_command',
     'contrast_command',
-    'setmodel_command',  # Added to export list
+    'setmodel_command',
 ]
