@@ -3,6 +3,7 @@ from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import yaml
 from loguru import logger
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import NestedCompleter
@@ -19,7 +20,10 @@ from .command_registry import CommandRegistry
 from .commands.agent import agent_command
 from .commands.chat import chat_command
 from .commands.clear import clear_command
-from .commands.compose import compose_command  # New import
+from .commands.compose import compose_command
+from .commands.config_load import config_load
+from .commands.config_save import config_save
+from .commands.config_show import config_show
 from .commands.contrast import contrast_command
 from .commands.debug import debug_command
 from .commands.exit import exit_command
@@ -61,9 +65,50 @@ class Shell:
         # Initialize history manager
         self.history_manager = HistoryManager()
         
-        # Initialize agents dictionary with a default agent
-        default_config = agent_config or AgentConfig()
-        default_agent = Agent(config=default_config)
+        # Check for .quantalogic/config.yaml in the current working directory
+        config_file_path = Path(".quantalogic/config.yaml").resolve()
+        if not config_file_path.exists():
+            default_config_data = {
+                "model": "gemini/gemini-2.0-flash",
+                "max_iterations": 5,
+                "enabled_toolboxes": [],
+                "reasoner": {"name": "default"},
+                "executor": {"name": "default"},
+                "personality": None,
+                "backstory": None,
+                "sop": None,
+                "name": None,
+                "tools_config": None,
+                "profile": None,
+                "customizations": None,
+                "agent_tool_model": "gemini/gemini-2.0-flash",
+                "agent_tool_timeout": 30
+            }
+            try:
+                config_file_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(config_file_path, "w") as f:
+                    yaml.safe_dump(default_config_data, f, default_flow_style=False)
+                logger.info(f"Created default configuration file at {config_file_path}")
+                console.print(Panel(f"Created default configuration file at {config_file_path}", title="Info", border_style="green"))
+            except Exception as e:
+                logger.error(f"Failed to create default configuration file at {config_file_path}: {e}")
+            try:
+                default_config = AgentConfig(**default_config_data)
+            except Exception as e:
+                logger.error(f"Failed to initialize AgentConfig from default data: {e}. Using minimal configuration.")
+                default_config = AgentConfig()
+        else:
+            try:
+                with open(config_file_path) as f:
+                    config_data = yaml.safe_load(f) or {}
+                default_config = AgentConfig(**config_data)
+                logger.info(f"Loaded configuration from {config_file_path}")
+            except Exception as e:
+                logger.error(f"Failed to load .quantalogic/config.yaml: {e}. Using minimal configuration.")
+                default_config = AgentConfig()
+        
+        # Initialize the default agent with the loaded or default config
+        default_agent = Agent(config=agent_config or default_config)
         default_agent.add_observer(self._stream_token_observer, ["StreamToken"])
         self.agents: Dict[str, AgentState] = {
             "default": AgentState(agent=default_agent)
@@ -106,6 +151,9 @@ class Shell:
             {"name": "inputmode", "func": inputmode_command, "help": "Set input mode: /inputmode single|multi", "args": ["single", "multi"]},
             {"name": "contrast", "func": contrast_command, "help": "Toggle high-contrast mode: /contrast on|off", "args": ["on", "off"]},
             {"name": "setmodel", "func": setmodel_command, "help": "Set model and switch to a new agent: /setmodel <model_name>", "args": None},
+            {"name": "config show", "func": config_show, "help": "Show the current configuration", "args": []},
+            {"name": "config save", "func": config_save, "help": "Save the current configuration to a file: /config save <filename>", "args": None},
+            {"name": "config load", "func": config_load, "help": "Load a configuration from a file: /config load <filename>", "args": None},
         ]
         for cmd in builtin_commands:
             self.command_registry.register(
@@ -199,17 +247,23 @@ class Shell:
                     if not command_input:
                         console.print(Panel("No command provided. Try /help.", title="Error", border_style="red"))
                         continue
-                    parts = command_input.split(maxsplit=1)
-                    command_name = parts[0]
-                    args = [parts[1]] if len(parts) > 1 else []
-                    if command_name in self.command_registry.commands:
-                        result = await self.command_registry.commands[command_name]["func"](args)
-                        if result and command_name not in ["chat", "solve", "tutorial"]:
-                            title = "Conversation History" if command_name == "history" else f"{command_name.capitalize()} Command"
+
+                    # Support multi-word commands by matching the longest command name first
+                    matched_command = None
+                    for name in sorted(self.command_registry.commands.keys(), key=lambda x: -len(x)):
+                        if command_input == name or command_input.startswith(name + " "):
+                            matched_command = name
+                            remaining = command_input[len(name):].strip()
+                            args = remaining.split() if remaining else []
+                            break
+                    if matched_command:
+                        result = await self.command_registry.commands[matched_command]["func"](args)
+                        if result and matched_command not in ["chat", "solve", "tutorial"]:
+                            title = "Conversation History" if matched_command == "history" else f"{matched_command.capitalize()} Command"
                             border_color = "bright_blue" if self.high_contrast else "blue"
                             console.print(Panel(result, title=title, border_style=border_color))
                     else:
-                        console.print(Panel(f"Unknown command: /{command_name}. Try /help.", title="Error", border_style="red"))
+                        console.print(Panel(f"Unknown command: /{command_input}. Try /help.", title="Error", border_style="red"))
                 else:
                     # Handle non-command input based on mode
                     if self.state.mode == "codeact":

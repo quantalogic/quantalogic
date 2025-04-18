@@ -49,10 +49,9 @@ class Agent:
             logger.error(f"Failed to load plugins: {e}")
         self.model: str = config.model
         self.default_tools: List[Tool] = self._get_tools()
-        # Fallback: If no tools are loaded, use all registered tools
-        if not self.default_tools:
-            self.default_tools = self.plugin_manager.tools.get_tools()
-            logger.warning(f"No tools loaded from configuration; falling back to all registered tools: {[(t.toolbox_name or 'default', t.name) for t in self.default_tools]}")
+        # If no tools are loaded, do not fall back to all registered tools
+        if not self.default_tools and (not config.enabled_toolboxes or not config.tools):
+            logger.info("No tools loaded from configuration; no toolboxes specified.")
         self.max_iterations: int = config.max_iterations
         self.personality = config.personality
         self.backstory = config.backstory
@@ -82,7 +81,7 @@ class Agent:
             base_tools = (
                 process_tools(self.config.tools)
                 if self.config.tools is not None
-                else get_default_tools(self.model, enabled_toolboxes=self.config.enabled_toolboxes)
+                else get_default_tools(self.model, enabled_toolboxes=self.config.enabled_toolboxes or [])
             )
             if not self.config.tools_config:
                 return base_tools

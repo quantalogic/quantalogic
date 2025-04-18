@@ -65,30 +65,33 @@ class AgentConfig:
         """Initialize configuration from arguments or a YAML file."""
         try:
             if config_file:
+                config_path = Path(config_file)
+                if not config_path.is_absolute():
+                    config_path = Path.cwd() / config_file  # Resolve relative to current working directory
                 try:
-                    with open(Path(__file__).parent / config_file) as f:
+                    with open(config_path) as f:
                         config: Dict = yaml.safe_load(f) or {}
                     self._load_from_config(config, model, max_iterations, max_history_tokens, toolbox_directory,
-                                        tools, enabled_toolboxes, reasoner_name, executor_name, personality,
-                                        backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                        profile, customizations, agent_tool_model, agent_tool_timeout)
+                                          tools, enabled_toolboxes, reasoner_name, executor_name, personality,
+                                          backstory, sop, jinja_env, name, tools_config, reasoner, executor,
+                                          profile, customizations, agent_tool_model, agent_tool_timeout)
                 except FileNotFoundError as e:
-                    logger.warning(f"Config file {config_file} not found: {e}. Using defaults.")
+                    logger.warning(f"Config file {config_path} not found: {e}. No toolboxes will be loaded.")
                     self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                    tools, enabled_toolboxes, reasoner_name, executor_name, personality,
-                                    backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                    profile, customizations, agent_tool_model, agent_tool_timeout)
+                                      tools, [], reasoner_name, executor_name, personality,
+                                      backstory, sop, jinja_env, name, tools_config, reasoner, executor,
+                                      profile, customizations, agent_tool_model, agent_tool_timeout)
                 except yaml.YAMLError as e:
-                    logger.error(f"Error parsing YAML config {config_file}: {e}. Falling back to defaults.")
+                    logger.error(f"Error parsing YAML config {config_path}: {e}. No toolboxes will be loaded.")
                     self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                    tools, enabled_toolboxes, reasoner_name, executor_name, personality,
-                                    backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                    profile, customizations, agent_tool_model, agent_tool_timeout)
+                                      tools, [], reasoner_name, executor_name, personality,
+                                      backstory, sop, jinja_env, name, tools_config, reasoner, executor,
+                                      profile, customizations, agent_tool_model, agent_tool_timeout)
             else:
                 self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                tools, enabled_toolboxes, reasoner_name, executor_name, personality,
-                                backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                profile, customizations, agent_tool_model, agent_tool_timeout)
+                                  tools, enabled_toolboxes, reasoner_name, executor_name, personality,
+                                  backstory, sop, jinja_env, name, tools_config, reasoner, executor,
+                                  profile, customizations, agent_tool_model, agent_tool_timeout)
             self.__post_init__()
         except Exception as e:
             logger.error(f"Failed to initialize AgentConfig: {e}")
@@ -179,13 +182,6 @@ class AgentConfig:
                                 current.update(value)
                             elif current is None or (key in ["personality", "backstory"] and isinstance(current, str)):
                                 setattr(self, key, value)
-            # Load enabled_toolboxes from default config if not set
-            if self.enabled_toolboxes is None:
-                default_config_path = Path.home() / "quantalogic-config.yaml"
-                if default_config_path.exists():
-                    with open(default_config_path) as f:
-                        default_config = yaml.safe_load(f) or {}
-                    self.enabled_toolboxes = [tb["name"] for tb in default_config.get("installed_toolboxes", [])]
         except Exception as e:
             logger.error(f"Error in post_init: {e}")
             raise

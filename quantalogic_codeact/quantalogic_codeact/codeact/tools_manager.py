@@ -87,7 +87,7 @@ class ToolRegistry:
             # Continue without raising to allow other toolboxes to load
             return
 
-    def load_toolboxes(self, toolbox_names: Optional[List[str]] = None) -> None:
+    def load_toolboxes(self, toolbox_names: List[str] = []) -> None:
         """Load toolboxes from registered entry points, optionally filtering by name."""
         try:
             entry_points = importlib.metadata.entry_points(group="quantalogic.tools")
@@ -96,9 +96,10 @@ class ToolRegistry:
             entry_points = []
 
         try:
-            if toolbox_names is not None:
+            if toolbox_names:  # Only filter if toolbox_names is non-empty
                 entry_points = [ep for ep in entry_points if ep.name in toolbox_names]
-
+            else:
+                entry_points = []  # No toolboxes specified, load none
             logger.debug(f"Found {len(entry_points)} toolbox entry points")
             for ep in entry_points:
                 try:
@@ -116,7 +117,7 @@ class ToolRegistry:
 def get_default_tools(
     model: str,
     history_store: Optional[List[dict]] = None,
-    enabled_toolboxes: Optional[List[str]] = None,
+    enabled_toolboxes: List[str] = [],  # Change default to empty list
     tools_config: Optional[List[dict[str, Any]]] = None
 ) -> List[Tool]:
     """Dynamically load default tools using the pre-loaded registry from PluginManager."""
@@ -126,9 +127,10 @@ def get_default_tools(
         plugin_manager.load_plugins()
         registry = plugin_manager.tools
         
-        static_tools: List[Tool] = [AgentTool(model=model)]
-        if history_store is not None:
-            static_tools.append(RetrieveStepTool(history_store))
+        static_tools: List[Tool] = [
+            AgentTool(model=model),
+            RetrieveStepTool(history_store or [])
+        ]
 
         for tool in static_tools:
             try:
@@ -136,28 +138,42 @@ def get_default_tools(
             except ValueError as e:
                 logger.debug(f"Static tool {tool.name} already registered: {e}")
 
-        # Only filter tools if enabled_toolboxes is explicitly provided and non-empty
-        if enabled_toolboxes is not None and enabled_toolboxes:
-            tools = [t for t in registry.get_tools() if t.toolbox_name in enabled_toolboxes]
+        # Get plugin tools from specified toolboxes
+        if enabled_toolboxes:
+            plugin_tools = [
+                t for t in registry.get_tools()
+                if t.toolbox_name in enabled_toolboxes
+                and t.name not in {tool.name for tool in static_tools}
+            ]
         else:
-            tools = registry.get_tools()
+            plugin_tools = []
 
+        # Apply tools_config filtering to plugin tools
         if tools_config:
-            filtered_tools = []
+            filtered_plugin_tools: List[Tool] = []
             processed_names = set()
             for tool_conf in tools_config:
                 if tool_conf.get("enabled", True):
-                    tool = next((t for t in tools if t.name == tool_conf["name"] or t.toolbox_name == tool_conf["name"]), None)
+                    tool = next(
+                        (t for t in plugin_tools if t.name == tool_conf["name"] or t.toolbox_name == tool_conf["name"]),
+                        None
+                    )
                     if tool and tool.name not in processed_names:
                         for key, value in tool_conf.items():
                             if key not in ["name", "enabled"]:
                                 setattr(tool, key, value)
-                        filtered_tools.append(tool)
+                        filtered_plugin_tools.append(tool)
                         processed_names.add(tool.name)
-            for tool in tools:
+            for tool in plugin_tools:
                 if tool.name not in processed_names:
-                    filtered_tools.append(tool)
-            tools = filtered_tools
+                    filtered_plugin_tools.append(tool)
+            plugin_tools = filtered_plugin_tools
+
+        # Always include static tools, ensuring no duplicates
+        tools = static_tools.copy()
+        for t in plugin_tools:
+            if t.name not in {tool.name for tool in tools}:
+                tools.append(t)
         
         logger.info(f"Loaded {len(tools)} default tools: {[(tool.toolbox_name or 'default', tool.name) for tool in tools]}")
         return tools
