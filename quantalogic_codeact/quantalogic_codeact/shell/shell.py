@@ -10,7 +10,6 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
 
 from ..codeact.agent import Agent, AgentConfig
@@ -74,60 +73,24 @@ class Shell:
 
     def _register_builtin_commands(self) -> None:
         """Register all built-in commands with their arguments for autocompletion."""
-        self.command_registry.register(
-            "help",
-            lambda args: help_command(self, args),
-            "Show help for commands: /help [command]",
-            args=None  # Will be set to command list after registration
-        )
-        self.command_registry.register(
-            "chat",
-            lambda args: chat_command(self, args),
-            "Chat with the agent: /chat <message>",
-            args=None  # Free-form input, no specific suggestions
-        )
-        self.command_registry.register(
-            "solve",
-            lambda args: solve_command(self, args),
-            "Solve a task: /solve <task>",
-            args=None  # Free-form input
-        )
-        self.command_registry.register(
-            "exit",
-            lambda args: exit_command(self, args),
-            "Exit the shell: /exit",
-            args=[]  # No arguments expected
-        )
-        self.command_registry.register(
-            "history",
-            lambda args: history_command(self, args),
-            "Show conversation history: /history",
-            args=[]  # No arguments
-        )
-        self.command_registry.register(
-            "clear",
-            lambda args: clear_command(self, args),
-            "Clear conversation history: /clear",
-            args=[]  # No arguments
-        )
-        self.command_registry.register(
-            "stream",
-            lambda args: stream_command(self, args),
-            "Toggle streaming: /stream on|off",
-            args=["on", "off"]  # Specific argument options
-        )
-        self.command_registry.register(
-            "mode",
-            lambda args: mode_command(self, args),
-            "Set or show the current mode: /mode [react|codeact]",
-            args=["react", "codeact"]  # Specific argument options
-        )
-        self.command_registry.register(
-            "loglevel",
-            lambda args: loglevel_command(self, args),
-            "Set or show the log level: /loglevel [DEBUG|INFO|WARNING|ERROR|CRITICAL]",
-            args=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-        )
+        builtin_commands = [
+            {"name": "help", "func": help_command, "help": "Show help for commands: /help [command]", "args": None},
+            {"name": "chat", "func": chat_command, "help": "Chat with the agent: /chat <message>", "args": None},
+            {"name": "solve", "func": solve_command, "help": "Solve a task: /solve <task>", "args": None},
+            {"name": "exit", "func": exit_command, "help": "Exit the shell: /exit", "args": []},
+            {"name": "history", "func": history_command, "help": "Show conversation history: /history", "args": []},
+            {"name": "clear", "func": clear_command, "help": "Clear conversation history: /clear", "args": []},
+            {"name": "stream", "func": stream_command, "help": "Toggle streaming: /stream on|off", "args": ["on", "off"]},
+            {"name": "mode", "func": mode_command, "help": "Set or show the current mode: /mode [react|codeact]", "args": ["react", "codeact"]},
+            {"name": "loglevel", "func": loglevel_command, "help": "Set or show the log level: /loglevel [DEBUG|INFO|WARNING|ERROR|CRITICAL]", "args": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]},
+        ]
+        for cmd in builtin_commands:
+            self.command_registry.register(
+                cmd["name"],
+                lambda args, f=cmd["func"]: f(self, args),
+                cmd["help"],
+                cmd["args"]
+            )
         # Set args for /help to include all command names for autocompletion
         self.command_registry.commands["help"]["args"] = list(self.command_registry.commands.keys())
 
@@ -211,27 +174,17 @@ class Shell:
                     args = [parts[1]] if len(parts) > 1 else []
                     if command_name in self.command_registry.commands:
                         result = await self.command_registry.commands[command_name]["func"](args)
-                        if result:
-                            if command_name == "chat":
-                                console.print(Panel(Markdown(result), title="Chat Response", border_style="blue"))
-                            elif command_name == "solve":
-                                console.print(Panel(Markdown(result), title="Final Answer", border_style="green"))
-                            else:
-                                # Customize titles for specific commands
-                                title = "Conversation History" if command_name == "history" else f"{command_name.capitalize()} Command"
-                                console.print(Panel(result, title=title, border_style="blue"))
+                        if result and command_name not in ["chat", "solve"]:
+                            title = "Conversation History" if command_name == "history" else f"{command_name.capitalize()} Command"
+                            console.print(Panel(result, title=title, border_style="blue"))
                     else:
                         console.print(f"[red]Unknown command: /{command_name}. Try /help.[/red]")
                 else:
                     # Handle non-command input based on mode
                     if self.state.mode == "codeact":
-                        result = await solve_command(self, [user_input])
-                        if result:
-                            console.print(Panel(Markdown(result), title="Final Answer", border_style="green"))
+                        await solve_command(self, [user_input])
                     else:  # react mode
-                        result = await chat_command(self, [user_input])
-                        if result:
-                            console.print(Panel(Markdown(result), title="Chat Response", border_style="blue"))
+                        await chat_command(self, [user_input])
 
             except KeyboardInterrupt:
                 console.print("\nUse '/exit' to quit the shell.")
