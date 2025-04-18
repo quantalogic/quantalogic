@@ -15,26 +15,37 @@ from rich.panel import Panel
 from ..codeact.agent import Agent, AgentConfig
 from .agent_state import AgentState
 from .command_registry import CommandRegistry
+from .commands.agent import agent_command
 from .commands.chat import chat_command
 from .commands.clear import clear_command
+from .commands.contrast import contrast_command
+from .commands.debug import debug_command
 from .commands.exit import exit_command
 from .commands.help import help_command
 from .commands.history import history_command
+from .commands.inputmode import inputmode_command
+from .commands.load import load_command
 from .commands.loglevel import loglevel_command
 from .commands.mode import mode_command
+from .commands.save import save_command
 from .commands.solve import solve_command
 from .commands.stream import stream_command
+from .commands.tutorial import tutorial_command
 from .history_manager import HistoryManager
 from .shell_state import ShellState
 
+console = Console()
 
 class Shell:
     """Interactive CLI shell for dialog with Quantalogic agents."""
     def __init__(self, agent_config: Optional[AgentConfig] = None):
-        # Configure logger to INFO by default, clearing all existing handlers
-        logger.remove()  # Remove all existing handlers to prevent DEBUG logs
+        # Configure logger to INFO by default
+        logger.remove()
         self.logger_sink_id = logger.add(sys.stderr, level="INFO")
         self.log_level = "INFO"
+        self.debug = False  # For detailed error logging
+        self.high_contrast = False  # For accessibility
+        self.multiline = False  # Default to single-line input
         
         # Initialize shell state
         self.state = ShellState(
@@ -83,11 +94,18 @@ class Shell:
             {"name": "chat", "func": chat_command, "help": "Chat with the agent: /chat <message>", "args": None},
             {"name": "solve", "func": solve_command, "help": "Solve a task: /solve <task>", "args": None},
             {"name": "exit", "func": exit_command, "help": "Exit the shell: /exit", "args": []},
-            {"name": "history", "func": history_command, "help": "Show conversation history: /history", "args": []},
+            {"name": "history", "func": history_command, "help": "Show conversation history: /history [n]", "args": None},
             {"name": "clear", "func": clear_command, "help": "Clear conversation history: /clear", "args": []},
             {"name": "stream", "func": stream_command, "help": "Toggle streaming: /stream on|off", "args": ["on", "off"]},
-            {"name": "mode", "func": mode_command, "help": "Set or show the current mode: /mode [react|codeact]", "args": ["react", "codeact"]},
-            {"name": "loglevel", "func": loglevel_command, "help": "Set or show the log level: /loglevel [DEBUG|INFO|WARNING|ERROR|CRITICAL]", "args": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]},
+            {"name": "mode", "func": mode_command, "help": "Set or show mode: /mode [react|codeact]", "args": ["react", "codeact"]},
+            {"name": "loglevel", "func": loglevel_command, "help": "Set log level: /loglevel [DEBUG|INFO|WARNING|ERROR|CRITICAL]", "args": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]},
+            {"name": "debug", "func": debug_command, "help": "Toggle debug mode: /debug on|off", "args": ["on", "off"]},
+            {"name": "save", "func": save_command, "help": "Save history: /save <filename>", "args": None},
+            {"name": "load", "func": load_command, "help": "Load history: /load <filename>", "args": None},
+            {"name": "agent", "func": agent_command, "help": "Switch agent: /agent <name>", "args": list(self.agents.keys())},
+            {"name": "tutorial", "func": tutorial_command, "help": "Show tutorial: /tutorial", "args": []},
+            {"name": "inputmode", "func": inputmode_command, "help": "Set input mode: /inputmode single|multi", "args": ["single", "multi"]},
+            {"name": "contrast", "func": contrast_command, "help": "Toggle high-contrast mode: /contrast on|off", "args": ["on", "off"]},
         ]
         for cmd in builtin_commands:
             self.command_registry.register(
@@ -108,21 +126,21 @@ class Shell:
                     cmd_func = ep.load()
                     self.command_registry.register(ep.name, cmd_func, f"Plugin command: {ep.name}", args=None)
                 except Exception as e:
-                    print(f"Failed to load plugin command {ep.name}: {e}")
+                    console.print(Panel(f"Failed to load plugin command {ep.name}: {e}", title="Error", border_style="red"))
         except Exception as e:
-            print(f"Error retrieving shell command entry points: {e}")
+            console.print(Panel(f"Error retrieving command entry points: {e}", title="Error", border_style="red"))
 
     async def _stream_token_observer(self, event: object) -> None:
-        """Observer for streaming tokens (placeholder, handled in commands)."""
-        pass  # No direct printing; let chat_command and solve_command handle display
+        """Observer for streaming tokens (handled in commands)."""
+        pass
 
     def bottom_toolbar(self) -> str:
         """Render a bottom toolbar with mode and agent information."""
-        return f"Mode: {self.state.mode} | Agent: {self.current_agent.name or 'Default'}"
+        color = "bright_white" if self.high_contrast else "yellow"
+        return f"[{color}]Mode: {self.state.mode} | Agent: {self.current_agent.name or 'Default'}[/{color}]"
 
     async def run(self) -> None:
         """Run the interactive shell loop."""
-        console = Console()
         history_file = Path.home() / ".quantalogic_shell_history"
         kb = KeyBindings()
 
@@ -146,13 +164,14 @@ class Shell:
         session = PromptSession(
             message=lambda: f"[{self.current_agent.name or 'Agent'} | {self.state.mode}]> ",
             completer=completer,
-            multiline=False,  # Single-line input, Ctrl+J for newlines
+            multiline=self.multiline,
             history=FileHistory(str(history_file)),
             key_bindings=kb,
             bottom_toolbar=self.bottom_toolbar
         )
+        self.session = session  # Store for inputmode updates
 
-        # Welcome message with rich formatting
+        # Welcome message
         welcome_message = (
             f"Welcome to Quantalogic Shell.\n\n"
             f"Interacting with agent: {self.current_agent.name or 'Agent'}\n"
@@ -169,21 +188,26 @@ class Shell:
                 if not user_input:
                     continue
 
+                # Display user input with label and color
+                color = "bright_blue" if self.high_contrast else "blue"
+                console.print(f"[bold {color}]User:[/bold {color}] {user_input}")
+
                 if user_input.startswith('/'):
                     command_input = user_input[1:].strip()
                     if not command_input:
-                        console.print("[red]Error: No command provided. Try /help.[/red]")
+                        console.print(Panel("No command provided. Try /help.", title="Error", border_style="red"))
                         continue
                     parts = command_input.split(maxsplit=1)
                     command_name = parts[0]
                     args = [parts[1]] if len(parts) > 1 else []
                     if command_name in self.command_registry.commands:
                         result = await self.command_registry.commands[command_name]["func"](args)
-                        if result and command_name not in ["chat", "solve"]:
+                        if result and command_name not in ["chat", "solve", "tutorial"]:
                             title = "Conversation History" if command_name == "history" else f"{command_name.capitalize()} Command"
-                            console.print(Panel(result, title=title, border_style="blue"))
+                            border_color = "bright_blue" if self.high_contrast else "blue"
+                            console.print(Panel(result, title=title, border_style=border_color))
                     else:
-                        console.print(f"[red]Unknown command: /{command_name}. Try /help.[/red]")
+                        console.print(Panel(f"Unknown command: /{command_name}. Try /help.", title="Error", border_style="red"))
                 else:
                     # Handle non-command input based on mode
                     if self.state.mode == "codeact":
@@ -192,9 +216,12 @@ class Shell:
                         await chat_command(self, [user_input])
 
             except KeyboardInterrupt:
-                console.print("\nUse '/exit' to quit the shell.")
+                console.print(Panel("\nUse '/exit' to quit the shell.", title="Info", border_style="yellow"))
             except SystemExit:
-                console.print("Goodbye!")
+                console.print(Panel("Goodbye!", title="Exit", border_style="green"))
                 break
             except Exception as e:
-                logger.debug(f"Error: {e}")
+                if self.debug:
+                    logger.exception("Shell error")
+                error_message = f"Error: {e}. Try /help for assistance."
+                console.print(Panel(error_message, title="Error", border_style="red"))

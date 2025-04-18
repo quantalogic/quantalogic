@@ -1,4 +1,5 @@
-from typing import List, Dict
+from typing import Dict, List
+
 
 class HistoryManager:
     """Manages the conversation history for the shell."""
