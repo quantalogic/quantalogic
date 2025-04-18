@@ -24,6 +24,7 @@ from .commands.loglevel import loglevel_command
 from .commands.mode import mode_command
 from .commands.solve import solve_command
 from .commands.stream import stream_command
+from .history_manager import HistoryManager
 from .shell_state import ShellState
 
 
@@ -43,6 +44,9 @@ class Shell:
             mode="codeact"
         )
         
+        # Initialize history manager
+        self.history_manager = HistoryManager()
+        
         # Initialize agents dictionary with a default agent
         default_config = agent_config or AgentConfig()
         default_agent = Agent(config=default_config)
@@ -51,7 +55,8 @@ class Shell:
             "default": AgentState(
                 agent=default_agent,
                 model_name="deepseek/deepseek-chat",
-                max_iterations=10
+                max_iterations=10,
+                message_history=self.history_manager.get_history()
             )
         }
         self.current_agent_name: str = "default"
@@ -69,7 +74,7 @@ class Shell:
     @property
     def current_message_history(self) -> List[Dict[str, str]]:
         """Get the current agent's message history."""
-        return self.agents[self.current_agent_name].message_history
+        return self.history_manager.get_history()
 
     def _register_builtin_commands(self) -> None:
         """Register all built-in commands with their arguments for autocompletion."""

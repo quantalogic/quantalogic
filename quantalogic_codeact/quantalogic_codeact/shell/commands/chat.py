@@ -30,22 +30,22 @@ async def chat_command(shell, args: List[str]) -> str:
                 shell.current_agent.add_observer(stream_observer, ["StreamToken"])
                 response = await shell.current_agent.chat(
                     message,
-                    history=shell.current_message_history,
+                    history=shell.history_manager.get_history(),
                     streaming=True
                 )
                 shell.current_agent.remove_observer(stream_observer)
             # Append to history after streaming completes
-            shell.current_message_history.append({"role": "user", "content": message})
-            shell.current_message_history.append({"role": "assistant", "content": response})
+            shell.history_manager.add_message("user", message)
+            shell.history_manager.add_message("assistant", response)
             return response
         else:
             response = await shell.current_agent.chat(
                 message,
-                history=shell.current_message_history,
+                history=shell.history_manager.get_history(),
                 streaming=False
             )
-            shell.current_message_history.append({"role": "user", "content": message})
-            shell.current_message_history.append({"role": "assistant", "content": response})
+            shell.history_manager.add_message("user", message)
+            shell.history_manager.add_message("assistant", response)
             console.print(Panel(Markdown(response), title="Chat Response", border_style="blue"))
             return response
     except Exception as e:
