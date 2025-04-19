@@ -33,6 +33,7 @@ from .commands.config_save import config_save
 from .commands.config_show import config_show
 from .commands.contrast import contrast_command
 from .commands.debug import debug_command
+from .commands.edit import edit_command
 from .commands.exit import exit_command
 from .commands.help import help_command
 from .commands.history import history_command
@@ -148,6 +149,7 @@ class Shell:
             {"name": "chat", "func": chat_command, "help": "Chat with the agent: /chat <message>", "args": None},
             {"name": "solve", "func": solve_command, "help": "Solve a task: /solve <task>", "args": None},
             {"name": "compose", "func": compose_command, "help": "Compose input in external editor: /compose", "args": []},
+            {"name": "edit", "func": edit_command, "help": "Edit last user message: /edit", "args": []},
             {"name": "exit", "func": exit_command, "help": "Exit the shell: /exit", "args": []},
             {"name": "history", "func": history_command, "help": "Show conversation history: /history [n]", "args": None},
             {"name": "clear", "func": clear_command, "help": "Clear conversation history: /clear", "args": []},
@@ -201,9 +203,16 @@ class Shell:
     def bottom_toolbar(self):
         """Render a bottom toolbar with mode, agent, and model information as prompt_toolkit HTML."""
         if self.high_contrast:
-            return HTML(f'<b><ansiwhite>Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"} | Model: {self.current_agent.model}</ansiwhite></b>')
+            return HTML(f'<b><style fg="ansiblack" bg="#E6E6FA">Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"} | Model: {self.current_agent.model}</style></b>')
         else:
-            return HTML(f'<b><ansiyellow>Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"} | Model: {self.current_agent.model}</ansiyellow></b>')
+            # High-contrast ANSI backgrounds for default toolbar
+            return HTML(
+                f'<b>'
+                f'<style fg="ansiwhite" bg="ansired"> Mode: {self.state.mode} </style>'
+                f'<style fg="ansiwhite" bg="ansigreen"> Agent: {self.current_agent.name or "Default"} </style>'
+                f'<style fg="ansiwhite" bg="ansiblue"> Model: {self.current_agent.model} </style>'
+                f'</b>'
+            )
 
     async def run(self) -> None:
         """Run the interactive shell loop."""
@@ -253,7 +262,13 @@ class Shell:
 
         while True:
             try:
-                user_input = await session.prompt_async()
+                # Use default parameter to prefill edited text if queued
+                if hasattr(self, 'next_input_text'):
+                    default = self.next_input_text
+                    delattr(self, 'next_input_text')
+                    user_input = await session.prompt_async(default=default)
+                else:
+                    user_input = await session.prompt_async()
                 user_input = user_input.strip()
                 if not user_input:
                     continue
