@@ -3,6 +3,7 @@ name = "quantalogic_toolbox_mcp"
 version = "0.12.0"
 description = "A custom MCP Client for Quantalogic"
 license = "MIT"
+license-file = "LICENSE"
 readme = "./README.md"
 keywords = ["MCP", "Quantalogic", "toolbox", "client"]
 packages = [
@@ -28,3 +29,8 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.plugins."quantalogic.tools"]
 "quantalogic_toolbox_mcp" = "quantalogic_toolbox_mcp"
+
+[tool.poetry.urls]
+Homepage = "https://github.com/quantalogic/toolboxes/tree/main/quantalogic-toolbox-mcp"
+Repository = "https://github.com/quantalogic/toolboxes/tree/main/quantalogic-toolbox-mcp"
+Documentation = "https://github.com/quantalogic/toolboxes/tree/main/quantalogic-toolbox-mcp#readme"
