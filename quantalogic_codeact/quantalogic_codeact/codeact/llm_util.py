@@ -4,6 +4,10 @@ import litellm
 from litellm import exceptions
 
 
+class LLMCompletionError(Exception):
+    """Non-recoverable error during LLM completion."""
+    pass
+
 async def litellm_completion(
     model: str,
     messages: List[dict],
@@ -50,7 +54,7 @@ async def litellm_completion(
                     token=err_msg,
                     step_number=step
                 ))
-            raise RuntimeError(err_msg)
+            raise LLMCompletionError(err_msg)
         except Exception as e:
             err_msg = f"❌ Streaming completion failed: {e}"
             if notify_event:
@@ -59,7 +63,7 @@ async def litellm_completion(
                     token=err_msg,
                     step_number=step
                 ))
-            raise RuntimeError(err_msg)
+            raise LLMCompletionError(err_msg)
     else:
         try:
             response = await litellm.acompletion(
@@ -74,6 +78,6 @@ async def litellm_completion(
         except exceptions.APIError as e:
             # Clear message for non-streaming errors
             err_msg = f"❌ Completion failed: {e.__class__.__name__}: {e}"
-            raise RuntimeError(err_msg)
+            raise LLMCompletionError(err_msg)
         except Exception as e:
-            raise RuntimeError(f"❌ Completion failed: {e}")
+            raise LLMCompletionError(f"❌ Completion failed: {e}")
