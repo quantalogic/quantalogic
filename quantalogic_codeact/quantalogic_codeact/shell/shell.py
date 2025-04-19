@@ -23,6 +23,7 @@ from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list
 from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
 
 from .agent_state import AgentState
+from .command_registry import CommandRegistry
 from .commands.agent import agent_command
 from .commands.chat import chat_command
 from .commands.clear import clear_command
@@ -47,7 +48,6 @@ from .commands.setmodel import setmodel_command
 from .commands.solve import solve_command
 from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
-from .command_registry import CommandRegistry
 from .history_manager import HistoryManager
 from .shell_state import ShellState
 

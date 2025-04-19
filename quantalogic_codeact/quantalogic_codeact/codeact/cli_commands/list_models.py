@@ -1,6 +1,7 @@
+from typing import Optional
+
 import typer
 from rich.console import Console
-from typing import Optional
 
 from quantalogic_codeact.llm_util.data import get_model_info, list_litellm_models
 from quantalogic_codeact.llm_util.presentation import make_model_info_table, make_model_list_table
