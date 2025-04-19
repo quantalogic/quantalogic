@@ -4,7 +4,10 @@ import sys
 
 import typer
 from loguru import logger
+from rich.box import DOUBLE
 from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 
 from quantalogic_codeact.codeact.agent import Agent, AgentConfig
 from quantalogic_codeact.codeact.constants import DEFAULT_MODEL, LOG_FILE
@@ -211,5 +214,9 @@ def task(
         ))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
-        typer.echo(f"Error: {e}", err=True)
+        console.print(Panel(
+            Text(repr(e), style="red"),
+            title="[bold red]Task did not complete successfully[/bold red]",
+            box=DOUBLE, expand=True
+        ))
         raise typer.Exit(code=1)
