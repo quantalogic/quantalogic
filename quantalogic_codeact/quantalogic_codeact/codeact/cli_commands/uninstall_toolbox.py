@@ -1,10 +1,13 @@
 import subprocess
+
 import typer
 from rich.console import Console
-from pathlib import Path
+
 from quantalogic_codeact.codeact.cli_commands.config_manager import (
-    load_global_config, save_global_config,
-    load_project_config, save_project_config
+    load_global_config,
+    load_project_config,
+    save_global_config,
+    save_project_config,
 )
 
 app = typer.Typer()

@@ -16,11 +16,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from quantalogic_codeact.codeact.agent import Agent, AgentConfig
-from quantalogic_codeact.codeact.cli_commands.config_manager import (
-    GLOBAL_CONFIG_PATH,
-    load_global_config,
-    save_global_config,
-)
+import quantalogic_codeact.codeact.cli_commands.config_manager as config_manager
 from quantalogic_codeact.codeact.commands.toolbox.get_tool_doc import get_tool_doc
 from quantalogic_codeact.codeact.commands.toolbox.install_toolbox import install_toolbox
 from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
@@ -57,11 +53,21 @@ console = Console()
 
 class Shell:
     """Interactive CLI shell for dialog with Quantalogic agents."""
-    def __init__(self, agent_config: Optional[AgentConfig] = None):
-        # Configure logger to INFO by default
+    def __init__(self, agent_config: Optional[AgentConfig] = None, cli_log_level: Optional[str] = None):
+        # Configure logger based on config file (default ERROR)
+        cfg = config_manager.load_global_config()
+        if cli_log_level:
+            level = cli_log_level.upper()
+        else:
+            level = cfg.get("log_level", config_manager.GLOBAL_DEFAULTS.get("log_level", "ERROR")).upper()
         logger.remove()
-        self.logger_sink_id = logger.add(sys.stderr, level="INFO")
-        self.log_level = "INFO"
+        self.logger_sink_id = logger.add(
+            sys.stderr,
+            level=level,
+            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | "
+                   "<cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>"
+        )
+        self.log_level = level
         self.debug = False  # For detailed error logging
         self.high_contrast = False  # For accessibility
         self.multiline = False  # Default to single-line input
@@ -78,7 +84,7 @@ class Shell:
         self.history_manager = HistoryManager()
         
         # Load or initialize global config
-        if not GLOBAL_CONFIG_PATH.exists():
+        if not config_manager.GLOBAL_CONFIG_PATH.exists():
             default_data = {
                 "model": "gemini/gemini-2.0-flash",
                 "max_iterations": 5,
@@ -94,18 +100,20 @@ class Shell:
                 "customizations": None,
                 "agent_tool_model": "gemini/gemini-2.0-flash",
                 "agent_tool_timeout": 30,
-                "installed_toolboxes": []
+                "installed_toolboxes": [],
+                "log_level": config_manager.GLOBAL_DEFAULTS.get("log_level", "ERROR")
             }
-            save_global_config(default_data)
-            logger.info(f"Created global configuration at {GLOBAL_CONFIG_PATH}")
+            config_manager.save_global_config(default_data)
+            logger.info(f"Created global configuration at {config_manager.GLOBAL_CONFIG_PATH}")
             config_data = default_data
         else:
-            config_data = load_global_config()
+            config_data = config_manager.load_global_config()
         # Prepare AgentConfig args
         config_data.pop("installed_toolboxes", None)
+        config_data.pop("log_level", None)
         try:
             default_config = AgentConfig(**config_data)
-            logger.info(f"Loaded configuration from {GLOBAL_CONFIG_PATH}")
+            logger.info(f"Loaded configuration from {config_manager.GLOBAL_CONFIG_PATH}")
         except Exception as e:
             logger.error(f"Failed to initialize AgentConfig: {e}. Using minimal configuration.")
             default_config = AgentConfig()
@@ -220,7 +228,11 @@ class Shell:
             for cmd, info in self.command_registry.commands.items()
         })
         session = PromptSession(
-            message=lambda: f"[{self.current_agent.name or 'Agent'} | {self.state.mode}]> ",
+            message=lambda: HTML(
+                f'<ansigreen>[cfg:{config_manager.GLOBAL_CONFIG_PATH.name}]</ansigreen> '
+                f'<ansicyan>[{self.current_agent.name or "Agent"}]</ansicyan> '
+                f'<ansiyellow>[{self.state.mode}]></ansiyellow> '
+            ),
             completer=completer,
             multiline=self.multiline,
             history=FileHistory(str(history_file)),

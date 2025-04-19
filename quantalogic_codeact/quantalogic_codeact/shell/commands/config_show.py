@@ -1,14 +1,16 @@
 from typing import List
 
-import yaml
 from jinja2 import Environment
 from rich.console import Console
 from rich.table import Table
+import quantalogic_codeact.codeact.cli_commands.config_manager as config_manager
 
 console = Console()
 
 async def config_show(shell, args: List[str]) -> str:
     """Display the current configuration with sanitized values."""
+    config_path = config_manager.GLOBAL_CONFIG_PATH.expanduser().resolve()
+    console.print(f"[bold]Config file path:[/bold] {config_path}")
     config = shell.current_agent.config
     # Collect raw attributes (exclude private)
     raw = {k: v for k, v in vars(config).items() if not k.startswith('_')}

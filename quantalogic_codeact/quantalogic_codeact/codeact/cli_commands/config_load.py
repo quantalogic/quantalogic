@@ -1,8 +1,9 @@
-from pathlib import Path
 
 import typer
 import yaml
 from loguru import logger
+
+from quantalogic_codeact.codeact.cli_commands.config_manager import GLOBAL_CONFIG_PATH
 
 app = typer.Typer()
 
@@ -12,7 +13,7 @@ def config_load(filename: str = typer.Argument(..., help="Path to the configurat
     try:
         with open(filename) as f:
             new_config = yaml.safe_load(f) or {}
-        config_file_path = Path(".quantalogic/config.yaml").resolve()
+        config_file_path = GLOBAL_CONFIG_PATH
         config_file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(config_file_path, "w") as f:
             yaml.safe_dump(new_config, f, default_flow_style=False)
