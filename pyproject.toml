@@ -11,17 +11,6 @@ packages = [
 # PyPI metadata
 license = "MIT"
 
-[[tool.poetry.include]]
-path = "LICENSE"
-format = "text"
-
-keywords = ["agent", "ReAct", "QuantaLogic"]
-classifiers = [
-  "License :: OSI Approved :: MIT License",
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
-  "Development Status :: 4 - Beta"
-]
 
 [tool.poetry.urls]
 Homepage = "https://github.com/quantalogic/quantalogic"
