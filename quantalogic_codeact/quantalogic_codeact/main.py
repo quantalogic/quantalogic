@@ -34,8 +34,8 @@ for file in cli_commands_dir.glob("*.py"):
 
 def main():
     """Main entry point: default to shell mode if no arguments, otherwise run CLI."""
-    if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ["--help", "-h"]):
-        # No subcommand provided, or help requested without subcommand: run shell
+    if len(sys.argv) == 1:
+        # No subcommand provided: run shell
         shell()
     else:
         # Run typer app for CLI commands
