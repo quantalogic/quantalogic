@@ -1,7 +1,7 @@
 """Toolbox for interacting with MCP servers with JSON-based configuration.
 
 This module provides a generic adapter for interacting with multiple MCP servers,
-configured via JSON files in a configurable directory (default: ./config). Each server has its own tools,
+configured via JSON files in a configurable directory (default: ./mcp_config). Each server has its own tools,
 and core tools are provided to interact with any server by specifying its name.
 Tools are automatically queried from servers during initialization with caching and refresh options.
 """
@@ -35,7 +35,8 @@ logger.add(
 # **Global Variables**
 servers: Dict[str, StdioServerParameters] = {}
 tools_cache: Dict[str, Any] = {}  # Cache for storing tools_result per server
-CONFIG_DIR = os.getenv("MCP_CONFIG_DIR", "./config")
+CONFIG_DIR = os.getenv("MCP_CONFIG_DIR", "./mcp_config")
+CONFIG_FILE = os.getenv("MCP_CONFIG_FILE")
 _tools_cache = None  # Cache for get_tools() results
 
 # **Utility Functions**
@@ -608,7 +609,7 @@ def get_tools() -> List:
         list_servers,
     ]
 
-    config_path = os.path.join(CONFIG_DIR, "mcp.json")
+    config_path = CONFIG_FILE if CONFIG_FILE else os.path.join(CONFIG_DIR, "mcp.json")
     if os.path.exists(config_path):
         try:
             config = load_mcp_config(config_path)
