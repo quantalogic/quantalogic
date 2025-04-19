@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic-toolbox-math"
-version = "0.15.0"
+version = "0.16.0"
 description = "Advanced math toolbox for Quantalogic Agent with symbolic and numerical operations."
 authors = ["Raphael Mansuy <raphael.mansuy@quantalogic.app>"]
 packages = [

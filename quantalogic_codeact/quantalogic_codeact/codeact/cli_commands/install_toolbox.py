@@ -52,7 +52,9 @@ def install_toolbox(
         
         # Get entry points for this package
         eps = importlib.metadata.entry_points(group="quantalogic.tools")
-        installed_eps = [ep for ep in eps if ep.dist.name == package_name]
+        # Match distribution name with underscores or dashes
+        dist_names = {package_name, package_name.replace("_", "-")}
+        installed_eps = [ep for ep in eps if ep.dist.name in dist_names]
         
         if not installed_eps:
             console.print(f"[yellow]Installed '{package_name}' but no quantalogic.tools entry points found.[/yellow]")
