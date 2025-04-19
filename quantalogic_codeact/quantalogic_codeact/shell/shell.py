@@ -3,7 +3,6 @@ from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import yaml
 from loguru import logger
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import NestedCompleter
@@ -46,6 +45,9 @@ from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
 from .history_manager import HistoryManager
 from .shell_state import ShellState
+from quantalogic_codeact.codeact.cli_commands.config_manager import (
+    GLOBAL_CONFIG_PATH, load_global_config, save_global_config
+)
 
 console = Console()
 
@@ -71,10 +73,9 @@ class Shell:
         # Initialize history manager
         self.history_manager = HistoryManager()
         
-        # Check for .quantalogic/config.yaml in the current working directory
-        config_file_path = Path(".quantalogic/config.yaml").resolve()
-        if not config_file_path.exists():
-            default_config_data = {
+        # Load or initialize global config
+        if not GLOBAL_CONFIG_PATH.exists():
+            default_data = {
                 "model": "gemini/gemini-2.0-flash",
                 "max_iterations": 5,
                 "enabled_toolboxes": [],
@@ -88,30 +89,22 @@ class Shell:
                 "profile": None,
                 "customizations": None,
                 "agent_tool_model": "gemini/gemini-2.0-flash",
-                "agent_tool_timeout": 30
+                "agent_tool_timeout": 30,
+                "installed_toolboxes": []
             }
-            try:
-                config_file_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(config_file_path, "w") as f:
-                    yaml.safe_dump(default_config_data, f, default_flow_style=False)
-                logger.info(f"Created default configuration file at {config_file_path}")
-                console.print(Panel(f"Created default configuration file at {config_file_path}", title="Info", border_style="green"))
-            except Exception as e:
-                logger.error(f"Failed to create default configuration file at {config_file_path}: {e}")
-            try:
-                default_config = AgentConfig(**default_config_data)
-            except Exception as e:
-                logger.error(f"Failed to initialize AgentConfig from default data: {e}. Using minimal configuration.")
-                default_config = AgentConfig()
+            save_global_config(default_data)
+            logger.info(f"Created global configuration at {GLOBAL_CONFIG_PATH}")
+            config_data = default_data
         else:
-            try:
-                with open(config_file_path) as f:
-                    config_data = yaml.safe_load(f) or {}
-                default_config = AgentConfig(**config_data)
-                logger.info(f"Loaded configuration from {config_file_path}")
-            except Exception as e:
-                logger.error(f"Failed to load .quantalogic/config.yaml: {e}. Using minimal configuration.")
-                default_config = AgentConfig()
+            config_data = load_global_config()
+        # Prepare AgentConfig args
+        config_data.pop("installed_toolboxes", None)
+        try:
+            default_config = AgentConfig(**config_data)
+            logger.info(f"Loaded configuration from {GLOBAL_CONFIG_PATH}")
+        except Exception as e:
+            logger.error(f"Failed to initialize AgentConfig: {e}. Using minimal configuration.")
+            default_config = AgentConfig()
         
         # Initialize the default agent with the loaded or default config
         default_agent = Agent(config=agent_config or default_config)

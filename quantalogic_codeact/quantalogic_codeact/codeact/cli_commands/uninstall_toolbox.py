@@ -1,26 +1,24 @@
 import subprocess
-from pathlib import Path
-
 import typer
-import yaml
 from rich.console import Console
+from pathlib import Path
+from quantalogic_codeact.codeact.cli_commands.config_manager import (
+    load_global_config, save_global_config,
+    load_project_config, save_project_config
+)
 
 app = typer.Typer()
 console = Console()
-CONFIG_PATH = Path.home() / ".quantalogic/config.yaml"
-PROJECT_CONFIG_PATH = Path(".quantalogic/config.yaml").resolve()
 
 def load_config():
     """Load or initialize the config file."""
-    if CONFIG_PATH.exists():
-        with open(CONFIG_PATH) as f:
-            return yaml.safe_load(f) or {"installed_toolboxes": []}
-    return {"installed_toolboxes": []}
+    # Load global config
+    config = load_global_config()
+    return config
 
 def save_config(config):
     """Save the config to file."""
-    with open(CONFIG_PATH, "w") as f:
-        yaml.safe_dump(config, f, default_flow_style=False)
+    save_global_config(config)
 
 @app.command()
 def uninstall_toolbox(
@@ -32,48 +30,40 @@ def uninstall_toolbox(
         config = load_config()
         
         # Step 1: Check if input is a toolbox name
-        toolbox_entry = next((tb for tb in config["installed_toolboxes"] if tb["name"] == toolbox_name), None)
+        toolbox_entry = next((tb for tb in config.get("installed_toolboxes", []) if tb["name"] == toolbox_name), None)
         if toolbox_entry:
             package_name = toolbox_entry["package"]
             subprocess.run(["uv", "pip", "uninstall", package_name], check=True)
-            config["installed_toolboxes"] = [tb for tb in config["installed_toolboxes"] if tb["name"] != toolbox_name]
+            config["installed_toolboxes"] = [tb for tb in config.get("installed_toolboxes", []) if tb["name"] != toolbox_name]
             save_config(config)
             console.print(f"[green]Toolbox '{toolbox_name}' (package '{package_name}') uninstalled and removed from config.[/green]")
             # Disable in project config
-            if PROJECT_CONFIG_PATH.exists():
-                with open(PROJECT_CONFIG_PATH) as f:
-                    project_config = yaml.safe_load(f) or {}
-                enabled = project_config.get("enabled_toolboxes", [])
-                if toolbox_name in enabled:
-                    enabled.remove(toolbox_name)
-                    project_config["enabled_toolboxes"] = enabled
-                    PROJECT_CONFIG_PATH.parent.mkdir(exist_ok=True)
-                    with open(PROJECT_CONFIG_PATH, "w") as f:
-                        yaml.safe_dump(project_config, f, default_flow_style=False)
-                    console.print(f"[green]Toolbox '{toolbox_name}' disabled in project config.[/green]")
+            project_cfg = load_project_config()
+            enabled = project_cfg.get("enabled_toolboxes", [])
+            if toolbox_name in enabled:
+                enabled.remove(toolbox_name)
+                project_cfg["enabled_toolboxes"] = enabled
+                save_project_config(project_cfg)
+                console.print(f"[green]Toolbox '{toolbox_name}' disabled in project config.[/green]")
             return
         
         # Step 2: Check if input is a package name
-        package_entries = [tb for tb in config["installed_toolboxes"] if tb["package"] == toolbox_name]
+        package_entries = [tb for tb in config.get("installed_toolboxes", []) if tb["package"] == toolbox_name]
         if package_entries:
             subprocess.run(["uv", "pip", "uninstall", toolbox_name], check=True)
-            config["installed_toolboxes"] = [tb for tb in config["installed_toolboxes"] if tb["package"] != toolbox_name]
+            config["installed_toolboxes"] = [tb for tb in config.get("installed_toolboxes", []) if tb["package"] != toolbox_name]
             save_config(config)
             toolbox_names = ", ".join(tb["name"] for tb in package_entries)
             console.print(f"[green]Package '{toolbox_name}' providing toolbox(es) '{toolbox_names}' uninstalled and removed from config.[/green]")
             # Disable in project config
-            if PROJECT_CONFIG_PATH.exists():
-                with open(PROJECT_CONFIG_PATH) as f:
-                    project_config = yaml.safe_load(f) or {}
-                enabled = project_config.get("enabled_toolboxes", [])
-                for name in toolbox_names.split(", "):
-                    if name in enabled:
-                        enabled.remove(name)
-                project_config["enabled_toolboxes"] = enabled
-                PROJECT_CONFIG_PATH.parent.mkdir(exist_ok=True)
-                with open(PROJECT_CONFIG_PATH, "w") as f:
-                    yaml.safe_dump(project_config, f, default_flow_style=False)
-                console.print(f"[green]Toolbox(es) '{toolbox_names}' disabled in project config.[/green]")
+            project_cfg = load_project_config()
+            enabled = project_cfg.get("enabled_toolboxes", [])
+            for name in toolbox_names.split(", "):
+                if name in enabled:
+                    enabled.remove(name)
+            project_cfg["enabled_toolboxes"] = enabled
+            save_project_config(project_cfg)
+            console.print(f"[green]Toolbox(es) '{toolbox_names}' disabled in project config.[/green]")
             return
         
         # If neither toolbox nor package is found

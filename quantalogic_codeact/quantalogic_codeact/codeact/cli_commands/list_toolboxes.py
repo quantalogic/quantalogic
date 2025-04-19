@@ -1,33 +1,18 @@
 import importlib.metadata
 from pathlib import Path
-
 import typer
-import yaml
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from quantalogic_codeact.codeact.cli import plugin_manager  # Import shared plugin_manager from cli.py
+from quantalogic_codeact.codeact.cli import plugin_manager
+from quantalogic_codeact.codeact.cli_commands.config_manager import (
+    load_global_config, GLOBAL_CONFIG_PATH
+)
 
 app = typer.Typer()
 console = Console()
-CONFIG_PATH = Path.home() / ".quantalogic/config.yaml"
-PROJECT_CONFIG_PATH = Path(".quantalogic/config.yaml").resolve()
-
-def load_config():
-    """Load the configuration file and return the config along with a status message."""
-    if not CONFIG_PATH.exists():
-        return {"installed_toolboxes": []}, "not found"
-    try:
-        with open(CONFIG_PATH) as f:
-            config = yaml.safe_load(f)
-            if config is None:
-                return {"installed_toolboxes": []}, "empty"
-            return config, "loaded"
-    except yaml.YAMLError:
-        return {"installed_toolboxes": []}, "invalid YAML"
-    except Exception as e:
-        return {"installed_toolboxes": []}, f"error: {str(e)}"
+# Config file managed via config_manager
 
 def get_module_path(toolbox_name: str) -> str:
     """Retrieve the filesystem path of the module for a given toolbox."""
@@ -49,18 +34,11 @@ def list_toolboxes(
     detail: bool = typer.Option(False, "--detail", help="Show detailed information including tools and their documentation")
 ) -> None:
     """List installed toolboxes, optionally with detailed tool information and documentation."""
-    config, status = load_config()
-    # Load project config to determine enabled toolboxes
-    enabled_toolboxes = []
-    if PROJECT_CONFIG_PATH.exists():
-        try:
-            with open(PROJECT_CONFIG_PATH) as f:
-                proj_cfg = yaml.safe_load(f) or {}
-                enabled_toolboxes = proj_cfg.get("enabled_toolboxes", [])
-        except Exception:
-            pass
+    # Load config
+    config = load_global_config()
+    enabled_toolboxes = config.get("enabled_toolboxes", [])
     
-    console.print(f"[bold]Config file:[/bold] {CONFIG_PATH} ([italic]{status}[/italic])")
+    console.print(f"[bold]Config file:[/bold] {GLOBAL_CONFIG_PATH}")
     
     installed_toolboxes = config.get("installed_toolboxes", [])
     

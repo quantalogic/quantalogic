@@ -4,26 +4,13 @@ import subprocess
 from pathlib import Path
 
 import typer
-import yaml
 from rich.console import Console
+from quantalogic_codeact.codeact.cli_commands.config_manager import (
+    load_global_config, save_global_config
+)
 
 app = typer.Typer()
 console = Console()
-GLOBAL_CONFIG_PATH = Path.home() / ".quantalogic/config.yaml"
-PROJECT_CONFIG_PATH = Path(".quantalogic/config.yaml").resolve()
-
-def load_config(path: Path):
-    """Load or initialize the config file."""
-    if path.exists():
-        with open(path) as f:
-            return yaml.safe_load(f) or {"installed_toolboxes": []}
-    return {"installed_toolboxes": []}
-
-def save_config(config, path: Path):
-    """Save the config to file."""
-    path.parent.mkdir(exist_ok=True)
-    with open(path, "w") as f:
-        yaml.safe_dump(config, f, default_flow_style=False)
 
 def parse_package_info_from_filename(filename):
     """Parse package name and version from filename like 'package_name-1.0.0.tar.gz'"""
@@ -36,7 +23,7 @@ def parse_package_info_from_filename(filename):
 def install_toolbox(
     toolbox_name: str = typer.Argument(..., help="Name of the toolbox to install (PyPI package or local wheel file)")
 ) -> None:
-    """Install a toolbox, update the global config, and enable it in the project config."""
+    """Install a toolbox, update the global config, and enable it in the global config."""
     try:
         # Determine package name and version based on input
         if Path(toolbox_name).exists():
@@ -59,7 +46,7 @@ def install_toolbox(
             pass
         
         # Load existing global config
-        global_config = load_config(GLOBAL_CONFIG_PATH)
+        global_config = load_global_config()
         
         # Remove existing entries for this package
         global_config["installed_toolboxes"] = [tb for tb in global_config["installed_toolboxes"] if tb["package"] != package_name]
@@ -92,19 +79,17 @@ def install_toolbox(
                 except Exception as e:
                     console.print(f"[yellow]Warning: Could not register tools for '{ep.name}': {e}[/yellow]")
         
-        save_config(global_config, GLOBAL_CONFIG_PATH)
+        # Persist installation
+        save_global_config(global_config)
         console.print(f"[green]Toolbox '{package_name}' installed and added to global config.[/green]")
         
-        # Always enable installed toolbox(es) in project config
-        project_config = load_config(PROJECT_CONFIG_PATH)
-        enabled_toolboxes = project_config.get("enabled_toolboxes", [])
+        # Enable toolboxes
         to_enable = [ep.name for ep in installed_eps] or [package_name]
         for name in to_enable:
-            if name not in enabled_toolboxes:
-                enabled_toolboxes.append(name)
-        project_config["enabled_toolboxes"] = enabled_toolboxes
-        save_config(project_config, PROJECT_CONFIG_PATH)
-        console.print(f"[green]Toolbox '{', '.join(to_enable)}' enabled in project config.[/green]")
+            if name not in global_config.setdefault("enabled_toolboxes", []):
+                global_config["enabled_toolboxes"].append(name)
+        save_global_config(global_config)
+        console.print(f"[green]Toolbox '{', '.join(to_enable)}' enabled in global config.[/green]")
     except subprocess.CalledProcessError as e:
         console.print(f"[red]Failed to install toolbox: {e}[/red]")
         raise typer.Exit(code=1)
