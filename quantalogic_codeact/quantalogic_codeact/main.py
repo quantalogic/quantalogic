@@ -2,12 +2,18 @@ import asyncio
 import importlib
 import sys
 from pathlib import Path
-import typer
 from typing import Optional
-import quantalogic_codeact.codeact.cli_commands.config_manager as cm
+
+import typer
 from loguru import logger
 
-from quantalogic_codeact.shell.shell import Shell
+# Default logger configuration: only show ERROR and above until overridden by --loglevel
+logger.remove()
+logger.add(sys.stderr, level="ERROR", format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | "
+           "<cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>")
+
+import quantalogic_codeact.codeact.cli_commands.config_manager as cm  # noqa: E402
+from quantalogic_codeact.shell.shell import Shell  # noqa: E402
 
 app = typer.Typer()
 
