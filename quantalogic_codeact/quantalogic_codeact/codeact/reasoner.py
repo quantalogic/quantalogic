@@ -7,7 +7,7 @@ from quantalogic.tools import Tool
 
 from .constants import MAX_GENERATE_PROGRAM_TOKENS
 from .events import PromptGeneratedEvent
-from .llm_util import litellm_completion
+from .llm_util import LLMCompletionError, litellm_completion
 from .templates import jinja_env
 from .xml_utils import XMLResultHandler, validate_xml
 
@@ -53,6 +53,8 @@ async def generate_program(
             )
             code = response.strip()
             return code[9:-3].strip() if code.startswith("```python") and code.endswith("```") else code
+        except LLMCompletionError as e:
+            raise e
         except Exception as e:
             if attempt < 2:
                 await asyncio.sleep(2 ** attempt)
@@ -156,6 +158,8 @@ class Reasoner(BaseReasoner):
             if not validate_xml(response):
                 raise ValueError("Invalid XML generated")
             return response
+        except LLMCompletionError as e:
+            raise e
         except Exception as e:
             return XMLResultHandler.format_error_result(str(e))
 
