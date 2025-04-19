@@ -12,7 +12,7 @@ console = Console()
 async def chat_command(shell, args: List[str]) -> str:
     """Handle the /chat command with conversation history and streaming."""
     if not args:
-        return "Please provide a message to chat with the agent."
+        return "Please provide a message to chat with the agent. For example: /chat Hello, how are you?"
     
     message = " ".join(args)
     try:

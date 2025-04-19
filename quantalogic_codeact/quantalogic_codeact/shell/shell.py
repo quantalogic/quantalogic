@@ -1,4 +1,5 @@
 import sys
+from difflib import get_close_matches  # Added for command suggestions
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -14,6 +15,11 @@ from rich.console import Console
 from rich.panel import Panel
 
 from quantalogic_codeact.codeact.agent import Agent, AgentConfig
+from quantalogic_codeact.codeact.cli_commands.config_manager import (
+    GLOBAL_CONFIG_PATH,
+    load_global_config,
+    save_global_config,
+)
 from quantalogic_codeact.codeact.commands.toolbox.get_tool_doc import get_tool_doc
 from quantalogic_codeact.codeact.commands.toolbox.install_toolbox import install_toolbox
 from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
@@ -45,9 +51,6 @@ from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
 from .history_manager import HistoryManager
 from .shell_state import ShellState
-from quantalogic_codeact.codeact.cli_commands.config_manager import (
-    GLOBAL_CONFIG_PATH, load_global_config, save_global_config
-)
 
 console = Console()
 
@@ -249,7 +252,8 @@ class Shell:
                 if user_input.startswith('/'):
                     command_input = user_input[1:].strip()
                     if not command_input:
-                        console.print(Panel("No command provided. Try /help.", title="Error", border_style="red"))
+                        border_style = "bright_red" if self.high_contrast else "red"
+                        console.print(Panel("No command provided. Try /help.", title="Error", border_style=border_style))
                         continue
 
                     # Support multi-word commands by matching the longest command name first
@@ -267,7 +271,14 @@ class Shell:
                             border_color = "bright_blue" if self.high_contrast else "blue"
                             console.print(Panel(result, title=title, border_style=border_color))
                     else:
-                        console.print(Panel(f"Unknown command: /{command_input}. Try /help.", title="Error", border_style="red"))
+                        similar = get_close_matches(command_input, self.command_registry.commands.keys(), n=1, cutoff=0.6)
+                        if similar:
+                            suggestion = f"Did you mean '/{similar[0]}'?"
+                        else:
+                            suggestion = ""
+                        error_message = f"Unknown command: /{command_input}. {suggestion} Try /help."
+                        border_style = "bright_red" if self.high_contrast else "red"
+                        console.print(Panel(error_message, title="Error", border_style=border_style))
                 else:
                     # Handle non-command input based on mode
                     if self.state.mode == "codeact":
@@ -282,6 +293,7 @@ class Shell:
                 break
             except Exception as e:
                 if self.debug:
-                    logger.exception("Shell error")
+                    logger.exception(f"Error processing input: {user_input}")
                 error_message = f"Error: {e}. Try /help for assistance."
-                console.print(Panel(error_message, title="Error", border_style="red"))
+                border_style = "bright_red" if self.high_contrast else "red"
+                console.print(Panel(error_message, title="Error", border_style=border_style))

@@ -13,7 +13,7 @@ console = Console()
 async def solve_command(shell, args: List[str]) -> str:
     """Handle the /solve command with streaming and intermediate steps display."""
     if not args:
-        return "Please provide a task to solve."
+        return "Please provide a task to solve. For example: /solve Calculate the integral of x^2 from 0 to 1."
     
     task = " ".join(args)
     try:
@@ -35,11 +35,16 @@ async def solve_command(shell, args: List[str]) -> str:
                     step_buffers[step] = lines[-1]
                 elif isinstance(event, ActionExecutedEvent):
                     summary = XMLResultHandler.format_result_summary(event.result_xml)
-                    console.print(f"[magenta]Step {event.step_number} Result:[/magenta]\n{summary}")
+                    if "<Status>Error</Status>" in event.result_xml:
+                        console.print(Panel(summary, title=f"Step {event.step_number} Error", border_style="red"))
+                    else:
+                        console.print(Panel(summary, title=f"Step {event.step_number} Result", border_style="magenta"))
                 elif isinstance(event, TaskCompletedEvent):
                     if event.final_answer:
                         final_answer = XMLResultHandler.extract_result_value(event.final_answer)
                         console.print(Panel(Markdown(final_answer), title="Final Answer", border_style="green"))
+                    else:
+                        console.print(Panel("Task did not complete successfully.", title="Error", border_style="red"))
             
             shell.current_agent.add_observer(stream_observer, ["StreamToken", "ActionExecuted", "TaskCompleted"])
             history = await shell.current_agent.solve(
@@ -63,18 +68,32 @@ async def solve_command(shell, args: List[str]) -> str:
                     thought = step.get('thought', '')
                     action = step.get('action', '')
                     result = step.get('result', '')
-                    rprint(Panel(
-                        f"[cyan]Step {step['step_number']}:[/cyan]\n"
-                        f"[yellow]Thought:[/yellow] {thought}\n"
-                        f"[yellow]Action:[/yellow] {action}\n"
-                        f"[yellow]Result:[/yellow] {result}",
-                        border_style="cyan"
-                    ))
+                    result_summary = XMLResultHandler.format_result_summary(result)
+                    if "<Status>Error</Status>" in result:
+                        rprint(Panel(
+                            f"[cyan]Step {step['step_number']}:[/cyan]\n"
+                            f"[yellow]Thought:[/yellow] {thought}\n"
+                            f"[yellow]Action:[/yellow] {action}\n"
+                            f"[red]Error:[/red] {result_summary}",
+                            border_style="red"
+                        ))
+                    else:
+                        rprint(Panel(
+                            f"[cyan]Step {step['step_number']}:[/cyan]\n"
+                            f"[yellow]Thought:[/yellow] {thought}\n"
+                            f"[yellow]Action:[/yellow] {action}\n"
+                            f"[blue]Result:[/blue] {result_summary}",
+                            border_style="cyan"
+                        ))
                 final_answer = shell.current_agent._extract_response(history)
+                if final_answer.startswith("Error:"):
+                    console.print(Panel(final_answer, title="Task Error", border_style="red"))
+                else:
+                    console.print(Panel(Markdown(final_answer), title="Final Answer", border_style="green"))
+                shell.history_manager.add_message("user", task)
+                shell.history_manager.add_message("assistant", final_answer)
+                return final_answer
             else:
-                final_answer = "No steps were executed."
-            shell.history_manager.add_message("user", task)
-            shell.history_manager.add_message("assistant", final_answer)
-            return final_answer
+                return "No steps were executed."
     except Exception as e:
         return f"Error solving task: {e}"
