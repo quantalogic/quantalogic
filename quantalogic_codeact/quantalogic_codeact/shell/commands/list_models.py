@@ -1,4 +1,5 @@
 from rich.console import Console
+
 from quantalogic_codeact.llm_util.data import get_model_info
 from quantalogic_codeact.llm_util.presentation import make_model_info_table
 
