@@ -15,8 +15,8 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from quantalogic_codeact.codeact.agent import Agent, AgentConfig
 import quantalogic_codeact.codeact.cli_commands.config_manager as config_manager
+from quantalogic_codeact.codeact.agent import Agent, AgentConfig
 from quantalogic_codeact.codeact.commands.toolbox.get_tool_doc import get_tool_doc
 from quantalogic_codeact.codeact.commands.toolbox.install_toolbox import install_toolbox
 from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
