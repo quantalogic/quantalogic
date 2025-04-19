@@ -436,6 +436,13 @@ class CodeActAgent:
                 notify_event=self._notify_observers if streaming else None
             )
             return response.strip()
+        except LLMCompletionError as e:
+            logger.error(f"Chat failed: {e}")
+            # Notify observers about the error
+            await self._notify_observers(ErrorOccurredEvent(
+                event_type="ErrorOccurred", error_message=str(e), step_number=1
+            ))
+            raise e
         except Exception as e:
             logger.error(f"Chat failed: {e}")
             return f"Error: Unable to process chat request due to {str(e)}"
