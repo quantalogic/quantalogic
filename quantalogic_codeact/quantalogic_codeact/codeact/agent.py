@@ -81,7 +81,7 @@ class Agent:
             base_tools = (
                 process_tools(self.config.tools)
                 if self.config.tools is not None
-                else get_default_tools(self.model, enabled_toolboxes=self.config.enabled_toolboxes or [])
+                else get_default_tools(self.model, enabled_toolboxes=self.config.enabled_toolboxes)
             )
             if not self.config.tools_config:
                 return base_tools

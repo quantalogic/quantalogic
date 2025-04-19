@@ -21,6 +21,10 @@ from .setmodel import setmodel_command
 from .config_show import config_show
 from .config_save import config_save
 from .config_load import config_load
+from quantalogic_codeact.codeact.commands.toolbox.install_toolbox import install_toolbox
+from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
+from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
+from quantalogic_codeact.codeact.commands.toolbox.get_tool_doc import get_tool_doc
 
 __all__ = [
     'help_command',
@@ -44,4 +48,8 @@ __all__ = [
     'config_show',
     'config_save',
     'config_load',
+    'install_toolbox',
+    'uninstall_toolbox',
+    'list_toolbox_tools',
+    'get_tool_doc',
 ]

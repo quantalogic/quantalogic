@@ -14,7 +14,12 @@ from prompt_toolkit.keys import Keys
 from rich.console import Console
 from rich.panel import Panel
 
-from ..codeact.agent import Agent, AgentConfig
+from quantalogic_codeact.codeact.agent import Agent, AgentConfig
+from quantalogic_codeact.codeact.commands.toolbox.get_tool_doc import get_tool_doc
+from quantalogic_codeact.codeact.commands.toolbox.install_toolbox import install_toolbox
+from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
+from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
+
 from .agent_state import AgentState
 from .command_registry import CommandRegistry
 from .commands.agent import agent_command
@@ -156,6 +161,10 @@ class Shell:
             {"name": "config show", "func": config_show, "help": "Show the current configuration", "args": []},
             {"name": "config save", "func": config_save, "help": "Save the current configuration to a file: /config save <filename>", "args": None},
             {"name": "config load", "func": config_load, "help": "Load a configuration from a file: /config load <filename>", "args": None},
+            {"name": "toolbox install", "func": install_toolbox, "help": "Install a toolbox: /toolbox install <toolbox_name>", "args": None},
+            {"name": "toolbox uninstall", "func": uninstall_toolbox, "help": "Uninstall a toolbox: /toolbox uninstall <toolbox_name>", "args": None},
+            {"name": "toolbox tools", "func": list_toolbox_tools, "help": "List tools in a toolbox: /toolbox tools <toolbox_name>", "args": None},
+            {"name": "toolbox doc", "func": get_tool_doc, "help": "Show tool documentation: /toolbox doc <toolbox_name> <tool_name>", "args": None},
         ]
         for cmd in builtin_commands:
             self.command_registry.register(

@@ -31,13 +31,10 @@ def load_config():
 def get_module_path(toolbox_name: str) -> str:
     """Retrieve the filesystem path of the module for a given toolbox."""
     try:
-        # Get entry points for quantalogic.tools
         eps = importlib.metadata.entry_points(group="quantalogic.tools")
-        # Find the entry point matching the toolbox name
         ep = next((ep for ep in eps if ep.name == toolbox_name), None)
         if ep is None:
             return "Not found"
-        # Load the module to get its path
         module = ep.load()
         module_file = getattr(module, "__file__", None)
         if module_file:
@@ -48,9 +45,9 @@ def get_module_path(toolbox_name: str) -> str:
 
 @app.command()
 def list_toolboxes(
-    detail: bool = typer.Option(False, "--detail", help="Show detailed information including tools")
+    detail: bool = typer.Option(False, "--detail", help="Show detailed information including tools and their documentation")
 ) -> None:
-    """List installed toolboxes, optionally with detailed tool information."""
+    """List installed toolboxes, optionally with detailed tool information and documentation."""
     config, status = load_config()
     
     console.print(f"[bold]Config file:[/bold] {CONFIG_PATH} ([italic]{status}[/italic])")
@@ -62,7 +59,6 @@ def list_toolboxes(
         return
     
     if not detail:
-        # Basic output: list toolboxes with name, package, version, and module path
         console.print("[bold cyan]Installed Toolboxes:[/bold cyan]")
         for tb in installed_toolboxes:
             try:
@@ -74,37 +70,29 @@ def list_toolboxes(
             except Exception as e:
                 console.print(f"[red]Error processing '{tb['name']}': {str(e)}[/red]")
     else:
-        # Detailed output: show each toolbox with its tools in a panel
+        plugin_manager.load_plugins(force=True)  # Force reload to ensure latest tools
         for tb in installed_toolboxes:
             try:
                 toolbox_name = tb["name"]
                 package = tb["package"]
                 version = tb["version"]
-                # Get module path
                 module_path = get_module_path(toolbox_name)
-                # Filter tools by toolbox_name from the ToolRegistry
                 tools = [
                     tool for (tb_name, _), tool in plugin_manager.tools.tools.items()
                     if tb_name == toolbox_name
                 ]
-                # Sort tools alphabetically by name
                 tools.sort(key=lambda t: t.name)
                 
-                # Build the tool list as bullet points
                 tool_list = []
                 for tool in tools:
                     try:
-                        # Use the raw description without appended notes
-                        description = tool.description.strip()
-                        # Add async note only for tools that are async (DynamicTool instances)
-                        tool_text = f"- {tool.name}: {description}"
-                        tool_list.append(tool_text)
+                        docstring = tool.to_docstring().strip() if hasattr(tool, 'to_docstring') else "No documentation available"
+                        tool_list.append(f"- {tool.name}:\n  {docstring}")
                     except Exception as e:
-                        tool_list.append(f"- {tool.name}: Error retrieving description ({str(e)})")
+                        tool_list.append(f"- {tool.name}: Error retrieving documentation ({str(e)})")
                 if not tool_list:
                     tool_list.append("- No tools found")
                 
-                # Create the panel content
                 content = Text()
                 content.append(f"Package: {package}\n")
                 content.append(f"Version: {version}\n")
@@ -115,7 +103,6 @@ def list_toolboxes(
                 for tool_text in tool_list:
                     content.append(tool_text + "\n")
                 
-                # Display the toolbox in a styled panel
                 panel = Panel(
                     content,
                     title=f"[bold]{toolbox_name}[/bold]",

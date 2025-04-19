@@ -59,7 +59,8 @@ class PluginManager:
                     try:
                         loaded = ep.load()
                         if group == "quantalogic.tools":
-                            store()
+                            # Load the specific toolbox by name so tools are registered
+                            store([ep.name])
                             if ep.name == "quantalogic_toolbox_mcp":
                                 try:
                                     import asyncio

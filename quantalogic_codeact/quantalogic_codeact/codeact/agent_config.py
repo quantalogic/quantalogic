@@ -109,7 +109,9 @@ class AgentConfig:
             self.max_history_tokens = config.get("max_history_tokens", max_history_tokens)
             self.toolbox_directory = config.get("toolbox_directory", toolbox_directory)
             self.tools = tools if tools is not None else config.get("tools")
-            self.enabled_toolboxes = config.get("enabled_toolboxes", enabled_toolboxes)
+            # Treat empty list as no filter (i.e., include all toolboxes)
+            etb = config.get("enabled_toolboxes", enabled_toolboxes)
+            self.enabled_toolboxes = etb if etb else None
             self.reasoner = config.get("reasoner", {"name": config.get("reasoner_name", reasoner_name)})
             self.executor = config.get("executor", {"name": config.get("executor_name", executor_name)})
             self.personality = config.get("personality", personality)
