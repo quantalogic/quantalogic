@@ -23,7 +23,6 @@ from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list
 from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
 
 from .agent_state import AgentState
-from .command_registry import CommandRegistry
 from .commands.agent import agent_command
 from .commands.chat import chat_command
 from .commands.clear import clear_command
@@ -38,6 +37,7 @@ from .commands.exit import exit_command
 from .commands.help import help_command
 from .commands.history import history_command
 from .commands.inputmode import inputmode_command
+from .commands.list_models import listmodels_command
 from .commands.load import load_command
 from .commands.loglevel import loglevel_command
 from .commands.mode import mode_command
@@ -47,6 +47,7 @@ from .commands.setmodel import setmodel_command
 from .commands.solve import solve_command
 from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
+from .command_registry import CommandRegistry
 from .history_manager import HistoryManager
 from .shell_state import ShellState
 
@@ -172,6 +173,7 @@ class Shell:
             {"name": "toolbox uninstall", "func": uninstall_toolbox, "help": "Uninstall a toolbox: /toolbox uninstall <toolbox_name>", "args": None},
             {"name": "toolbox tools", "func": list_toolbox_tools, "help": "List tools in a toolbox: /toolbox tools <toolbox_name>", "args": None},
             {"name": "toolbox doc", "func": get_tool_doc, "help": "Show tool documentation: /toolbox doc <toolbox_name> <tool_name>", "args": None},
+            {"name": "listmodels", "func": listmodels_command, "help": "List models using LLM util: /listmodels", "args": []},
         ]
         for cmd in builtin_commands:
             self.command_registry.register(
