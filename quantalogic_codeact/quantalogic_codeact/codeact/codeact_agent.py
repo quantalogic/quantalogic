@@ -23,7 +23,7 @@ from .events import (
 )
 from .executor import BaseExecutor, Executor
 from .history_manager import HistoryManager
-from .llm_util import litellm_completion
+from .llm_util import LLMCompletionError, litellm_completion
 from .reasoner import BaseReasoner, Reasoner
 from .tools_manager import ToolRegistry
 from .xml_utils import XMLResultHandler
@@ -284,6 +284,11 @@ class CodeActAgent:
                     step_data = {"step_number": step, "thought": thought, "action": code, "result": result}
                     self.history_manager.add(step_data)
                     return step_data
+                except LLMCompletionError as e:
+                    await self._notify_observers(ErrorOccurredEvent(
+                        event_type="ErrorOccurred", error_message=str(e), step_number=step
+                    ))
+                    raise
                 except Exception as e:
                     if not self.error_handler(e, step) or attempt == 2:
                         await self._notify_observers(ErrorOccurredEvent(
@@ -378,6 +383,11 @@ class CodeActAgent:
                             event_type="TaskCompleted", final_answer=step_data["result"], reason="success"
                         ))
                         break
+                except LLMCompletionError as e:
+                    await self._notify_observers(ErrorOccurredEvent(
+                        event_type="ErrorOccurred", error_message=str(e), step_number=step
+                    ))
+                    raise
                 except Exception as e:
                     await self._notify_observers(ErrorOccurredEvent(
                         event_type="ErrorOccurred", error_message=str(e), step_number=step

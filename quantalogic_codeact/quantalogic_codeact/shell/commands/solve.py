@@ -5,7 +5,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from ...codeact.events import ActionExecutedEvent, StreamTokenEvent, TaskCompletedEvent
+from ...codeact.events import ActionExecutedEvent, ErrorOccurredEvent, StreamTokenEvent, TaskCompletedEvent
 from ...codeact.xml_utils import XMLResultHandler
 
 console = Console()
@@ -45,8 +45,10 @@ async def solve_command(shell, args: List[str]) -> str:
                         console.print(Panel(Markdown(final_answer), title="Final Answer", border_style="green"))
                     else:
                         console.print(Panel("Task did not complete successfully.", title="Error", border_style="red"))
+                elif isinstance(event, ErrorOccurredEvent):
+                    console.print(Panel(f"[red]{event.error_message}[/red]", title="Error", border_style="red"))
             
-            shell.current_agent.add_observer(stream_observer, ["StreamToken", "ActionExecuted", "TaskCompleted"])
+            shell.current_agent.add_observer(stream_observer, ["StreamToken", "ActionExecuted", "TaskCompleted", "ErrorOccurred"])
             history = await shell.current_agent.solve(
                 task,
                 history=shell.history_manager.get_history(),
@@ -96,4 +98,5 @@ async def solve_command(shell, args: List[str]) -> str:
             else:
                 return "No steps were executed."
     except Exception as e:
+        console.print(Panel(f"[red]Error solving task: {e}[/red]", title="Error", border_style="red"))
         return f"Error solving task: {e}"
