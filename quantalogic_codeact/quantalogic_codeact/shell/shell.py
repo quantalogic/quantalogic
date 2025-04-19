@@ -12,6 +12,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.panel import Panel
 
 from quantalogic_codeact.codeact.agent import Agent, AgentConfig
@@ -267,9 +268,13 @@ class Shell:
                     if matched_command:
                         result = await self.command_registry.commands[matched_command]["func"](args)
                         if result and matched_command not in ["chat", "solve", "tutorial"]:
-                            title = "Conversation History" if matched_command == "history" else f"{matched_command.capitalize()} Command"
+                            # Use Markdown rendering for toolbox commands
                             border_color = "bright_blue" if self.high_contrast else "blue"
-                            console.print(Panel(result, title=title, border_style=border_color))
+                            if matched_command in ["toolbox doc", "toolbox tools"]:
+                                console.print(Markdown(result))
+                            else:
+                                title = "Conversation History" if matched_command == "history" else f"{matched_command.capitalize()} Command"
+                                console.print(Panel(result, title=title, border_style=border_color))
                     else:
                         similar = get_close_matches(command_input, self.command_registry.commands.keys(), n=1, cutoff=0.6)
                         if similar:

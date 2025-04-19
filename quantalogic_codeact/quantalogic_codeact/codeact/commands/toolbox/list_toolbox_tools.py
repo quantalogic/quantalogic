@@ -12,7 +12,29 @@ async def list_toolbox_tools(shell, args: list[str]) -> str:
         str: A formatted string of tool names or an error message.
     """
     if not args:
-        return "Usage: /toolbox tools <toolbox_name>"
+        # Display tools only from enabled toolboxes
+        enabled = shell.current_agent.config.enabled_toolboxes or []
+        if not enabled:
+            return "No toolboxes enabled."
+        plugin_manager: PluginManager = shell.current_agent.plugin_manager
+        tools_dict = plugin_manager.tools.tools
+        # Group only enabled tools by toolbox
+        toolbox_dict: dict[str, list[str]] = {tb: [] for tb in enabled}
+        for (tb_name, tool_name), _ in tools_dict.items():
+            if tb_name in enabled:
+                toolbox_dict[tb_name].append(tool_name)
+        # Format output with enumeration and bullets for better UX
+        lines: list[str] = ["Enabled toolboxes and their tools:"]
+        for idx, tb in enumerate(enabled, start=1):
+            tools_list = sorted(toolbox_dict.get(tb, []))
+            count = len(tools_list)
+            lines.append(f"{idx}. {tb} ({count} tool{'' if count == 1 else 's'})")
+            if tools_list:
+                for tool_name in tools_list:
+                    lines.append(f"   - {tool_name}")
+            else:
+                lines.append("   (no tools)")
+        return "\n".join(lines)
     toolbox_name = args[0]
     plugin_manager: PluginManager = shell.current_agent.plugin_manager
     try:
