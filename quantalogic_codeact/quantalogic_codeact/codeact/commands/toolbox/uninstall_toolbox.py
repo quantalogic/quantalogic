@@ -17,7 +17,12 @@ async def uninstall_toolbox(shell, args: list[str]) -> str:
     toolbox_name = args[0]
     try:
         await asyncio.to_thread(subprocess.run, ["uv", "pip", "uninstall", toolbox_name], check=True)
-        return f"Toolbox '{toolbox_name}' uninstalled. Please restart the shell to apply changes."
+        # Immediately disable toolbox and reload plugins
+        cfg = shell.current_agent.config
+        if cfg.enabled_toolboxes and toolbox_name in cfg.enabled_toolboxes:
+            cfg.enabled_toolboxes.remove(toolbox_name)
+        shell.current_agent.plugin_manager.load_plugins(force=True)
+        return f"Toolbox '{toolbox_name}' uninstalled and deactivated."
     except subprocess.CalledProcessError as e:
         if shell.debug:
             shell.logger.exception("Uninstall toolbox error")
