@@ -1,6 +1,7 @@
 from typing import Callable, List, Optional
 
 import litellm
+from litellm import exceptions
 
 
 async def litellm_completion(
@@ -40,8 +41,25 @@ async def litellm_completion(
                         step_number=step
                     ))
             return full_response
+        except exceptions.APIError as e:
+            # Notify user about streaming failure
+            err_msg = f"❌ Streaming completion failed: {e.__class__.__name__}: {e}"
+            if notify_event:
+                await notify_event(StreamTokenEvent(
+                    event_type="StreamError",
+                    token=err_msg,
+                    step_number=step
+                ))
+            raise RuntimeError(err_msg)
         except Exception as e:
-            raise Exception(f"Streaming completion failed: {e}")
+            err_msg = f"❌ Streaming completion failed: {e}"
+            if notify_event:
+                await notify_event(StreamTokenEvent(
+                    event_type="StreamError",
+                    token=err_msg,
+                    step_number=step
+                ))
+            raise RuntimeError(err_msg)
     else:
         try:
             response = await litellm.acompletion(
@@ -53,5 +71,9 @@ async def litellm_completion(
                 **kwargs
             )
             return response.choices[0].message.content
+        except exceptions.APIError as e:
+            # Clear message for non-streaming errors
+            err_msg = f"❌ Completion failed: {e.__class__.__name__}: {e}"
+            raise RuntimeError(err_msg)
         except Exception as e:
-            raise Exception(f"Completion failed: {e}")
+            raise RuntimeError(f"❌ Completion failed: {e}")
