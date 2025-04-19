@@ -34,10 +34,9 @@ def parse_package_info_from_filename(filename):
 
 @app.command()
 def install_toolbox(
-    toolbox_name: str = typer.Argument(..., help="Name of the toolbox to install (PyPI package or local wheel file)"),
-    enable: bool = typer.Option(False, "--enable", help="Automatically enable the toolbox in the project's configuration")
+    toolbox_name: str = typer.Argument(..., help="Name of the toolbox to install (PyPI package or local wheel file)")
 ) -> None:
-    """Install a toolbox, update the global config, and optionally enable it in the project config."""
+    """Install a toolbox, update the global config, and enable it in the project config."""
     try:
         # Determine package name and version based on input
         if Path(toolbox_name).exists():
@@ -96,16 +95,16 @@ def install_toolbox(
         save_config(global_config, GLOBAL_CONFIG_PATH)
         console.print(f"[green]Toolbox '{package_name}' installed and added to global config.[/green]")
         
-        if enable:
-            # Load project config
-            project_config = load_config(PROJECT_CONFIG_PATH)
-            enabled_toolboxes = project_config.get("enabled_toolboxes", [])
-            for ep in installed_eps:
-                if ep.name not in enabled_toolboxes:
-                    enabled_toolboxes.append(ep.name)
-            project_config["enabled_toolboxes"] = enabled_toolboxes
-            save_config(project_config, PROJECT_CONFIG_PATH)
-            console.print(f"[green]Toolbox '{package_name}' enabled in project config.[/green]")
+        # Always enable installed toolbox(es) in project config
+        project_config = load_config(PROJECT_CONFIG_PATH)
+        enabled_toolboxes = project_config.get("enabled_toolboxes", [])
+        to_enable = [ep.name for ep in installed_eps] or [package_name]
+        for name in to_enable:
+            if name not in enabled_toolboxes:
+                enabled_toolboxes.append(name)
+        project_config["enabled_toolboxes"] = enabled_toolboxes
+        save_config(project_config, PROJECT_CONFIG_PATH)
+        console.print(f"[green]Toolbox '{', '.join(to_enable)}' enabled in project config.[/green]")
     except subprocess.CalledProcessError as e:
         console.print(f"[red]Failed to install toolbox: {e}[/red]")
         raise typer.Exit(code=1)

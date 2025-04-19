@@ -12,6 +12,7 @@ from quantalogic_codeact.codeact.cli import plugin_manager  # Import shared plug
 app = typer.Typer()
 console = Console()
 CONFIG_PATH = Path.home() / ".quantalogic/config.yaml"
+PROJECT_CONFIG_PATH = Path(".quantalogic/config.yaml").resolve()
 
 def load_config():
     """Load the configuration file and return the config along with a status message."""
@@ -49,6 +50,15 @@ def list_toolboxes(
 ) -> None:
     """List installed toolboxes, optionally with detailed tool information and documentation."""
     config, status = load_config()
+    # Load project config to determine enabled toolboxes
+    enabled_toolboxes = []
+    if PROJECT_CONFIG_PATH.exists():
+        try:
+            with open(PROJECT_CONFIG_PATH) as f:
+                proj_cfg = yaml.safe_load(f) or {}
+                enabled_toolboxes = proj_cfg.get("enabled_toolboxes", [])
+        except Exception:
+            pass
     
     console.print(f"[bold]Config file:[/bold] {CONFIG_PATH} ([italic]{status}[/italic])")
     
@@ -63,8 +73,9 @@ def list_toolboxes(
         for tb in installed_toolboxes:
             try:
                 module_path = get_module_path(tb["name"])
+                status_mark = "[green]enabled[/green]" if tb["name"] in enabled_toolboxes else "[dim]disabled[/dim]"
                 console.print(
-                    f"- {tb['name']} (package: {tb['package']}, version: {tb['version']}, "
+                    f"- {tb['name']} {status_mark} (package: {tb['package']}, version: {tb['version']}, "
                     f"path: [italic]{module_path}[/italic])"
                 )
             except Exception as e:

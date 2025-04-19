@@ -1,4 +1,3 @@
-import importlib.metadata
 import subprocess
 from pathlib import Path
 
@@ -9,6 +8,7 @@ from rich.console import Console
 app = typer.Typer()
 console = Console()
 CONFIG_PATH = Path.home() / ".quantalogic/config.yaml"
+PROJECT_CONFIG_PATH = Path(".quantalogic/config.yaml").resolve()
 
 def load_config():
     """Load or initialize the config file."""
@@ -39,6 +39,18 @@ def uninstall_toolbox(
             config["installed_toolboxes"] = [tb for tb in config["installed_toolboxes"] if tb["name"] != toolbox_name]
             save_config(config)
             console.print(f"[green]Toolbox '{toolbox_name}' (package '{package_name}') uninstalled and removed from config.[/green]")
+            # Disable in project config
+            if PROJECT_CONFIG_PATH.exists():
+                with open(PROJECT_CONFIG_PATH) as f:
+                    project_config = yaml.safe_load(f) or {}
+                enabled = project_config.get("enabled_toolboxes", [])
+                if toolbox_name in enabled:
+                    enabled.remove(toolbox_name)
+                    project_config["enabled_toolboxes"] = enabled
+                    PROJECT_CONFIG_PATH.parent.mkdir(exist_ok=True)
+                    with open(PROJECT_CONFIG_PATH, "w") as f:
+                        yaml.safe_dump(project_config, f, default_flow_style=False)
+                    console.print(f"[green]Toolbox '{toolbox_name}' disabled in project config.[/green]")
             return
         
         # Step 2: Check if input is a package name
@@ -49,6 +61,19 @@ def uninstall_toolbox(
             save_config(config)
             toolbox_names = ", ".join(tb["name"] for tb in package_entries)
             console.print(f"[green]Package '{toolbox_name}' providing toolbox(es) '{toolbox_names}' uninstalled and removed from config.[/green]")
+            # Disable in project config
+            if PROJECT_CONFIG_PATH.exists():
+                with open(PROJECT_CONFIG_PATH) as f:
+                    project_config = yaml.safe_load(f) or {}
+                enabled = project_config.get("enabled_toolboxes", [])
+                for name in toolbox_names.split(", "):
+                    if name in enabled:
+                        enabled.remove(name)
+                project_config["enabled_toolboxes"] = enabled
+                PROJECT_CONFIG_PATH.parent.mkdir(exist_ok=True)
+                with open(PROJECT_CONFIG_PATH, "w") as f:
+                    yaml.safe_dump(project_config, f, default_flow_style=False)
+                console.print(f"[green]Toolbox(es) '{toolbox_names}' disabled in project config.[/green]")
             return
         
         # If neither toolbox nor package is found
