@@ -61,14 +61,6 @@ class PluginManager:
                         if group == "quantalogic.tools":
                             # Load the specific toolbox by name so tools are registered
                             store([ep.name])
-                            if ep.name == "quantalogic_toolbox_mcp":
-                                try:
-                                    import asyncio
-
-                                    from quantalogic_toolbox_mcp.tools import initialize_toolbox
-                                    asyncio.run(initialize_toolbox(self.tools))
-                                except ImportError as e:
-                                    logger.warning(f"Skipping initialize_toolbox for {ep.name}: {e}")
                         else:
                             store[ep.name] = loaded
                             logger.info(f"Loaded plugin {ep.name} for {group}")

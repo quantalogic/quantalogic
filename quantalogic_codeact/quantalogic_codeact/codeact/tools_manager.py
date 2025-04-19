@@ -3,8 +3,9 @@
 import importlib
 import importlib.metadata
 import inspect
-import loguru
 from typing import Any, List, Optional
+
+import loguru
 
 from quantalogic_toolbox import Tool, create_tool
 

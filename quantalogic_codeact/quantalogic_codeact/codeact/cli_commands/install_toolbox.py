@@ -5,9 +5,8 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
-from quantalogic_codeact.codeact.cli_commands.config_manager import (
-    load_global_config, save_global_config
-)
+
+from quantalogic_codeact.codeact.cli_commands.config_manager import load_global_config, save_global_config
 
 app = typer.Typer()
 console = Console()

@@ -1,14 +1,13 @@
 import importlib.metadata
 from pathlib import Path
+
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
 from quantalogic_codeact.codeact.cli import plugin_manager
-from quantalogic_codeact.codeact.cli_commands.config_manager import (
-    load_global_config, GLOBAL_CONFIG_PATH
-)
+from quantalogic_codeact.codeact.cli_commands.config_manager import GLOBAL_CONFIG_PATH, load_global_config
 
 app = typer.Typer()
 console = Console()
