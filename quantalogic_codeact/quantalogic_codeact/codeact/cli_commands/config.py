@@ -5,7 +5,7 @@ import yaml
 from rich.console import Console
 
 console = Console()
-CONFIG_PATH = Path.home() / "quantalogic-config.yaml"
+CONFIG_PATH = Path.home() / ".quantalogic" / "config.yaml"
 
 app = typer.Typer()
 
@@ -18,7 +18,7 @@ def show():
         console.print("[bold cyan]Current Configuration:[/bold cyan]")
         console.print(yaml.safe_dump(config, default_flow_style=False))
     else:
-        console.print("[yellow]No config file found at ~/quantalogic-config.yaml[/yellow]")
+        console.print("[yellow]No config file found at ~/.quantalogic/config.yaml[/yellow]")
 
 @app.command()
 def reset():

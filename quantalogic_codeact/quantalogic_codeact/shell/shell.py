@@ -292,7 +292,8 @@ class Shell:
                         await chat_command(self, [user_input])
 
             except KeyboardInterrupt:
-                console.print(Panel("\nUse '/exit' to quit the shell.", title="Info", border_style="yellow"))
+                console.print(Panel("Goodbye!", title="Exit", border_style="green"))
+                break
             except SystemExit:
                 console.print(Panel("Goodbye!", title="Exit", border_style="green"))
                 break
