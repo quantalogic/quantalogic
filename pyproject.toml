@@ -10,7 +10,11 @@ packages = [
 
 # PyPI metadata
 license = "MIT"
-license-file = "LICENSE"
+
+[[tool.poetry.include]]
+path = "LICENSE"
+format = "text"
+
 keywords = ["agent", "ReAct", "QuantaLogic"]
 classifiers = [
   "License :: OSI Approved :: MIT License",
