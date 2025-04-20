@@ -114,6 +114,7 @@ graph TD
     classDef reasoner fill:#e2fff7,stroke:#bce3d9,stroke-width:2px,color:#333;
     classDef executor fill:#e2e7ff,stroke:#bcbce3,stroke-width:2px,color:#333;
     classDef tools fill:#f9e2ff,stroke:#e3bcdc,stroke-width:2px,color:#333;
+    classDef pythonbox fill:#e2f7ff,stroke:#bcd5e3,stroke-width:2px,color:#333;
 
     User[User] -->|Interacts| Shell[Shell Interface]
     User -->|Runs| CLI[CLI Commands]
@@ -126,6 +127,8 @@ graph TD
     Reasoner -->|Generates Actions| Agent
     Executor -->|Uses| Tools[Tools]
     Tools -->|Returns Results| Executor
+    Executor -->|Executes Code| PythonBox["Python Toolbox (PythonBox)"]
+    PythonBox -->|Returns Results| Executor
     Executor -->|Updates Context| Agent
     Agent -->|Responds| Shell
     Agent -->|Outputs| CLI
@@ -139,12 +142,14 @@ graph TD
     class Reasoner reasoner;
     class Executor executor;
     class Tools tools;
+    class PythonBox pythonbox;
 ```
 
 - **Agent (`CodeActAgent`)**: Orchestrates the ReAct loop, managing state and history.
 - **Reasoner**: Generates reasoning steps or code using language models (e.g., Gemini, DeepSeek).
 - **Executor**: Executes actions, handling code execution and tool interactions.
 - **Tools**: Modular functions for specific tasks (e.g., `math_tools` for calculations).
+- **Python Toolbox (PythonBox)**: Provides a secure, sandboxed environment for running agent-generated Python code, ensuring isolation and resource limits. See https://github.com/quantalogic/quantalogic-pythonbox
 - **Interfaces**: Shell, CLI, and SDK provide user and programmatic access.
 
 ---
