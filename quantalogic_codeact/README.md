@@ -34,7 +34,7 @@ Quantalogic aims to bridge the gap between advanced AI capabilities and user-fri
 ## Key Features
 
 - **Modular Design**: Plug-and-play components like reasoners, executors, and tools.
-- **Language Model Integration**: Supports multiple models through `litellm` (e.g., Gemini, DeepSeek).
+- **Language Model Integration**: Supports multiple models through `litellm` (e.g., Gemini, DeepSeek). 
 - **Tool System**: Extensible toolbox architecture for adding domain-specific functionality.
 - **Interactive Shell**: Real-time interaction with streaming output and command autocompletion.
 - **CLI Flexibility**: Manage agents, toolboxes, and tasks from the command line.
@@ -182,12 +182,14 @@ Examples:
 
 ## Examples
 
-See the `examples/` directory for ready-to-run demos:
-- `01-simple-agent.py`, `02-agent-with-event-monitoring.py`, etc.
+For a detailed guide on agent configuration, see [examples/README.md](examples/README.md).
+The file [examples/agent_sample.yaml](examples/agent_sample.yaml) provides a sample configuration:
+```yaml
+model: "deepseek/deepseek-chat"
+max_iterations: 5
+max_history_tokens: 2000
+```
 
-## Configuration
-
-Store settings at `~/.quantalogic/config.yaml`. See [Configuration Guide](docs/configuration.md) for details.
 
 ## Contributing
 
