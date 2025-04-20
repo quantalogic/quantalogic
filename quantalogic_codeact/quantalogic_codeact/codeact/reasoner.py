@@ -3,6 +3,8 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional
 
+from loguru import logger
+
 from quantalogic.tools import Tool
 
 from .constants import MAX_GENERATE_PROGRAM_TOKENS
@@ -33,6 +35,7 @@ async def generate_program(
         task_description=task_description,
         tools_by_toolbox=tools_by_toolbox
     )
+    logger.debug(f"Generated prompt for step {step}:\n{prompt}")
     await notify_event(PromptGeneratedEvent(
         event_type="PromptGenerated", step_number=step, prompt=prompt
     ))
