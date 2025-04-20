@@ -87,15 +87,16 @@ async def create_project_plan(task_description: str, tools_description: str = No
     Raises:
         ValueError: If the AI response is malformed (not a list or missing required fields).
     """
-    prompt = f"""
-    Break down the following task into clear subtasks with steps:
-
-    {task_description}
-
-    {f"Consider the following tools for the task:\n\n{tools_description}" if tools_description else ""}
-
-    Return the subtasks as a JSON array of objects, each with 'step' (integer) and soap 'description' (string) fields.
-    """
+    if tools_description:
+        tools_str = f"Consider the following tools for the task:\n\n{tools_description}"
+    else:
+        tools_str = ""
+    prompt = (
+        f"Break down the following task into clear subtasks with steps:\n\n"
+        f"{task_description}\n\n"
+        f"{tools_str}\n\n"
+        "Return the subtasks as a JSON array of objects, each with 'step' (integer) and 'description' (string) fields."
+    )
 
     response = await client.create(
         model=MODEL_NAME,

@@ -190,6 +190,8 @@ def resolve_secrets(config: Dict) -> Dict:
 
 def load_configs(config_dir: str = CONFIG_DIR) -> None:
     """Load all JSON config files from the specified directory into the servers dictionary."""
+    # Ensure default config directory exists
+    os.makedirs(config_dir, exist_ok=True)
     global tools_cache
     cache_file = os.path.join(config_dir, "config_cache.json")
     current_hash = compute_config_hash(config_dir)
