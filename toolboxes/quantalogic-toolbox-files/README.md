@@ -1,4 +1,4 @@
-# {{ name }} v{{ version }}
+# quantalogic-toolbox-files
 
 A custom toolbox for Quantalogic.
 

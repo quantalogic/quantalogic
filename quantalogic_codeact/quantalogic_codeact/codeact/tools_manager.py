@@ -103,7 +103,9 @@ class ToolRegistry:
             for ep in entry_points:
                 try:
                     module = ep.load()
-                    self.register_tools_from_module(module, toolbox_name=ep.name)
+                    # normalize toolbox names to valid Python identifiers
+                    normalized = ep.name.replace('-', '_')
+                    self.register_tools_from_module(module, toolbox_name=normalized)
                     loguru.logger.info(f"Successfully loaded toolbox: {ep.name}")
                 except ImportError as e:
                     loguru.logger.error(f"Failed to import toolbox {ep.name}: {e}")

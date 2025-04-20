@@ -1,6 +1,6 @@
 [tool.poetry]
-name = "{{ name }}"
-version = "{{ version }}"
+name = "quantalogic-toolbox-files"
+version = "0.2.0"
 description = "A custom toolbox for Quantalogic"
 authors = ["Your Name <you@example.com>"]
 
@@ -13,4 +13,4 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.plugins."quantalogic.tools"]
-"{{ name }}" = "{{ package_name }}.tools"
+"quantalogic-toolbox-files" = "quantalogic_toolbox_files.tools"

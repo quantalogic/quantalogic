@@ -62,7 +62,7 @@ async def main():
         temperature=0.7,
         history=step{{ current_step }}_history
     )
-    return f"Task completed: {step{{ current_step }}_response}"
+    return f"Task completed:\n{step{{ current_step }}_response}"
 
 Error Reflection:
 - If there were errors in previous steps, review the error messages in the <History> section and adjust your code to avoid similar issues.
@@ -76,3 +76,4 @@ The program must:
 2. Follow a subset of Python 3.10+ syntax, doesn't allow unsafe operations such as eval() or exec()
 3. Include type annotations for variables, give very explicit names to variables
 4. Output progress information
+4. If the task is fully solved in this step, nicely format the result and return `"Task completed:\n[final answer]"`
