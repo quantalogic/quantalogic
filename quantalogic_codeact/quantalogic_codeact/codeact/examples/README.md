@@ -340,3 +340,23 @@ The agent will introduce itself as: "I am MathWizard, an AI assistant with the f
 - **Profiles**: Leverage `profile` for quick setup, refining with `customizations`.
 - **Secrets**: Use `{{ env.VAR_NAME }}` for sensitive data in `tools_config`.
 
+---
+
+## CLI Usage
+
+Use your YAML config file with the quantalogic_codeact CLI commands:
+
+```bash
+# Start interactive shell with a custom config
+quantalogic_codeact --config agent_config.yaml shell
+
+# Load a configuration into the default location
+quantalogic_codeact config-load agent_config.yaml
+
+# Run a task with the specified config file
+quantalogic_codeact --config agent_config.yaml task "Solve 2 + 2"
+
+# Show general CLI help
+quantalogic_codeact --help
+```
+
