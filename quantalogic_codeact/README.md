@@ -150,6 +150,10 @@ graph TD
    ```bash
    poetry install
    ```
+Alternatively, install CodeAct via pip:
+```bash
+pip install quantalogic-codeact
+```
 3. Set environment variables:
    ```bash
    export GEMINI_API_KEY="your-api-key"
@@ -157,6 +161,10 @@ graph TD
 4. Verify installation:
    ```bash
    poetry run quantalogic_codeact shell
+   ```
+   or
+   ```bash
+   quantalogic_codeact --help
    ```
 
 ### Quick Start
@@ -189,6 +197,41 @@ List available tools or models:
 ```bash
 poetry run quantalogic_codeact list-toolboxes
 poetry run quantalogic_codeact list-models
+```
+
+#### CLI Usage
+The `quantalogic_codeact` CLI offers the following core commands:
+```bash
+quantalogic_codeact task "TASK_DESCRIPTION" [options]
+quantalogic_codeact shell [options]
+quantalogic_codeact list-toolboxes
+quantalogic_codeact list-models
+quantalogic_codeact config
+```
+**Commands & Options:**
+- `task`: Solve a task directly.
+  - `--streaming` for real-time output.
+  - `--model MODEL_NAME` to select an LLM (e.g., `deepseek/deepseek-chat`).
+  - `--timeout SECONDS` to set execution timeout.
+- `shell`: Start interactive shell (supports `/help`, `/solve`, `/chat`).
+- `list-toolboxes` & `list-models`: Show available tools and models.
+- `config`: View or edit CLI configuration.
+
+**Example:**
+```bash
+quantalogic_codeact task "Calculate factorial of 5" --model deepseek/deepseek-chat --timeout 60 --streaming
+```
+**Usage Diagram:**
+```mermaid
+flowchart LR
+  subgraph User
+    U[User Terminal]
+  end
+  U -->|runs| CLI[quantalogic_codeact CLI]
+  CLI --> Agent[CodeActAgent]
+  Agent -->|executes| Executor[PythonBox Executor]
+  Executor -->|returns| Agent
+  Agent -->|outputs| U
 ```
 
 ### Using the Agent SDK
