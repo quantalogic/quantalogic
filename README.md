@@ -82,36 +82,51 @@ graph TD
 
 **How do you dive in?** Install it, set it up, and start creating. We’ll guide you through setup, examples, and pro tips to master QuantaLogic in minutes.
 
-### Installation
+### Installation & Setup
 
-#### What You Need
-- **Python 3.12+**: The fuel for our AI engine.
-- **Docker** (optional): For secure tool execution.
+#### Prerequisites
+- Python 3.12+ (required)
+- Docker (optional; sandboxed execution)
+- Poetry (optional; for source builds)
 
-#### Option 1: pip (Fast Track)
+#### Installation
+Install the core CLI and (optionally) CodeAct extension:
 ```bash
 pip install quantalogic
+pip install quantalogic-codeact
 ```
-
-#### Option 2: pipx (Clean Setup)
+Or with pipx:
 ```bash
 pipx install quantalogic
+pipx install quantalogic-codeact
 ```
 
-#### Option 3: Source (For Hackers)
+#### Developer Build (optional)
 ```bash
 git clone https://github.com/quantalogic/quantalogic.git
 cd quantalogic
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# macOS/Linux
+source .venv/bin/activate
+# Windows
+.venv\\Scripts\\activate
 poetry install
 ```
 
-**Insider Secret**: Create a `.env` file for API keys to unlock LLMs:
+#### Verify Installation
 ```bash
-echo "OPENAI_API_KEY=sk-your-key" > .env
-echo "DEEPSEEK_API_KEY=ds-your-key" >> .env
+quantalogic --help
+quantalogic_codeact --help
 ```
+
+#### Configure API Keys
+```bash
+cat <<EOF > .env
+OPENAI_API_KEY=sk-your-key
+DEEPSEEK_API_KEY=ds-your-key
+EOF
+```
+> For advanced settings, see [docs/config.md](./docs/config.md)
 
 ---
 
@@ -130,6 +145,16 @@ quantalogic task "Write a Python script to reverse a string"
 quantalogic chat --persona "You’re a cosmic guide" "What’s the tallest mountain?"
 ```
 **Output**: A lively response, possibly with search results!
+
+#### CLI: CodeAct Shell
+```bash
+quantalogic_codeact shell
+```
+
+#### CLI: CodeAct Task
+```bash
+quantalogic_codeact task "Solve 2 + 2" --model deepseek/deepseek-chat --timeout 60 --streaming
+```
 
 #### Python: ReAct Agent
 ```python
