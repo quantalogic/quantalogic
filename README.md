@@ -62,18 +62,30 @@ Here’s how it flows:
 ```mermaid
 graph TD
     A[User] -->|Input| B[QuantaLogic]
-    B --> C[ReAct: Solve]
+    B --> C1[Pure ReAct]
+    B --> C2[CodeAct]
     B --> D[Flow: Automate]
     B --> E[Chat: Converse]
-    C --> F[LLM + Tools]
+    C1 --> F1[LLM + Tools]
+    C2 --> F2[LLM + Code Actions]
     D --> G[Nodes + Engine]
     E --> H[Persona + Tools]
-    F --> I[Output]
+    F1 --> I[Output]
+    F2 --> I
     G --> I
     H --> I
     I --> A
-    style A fill:#f0f,stroke:#333
-    style I fill:#aaf,stroke:#333
+    style A fill:#ffe5b4,stroke:#555
+    style B fill:#cfe0e8,stroke:#555
+    style C1 fill:#e6e6fa,stroke:#555
+    style C2 fill:#ffd1dc,stroke:#555
+    style D fill:#c8e6c9,stroke:#555
+    style E fill:#fff9c4,stroke:#555
+    style F1 fill:#f0f0f0,stroke:#555
+    style F2 fill:#f0f0f0,stroke:#555
+    style G fill:#d0f0c0,stroke:#555
+    style H fill:#ffefdb,stroke:#555
+    style I fill:#cfe0e8,stroke:#555
 ```
 
 ---
