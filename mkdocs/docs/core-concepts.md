@@ -1,102 +1,135 @@
 # Core Concepts
 
-## What is ReAct?
+Understand the foundational elements of QuantaLogic, including its four modes: **ReAct**, **CodeAct**, **Flow**, and **Chat**.
 
-ReAct (Reasoning & Action) is a pattern that helps AI agents solve problems more effectively by combining two key abilities:
+---
 
-1. **Reasoning**: Understanding the problem and planning a solution
-2. **Action**: Using tools and executing steps to implement the solution
+## What are ReAct and CodeAct?
 
-Think of it like how a chef cooks a meal:
-- First, they **reason** about the recipe, ingredients, and cooking steps
-- Then they **act** by gathering ingredients, using tools, and cooking
+**ReAct** (Reasoning and Acting) is a paradigm that enables AI agents to solve complex tasks by alternating between reasoning and action ([ReAct Paper](https://arxiv.org/abs/2210.03629)). **CodeAct** extends ReAct by using executable Python code as the primary action language, leveraging LLMs’ code proficiency for precise automation ([CodeAct Paper](https://arxiv.org/html/2402.01030v4)).
 
-## How QuantaLogic Works
+**How They Work**:
+- **Reasoning**: The agent analyzes the task, plans steps, or generates code.
+- **Acting**: The agent executes actions (tools in ReAct, code in CodeAct) and observes results.
+- **Looping**: The process repeats until the task is complete.
 
-### 1. The Agent
+**Example**:
+- ReAct: “Write a script” → Reason (plan steps) → Act (use `WriteFileTool`).
+- CodeAct: “Calculate Fibonacci” → Reason (write code) → Act (execute code).
 
-The agent is your AI assistant. It:
-- Understands your instructions in plain language
-- Breaks down complex tasks into smaller steps
-- Chooses the right tools for each step
-- Learns from the results to improve
-
+**Diagram**:
 ```mermaid
-graph LR
+graph TD
     A[User Input] --> B[Agent]
-    B --> C[Understanding]
-    C --> D[Planning]
-    D --> E[Execution]
-    E --> F[Result]
+    B --> C{ReAct/CodeAct Loop}
+    C -->|Reason| D[LLM]
+    C -->|Act| E[Tools/Code Execution]
+    D --> C
+    E --> C
+    C -->|Complete| F[Result]
 ```
 
-### 2. The Tool System
+---
 
-Tools are what the agent uses to get things done. Like a Swiss Army knife, each tool has a specific purpose:
+## What is Flow?
 
-- **Code Tools**: Write and run code
-- **File Tools**: Read, write, and edit files
-- **Search Tools**: Find information
-- **Analysis Tools**: Process and understand data
+**Flow** orchestrates structured workflows using nodes (tasks) and transitions (connections). It’s ideal for repeatable processes like data pipelines or report generation.
 
-Tools run in a secure sandbox to prevent any unwanted effects.
+**Key Components**:
+- **Nodes**: Individual tasks (e.g., LLM calls, data processing).
+- **Workflows**: Define how nodes connect and execute.
+- **Context**: A shared dictionary for passing data between nodes.
 
-### 3. Memory Management
+**Example**: A workflow to uppercase text and format it.
 
-The agent keeps track of:
-- The current conversation
-- Previous actions and their results
-- Important context about your task
+**Diagram**:
+```mermaid
+graph LR
+    A[Start] --> B[Uppercase Node]
+    B --> C[Format Node]
+    C --> D[End]
+    style A fill:#dfd,stroke:#333
+    style D fill:#dfd,stroke:#333
+```
 
-This helps it make better decisions and maintain context across multiple interactions.
+---
+
+## What is Chat?
+
+**Chat** mode enables natural, tool-augmented conversations. The agent responds to queries, calling tools (e.g., web search) when needed, with a customizable persona.
+
+**Example**: “What’s the weather?” → Agent searches and responds.
+
+---
+
+## The Agent
+
+The **Agent** is the core component, orchestrating tasks across modes. It:
+- Interprets user instructions.
+- Selects appropriate tools or code.
+- Manages context and memory.
+- Iterates until task completion.
+
+See [Agent API](api/agent.md).
+
+---
+
+## The Tool System
+
+Tools are modular functions that agents use to perform tasks. They run in a secure, Docker-based sandbox.
+
+**Examples**:
+- `PythonTool`: Executes Python code (used heavily in CodeAct).
+- `DuckDuckGoSearchTool`: Performs web searches.
+- `WriteFileTool`: Manages file operations.
+
+See [Tool Development](best-practices/tool-development.md).
+
+---
+
+## Memory Management
+
+Agents maintain context using:
+- **AgentMemory**: Stores conversation history.
+- **VariableMemory**: Manages task-specific variables.
+
+Memory is compacted to optimize performance for long tasks.
+
+See [Memory API](api/memory.md).
+
+---
 
 ## Key Principles
 
-### 1. Safety First
-- All code runs in isolated environments
-- Tools have clear permissions
-- No unexpected side effects
+- **Safety**: Tools run in isolated environments.
+- **Transparency**: Events and logs provide insight into agent actions.
+- **Flexibility**: Supports multiple LLMs and custom tools.
+- **Learning**: Agents improve by retaining successful patterns.
 
-### 2. Transparency
-- See what the agent is thinking
-- Watch tools in action
-- Understand why decisions are made
-
-### 3. Flexibility
-- Works with different AI models
-- Customizable tool sets
-- Adaptable to various tasks
-
-### 4. Learning
-- Improves from experience
-- Remembers successful patterns
-- Avoids repeated mistakes
+---
 
 ## Example Flow
 
-Here's how QuantaLogic solves a simple coding task:
+**Task**: “Write a function to sort numbers.”
 
-1. **User Request**: "Create a function to sort a list of numbers"
+1. **User Input**: Agent receives the task.
+2. **Reasoning**: Plans to write and test a sorting function.
+3. **Action**: Uses `PythonTool` to generate and execute code.
+4. **Result**: Returns a working function.
 
-2. **Agent Reasoning**:
-   - Need to write Python code
-   - Should handle different input types
-   - Must include error checking
+**Sequence**:
+```mermaid
+sequenceDiagram
+    Agent->>LLM: Plan sorting function
+    LLM-->>Agent: Use bubble sort
+    Agent->>PythonTool: Write and test code
+    PythonTool-->>Agent: Working function
+    Agent-->>User: Final solution
+```
 
-3. **Agent Actions**:
-   ```mermaid
-   sequenceDiagram
-       Agent->>Code Tool: Write sorting function
-       Code Tool->>Agent: Return code
-       Agent->>Test Tool: Verify function
-       Test Tool->>Agent: Test results
-       Agent->>User: Final solution
-   ```
-
-4. **Result**: Working, tested code that meets the requirements
+---
 
 ## Next Steps
-
-- Try the [Quick Start Guide](quickstart.md)
+- Try the [Quick Start](quickstart.md)
+- Explore [CodeAct](codeact.md) and [Flow](quantalogic-flow.md)
 - See [Examples](examples/simple-agent.md)
-- Learn about [Tool Development](best-practices/tool-development.md)

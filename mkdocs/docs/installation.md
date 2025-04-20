@@ -1,115 +1,108 @@
 # Installation Guide
 
-This guide will help you get QuantaLogic up and running quickly. Choose the installation method that best suits your needs.
+This guide helps you install and configure QuantaLogic for **ReAct**, **CodeAct**, **Flow**, and **Chat** modes.
 
-## System Requirements
+> **Important**: QuantaLogic requires **Python 3.12+** (3.10+ for Flow). Check with:
+> ```bash
+> python --version
+> ```
 
-- Python 3.12 or later
+---
 
-## Quick Install (Recommended)
+## Installation Options
 
+### Option 1: pip (Recommended)
 ```bash
 pip install quantalogic
 ```
 
-That's it! Skip to [Verify Installation](#verify-installation) to confirm everything works.
-
-## Detailed Installation Options
-
-### Option 1: Using pip (Simple)
-
+### Option 2: pipx (Isolated)
 ```bash
-# Create a virtual environment (recommended)
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install QuantaLogic
-pip install quantalogic
-```
-
-### Option 2: Using Poetry (Development)
-
-```bash
-# Install Poetry if you haven't already
-curl -sSL https://install.python-poetry.org | python3 -
-
-# Clone and install
-git clone https://github.com/quantalogic/quantalogic.git
-cd quantalogic
-poetry install
-```
-
-### Option 3: Using pipx (Isolated)
-
-```bash
-# Install pipx
-python -m pip install --user pipx
-pipx ensurepath
-
-# Install QuantaLogic
 pipx install quantalogic
 ```
 
+### Option 3: From Source (Development)
+```bash
+git clone https://github.com/quantalogic/quantalogic.git
+cd quantalogic
+python -m venv .venv
+source .venv/bin/activate
+poetry install
+```
+
+---
+
 ## Required Configuration
 
-### 1. LLM API Keys
+### LLM API Keys
 
-Choose at least one LLM provider and set its API key:
-
+Set at least one LLM provider’s API key:
 ```bash
-# DeepSeek (Recommended)
+# Recommended
 export DEEPSEEK_API_KEY="your-api-key"
 
-# Or OpenAI
+# Optional
 export OPENAI_API_KEY="your-api-key"
-
-# Or Anthropic
 export ANTHROPIC_API_KEY="your-api-key"
 ```
 
-!!! tip "Secure Key Storage"
-    Never commit API keys to version control. Consider using:
-    - Environment variables
-    - `.env` files (add to .gitignore)
-    - Your OS's keychain
+**Tip**: Use a `.env` file for security:
+```env
+DEEPSEEK_API_KEY=your-api-key
+OPENAI_API_KEY=your-api-key
+ANTHROPIC_API_KEY=your-api-key
+```
+Add `.env` to `.gitignore`.
+
+**Warning**: Some models (e.g., Anthropic) may have regional restrictions. Use `deepseek/deepseek-chat` if issues arise.
+
+---
 
 ## Optional Components
 
-### Docker Setup (For Code Execution)
-
-1. Install Docker from [docker.com](https://www.docker.com/get-started)
-2. Start the Docker daemon
-3. Verify with:
+### Docker (CodeAct/ReAct)
+Required for code execution tools (e.g., `PythonTool`):
+1. Install Docker from [docker.com](https://www.docker.com/get-started).
+2. Start the Docker daemon.
+3. Verify:
    ```bash
    docker run hello-world
    ```
 
+### Flow Dependencies
+For Flow mode, install:
+```bash
+pip install quantalogic-flow
+```
+
+---
+
 ## Verify Installation
 
-Run these commands to verify your setup:
-
 ```bash
-# Check version
+# Check QuantaLogic version
 quantalogic --version
 
+# Verify CodeAct shell
+quantalogic_codeact shell
 ```
+
+---
 
 ## Troubleshooting
 
-### Common Issues
+| Issue                    | Solution                                      |
+|--------------------------|-----------------------------------------------|
+| `ModuleNotFoundError`    | Re-run `pip install quantalogic`             |
+| `API key not found`      | Set keys in `.env` or environment variables  |
+| `Docker not running`     | Start Docker daemon and verify with `docker ps` |
+| `Model access error`     | Use `deepseek/deepseek-chat`                 |
 
-1. **Python Version Error**
-   ```bash
-   python --version  # Should be 3.12 or later
-   ```
+See [Troubleshooting Guide](troubleshooting.md).
 
+---
 
-
-### Error Messages
-
-| Error | Solution |
-|-------|----------|
-| `ModuleNotFoundError` | Re-run `pip install quantalogic` |
-| `ImportError` | Check Python version (3.12+) |
-| `API key not found` | Set environment variables |
-
+## Next Steps
+- Try the [Quick Start](quickstart.md)
+- Explore [CodeAct](codeact.md) and [Flow](quantalogic-flow.md)
+- Learn [Best Practices](best-practices/agent-design.md)
