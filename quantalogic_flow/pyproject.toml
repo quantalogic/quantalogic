@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "quantalogic-flow"
+version = "0.6.2"
+description = "Quantalogic Flow"
+readme = "README.md"
+authors = ["QuantaLogic Team <raphael.mansuy@quantalogic.app>"]
+license = "MIT"
+packages = [ { include = "quantalogic_flow" } ]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+loguru = "^0.7.3"
+litellm = "^1.67.0"
+instructor = "^1.7.9"
+pathspec = "^0.12.1"
+pydantic = "^2.11.3"
+jinja2 = "^3.1.6"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

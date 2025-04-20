@@ -1,12 +1,25 @@
 [tool.poetry]
 name = "quantalogic_toolbox_mcp"
-version = "0.5.95"
+version = "0.13.0"
 description = "A custom MCP Client for Quantalogic"
-authors = ["Your Name <you@example.com>"]
+license = "MIT"
+readme = "./README.md"
+keywords = ["MCP", "Quantalogic", "toolbox", "client"]
+packages = [
+  { include = "quantalogic_toolbox_mcp" }
+]
+homepage = "https://github.com/quantalogic/toolboxes/tree/main/quantalogic-toolbox-mcp"
+repository = "https://github.com/quantalogic/toolboxes/tree/main/quantalogic-toolbox-mcp"
+authors = ["Raphael Mansuy <raphael.mansuy@quantalogic.com>"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Development Status :: 4 - Beta"
+]
 
 [tool.poetry.dependencies]
-python = "^3.10"
-quantalogic = ">0.60.0"
+python = ">=3.10"
 mcp = "^1.6.0"
 
 [build-system]
@@ -14,4 +27,9 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.plugins."quantalogic.tools"]
-"quantalogic_toolbox_mcp" = "quantalogic_toolbox_mcp.tools"
+"quantalogic_toolbox_mcp" = "quantalogic_toolbox_mcp"
+
+[tool.poetry.urls]
+Homepage = "https://github.com/quantalogic/toolboxes/tree/main/quantalogic-toolbox-mcp"
+Repository = "https://github.com/quantalogic/toolboxes/tree/main/quantalogic-toolbox-mcp"
+Documentation = "https://github.com/quantalogic/toolboxes/tree/main/quantalogic-toolbox-mcp#readme"

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic-toolbox-math"
-version = "0.1.0"
+version = "0.16.0"
 description = "Advanced math toolbox for Quantalogic Agent with symbolic and numerical operations."
 authors = ["Raphael Mansuy <raphael.mansuy@quantalogic.app>"]
 packages = [
@@ -11,12 +11,11 @@ packages = [
 python = ">=3.10,<4.0"
 sympy = ">=1.12"
 numpy = ">=1.24"
-quantalogic = ">=0.60"
 scipy = ">=1.10"
 matplotlib = ">=3.7"
 
 [tool.poetry.plugins."quantalogic.tools"]
-math_tools = "quantalogic_toolbox_math.tools"
+"quantalogic_toolbox_math" = "quantalogic_toolbox_math"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -1,0 +1,51 @@
+name: Build quantalogic_flow
+
+on:
+  push:
+    branches-ignore: []
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Cache Poetry virtualenv
+      id: cache-venv
+      uses: actions/cache@v3
+      with:
+        path: quantalogic_flow/.venv
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-flow-${{ hashFiles('quantalogic_flow/poetry.lock') }}
+        restore-keys: |
+          venv-${{ runner.os }}-${{ matrix.python-version }}-flow-
+
+    - name: Build package
+      working-directory: quantalogic_flow
+      run: poetry build
+
+    - name: Install package
+      working-directory: quantalogic_flow
+      run: |
+        pip install dist/*.whl
+        poetry install --with dev
+
+    - name: Test quantalogic_flow version
+      working-directory: quantalogic_flow
+      run: python -c "import quantalogic_flow; print(quantalogic_flow.__version__)"

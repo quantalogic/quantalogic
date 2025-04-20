@@ -24,8 +24,6 @@ from sympy import (
     sympify,
 )
 
-from quantalogic.tools import create_tool
-
 # Constants
 INFINITY = "oo"
 NEGATIVE_INFINITY = "-oo"
@@ -59,7 +57,6 @@ def parse_bound(bound: Union[float, str, None]) -> Union[float, str, None]:
     return sympify(str(bound).replace(INFINITY, "oo").replace(NEGATIVE_INFINITY, "-oo"))
 
 # Enhanced symbolic functions
-@create_tool
 async def symbolic_simplify(
     expression: str,
     variables: str = "x",
@@ -81,7 +78,6 @@ async def symbolic_simplify(
     except Exception as e:
         return f"Error: Simplification failed - {str(e)}"
 
-@create_tool
 async def symbolic_solve(
     expression: str,
     variable: str = "x",
@@ -109,7 +105,6 @@ async def symbolic_solve(
     except Exception as e:
         return [f"Error: Solving failed - {str(e)}"]
 
-@create_tool
 async def symbolic_diff(
     expression: str,
     variable: str = "x",
@@ -134,7 +129,6 @@ async def symbolic_diff(
     except Exception as e:
         return f"Error: Differentiation failed - {str(e)}"
 
-@create_tool
 async def symbolic_integrate(
     expression: str,
     variable: str = "x",
@@ -184,7 +178,6 @@ async def symbolic_integrate(
     except Exception as e:
         return f"Error: Integration failed - {str(e)}"
 
-@create_tool
 async def symbolic_series(
     expression: str,
     variable: str = "x",
@@ -211,7 +204,6 @@ async def symbolic_series(
     except Exception as e:
         return f"Error: Series expansion failed - {str(e)}"
 
-@create_tool
 async def symbolic_matrix(
     matrix: List[List[str]],
     operation: str = "det",
@@ -234,7 +226,6 @@ async def symbolic_matrix(
     except Exception as e:
         return f"Error: Matrix operation failed - {str(e)}"
 
-@create_tool
 async def symbolic_ode(
     equation: str,
     function: str = "y(x)",

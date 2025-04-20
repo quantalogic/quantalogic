@@ -1,0 +1,51 @@
+name: Build quantalogic-toolbox-mcp
+
+on:
+  push:
+    branches-ignore: []
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Cache Poetry virtualenv
+      id: cache-venv
+      uses: actions/cache@v3
+      with:
+        path: toolboxes/quantalogic-toolbox-mcp/.venv
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-toolbox-mcp-${{ hashFiles('toolboxes/quantalogic-toolbox-mcp/poetry.lock') }}
+        restore-keys: |
+          venv-${{ runner.os }}-${{ matrix.python-version }}-toolbox-mcp-
+
+    - name: Build package
+      working-directory: toolboxes/quantalogic-toolbox-mcp
+      run: poetry build
+
+    - name: Install package
+      working-directory: toolboxes/quantalogic-toolbox-mcp
+      run: |
+        pip install dist/*.whl
+        poetry install --with dev
+
+    - name: Test quantalogic_toolbox_mcp version
+      working-directory: toolboxes/quantalogic-toolbox-mcp
+      run: python -c "import quantalogic_toolbox_mcp; print(quantalogic_toolbox_mcp.__version__)"

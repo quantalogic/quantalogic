@@ -1,14 +1,12 @@
 import asyncio
 import html
-import json
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import aiohttp
-
-from quantalogic.tools import create_tool  # Assuming this is the decorator from your module
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +24,8 @@ class HNConfig:
     ALGOLIA_URL = "https://hn.algolia.com/api/v1"
     TIMEOUT = 10.0  # seconds
     DEFAULT_HEADERS = {"User-Agent": "Enhanced-HN-Client/1.0"}
+    CONNECTION_LIMIT = 100
+    CONNECTION_LIMIT_PER_HOST = 20
 
 # Data Models
 @dataclass
@@ -41,6 +41,26 @@ class HNItem:
     descendants: Optional[int] = None
     kids: Optional[List[int]] = None
     text: Optional[str] = None
+    
+    @property
+    def datetime(self) -> datetime:
+        """Convert Unix timestamp to datetime object."""
+        return datetime.fromtimestamp(self.time)
+    
+    @property
+    def formatted_date(self) -> str:
+        """Return human-readable date string (YYYY-MM-DD)."""
+        return self.datetime.strftime('%Y-%m-%d')
+    
+    @property
+    def formatted_time(self) -> str:
+        """Return human-readable time string (HH:MM:SS)."""
+        return self.datetime.strftime('%H:%M:%S')
+    
+    @property
+    def formatted_datetime(self) -> str:
+        """Return human-readable date and time string."""
+        return self.datetime.strftime('%Y-%m-%d %H:%M:%S')
 
 @dataclass
 class HNComment:
@@ -52,6 +72,26 @@ class HNComment:
     by: Optional[str] = None
     text: Optional[str] = None
     kids: Optional[List[int]] = None
+    
+    @property
+    def datetime(self) -> datetime:
+        """Convert Unix timestamp to datetime object."""
+        return datetime.fromtimestamp(self.time)
+    
+    @property
+    def formatted_date(self) -> str:
+        """Return human-readable date string (YYYY-MM-DD)."""
+        return self.datetime.strftime('%Y-%m-%d')
+    
+    @property
+    def formatted_time(self) -> str:
+        """Return human-readable time string (HH:MM:SS)."""
+        return self.datetime.strftime('%H:%M:%S')
+    
+    @property
+    def formatted_datetime(self) -> str:
+        """Return human-readable date and time string."""
+        return self.datetime.strftime('%Y-%m-%d %H:%M:%S')
 
 @dataclass
 class HNItemDetails(HNItem):
@@ -115,44 +155,99 @@ class HackerNewsClient:
     
     def __init__(self):
         self._session = None
-        
+        self._connector = aiohttp.TCPConnector(
+            limit=HNConfig.CONNECTION_LIMIT,
+            limit_per_host=HNConfig.CONNECTION_LIMIT_PER_HOST,
+            force_close=False,
+            enable_cleanup_closed=True
+        )
+
     async def __aenter__(self):
-        self._session = aiohttp.ClientSession(headers=HNConfig.DEFAULT_HEADERS)
+        self._session = aiohttp.ClientSession(
+            headers=HNConfig.DEFAULT_HEADERS,
+            connector=self._connector,
+            timeout=aiohttp.ClientTimeout(total=HNConfig.TIMEOUT)
+        )
         return self
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self._session:
             await self._session.close()
 
-    async def get_top_items(self, limit: int = 30) -> List[HNItem]:
-        return await self._get_items("topstories", limit)
-
-    async def get_new_items(self, limit: int = 30) -> List[HNItem]:
-        return await self._get_items("newstories", limit)
-
-    async def get_best_items(self, limit: int = 30) -> List[HNItem]:
-        return await self._get_items("beststories", limit)
-
-    async def get_ask_items(self, limit: int = 30) -> List[HNItem]:
-        return await self._get_items("askstories", limit)
-
-    async def get_show_items(self, limit: int = 30) -> List[HNItem]:
-        return await self._get_items("showstories", limit)
-
-    async def get_job_items(self, limit: int = 30) -> List[HNItem]:
-        return await self._get_items("jobstories", limit)
-
-    async def _get_items(self, endpoint: str, limit: int) -> List[HNItem]:
-        """Fetch items by endpoint."""
-        item_ids = await fetch_with_retry(self._session, f"{HNConfig.BASE_URL}/{endpoint}.json")
-        items = []
-
-        for item_id in item_ids[:limit]:
-            item = await self.get_item(item_id)
-            if item and item.type in ["story", "job"]:
-                items.append(item)
-
-        return items
+    async def _fetch_items_batch(self, item_ids: List[int]) -> List[Dict]:
+        """Fetch multiple items in parallel using asyncio.gather."""
+        tasks = [
+            fetch_with_retry(self._session, f"{HNConfig.BASE_URL}/item/{item_id}.json")
+            for item_id in item_ids
+        ]
+        return await asyncio.gather(*tasks)
+        
+    async def get_items_paginated(
+        self, 
+        endpoint: str, 
+        page: int = 1, 
+        per_page: int = 10,
+        max_items: int = 100
+    ) -> List[HNItem]:
+        """Get paginated items from an endpoint.
+        
+        Args:
+            endpoint: API endpoint (e.g. 'topstories', 'newstories')
+            page: Page number (1-based)
+            per_page: Items per page
+            max_items: Maximum total items to fetch
+            
+        Returns:
+            List of HNItem objects for the requested page
+        """
+        # Fetch all IDs first
+        all_ids = await fetch_with_retry(
+            self._session, 
+            f"{HNConfig.BASE_URL}/{endpoint}.json"
+        )
+        
+        if not all_ids:
+            return []
+            
+        # Apply max_items limit
+        all_ids = all_ids[:max_items]
+        
+        # Calculate pagination bounds
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        page_ids = all_ids[start_idx:end_idx]
+        
+        # Fetch items in parallel
+        items_data = await self._fetch_items_batch(page_ids)
+        return [HNItem(**item) for item in items_data if item]
+        
+    async def get_top_items(self, page: int = 1, per_page: int = 30) -> List[HNItem]:
+        """Get paginated top items."""
+        return await self.get_items_paginated("topstories", page, per_page)
+        
+    async def get_new_items(self, page: int = 1, per_page: int = 30) -> List[HNItem]:
+        """Get paginated new items."""
+        return await self.get_items_paginated("newstories", page, per_page)
+        
+    async def get_best_items(self, page: int = 1, per_page: int = 30) -> List[HNItem]:
+        """Get paginated best items."""
+        return await self.get_items_paginated("beststories", page, per_page)
+        
+    async def get_ask_items(self, page: int = 1, per_page: int = 30) -> List[HNItem]:
+        """Get paginated Ask HN items."""
+        items = await self.get_items_paginated("askstories", page, per_page)
+        return [item for item in items if item.type == "story" and 
+               (item.title or "").startswith("Ask HN:")]
+        
+    async def get_show_items(self, page: int = 1, per_page: int = 30) -> List[HNItem]:
+        """Get paginated Show HN items."""
+        items = await self.get_items_paginated("showstories", page, per_page)
+        return [item for item in items if item.type == "story" and 
+               (item.title or "").startswith("Show HN:")]
+        
+    async def get_job_items(self, page: int = 1, per_page: int = 30) -> List[HNItem]:
+        """Get paginated job items."""
+        return await self.get_items_paginated("jobstories", page, per_page)
 
     async def get_item(self, item_id: int) -> Optional[HNItem]:
         """Fetch a single item by ID."""
@@ -305,8 +400,7 @@ class HackerNewsClient:
         return items
 
 # Simplified Tools with @create_tool
-@create_tool
-async def get_hn_items(item_type: str = "top", num_items: int = 30) -> List[HNItem]:
+async def get_hn_items(item_type: str = "top", page: int = 1, per_page: int = 30) -> List[HNItem]:
     """Fetch popular items from Hacker News.
     
     Args:
@@ -317,7 +411,8 @@ async def get_hn_items(item_type: str = "top", num_items: int = 30) -> List[HNIt
             - 'ask_hn': Ask HN posts
             - 'show_hn': Show HN posts
             - 'job': Job postings
-        num_items: Number of items to retrieve (1-50, default 30)
+        page: Page number (1-based)
+        per_page: Items per page (1-100, default 30)
     
     Returns:
         List[HNItem]: A list of HNItem objects containing:
@@ -357,13 +452,12 @@ async def get_hn_items(item_type: str = "top", num_items: int = 30) -> List[HNIt
     if item_type not in item_type_map:
         raise ValueError(f"Invalid item_type: '{item_type}'. Valid options: {', '.join(item_type_map.keys())}")
 
-    num_items = max(1, min(50, num_items))
+    per_page = max(1, min(100, per_page))
 
     async with HackerNewsClient() as client:
         method = getattr(client, f"get_{item_type_map[item_type]}")
-        return await method(limit=num_items)
+        return await method(page=page, per_page=per_page)
 
-@create_tool
 async def get_hn_item_details(item_id: int, comment_depth: int = 2, clean_text: bool = True) -> Dict:
     """Fetch a Hacker News item with its comment hierarchy.
     
@@ -390,7 +484,6 @@ async def get_hn_item_details(item_id: int, comment_depth: int = 2, clean_text: 
             raise ValueError(f"Item with id {item_id} not found")
         return item.__dict__ if hasattr(item, '__dict__') else item
 
-@create_tool
 async def get_hn_user(username: str, include_items: bool = True, num_items: int = 10, item_types: List[str] = ["story"]) -> HNUser:
     """Fetch detailed information about a Hacker News user.
     
@@ -446,7 +539,6 @@ async def get_hn_user(username: str, include_items: bool = True, num_items: int 
             raise ValueError(f"User '{username}' not found")
         return user
 
-@create_tool
 async def search_hn(
     query: str,
     sort_by_date: bool = False,
@@ -487,29 +579,53 @@ async def search_hn(
 async def main():
     """Demonstrate the enhanced Hacker News client with tools."""
     # Fetch top items
-    top_items = await get_hn_items(item_type="top", num_items=5)
-    print("Top Items:")
+    top_items = await get_hn_items(item_type="top", page=1, per_page=5)
+    print("=== Top 5 Hacker News Items ===")
     for item in top_items:
-        print(f"- {item.title} ({item.type}) by {item.by}")
+        print(f"\n{item.title}")
+        print(f"  - Type: {item.type}")
+        print(f"  - Author: {item.by}")
+        print(f"  - Posted: {item.formatted_datetime}")
+        print(f"  - Score: {item.score}")
+        print(f"  - Comments: {item.descendants}")
+        print(f"  - URL: {item.url}")
 
     # Fetch item with comments
     if top_items:
         item_details = await get_hn_item_details(top_items[0].id, comment_depth=1, clean_text=True)
-        print(f"\nItem Details: {item_details['title']}")
-        for comment in item_details.get('comments', [])[:2]:
-            print(f"  Comment by {comment['by']}: {comment['text'][:50]}...")
+        print("\n=== Detailed View for Top Story ===")
+        print(f"Title: {item_details['title']}")
+        print(f"Author: {item_details['by']}")
+        print(f"Posted: {datetime.fromtimestamp(item_details['time']).strftime('%Y-%m-%d %H:%M:%S')}")
+        print("\nRecent Comments:")
+        for comment in item_details.get('comments', [])[:3]:
+            print(f"\n- {comment['by']} ({datetime.fromtimestamp(comment['time']).strftime('%Y-%m-%d %H:%M')}):")
+            print(f"  {comment['text'][:100]}{'...' if len(comment['text']) > 100 else ''}")
 
     # Fetch user with items
     user = await get_hn_user("dang", include_items=True, num_items=3, item_types=["story", "job"])
-    print(f"\nUser: {user.id}, Karma: {user.karma}")
+    print("\n=== User Profile ===")
+    print(f"Username: {user.id}")
+    print(f"Karma: {user.karma}")
+    print(f"Created: {datetime.fromtimestamp(user.created).strftime('%Y-%m-%d')}")
+    print("\nRecent Submissions:")
     for item in user.items or []:
-        print(f"- {item.title} ({item.type})")
+        print(f"\n- {item.title} ({item.type})")
+        print(f"  Posted: {item.formatted_datetime}")
+        print(f"  Score: {item.score}")
+        print(f"  URL: {item.url or 'N/A'}")
 
     # Search Ask HN posts
     ask_items = await search_hn("python", sort_by_date=True, num_results=5, content_type="ask_hn")
-    print("\nSearch Results (Ask HN):")
+    print("\n=== Recent Python-related Ask HN Posts ===")
     for item in ask_items:
-        print(f"- {item.title} by {item.by}")
+        print(f"\n- {item.title}")
+        print(f"  Author: {item.by}")
+        print(f"  Posted: {item.formatted_datetime}")
+        print(f"  Score: {item.score}")
+        print(f"  URL: {item.url or 'N/A'}")
+
+    print("\n=== Demo Complete ===")
 
 if __name__ == "__main__":
     asyncio.run(main())
