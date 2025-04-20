@@ -30,6 +30,12 @@ class AgentTool(Tool):
                         arg_type="list",
                         description="Optional list of previous messages, each with 'role' and 'content' (e.g., [{'role': 'user', 'content': 'Hi'}])",
                         required=False
+                    ),
+                    ToolArgument(
+                        name="max_tokens",
+                        arg_type="integer",
+                        description="Maximum number of tokens to generate (default 2000)",
+                        required=False
                     )
                 ],
                 return_type="string"
@@ -65,6 +71,7 @@ class AgentTool(Tool):
             prompt: str = kwargs["prompt"]
             temperature: float = float(kwargs["temperature"])
             history: Optional[List[Dict[str, str]]] = kwargs.get("history", None)
+            max_tokens: int = int(kwargs.get("max_tokens", 2000))
 
             if not 0 <= temperature <= 1:
                 raise ValueError("Temperature must be between 0 and 1")
@@ -79,7 +86,7 @@ class AgentTool(Tool):
                 messages.extend(history)
             messages.append({"role": "user", "content": prompt})
 
-            logger.info(f"Generating with {self.model}, temp={temperature}, timeout={self.timeout}s, history={len(history or [])} messages")
+            logger.info(f"Generating with {self.model}, temp={temperature}, max_tokens={max_tokens}, timeout={self.timeout}s, history={len(history or [])} messages")
             async with AsyncExitStack() as stack:
                 await stack.enter_async_context(asyncio.timeout(self.timeout))
                 try:
@@ -87,7 +94,7 @@ class AgentTool(Tool):
                         model=self.model,
                         messages=messages,
                         temperature=temperature,
-                        max_tokens=1000
+                        max_tokens=max_tokens
                     )
                     result = response.choices[0].message.content.strip()
                     logger.info(f"AgentTool generated text successfully: {result[:50]}...")
