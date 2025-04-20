@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic-codeact"
-version = "0.1.0"
+version = "0.2.0"
 description = "CodeAct Agent."
 authors = ["Raphael Mansuy <raphae.mansuy@quantalogic.app>"]
 license = "Apache-2.0"
