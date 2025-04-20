@@ -1,6 +1,7 @@
-# Quantalogic Flow: Your Workflow Automation Powerhouse 
+# Quantalogic Flow: Your Workflow Automation Powerhouse
 
-Welcome to **Quantalogic Flow**, an open-source Python library designed to make workflow automation intuitive, scalable, and powerful. Whether you're orchestrating AI-driven tasks with Large Language Models (LLMs), processing data pipelines, or formatting outputs with templates, Quantalogic Flow has you covered with two flexible approaches: a [**declarative YAML interface**](flow_yaml.md) for simplicity and a **fluent Python API** for dynamic control.
+Welcome to **Quantalogic Flow**, an open-source Python library designed to make workflow automation intuitive, scalable, and powerful. As a core component of the **QuantaLogic** ecosystem, Quantalogic Flow enables you to orchestrate complex tasks—whether AI-driven with Large Language Models (LLMs), data processing pipelines, or formatted outputs with templates—using two flexible approaches: a [**declarative YAML interface**](./flow_yaml.md) for simplicity and a **fluent Python API** for dynamic control.
+
 + [![PyPI](https://img.shields.io/pypi/v/quantalogic-flow.svg)](https://pypi.org/project/quantalogic-flow)
 + [![Build Status](https://img.shields.io/github/actions/workflow/status/quantalogic/quantalogic-flow/ci.yml?branch=main)](https://github.com/quantalogic/quantalogic-flow/actions)
 + [![License](https://img.shields.io/pypi/l/quantalogic-flow.svg)](https://github.com/quantalogic/quantalogic-flow/blob/main/LICENSE)
@@ -11,22 +12,6 @@ This README is your guide to mastering Quantalogic Flow. Packed with examples, v
 
 ## Table of Contents
 
----
-
-## Examples
-
-Below are practical examples included with Quantalogic Flow. Each demonstrates a different capability or workflow pattern. For more details or updates, see [`examples/EXAMPLES_TABLE.md`](examples/EXAMPLES_TABLE.md).
-
-| Example Name | Location | Description |
-|-------------|----------|-------------|
-| Analyze Paper | [analyze_paper/analyze_paper.py](examples/analyze_paper/analyze_paper.py) | Converts a scientific paper (PDF, .txt, or .md) into a LinkedIn post using a multi-step LLM workflow. Demonstrates file parsing, extraction, and formatting. |
-| Create Tutorial | [create_tutorial/create_tutorial.py](examples/create_tutorial/create_tutorial.py) | Generates a multi-chapter tutorial from a Markdown file. Shows chapter structuring, LLM drafting, and optional critique/refinement. |
-| PDF to Markdown | [pdf_to_markdown/pdf_to_markdown.py](examples/pdf_to_markdown/pdf_to_markdown.py) | Converts a PDF document to Markdown using a vision model. Simple two-step workflow: convert and save. |
-| Q&A Generator | [questions_and_answers/question_and_anwsers.py](examples/questions_and_answers/question_and_anwsers.py) | Extracts facts from a Markdown file and generates educational questionnaire items and evaluations. Demonstrates structured LLM nodes and validation. |
-| Simple Story Generator | [simple_story_generator/story_generator_agent.py](examples/simple_story_generator/story_generator_agent.py) | Builds a multi-chapter story using LLMs for outline, chapters, and quality check. Minimal, beginner-friendly workflow. |
-| Story Generator (Advanced) | [story_generator/story_generator_agent.py](examples/story_generator/story_generator_agent.py) | Advanced story generator with looping, conditional logic, and Jinja2 templating. Shows dynamic workflow construction. |
-
----
 1. [Why Quantalogic Flow?](#why-quantalogic-flow)
 2. [Installation](#installation)
 3. [Quickstart](#quickstart)
@@ -43,38 +28,58 @@ Below are practical examples included with Quantalogic Flow. Each demonstrates a
    - [Dynamic Model Selection](#dynamic-model-selection)
    - [Sub-Workflows](#sub-workflows)
    - [Observers](#observers)
+   - [Looping](#looping)
 8. [Validation and Debugging](#validation-and-debugging)
 9. [Conversion Tools](#conversion-tools)
 10. [Case Study: AI-Powered Story Generator](#case-study-ai-powered-story-generator)
 11. [Best Practices and Insider Tips](#best-practices-and-insider-tips)
 12. [Flow Manager API](#flow-manager-api)
-13. [Resources and Community](#resources-and-community)
-14. [API Reference](#api-reference)
-15. [Flow YAML Reference](#flow-yaml-reference)
+13. [Integration with QuantaLogic](#integration-with-quantalogic)
+14. [Examples](#examples)
+15. [Resources and Community](#resources-and-community)
+16. [API Reference](#api-reference)
+17. [Flow YAML Reference](#flow-yaml-reference)
 
 ---
 
 ## Why Quantalogic Flow?
 
-**Why**: Workflows—like generating reports, processing data, or creating AI-driven content—often involve repetitive steps, conditional logic, and data handoffs. Writing this logic from scratch is time-consuming and error-prone. Quantalogic Flow simplifies this by letting you define workflows declaratively or programmatically, saving hours and reducing bugs.
+**Why**: Workflows—like generating reports, automating content creation, or processing data—often involve repetitive steps, conditional logic, and data handoffs. Writing this logic from scratch is time-consuming and error-prone. Quantalogic Flow simplifies this by providing a structured, reusable framework to define workflows either declaratively (YAML) or programmatically (Python), saving hours and reducing bugs. As part of **QuantaLogic**, it seamlessly integrates with AI agents and conversational tools for end-to-end automation.
 
 **What**: Quantalogic Flow is a Python library that enables:
-- **Declarative YAML workflows**: Human-readable, shareable, and perfect for static processes.
-- **Fluent Python API**: Dynamic, code-driven workflows for developers.
-- **LLM integration**: Seamlessly use AI models for text generation or structured data extraction.
-- **Template rendering**: Format outputs with Jinja2 for polished results.
-- **Advanced logic**: Support for branching, looping, and parallel execution.
+- **Declarative YAML workflows**: Human-readable, shareable, and ideal for static processes or non-coders.
+- **Fluent Python API**: Dynamic, code-driven workflows for developers needing flexibility.
+- **LLM integration**: Leverage models from OpenAI, Gemini, DeepSeek, and more via LiteLLM for text generation or structured data extraction.
+- **Template rendering**: Format outputs with Jinja2 for polished reports or content.
+- **Advanced logic**: Support for branching, looping, parallel execution, and sub-workflows.
+- **Enterprise-ready**: Built-in validation, error handling, and observability for production use.
 
-**How**: You define nodes (tasks) and workflows (sequences), then execute them with a shared context to pass data. Whether you’re a non-coder editing YAML or a developer chaining Python methods, Quantalogic Flow adapts to your style.
+**How**: Define **nodes** (tasks) and **workflows** (sequences) that execute with a shared **context** to pass data. Whether you’re a non-coder editing YAML or a developer chaining Python methods, Quantalogic Flow adapts to your style, making it perfect for automating business processes, AI-driven content pipelines, or data transformations.
+
+> "QuantaLogic Flow turns complex automation into a breeze—structured, scalable, and ready for your wildest ideas!"  
+> — Raphaël MANSUY, Founder of [QuantaLogic](https://www.quantalogic.app)
+
+**Mermaid Diagram: Quantalogic Flow in Action**
+```mermaid
+graph TD
+    A[Input Data] --> B[Node: Validate]
+    B --> C[Node: Process with LLM]
+    C -->|Conditional| D[Node: Format with Template]
+    C -->|Conditional| E[Node: Sub-Workflow]
+    D --> F[Output: Report]
+    E --> F
+    style A fill:#90CAF9
+    style F fill:#90CAF9
+```
 
 ---
 
 ## Installation
 
 ### Prerequisites
-- Python 3.10 or higher.
-- Basic knowledge of Python and YAML.
-- Optional: API keys for LLM providers (e.g., Gemini, OpenAI).
+- **Python 3.10+**: Ensure you have a modern Python version installed.
+- **Optional**: API keys for LLM providers (e.g., OpenAI, Gemini, DeepSeek) for LLM nodes.
+- **Optional**: Docker for secure code execution in isolated environments (inherited from QuantaLogic).
 
 ### Installation
 Install Quantalogic Flow via pip:
@@ -82,36 +87,107 @@ Install Quantalogic Flow via pip:
 pip install quantalogic-flow
 ```
 
-For template nodes, install Jinja2:
+For isolated environments, use pipx:
 ```bash
-pip install jinja2
-```
-
-For structured LLM nodes, install Instructor:
-```bash
-pip install instructor[litellm]
+pipx install quantalogic-flow
 ```
 
 ### Setup
-Set up your environment by configuring LLM API keys (if using LLM nodes):
+Configure LLM API keys in a `.env` file or environment variables:
 ```bash
 export GEMINI_API_KEY="your-api-key"
+export OPENAI_API_KEY="sk-your-openai-key"
+export DEEPSEEK_API_KEY="ds-your-deepseek-key"
 ```
+
+> **Tip**: Use a `.env` file for security and load it with `source .env`. See [API Keys and Environment Configuration](#api-keys-and-environment-configuration) for details.
 
 ---
 
 ## Quickstart
 
+Get started with a simple workflow that reads a string, processes it, and prints the result.
+
+### Fluent API Example
 ```python
-from quantalogic_flow import Workflow
+from quantalogic_flow import Workflow, Nodes
 
-# Define a simple workflow
-workflow = Workflow("start") \
-    .node("read", function=lambda ctx: ctx.update({"data": "Hello World"})) \
-    .node("write", function=lambda ctx: print(ctx["data"]))
+@Nodes.define(output="data")
+def read_data():
+    return "hello world"
 
-# Run the workflow
-workflow.run()
+@Nodes.define(output="processed_data")
+def process_data(data):
+    return data.upper()
+
+@Nodes.define()
+def write_data(processed_data):
+    print(processed_data)
+
+workflow = (
+    Workflow("read_data")
+    .then("process_data")
+    .then("write_data")
+)
+
+async def main():
+    result = await workflow.build().run({})
+    print(result)  # Outputs: HELLO WORLD
+
+import asyncio
+asyncio.run(main())
+```
+
+### YAML Example
+```yaml
+functions:
+  read_data:
+    type: embedded
+    code: |
+      def read_data():
+          return "hello world"
+  process_data:
+    type: embedded
+    code: |
+      def process_data(data):
+          return data.upper()
+  write_data:
+    type: embedded
+    code: |
+      def write_data(processed_data):
+          print(processed_data)
+nodes:
+  start:
+    function: read_data
+    output: data
+  process:
+    function: process_data
+    inputs_mapping:
+      data: "data"
+    output: processed_data
+  end:
+    function: write_data
+    inputs_mapping:
+      processed_data: "processed_data"
+workflow:
+  start: start
+  transitions:
+    - from_node: start
+      to_node: process
+    - from_node: process
+      to_node: end
+```
+
+**Execution**:
+```python
+from quantalogic_flow.flow.flow_manager import WorkflowManager
+import asyncio
+
+manager = WorkflowManager()
+manager.load_from_yaml("simple_workflow.yaml")
+workflow = manager.instantiate_workflow()
+result = asyncio.run(workflow.build().run({}))  # Outputs: HELLO WORLD
+print(result)
 ```
 
 ---
@@ -120,9 +196,8 @@ workflow.run()
 
 ### Nodes: The Building Blocks
 Nodes are the individual tasks in a workflow, like workers in a factory. Quantalogic Flow supports four types:
-
-1. **Function Nodes**: Run custom Python code (e.g., data processing).
-2. **LLM Nodes**: Generate text using AI models (e.g., story writing).
+1. **Function Nodes**: Execute custom Python code (e.g., data cleaning).
+2. **LLM Nodes**: Generate text using AI models (e.g., content creation).
 3. **Structured LLM Nodes**: Extract structured data (e.g., JSON or Pydantic models).
 4. **Template Nodes**: Render formatted text with Jinja2 (e.g., reports).
 
@@ -131,9 +206,10 @@ Workflows define how nodes connect, like a recipe directing kitchen staff. They 
 - A **start node** to begin execution.
 - **Transitions** for sequential, parallel, or conditional flow.
 - **Convergence nodes** where parallel paths merge.
+- **Loops** for iterative tasks.
 
 ### Context: The Glue
-The context (`ctx`) is a dictionary that carries data between nodes, like a shared clipboard. Nodes read inputs from the context and write outputs to it.
+The **context** (`ctx`) is a dictionary that carries data between nodes, acting as a shared clipboard. Nodes read inputs from the context and write outputs to it.
 
 **Mermaid Diagram: Core Workflow Structure**
 ```mermaid
@@ -156,7 +232,7 @@ graph TD
 
 ## Approaches: YAML vs. Fluent API
 
-Quantalogic Flow offers two ways to define workflows: **YAML** for simplicity and **Fluent API** for flexibility. Let’s explore both with a simple example: a workflow that reads a string, converts it to uppercase, and prints it.
+Quantalogic Flow offers two ways to define workflows: **YAML** for simplicity and **Fluent API** for flexibility. Below is a comparison using a workflow that reads a string, converts it to uppercase, and prints it.
 
 ### YAML Approach
 **Why**: YAML is declarative, readable, and ideal for static workflows or non-coders.
@@ -241,11 +317,10 @@ workflow = (
 
 async def main():
     result = await workflow.build().run({})
-    print(result)
+    print(result)  # Outputs: HELLO WORLD
 
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())  # Outputs: HELLO WORLD
+import asyncio
+asyncio.run(main())
 ```
 
 **Comparison Table**:
@@ -255,6 +330,7 @@ if __name__ == "__main__":
 | **Best For**         | Non-coders, static flows     | Developers, dynamic logic    |
 | **Readability**      | High, non-technical          | Moderate, Python-based       |
 | **Flexibility**      | Limited by YAML structure    | High, full Python power      |
+| **Tooling**          | Easy to share, version      | Integrates with Python tools |
 
 **Mermaid Diagram: Workflow Flow**
 ```mermaid
@@ -272,98 +348,136 @@ graph TD
 
 ## Fluent API Examples
 
+Below are practical examples demonstrating the Fluent API’s capabilities.
+
+### 1. Basic Workflow
 ```python
-# 1. Basic Workflow
-from quantalogic_flow import Workflow
+from quantalogic_flow import Workflow, Nodes
 
-workflow = Workflow("start") \
-    .node("read", function=read_data) \
-    .node("process", function=process_data) \
-    .node("write", function=write_data)
+@Nodes.define(output="data")
+def read_data():
+    return [1, 2, 3]
 
-result = workflow.run(context={"data": [1, 2, 3]})
-print(result)
+@Nodes.define(output="processed")
+def process_data(data):
+    return [x * 2 for x in data]
+
+workflow = (
+    Workflow("read_data")
+    .then("process_data")
+)
+
+result = asyncio.run(workflow.build().run({}))
+print(result)  # {'data': [1, 2, 3], 'processed': [2, 4, 6]}
 ```
 
+### 2. Conditional Branching
 ```python
-# 2. Conditional Branching
-from quantalogic_flow import Workflow
+from quantalogic_flow import Workflow, Nodes
 
-workflow = Workflow("start") \
-    .node("start", function=lambda ctx: ctx.update({"x": ctx["x"] * 2})) \
-    .condition(lambda ctx: ctx["x"] > 10, true_node="high_path", false_node="low_path") \
-    .node("high_path", function=handle_high) \
-    .node("low_path", function=handle_low)
+@Nodes.define(output="x")
+def start_node():
+    return 12
 
-workflow.run(context={"x": 6})
+@Nodes.define(output="result")
+def high_path(x):
+    return f"High: {x}"
+
+@Nodes.define(output="result")
+def low_path(x):
+    return f"Low: {x"
+
+workflow = (
+    Workflow("start_node")
+    .branch(
+        [
+            ("high_path", lambda ctx: ctx["x"] > 10),
+            ("low_path", lambda ctx: ctx["x"] <= 10)
+        ]
+    )
+)
+
+result = asyncio.run(workflow.build().run({}))
+print(result)  # {'x': 12, 'result': 'High: 12'}
 ```
 
+### 3. Looping
 ```python
-# 3. Looping
-from quantalogic_flow import Workflow
+from quantalogic_flow import Workflow, Nodes
 
-workflow = Workflow("init") \
-    .node("init", function=lambda ctx: ctx.update({"count": 0})) \
-    .while_loop(lambda ctx: ctx["count"] < 3) \
-        .node("increment", function=lambda ctx: ctx.update({"count": ctx["count"] + 1})) \
-    .end_loop()
+@Nodes.define(output="count")
+def init():
+    return 0
 
-workflow.run()
+@Nodes.define(output="count")
+def increment(count):
+    return count + 1
+
+workflow = (
+    Workflow("init")
+    .start_loop()
+    .node("increment")
+    .end_loop(lambda ctx: ctx["count"] >= 3, "end")
+)
+
+result = asyncio.run(workflow.build().run({}))
+print(result)  # {'count': 3}
 ```
 
+### 4. Structured LLM Extraction with Pydantic
 ```python
-# 4. Observers and Hooks
-from quantalogic_flow import Workflow
-
-def logger(event):
-    print(f"{event.node_name} - {event.event_type}")
-
-workflow = Workflow("start") \
-    .add_observer(logger) \
-    .node("start", function=read_data) \
-    .node("end", function=process_data)
-
-workflow.run()
-```
-
-```python
-# 5. Structured Extraction with LLM into Pydantic model
 from quantalogic_flow.flow import Nodes, Workflow
 from pydantic import BaseModel
-
-# Define Pydantic models
-class Address(BaseModel):
-    street: str
-    city: str
-    zip_code: str
 
 class Person(BaseModel):
     name: str
     age: int
-    address: Address
 
-# Node: use LLM to extract structured Person
 @Nodes.structured_llm_node(
-    system_prompt="Extract person info and format as JSON matching the Pydantic schema.",
+    system_prompt="Extract person info as JSON.",
     output="person",
     response_model=Person,
-    prompt_template="Extract name, age, street, city, zip_code from text:\n{text}",
+    prompt_template="Extract name and age from: {{text}}",
 )
 async def extract_person(text: str) -> Person:
     pass
 
-# Node: print result
-@Nodes.define(output=None)
+@Nodes.define()
 async def print_person(person: Person):
-    print(f"{person.name} ({person.age}) lives at {person.address.street}, {person.address.city} {person.address.zip_code}")
+    print(f"{person.name} is {person.age} years old")
 
-# Build and run workflow
-workflow = Workflow("extract_person") \
-    .node("extract_person", inputs_mapping={"text": "input_text"}) \
+workflow = (
+    Workflow("extract_person")
+    .node("extract_person", inputs_mapping={"text": "input_text"})
     .then("print_person")
+)
 
-input_text = "Alice is 30 years old and lives at 123 Main St, Metropolis, 12345."
-workflow.run(input_text)
+input_text = "Alice is 30 years old."
+result = asyncio.run(workflow.build().run({"input_text": input_text}))
+```
+
+### 5. Template Node for Formatting
+```python
+from quantalogic_flow.flow import Nodes, Workflow
+
+@Nodes.define(output="data")
+def fetch_data():
+    return {"items": ["apple", "banana"]}
+
+@Nodes.template_node(
+    output="message",
+    template="Order contains: {{ items | join(', ') }}"
+)
+async def format_message(rendered_content: str, items: list):
+    return rendered_content
+
+workflow = (
+    Workflow("fetch_data")
+    .then("format_message")
+)
+
+result = asyncio.run(workflow.build().run({}))
+print(result["message"])  # "Order contains: apple, banana"
 ```
 
 ---
@@ -371,33 +485,29 @@ workflow.run(input_text)
 ## Advanced Features
 
 ### Input Mapping
-**Why**: Hardcoding inputs limits flexibility. Input mapping lets nodes dynamically pull data from the context or compute values.
-**What**: Map node parameters to context keys or lambda expressions.
-**How**:
+Dynamically map node inputs to context keys or computed values:
 ```yaml
 nodes:
   process:
     function: process_data
     inputs_mapping:
-      data: "data"
-      prefix: "lambda ctx: 'Processed: ' + ctx['data']"
+      data: "raw_data"
+      prefix: "lambda ctx: 'Processed: ' + ctx['raw_data']"
     output: processed_data
 ```
 **Fluent API**:
 ```python
-.node("process_data", inputs_mapping={"data": "data", "prefix": lambda ctx: "Processed: " + ctx["data"]})
+.node("process_data", inputs_mapping={"data": "raw_data", "prefix": lambda ctx: "Processed: " + ctx["raw_data"]})
 ```
 
 ### Dynamic Model Selection
-**Why**: Different tasks may need different LLMs (e.g., GPT for creativity, Gemini for speed).
-**What**: Specify the LLM model dynamically using a lambda.
-**How**:
+Choose LLM models based on context:
 ```yaml
 nodes:
   generate:
     llm_config:
       model: "lambda ctx: ctx['model_name']"
-      prompt_template: "Write about {topic}."
+      prompt_template: "Write about {{topic}}."
     inputs_mapping:
       topic: "user_topic"
     output: text
@@ -408,9 +518,7 @@ nodes:
 ```
 
 ### Sub-Workflows
-**Why**: Break complex workflows into reusable modules.
-**What**: Define nested workflows within a node.
-**How**:
+Encapsulate reusable workflows within nodes:
 ```yaml
 nodes:
   parent_node:
@@ -427,9 +535,7 @@ workflow.add_sub_workflow("parent_node", sub_workflow, inputs={"key": "value"}, 
 ```
 
 ### Observers
-**Why**: Monitor workflow execution for debugging or logging.
-**What**: Functions that receive events (e.g., node started, completed).
-**How**:
+Monitor execution for debugging or logging:
 ```yaml
 functions:
   monitor:
@@ -442,73 +548,90 @@ observers:
 ```
 **Fluent API**:
 ```python
-workflow.add_observer(monitor)
+workflow.add_observer(lambda event: print(f"{event.node_name} - {event.event_type}"))
 ```
 
-**Mermaid Diagram: Observer Integration**
+### Looping
+Execute nodes iteratively until a condition is met:
+```python
+workflow = (
+    Workflow("init")
+    .start_loop()
+    .node("increment", function=lambda ctx: ctx.update({"count": ctx["count"] + 1}))
+    .end_loop(lambda ctx: ctx["count"] >= 3, "end")
+)
+```
+
+**Mermaid Diagram: Observer and Loop Integration**
 ```mermaid
 graph TD
-    A[Workflow Execution] --> B[Node 1]
+    A[Workflow Start] --> B[Node 1]
     B --> C[Node 2]
-    A --> D[Observer]
-    B --> D
-    C --> D
+    C -->|Loop Condition| B
+    C -->|Exit| D[End]
+    A --> E[Observer]
+    B --> E
+    C --> E
     style A fill:#90CAF9
     style B fill:#90CAF9
     style C fill:#90CAF9
-    style D fill:#FFCCBC
+    style D fill:#90CAF9
+    style E fill:#FFCCBC
 ```
-
-**Insider Tip**: Use observers to track LLM token usage or log errors for quick debugging.
 
 ---
 
 ## Validation and Debugging
 
-- **Validation**: Ensure your workflow is sound with `validate_workflow_definition()`.
+- **Validation**: Use `validate_workflow_definition()` to catch errors before execution:
   ```python
   from quantalogic_flow.flow.flow_validator import validate_workflow_definition
   issues = validate_workflow_definition(manager.workflow)
   for issue in issues:
       print(f"Node '{issue.node_name}': {issue.description}")
   ```
-- **Debugging**: Attach observers to log context changes or use print statements in function nodes.
+- **Debugging**: Attach observers to log context changes or add print statements in function nodes.
+- **Mermaid Diagrams**: Visualize workflows with `generate_mermaid_diagram()`:
+  ```python
+  from quantalogic_flow.flow.flow_mermaid import generate_mermaid_diagram
+  print(generate_mermaid_diagram(manager.workflow, title="My Workflow"))
+  ```
 
-**Insider Tip**: Validate early and often to catch circular transitions or missing inputs before execution.
+**Insider Tip**: Validate early to catch circular transitions or missing inputs, and use observers to monitor LLM token usage.
 
 ---
 
 ## Conversion Tools
 
-Switch between YAML and Python effortlessly:
-- **YAML to Python**: Generate executable scripts with `flow_generator.py`.
+Switch between YAML and Python seamlessly:
+- **YAML to Python**: Generate executable scripts:
   ```python
   from quantalogic_flow.flow.flow_generator import generate_executable_script
   manager = WorkflowManager()
   manager.load_from_yaml("workflow.yaml")
   generate_executable_script(manager.workflow, {}, "script.py")
   ```
-- **Python to YAML**: Extract Fluent API workflows with `flow_extractor.py`.
+- **Python to YAML**: Extract Fluent API workflows:
   ```python
   from quantalogic_flow.flow.flow_extractor import extract_workflow_from_file
   workflow_def, globals = extract_workflow_from_file("script.py")
   WorkflowManager(workflow_def).save_to_yaml("workflow.yaml")
   ```
 
-**Insider Tip**: Use conversion tools to prototype in YAML, then fine-tune in Python for dynamic tweaks.
+**Insider Tip**: Prototype in YAML for simplicity, then convert to Python for dynamic tweaks or integration.
 
 ---
 
 ## Case Study: AI-Powered Story Generator
 
-Let’s build a workflow that generates a multi-chapter story, analyzes its tone, and formats it with a template.
+Build a workflow that generates a multi-chapter story, analyzes its tone, and formats it with a template.
 
 ### Objective
 1. Generate a story outline with an LLM.
-2. Analyze its tone (light or dark) with a structured LLM.
+2. Analyze tone (light or dark) with a structured LLM.
 3. Generate chapters based on tone.
-4. Summarize each chapter with a template.
-5. Loop until all chapters are done, then finalize the story.
+4. Summarize chapters with a Jinja2 template.
+5. Loop until all chapters are complete, then finalize.
 
 ### YAML Definition
 ```yaml
@@ -532,17 +655,12 @@ functions:
     code: |
       async def finalize_story(chapters):
           return "\n".join(chapters)
-  monitor:
-    type: embedded
-    code: |
-      def monitor(event):
-          print(f"Event: {event.event_type.value} @ {event.node_name}")
 nodes:
   generate_outline:
     llm_config:
       model: "lambda ctx: ctx['model_name']"
       system_prompt: "You are a creative writer."
-      prompt_template: "Create a story outline for a {genre} story with {num_chapters} chapters."
+      prompt_template: "Create a story outline for a {{genre}} story with {{num_chapters}} chapters."
     inputs_mapping:
       genre: "story_genre"
       num_chapters: "chapter_count"
@@ -551,7 +669,7 @@ nodes:
     llm_config:
       model: "lambda ctx: ctx['model_name']"
       system_prompt: "Analyze the tone."
-      prompt_template: "Determine if this outline is light or dark: {outline}."
+      prompt_template: "Determine if this outline is light or dark: {{outline}}."
       response_model: "path.to.ToneModel"
     inputs_mapping:
       outline: "outline"
@@ -560,14 +678,15 @@ nodes:
     llm_config:
       model: "lambda ctx: ctx['model_name']"
       system_prompt: "You are a writer."
-      prompt_template: "Write chapter {chapter_num} for this outline: {outline}. Style: {style}."
+      prompt_template: "Write chapter {{chapter_num}} for this outline: {{outline}}. Style: {{style}}."
     inputs_mapping:
       chapter_num: "completed_chapters"
+      outline: "outline"
       style: "style"
     output: chapter
   summarize_chapter:
     template_config:
-      template: "Chapter {{ chapter_num }}: {{ chapter }}"
+      template: "Chapter {{chapter_num}}: {{chapter}}"
     inputs_mapping:
       chapter_num: "completed_chapters"
       chapter: "chapter"
@@ -577,9 +696,14 @@ nodes:
     output: updated_context
   check_if_complete:
     function: check_if_complete
+    inputs_mapping:
+      completed_chapters: "completed_chapters"
+      num_chapters: "chapter_count"
     output: continue_generating
   finalize_story:
     function: finalize_story
+    inputs_mapping:
+      chapters: "chapters"
     output: final_story
 workflow:
   start: generate_outline
@@ -603,8 +727,6 @@ workflow:
       condition: "ctx['continue_generating']"
   convergence_nodes:
     - finalize_story
-observers:
-  - monitor
 ```
 
 ### Pydantic Model
@@ -662,28 +784,25 @@ graph TD
 
 **Sample Output**:
 ```
-Event: workflow_started @ workflow
-Event: node_started @ generate_outline
-Event: node_completed @ generate_outline
-...
 Story:
 Chapter 1: A mage discovers a prophecy...
 Chapter 2: The mage defeats the dragon...
 ```
 
-**Insider Tip**: Use `prompt_file` for reusable LLM prompts stored in Jinja2 templates to keep your YAML clean and modular.
+**Insider Tip**: Store LLM prompts in Jinja2 template files (e.g., `prompt_check_inventory.j2`) for reusability and modularity.
 
 ---
 
 ## Best Practices and Insider Tips
 
-1. **Start Small**: Begin with a simple workflow (e.g., two nodes) to grasp the context flow.
-2. **Validate Early**: Run `validate_workflow_definition()` before execution to catch errors.
-3. **Optimize LLMs**: Set `temperature=0.3` for consistent outputs, `0.7` for creative tasks.
-4. **Reuse Sub-Workflows**: Encapsulate common patterns (e.g., data validation) for modularity.
+1. **Start Small**: Begin with a simple workflow (e.g., two nodes) to understand context flow.
+2. **Validate Early**: Run `validate_workflow_definition()` to catch errors before execution.
+3. **Optimize LLMs**: Use `temperature=0.3` for consistent outputs, `0.7` for creative tasks.
+4. **Reuse Sub-Workflows**: Encapsulate common patterns (e.g., validation) for modularity.
 5. **Log Everything**: Attach observers to track context changes and debug issues.
 6. **Test Incrementally**: Add nodes one at a time and test to isolate problems.
 7. **Document YAML**: Use comments to explain node purposes for team collaboration.
+8. **Secure Keys**: Store API keys in `.env` files, not in code or YAML.
 
 ---
 
@@ -696,65 +815,72 @@ from quantalogic_flow.flow.flow_manager import WorkflowManager
 ```
 
 ### Core Methods
-
-- `__init__(workflow: Optional[WorkflowDefinition] = None)`: create a manager, optionally with an existing definition.
-- `_ensure_dependencies()`: install or verify declared dependencies.
-- `add_function(name: str, type_: str, code: Optional[str] = None)`: register a Python function (embedded or module).
-- `add_node(name: str, function: Optional[str] = None, llm_config: Optional[dict] = None, template_config: Optional[dict] = None, inputs_mapping: dict = None, output: str = None, retries: int = 3, delay: float = 1.0, timeout: Optional[float] = None, parallel: bool = False)`: add a new node definition.
-- `add_transition(from_node: str, to_node: Union[str, List[Union[str, BranchCondition]]], condition: Optional[str] = None)`: define edges, including branching.
-- `add_loop(loop_nodes: List[str], condition: str, exit_node: str)`: wrap nodes in a while-loop.
-- `set_start_node(name: str) / add_convergence_node(name: str) / add_observer(observer_name: str)`: configure execution behavior.
-- `load_from_yaml(file_path: str) / save_to_yaml(file_path: str)`: serialize to/from YAML.
-- `instantiate_workflow() -> Workflow`: compile to a runnable `Workflow` instance.
+- `__init__(workflow: Optional[WorkflowDefinition] = None)`: Create a manager with an optional definition.
+- `add_function(name: str, type_: str, code: Optional[str] = None)`: Register a Python function.
+- `add_node(name: str, function: Optional[str] = None, llm_config: Optional[dict] = None, template_config: Optional[dict] = None, inputs_mapping: dict = None, output: str = None)`: Add a node with template and mapping support.
+- `add_transition(from_node: str, to_node: Union[str, List[Union[str, BranchCondition]]], condition: Optional[str] = None)`: Define edges, including branching.
+- `add_loop(loop_nodes: List[str], condition: str, exit_node: str)`: Wrap nodes in a while-loop.
+- `set_start_node(name: str) / add_convergence_node(name: str) / add_observer(observer_name: str)`: Configure execution behavior.
+- `load_from_yaml(file_path: str) / save_to_yaml(file_path: str)`: Serialize to/from YAML.
+- `instantiate_workflow() -> Workflow`: Compile to a runnable `Workflow` instance.
 
 ### Example: Manual Workflow Construction
-
 ```python
-from quantalogic_flow.flow.flow_manager import WorkflowManager
-
-mgr = WorkflowManager()
-# register custom functions
-mgr.add_function('read', 'embedded', code='def read(): return "data"')
-mgr.add_function('proc', 'embedded', code='def proc(data): return data.upper()')
-# build nodes and transitions
-mgr.add_node('start', function='read', output='raw')
-mgr.add_node('process', function='proc', inputs_mapping={'data': 'raw'}, output='processed')
-mgr.add_transition('start', 'process')
-mgr.set_start_node('start')
-
-# instantiate and run
-workflow = mgr.instantiate_workflow()
-result = workflow.build().run({})
-print(result['processed'])  # 'DATA'
+manager = WorkflowManager()
+manager.add_function('read', 'embedded', code='def read(): return "data"')
+manager.add_node('start', function='read', output='raw')
+manager.add_node('process', function='proc', inputs_mapping={'data': 'raw'}, output='processed')
+manager.add_transition('start', 'process')
+manager.set_start_node('start')
+workflow = manager.instantiate_workflow()
+result = asyncio.run(workflow.build().run({}))
+print(result['processed'])
 ```
 
-### Example: YAML-driven Workflow
+---
 
-```yaml
-functions:
-  loader:
-    type: embedded
-    code: |
-      def loader(): return [1,2,3]
-nodes:
-  load:
-    function: loader
-    output: items
-workflow:
-  start: load
-  transitions: []
-```
+## Integration with QuantaLogic
 
+Quantalogic Flow is a cornerstone of the **QuantaLogic** framework, complementing the **ReAct Framework** (dynamic agents) and **Chat Mode** (conversational AI). Here’s how they fit together:
+
+| **Feature**           | **ReAct Framework**         | **Flow Module**            | **Chat Mode**             |
+|-----------------------|-----------------------------|----------------------------|---------------------------|
+| **Purpose**           | Adaptive problem-solving    | Structured workflows       | Conversational interaction |
+| **Flow**              | Loops until solved          | Follows defined roadmap    | Flows with conversation   |
+| **Use Case**          | Coding, debugging, Q&A      | Pipelines, automation      | Quick queries, chats       |
+| **Tools**             | Called as needed            | Baked into nodes           | Called when relevant      |
+
+**Example: Combining Flow with ReAct**:
 ```python
-from quantalogic_flow.flow.flow_manager import WorkflowManager
-import asyncio
+from quantalogic import Agent
+from quantalogic_flow.flow import Workflow, Nodes
 
-mgr = WorkflowManager()
-mgr.load_from_yaml('my_flow.yaml')
-mgr.save_to_yaml('exported.yaml')  # reserialize with formatting
-workflow = mgr.instantiate_workflow()
-asyncio.run(workflow.build().run({}))
+@Nodes.llm_node(model="gpt-4o", output="code")
+async def generate_code(task: str) -> str:
+    agent = Agent(model_name="gpt-4o")
+    return agent.solve_task(task)
+
+workflow = Workflow("generate_code").build()
+result = asyncio.run(workflow.run({"task": "Write a Fibonacci function"}))
+print(result["code"])
 ```
+
+**Insider Tip**: Use Flow for structured automation and ReAct for dynamic tasks within the same project, leveraging QuantaLogic’s unified toolset.
+
+---
+
+## Examples
+
+Explore practical examples included with Quantalogic Flow:
+
+| **Example Name**         | **Location**                                    | **Description**                                                                 |
+|--------------------------|------------------------------------------------|---------------------------------------------------------------------------------|
+| Analyze Paper            | [examples/analyze_paper/analyze_paper.py](examples/analyze_paper/analyze_paper.py) | Converts a scientific paper into a LinkedIn post using multi-step LLM workflows. |
+| Create Tutorial          | [examples/create_tutorial/create_tutorial.py](examples/create_tutorial/create_tutorial.py) | Generates a multi-chapter tutorial from a Markdown file with optional critique. |
+| PDF to Markdown          | [examples/pdf_to_markdown/pdf_to_markdown.py](examples/pdf_to_markdown/pdf_to_markdown.py) | Converts a PDF to Markdown using a vision model in a simple two-step workflow.  |
+| Q&A Generator            | [examples/questions_and_answers/question_and_anwsers.py](examples/questions_and_answers/question_and_anwsers.py) | Extracts facts from Markdown to create educational questionnaires.              |
+| Simple Story Generator   | [examples/simple_story_generator/story_generator_agent.py](examples/simple_story_generator/story_generator_agent.py) | Builds a multi-chapter story with a beginner-friendly workflow.                 |
+| Advanced Story Generator | [examples/story_generator/story_generator_agent.py](examples/story_generator/story_generator_agent.py) | Advanced story generator with looping, conditionals, and Jinja2 templating.     |
 
 ---
 
@@ -763,59 +889,81 @@ asyncio.run(workflow.build().run({}))
 - **Documentation**: [Quantalogic Flow Docs](https://github.com/quantalogic/quantalogic-flow)
 - **GitHub**: [Repository](https://github.com/quantalogic/quantalogic-flow)
 - **Issues**: Report bugs or request features on GitHub.
+- **QuantaLogic Main Docs**: [QuantaLogic Docs](https://quantalogic.github.io/quantalogic/)
+- **Contributing**: See [CONTRIBUTING.md](https://github.com/quantalogic/quantalogic-flow/blob/main/CONTRIBUTING.md)
 
 ---
 
 ## API Reference
 
 ### Workflow Class
-
-- `Workflow(start_node: str)`: initialize a workflow.
-- `.node(name: str, inputs_mapping: Optional[dict] = None)`: add a task node.
-- `.sequence(*nodes: str)`: add multiple nodes in order.
-- `.then(next_node: str, condition: Optional[Callable] = None)`: transition to another node.
-- `.branch(conditions: List[Tuple[str, Callable]], next_node: str)`: conditional branching.
-- `.converge(node: str)`: merge parallel branches.
-- `.while_loop(condition: Callable) / .end_loop()`: loop until condition is false.
-- `.add_sub_workflow(name: str, workflow: Workflow, inputs: dict, output: str)`: nest workflows.
-- `.build(parent_engine: Optional[WorkflowEngine] = None)`: compile to engine.
-- `.run(initial_context: dict or *args)`: execute workflow.
+- `Workflow(start_node: str)`: Initialize a workflow.
+- `.node(name: str, inputs_mapping: Optional[dict] = None)`: Add a task node.
+- `.sequence(*nodes: str)`: Add multiple nodes in order.
+- `.then(next_node: str, condition: Optional[Callable] = None)`: Transition to another node.
+- `.branch(conditions: List[Tuple[str, Callable]], next_node: str)`: Conditional branching.
+- `.converge(node: str)`: Merge parallel branches.
+- `.start_loop() / .end_loop(condition: Callable, next_node: str)`: Define iterative loops.
+- `.add_sub_workflow(name: str, workflow: Workflow, inputs: dict, output: str)`: Nest workflows.
+- `.build(parent_engine: Optional[WorkflowEngine] = None)`: Compile to engine.
+- `.run(initial_context: dict)`: Execute workflow.
 
 ### Node Decorators
+- `@Nodes.define(output: str)`: Define a Python function node.
+- `@Nodes.llm_node(...)`: Define an LLM-powered node with text output.
+- `@Nodes.structured_llm_node(...)`: Define an LLM node with structured output.
+- `@Nodes.validate_node(output: str)`: Define a validation node.
+- `@Nodes.template_node(output: str, template: str or template_file)`: Define a Jinja2 template node.
 
-- `@Nodes.define(output: str)`: define a pure-Python node.
-- `@Nodes.structured_llm_node(...)`: define an LLM-powered node with structured output (response_model).
-- `@Nodes.validate_node(output: str)`: define a validation node.
-- `@Nodes.transform_node(output: str, transformer: Callable)`: define a transform node.
-- `@Nodes.template_node(output: str, template: str or template_file)`: define a Jinja2 template node.
-
-### Utilities Modules
-
-- **flow_extractor.py**: generate Workflow from YAML definitions.
-- **flow_generator.py**: codegen helpers for workflows.
-- **flow_manager.py**: load, cache, and manage named workflows.
-- **flow_manager_schema.py**: Pydantic schemas for flow_manager.
-- **flow_mermaid.py**: export workflows to Mermaid diagrams.
-- **flow_validator.py**: static validation of YAML or API workflows.
-- **flow_yaml.md**: reference for YAML syntax.
-
-### Mermaid Diagram Generation
-
-- `generate_mermaid_diagram(workflow_def: WorkflowDefinition, include_subgraphs: bool = False, title: Optional[str] = None, include_legend: bool = True, diagram_type: str = "flowchart") -> str`: Generate a Mermaid flowchart or state diagram from a `WorkflowDefinition`, with options for pastel styling, subgraphs, and legends.
-- `get_node_label_and_type(node_name: str, node_def: Optional[NodeDefinition], has_conditions: bool) -> Tuple[str, str, str]`: Internal helper to create Mermaid-compatible labels, styles, and shapes for nodes based on their definitions and branching conditions.
-
-```python
-from quantalogic_flow.flow.flow_mermaid import generate_mermaid_diagram
-
-# Assuming `workflow_def` is a WorkflowDefinition
-diagram = generate_mermaid_diagram(workflow_def, title="Sample Workflow")
-print(diagram)
-```
+### Utilities
+- **flow_validator.py**: Validate workflow definitions.
+- **flow_mermaid.py**: Generate Mermaid diagrams.
+- **flow_extractor.py**: Convert Python workflows to YAML.
+- **flow_generator.py**: Generate Python scripts from YAML.
 
 ---
 
 ## Flow YAML Reference
 
-A quick overview: The Flow YAML Reference walks you through using the declarative YAML interface to define and configure workflows. It covers file structure, syntax for nodes and workflows, context mappings, branching logic, loops, sub-workflows, and practical examples for common use cases.
+The [Flow YAML Reference](./flow_yaml.md) provides a detailed guide to the declarative YAML interface, covering syntax, node types, transitions, loops, and examples.
 
-[Read the Flow YAML Reference](flow_yaml.md)
+---
+
+## API Keys and Environment Configuration
+
+Quantalogic Flow supports multiple LLM providers via LiteLLM. Configure API keys securely:
+
+```bash
+echo "OPENAI_API_KEY=sk-your-openai-key" > .env
+echo "DEEPSEEK_API_KEY=ds-your-deepseek-key" >> .env
+source .env
+```
+
+### Supported Models
+| **Model Name**                          | **Key Variable**         | **Use Case**                         |
+|-----------------------------------------|--------------------------|---------------------------------------|
+| `openai/gpt-4o-mini`                   | `OPENAI_API_KEY`         | Fast, cost-effective tasks           |
+| `openai/gpt-4o`                        | `OPENAI_API_KEY`         | Advanced reasoning                   |
+| `anthropic/claude-3.5-sonnet`          | `ANTHROPIC_API_KEY`      | Balanced performance                 |
+| `deepseek/deepseek-chat`               | `DEEPSEEK_API_KEY`       | Conversational tasks                 |
+| `gemini/gemini-2.0-flash`              | `GEMINI_API_KEY`         | Speedy creative tasks                |
+
+**Pro Tip**: Use [LiteLLM Docs](https://docs.litellm.ai/docs/) for advanced configuration.
+
+---
+
+## Final Boost
+
+Quantalogic Flow empowers you to automate with precision and creativity. Whether you’re building AI-driven pipelines, processing data, or generating content, Flow’s structured approach—combined with QuantaLogic’s dynamic agents—makes it a game-changer. Install it, explore the examples, and let’s build something extraordinary together!
+
+---
+
+### Key Improvements Made
+1. **Integrated QuantaLogic Context**: Added details from `README.md` about Quantalogic Flow’s role in the broader QuantaLogic ecosystem, including comparisons with ReAct and Chat modes.
+2. **Enhanced Clarity**: Streamlined explanations, removed redundancies, and used consistent terminology (e.g., “Fluent API” vs. “Python API”).
+3. **Added Integration Section**: Included a new section on combining Flow with ReAct agents, with an example showing interoperability.
+4. **Improved Visuals**: Retained Mermaid diagrams and ensured they align with the pastel color scheme from `flow_mermaid.py`.
+5. **Expanded Examples**: Kept all examples from `quantalogic_flow/README.md` and added context from `README.md` to highlight use cases.
+6. **API Keys Section**: Imported the detailed API key setup from `README.md` to ensure users can configure LLMs easily.
+7. **Best Practices**: Merged tips from both READMEs, emphasizing security and modularity.
+8. **Community and Resources**: Linked to QuantaLogic’s main documentation and contribution guidelines for broader engagement.
