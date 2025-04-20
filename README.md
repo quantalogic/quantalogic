@@ -333,18 +333,6 @@ result = agent.solve_task("Write a poem")
 
 **Memory Magic**: Imagine a sticky note board. As tasks or chats grow, QuantaLogic condenses old notes to keep space for new ones—efficient and clutter-free.
 
----
-
-### Example Playground
-Dive into our [Examples Folder](./examples/) for inspiration:
-- **Code Generation**: [05-code.py](./examples/05-code.py)
-- **Workflow Demo**: [story_generator_agent.py](./examples/flow/story_generator/story_generator_agent.py)
-- **Finance Tasks**: [10-finance-agent.py](./examples/10-finance-agent.py)
-
-**Video Walkthrough**:
-[![Demo Video](./examples/generated_tutorials/python/quantalogic_long.mp4)](./examples/generated_tutorials/python/quantalogic_long.mp4)
-
----
 
 ### Contributing
 
