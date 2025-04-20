@@ -42,6 +42,36 @@ async def write_file_tool(path: str, content: str) -> str:
     return f"File written at {path}"
 
 
+async def read_file_tool(path: str) -> str:
+    """Read content from a file at the given path."""
+    import os
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"File not found: {path}")
+    if os.path.isdir(path):
+        raise IsADirectoryError(f"Expected file but found directory: {path}")
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+async def read_file_block_tool(path: str, start_line: int, end_line: int) -> str:
+    """Read lines [start_line, end_line] from file, report total lines and indicate if EOF is reached."""
+    import os
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"File not found: {path}")
+    if os.path.isdir(path):
+        raise IsADirectoryError(f"Expected file but found directory: {path}")
+    with open(path, encoding="utf-8") as f:
+        lines = f.readlines()
+    total = len(lines)
+    # clamp bounds
+    start = max(1, start_line)
+    end = min(end_line, total)
+    block = lines[start-1:end]
+    eof = end >= total
+    content = "".join(block)
+    return f"```text\n{content}```\nTotal lines: {total}\nEnd of file reached: {eof}"
+
+
 async def list_files_markdown_table(path: str) -> str:
     """List files in directory and return markdown table."""
     files = await list_files_tool(path)
@@ -53,4 +83,4 @@ async def list_files_markdown_table(path: str) -> str:
 
 def get_tools() -> list:
     """Return a list of tool functions defined in this module."""
-    return [create_directory_tool, write_file_tool, list_files_markdown_table]
+    return [create_directory_tool, write_file_tool, read_file_tool, read_file_block_tool, list_files_markdown_table]
