@@ -48,8 +48,11 @@ from .commands.setmodel import setmodel_command
 from .commands.solve import solve_command
 from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
+from .commands.version import version_command
 from .history_manager import HistoryManager
 from .shell_state import ShellState
+
+from quantalogic.version import get_version
 
 console = Console()
 
@@ -174,6 +177,7 @@ class Shell:
             {"name": "toolbox tools", "func": list_toolbox_tools, "help": "List tools in a toolbox: /toolbox tools <toolbox_name>", "args": None},
             {"name": "toolbox doc", "func": get_tool_doc, "help": "Show tool documentation: /toolbox doc <toolbox_name> <tool_name>", "args": None},
             {"name": "listmodels", "func": listmodels_command, "help": "List models using LLM util: /listmodels", "args": []},
+            {"name": "version", "func": version_command, "help": "Show package version: /version", "args": []},
         ]
         for cmd in builtin_commands:
             self.command_registry.register(
@@ -205,7 +209,7 @@ class Shell:
     def bottom_toolbar(self):
         """Render a bottom toolbar with mode, agent, and model information as prompt_toolkit HTML."""
         if self.high_contrast:
-            return HTML(f'<b><style fg="ansiblack" bg="#E6E6FA">Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"} | Model: {self.current_agent.model}</style></b>')
+            return HTML(f'<b><style fg="ansiblack" bg="#E6E6FA">Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"} | Model: {self.current_agent.model} | Version: {get_version()}</style></b>')
         else:
             # High-contrast ANSI backgrounds for default toolbar
             return HTML(
@@ -213,6 +217,7 @@ class Shell:
                 f'<style fg="ansiwhite" bg="ansired"> Mode: {self.state.mode} </style>'
                 f'<style fg="ansiwhite" bg="ansigreen"> Agent: {self.current_agent.name or "Default"} </style>'
                 f'<style fg="ansiwhite" bg="ansiblue"> Model: {self.current_agent.model} </style>'
+                f'<style fg="ansiwhite" bg="ansimagenta"> Version: {get_version()} </style>'
                 f'</b>'
             )
 
@@ -254,7 +259,7 @@ class Shell:
 
         # Welcome message
         welcome_message = (
-            f"Welcome to Quantalogic Shell.\n\n"
+            f"Welcome to Quantalogic Shell (v{get_version()}).\n\n"
             f"Interacting with agent: {self.current_agent.name or 'Agent'}\n"
             f"Mode: {self.state.mode} - plain messages are "
             f"{'tasks to solve' if self.state.mode == 'codeact' else 'chat messages'}.\n\n"
