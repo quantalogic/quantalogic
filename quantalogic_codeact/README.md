@@ -41,15 +41,35 @@ Whether you're a developer building intelligent systems, a researcher exploring 
 
 Quantalogic CodeAct is a framework within the Quantalogic ecosystem that enables the creation of AI agents capable of reasoning and acting using the ReAct paradigm. It integrates language models, extensible tools, and interactive interfaces (CLI, shell, and SDK) to empower users to solve tasks, engage in conversations, and customize agent behavior.
 
-### CodeAct Principle and ReAct Paper
+### CodeAct Principle, ReAct, and the CodeAct Paper
 
-CodeAct is inspired by the *"ReAct: Synergizing Reasoning and Acting in Language Models"* paper (Yao et al., 2022). The ReAct paradigm combines reasoning (generating plans or thoughts) with acting (executing actions) in an iterative loop. CodeAct extends this concept by emphasizing code generation and execution as a primary action mechanism, hence "CodeAct." Key principles include:
+CodeAct is inspired by the *["ReAct: Synergizing Reasoning and Acting in Language Models"](https://arxiv.org/abs/2210.03629)* paper (Yao et al., 2022), and further formalized and empirically validated in the recent work *"Executable Code Actions Elicit Better LLM Agents"* ([Yang et al., 2024](https://arxiv.org/html/2402.01030v4)).
 
-- **Reasoning**: Agents analyze tasks and generate plans or code based on context and history.
-- **Acting**: Plans are executed via code or tool calls, producing tangible results.
-- **Iteration**: The cycle repeats, incorporating feedback until the task is resolved or a limit is reached.
+The ReAct paradigm combines reasoning (generating plans or thoughts) with acting (executing actions) in an iterative loop. CodeAct extends this concept by making **executable code**—specifically Python—the primary action and communication format between agent and environment. This approach leverages language models' extensive code pre-training, allowing agents to:
 
-While the ReAct paper focuses on prompting language models, CodeAct provides a structured, modular framework with components like reasoners, executors, and tools, enhancing scalability and customization.
+- **Reason**: Analyze tasks and generate plans or code based on context and history.
+- **Act**: Emit Python code as actions, which are executed in the environment; the agent receives outputs (including errors) as observations.
+- **Iterate**: Repeat the cycle, incorporating feedback from code execution until the task is resolved or a limit is reached.
+
+#### Why Executable Code Actions?
+Empirical results from the CodeAct paper show that using code as the action format leads to better tool-use performance for LLM agents—especially open-source models—compared to JSON or text-based tool calls. This is attributed to LLMs' familiarity with code and Python's rich ecosystem for task decomposition, control flow, and error handling.
+
+A critical component that makes CodeAct's executable code actions possible is the [quantalogic-pythonbox](https://github.com/quantalogic/quantalogic-pythonbox) project. PythonBox provides a secure, sandboxed environment for executing Python code, ensuring that agent-generated code can be run safely, with resource limits and isolation from the host system. This robust execution backend enables the CodeAct agent to interact with its environment confidently, handling both standard outputs and errors, and supports advanced features such as multi-turn tool use and dynamic package installation.
+
+CodeAct thus provides a natural, powerful, and extensible interface for building robust LLM agents that can solve complex, multi-step tasks using code.
+
+#### Example: CodeAct Agent Interaction
+A CodeAct agent typically emits actions in the form of executable Python code blocks. For example:
+
+```
+<execute>
+print("Hello, World!")
+</execute>
+```
+
+The agent receives the result of this execution (output or errors) and uses it for further reasoning and actions. This loop continues until the agent determines the task is complete.
+
+For more details and example prompts, see Appendix E of the [CodeAct paper](https://arxiv.org/html/2402.01030v4).
 
 ### ReAct Agent
 
@@ -68,7 +88,16 @@ CodeAct’s architecture is designed for modularity and scalability, as shown be
 
 ```mermaid
 graph TD
-    User -->|Interacts| Shell[Shell Interface]
+    classDef user fill:#ffe2e2,stroke:#e3bcbc,stroke-width:2px,color:#333;
+    classDef shell fill:#e2f0ff,stroke:#bcd5e3,stroke-width:2px,color:#333;
+    classDef cli fill:#e2ffe9,stroke:#bce3c8,stroke-width:2px,color:#333;
+    classDef sdk fill:#f2e2ff,stroke:#d3bce3,stroke-width:2px,color:#333;
+    classDef agent fill:#fff7e2,stroke:#e3d9bc,stroke-width:2px,color:#333;
+    classDef reasoner fill:#e2fff7,stroke:#bce3d9,stroke-width:2px,color:#333;
+    classDef executor fill:#e2e7ff,stroke:#bcbce3,stroke-width:2px,color:#333;
+    classDef tools fill:#f9e2ff,stroke:#e3bcdc,stroke-width:2px,color:#333;
+
+    User[User] -->|Interacts| Shell[Shell Interface]
     User -->|Runs| CLI[CLI Commands]
     User -->|Programs| SDK[Agent SDK]
     Shell -->|Commands| Agent[CodeActAgent]
@@ -83,6 +112,15 @@ graph TD
     Agent -->|Responds| Shell
     Agent -->|Outputs| CLI
     Agent -->|Returns| SDK
+
+    class User user;
+    class Shell shell;
+    class CLI cli;
+    class SDK sdk;
+    class Agent agent;
+    class Reasoner reasoner;
+    class Executor executor;
+    class Tools tools;
 ```
 
 - **Agent (`CodeActAgent`)**: Orchestrates the ReAct loop, managing state and history.
@@ -378,6 +416,11 @@ Use `/config save` or `/config load` in the shell to manage configurations, or m
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for code style, testing, and workflow guidelines.
 
+## References
+
+- Yang, J., et al. (2024). "Executable Code Actions Elicit Better LLM Agents." arXiv preprint [arXiv:2402.01030v4](https://arxiv.org/html/2402.01030v4).
+- Yao, S., et al. (2022). "ReAct: Synergizing Reasoning and Acting in Language Models." arXiv preprint [arXiv:2210.03629](https://arxiv.org/abs/2210.03629).
+
 ## License
 
-Quantalogic CodeAct is licensed under the MIT License. See [LICENSE](LICENSE) for more information.
+Quantalogic CodeAct is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for more information.
