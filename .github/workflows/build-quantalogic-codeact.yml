@@ -44,7 +44,7 @@ jobs:
       working-directory: quantalogic_codeact
       run: |
         pip install dist/*.whl
-        poetry install --with dev
+        poetry install
 
     - name: Test quantalogic_codeact version
       working-directory: quantalogic_codeact
