@@ -44,7 +44,7 @@ jobs:
       working-directory: toolboxes/quantalogic-toolbox-mcp
       run: |
         pip install dist/*.whl
-        poetry install --with dev
+        poetry install
 
     - name: Test quantalogic_toolbox_mcp version
       working-directory: toolboxes/quantalogic-toolbox-mcp

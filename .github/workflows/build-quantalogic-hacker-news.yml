@@ -44,7 +44,7 @@ jobs:
       working-directory: toolboxes/quantalogic_hacker_news
       run: |
         pip install dist/*.whl
-        poetry install --with dev
+        poetry install
 
     - name: Test quantalogic_hacker_news version
       working-directory: toolboxes/quantalogic_hacker_news

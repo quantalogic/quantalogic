@@ -44,7 +44,7 @@ jobs:
       working-directory: quantalogic_toolbox
       run: |
         pip install dist/*.whl
-        poetry install --with dev
+        poetry install
 
     - name: Test quantalogic_toolbox version
       working-directory: quantalogic_toolbox
