@@ -1,4 +1,5 @@
 import typer
+
 from quantalogic.version import get_version
 
 app = typer.Typer()
