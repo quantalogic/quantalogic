@@ -27,12 +27,15 @@ def create_toolbox(
     # Create directory structure
     toolbox_dir.mkdir()
     package_name = name.replace("-", "_")
+    version = "0.1.0"
     package_dir = toolbox_dir / package_name
     package_dir.mkdir()
-    (package_dir / "__init__.py").touch()
+    # Create __init__.py with version info
+    init_file = package_dir / "__init__.py"
+    init_file.write_text(f'""" {name} toolbox package """\n__version__ = "{version}"\n')
 
     # Render and write template files
-    context = {"name": name, "package_name": package_name}
+    context = {"name": name, "package_name": package_name, "version": version}
     for template_name in ["pyproject.toml.j2", "tools.py.j2", "README.md.j2"]:
         template = env.get_template(template_name)
         content = template.render(**context)
