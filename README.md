@@ -88,6 +88,8 @@ graph TD
     style I fill:#cfe0e8,stroke:#555
 ```
 
+For detailed CodeAct documentation, see [CodeAct Module](quantalogic_codeact/README.md).
+
 ---
 
 ## How to Get Started

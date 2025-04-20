@@ -5,7 +5,8 @@ Quantalogic CodeAct is a powerful, modular framework designed to create and mana
 ## Table of Contents
 - [Why CodeAct?](#why-codeact)
 - [What is CodeAct?](#what-is-codeact)
-  - [CodeAct Principle and ReAct Paper](#codeact-principle-and-react-paper)
+  - [CodeAct Module Overview](#codeact-module-overview)
+  - [CodeAct Principle, ReAct, and the CodeAct Paper](#codeact-principle-react-and-the-codeact-paper)
   - [ReAct Agent](#react-agent)
   - [Architecture](#architecture)
 - [How to Use CodeAct](#how-to-use-codeact)
@@ -40,6 +41,23 @@ Whether you're a developer building intelligent systems, a researcher exploring 
 ## What is CodeAct?
 
 Quantalogic CodeAct is a framework within the Quantalogic ecosystem that enables the creation of AI agents capable of reasoning and acting using the ReAct paradigm. It integrates language models, extensible tools, and interactive interfaces (CLI, shell, and SDK) to empower users to solve tasks, engage in conversations, and customize agent behavior.
+
+### CodeAct Module Overview
+The CodeAct module (located at `quantalogic_codeact/codeact`) provides the core components for building intelligent agents:
+
+```text
+quantalogic_codeact/
+└── codeact/
+    ├── agent.py          # Core agent implementing the ReAct loop (CodeActAgent)
+    ├── reasoner.py       # Generates reasoning steps or code using LLMs
+    ├── executor.py       # Safely executes Python code and tool calls
+    ├── tools/            # Built-in and extensible tool integrations
+    ├── history.py        # Manages conversational and execution history
+    ├── config.py         # Loads and validates YAML-based configuration
+    └── utils.py          # Helper functions for logging and error handling
+```
+
+Each component follows single-responsibility design, making it easy to extend or replace parts (e.g., swap in custom executors or toolsets) to fit your domain.
 
 ### CodeAct Principle, ReAct, and the CodeAct Paper
 
