@@ -2,6 +2,10 @@
 
 **QuantaLogic** is your all-in-one AI framework for building smart agents that code, automate workflows, and chat like pros. Powered by large language models (LLMs) and a versatile toolset, it offers three killer modes: **ReAct** for tackling tough tasks, **Flow** for streamlined processes, and **Chat** for natural, tool-savvy conversations. Whether you’re a coder, a business innovator, or an AI enthusiast, QuantaLogic delivers fast, flexible, and fun solutions. Let’s blast off!
 
+> **New: CodeAct**
+>
+> QuantaLogic CodeAct is a powerful, modular extension for creating AI agents that not only reason and act (ReAct) but also use **executable code as their primary action language**. Inspired by the latest research, CodeAct enables agents to solve complex, multi-step tasks by generating, running, and iterating on Python code, all while maintaining context and leveraging a robust tool system. This makes it ideal for advanced automation, mathematical problem-solving, and user-friendly conversational interfaces.
+
 [📖 Full Docs](https://quantalogic.github.io/quantalogic/) | [⚡ Quick Guide](./docs/howto/howto.md)
 
 ![Demo GIF](./examples/generated_tutorials/python/quantalogic_8s.gif)
@@ -34,6 +38,24 @@
 - **Smart Memory**: Keeps context lean for long tasks or chats.
 - **Real-Time Insights**: Track progress with events and logs.
 - **Safe Execution**: Docker-based tool isolation.
+
+---
+
+## CodeAct vs ReAct: What's the Difference?
+
+QuantaLogic supports both the classic **ReAct** paradigm and its advanced extension, **CodeAct**:
+
+- **ReAct** (Reason + Act):
+  - Based on the [ReAct paper](https://arxiv.org/abs/2210.03629), this approach lets agents *reason* (think step-by-step) and *act* (use tools or code) in a loop. It's great for tasks where language models need to plan, use tools, and adapt to feedback.
+
+- **CodeAct**:
+  - Builds on ReAct by making **executable Python code** the main language for agent actions. Instead of just calling tools or outputting text, the agent writes and runs code, observes the results (including errors), and iterates until the task is solved.
+  - This approach is inspired by recent research ([Yang et al., 2024](https://arxiv.org/html/2402.01030v4)) showing that executable code actions enable more capable and reliable LLM agents.
+  - CodeAct is ideal for complex, multi-step tasks, advanced automation, and scenarios where precise, verifiable actions are needed.
+
+**Summary**:
+- Use **ReAct** for flexible reasoning with tool use.
+- Use **CodeAct** for tasks where generating and executing code is the best way to solve a problem or automate a workflow.
 
 Here’s how it flows:
 
@@ -360,4 +382,4 @@ DEEPSEEK_API_KEY=ds-your-key
 
 QuantaLogic is your launchpad for AI awesomeness. Install it, try the examples, and create something epic—code, workflows, or chats. Star the repo, join the community, and let’s make AI unstoppable!
 
-[![Star History](https://api.star-history.com/svg?repos=quantalogic/quantalogic&type=Date)](https://star-history.com/#quantalogic/quantalogic&Date)
+[![Star History](https://api.star-history.com/svg?repos=quantalogic/quantalogic&type=Date)](https://star-history.com/#quantalogic/quantalogic?Date)

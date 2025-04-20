@@ -7,12 +7,27 @@ This document provides an improved and detailed question-and-answer format for u
 ### **Question:** What is QuantaLogic and what are its primary features?
 
 **Answer:**  
-QuantaLogic is a ReAct (Reasoning & Action) framework that enables developers to build advanced AI agents capable of understanding, reasoning about, and executing complex tasks through natural language interaction. Key features include:
-- **ReAct Framework**: Combines reasoning and actionable tasks.
+QuantaLogic is a flexible AI framework that enables developers to build advanced agents capable of understanding, reasoning about, and executing complex tasks through natural language interaction. It supports both the classic **ReAct** (Reasoning & Action) paradigm and the new **CodeAct** extension:
+- **ReAct Framework**: Agents reason step-by-step and use tools or code to solve tasks, adapting as they go.
+- **CodeAct Extension**: Agents generate and execute Python code as their main way to act, iterating based on real results—ideal for complex, multi-step automation and advanced problem solving.
 - **Universal LLM Support**: Integration with multiple large language models (LLMs) like OpenAI and DeepSeek.
 - **Secure Tool System**: Uses Docker for secure code execution and file manipulation.
 - **Real-time Monitoring**: A web interface allows for event visualization.
 - **Memory Management**: Includes intelligent context handling and optimization.
+
+## 1a. What is the difference between CodeAct and ReAct?
+
+### **Question:** How is CodeAct different from ReAct, and when should I use each?
+
+**Answer:**  
+- **ReAct** lets agents reason step-by-step and use tools or code in a loop, based on the [ReAct paper](https://arxiv.org/abs/2210.03629). It's great for tasks where agents need to plan, use tools, and adapt to feedback.
+- **CodeAct** builds on ReAct by making **executable Python code** the main language for agent actions. The agent writes and runs code, observes the results (including errors), and iterates until the task is solved. This is inspired by recent research ([Yang et al., 2024](https://arxiv.org/html/2402.01030v4)).
+
+**When to use each:**
+- Use **ReAct** for flexible reasoning with tool use.
+- Use **CodeAct** when generating and executing code is the best way to solve a problem or automate a workflow (e.g., advanced automation, mathematical problem-solving, or when you want verifiable, step-by-step execution).
+
+---
 
 ## 2. How Do I Install QuantaLogic?
 
@@ -139,7 +154,7 @@ To contribute, follow these steps:
 4. Implement the changes.
 5. Submit a pull request.
 
-Refer to the [CONTRIBUTING.md](CONTRIBUTING.md) for more detailed instructions.
+Refer to the [CONTRIBUTING.md](../CONTRIBUTING.md) for more detailed instructions.
 
 ## 9. How Can I Run Tests for QuantaLogic?
 
@@ -166,7 +181,7 @@ pytest tests/unit
 **Answer:**  
 You can stay updated by:
 - Following the official [QuantaLogic Documentation](https://quantalogic.github.io/quantalogic/).
-- Monitoring the [Release Notes](RELEASE_NOTES.md) for version changes.
+
 - Engaging with the community through forums and discussions related to QuantaLogic.
 
 ---
