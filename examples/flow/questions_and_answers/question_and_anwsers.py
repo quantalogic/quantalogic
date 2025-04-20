@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "anyio",
-#     "quantalogic-flow>=0.5.0",
+#     "quantalogic-flow>=0.6.0",
 #     "typer>=0.9.0"
 # ]
 # ///

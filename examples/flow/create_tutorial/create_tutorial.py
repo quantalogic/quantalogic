@@ -4,7 +4,7 @@
 # dependencies = [
 #     "loguru",
 #     "anyio",
-#     "quantalogic-flow>=0.5.0",
+#     "quantalogic-flow>=0.6.0",
 #     "typer",
 #     "pyperclip",
 # ]

@@ -5,8 +5,8 @@ from typing import Dict, List, Optional, Set, Union
 
 from pydantic import BaseModel
 
-from quantalogic.flow.flow_manager import WorkflowManager
-from quantalogic.flow.flow_manager_schema import (
+from quantalogic_flow.flow_manager import WorkflowManager
+from quantalogic_flow.flow_manager_schema import (
     BranchCondition,
     NodeDefinition,
     TransitionDefinition,
