@@ -3,7 +3,7 @@ import os
 import re
 from typing import Dict, Optional
 
-from quantalogic.flow.flow_manager_schema import BranchCondition, WorkflowDefinition
+from quantalogic_flow.flow.flow_manager_schema import BranchCondition, WorkflowDefinition
 
 
 def generate_executable_script(
@@ -116,7 +116,7 @@ def generate_executable_script(
         f.write('#     "litellm",\n')
         f.write('#     "pydantic>=2.0",\n')
         f.write('#     "anyio",\n')
-        f.write('#     "quantalogic>=0.35",\n')
+        f.write('#     "quantalogic_flow>=0.35",\n')
         f.write('#     "jinja2",\n')
         f.write('#     "instructor[litellm]",\n')
         f.write("# ]\n")
@@ -126,7 +126,7 @@ def generate_executable_script(
         f.write("import anyio\n")
         f.write("from typing import List\n")
         f.write("from loguru import logger\n")
-        f.write("from quantalogic.flow import Nodes, Workflow\n\n")
+        f.write("from quantalogic_flow.flow import Nodes, Workflow\n\n")
 
         # Global variables
         for var_name, value in global_vars.items():
@@ -288,7 +288,7 @@ def generate_executable_script(
 
 
 if __name__ == "__main__":
-    from quantalogic.flow.flow_manager import WorkflowManager
+    from quantalogic_flow.flow.flow_manager import WorkflowManager
 
     manager = WorkflowManager()
     manager.add_function(

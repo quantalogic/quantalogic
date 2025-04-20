@@ -2,20 +2,14 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "loguru>=0.7.2",
-#     "litellm==1.61.0",
-#     "pydantic>=2.0.0",
 #     "asyncio",
-#     "jinja2>=3.1.0",
 #     "py-zerox",
 #     "pdf2image",
 #     "pillow",
-#     "quantalogic",
-#     "instructor>=0.5.2",
+#     "quantalogic-flow>=0.5.0",
 #     "typer>=0.9.0",
 #     "rich>=13.0.0",
 #     "pyperclip>=1.8.2",
-#     "openai>=1.68.0"
 # ]
 # ///
 # System dependencies:
@@ -37,7 +31,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from quantalogic.flow.flow import Nodes, Workflow
+from quantalogic_flow import Nodes, Workflow
 
 
 def check_poppler():

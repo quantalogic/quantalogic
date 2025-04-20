@@ -5,7 +5,7 @@ from typing import List
 
 import anyio
 
-from quantalogic.flow import Nodes, Workflow
+from quantalogic_flow.flow import Nodes, Workflow
 
 MODEL = "gemini/gemini-2.0-flash"
 DEFAULT_LLM_PARAMS = {

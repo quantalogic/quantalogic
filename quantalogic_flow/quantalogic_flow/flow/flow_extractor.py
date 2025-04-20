@@ -3,9 +3,9 @@ import os
 
 from loguru import logger
 
-from quantalogic.flow.flow_generator import generate_executable_script
-from quantalogic.flow.flow_manager import WorkflowManager
-from quantalogic.flow.flow_manager_schema import (
+from quantalogic_flow.flow.flow_generator import generate_executable_script
+from quantalogic_flow.flow.flow_manager import WorkflowManager
+from quantalogic_flow.flow.flow_manager_schema import (
     BranchCondition,
     FunctionDefinition,
     NodeDefinition,
@@ -604,7 +604,7 @@ def extract_workflow_from_file(file_path):
     functions = {name: FunctionDefinition(**func) for name, func in extractor.functions.items()}
 
     nodes = {}
-    from quantalogic.flow.flow_manager_schema import LLMConfig
+    from quantalogic_flow.flow.flow_manager_schema import LLMConfig
 
     for name, node_info in extractor.nodes.items():
         if node_info["type"] == "function":

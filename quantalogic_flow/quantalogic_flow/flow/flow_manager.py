@@ -14,8 +14,8 @@ import yaml  # type: ignore
 from loguru import logger
 from pydantic import BaseModel, ValidationError
 
-from quantalogic.flow.flow import Nodes, Workflow
-from quantalogic.flow.flow_manager_schema import (
+from quantalogic_flow.flow.flow import Nodes, Workflow
+from quantalogic_flow.flow.flow_manager_schema import (
     BranchCondition,
     FunctionDefinition,
     LLMConfig,

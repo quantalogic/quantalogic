@@ -2,12 +2,8 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "loguru",
-#     "litellm==1.61.0",
-#     "pydantic>=2.0",
 #     "anyio",
-#     "quantalogic>=0.35",
-#     "jinja2",
+#     "quantalogic-flow>=0.5.0",
 #     "typer>=0.9.0"
 # ]
 # ///

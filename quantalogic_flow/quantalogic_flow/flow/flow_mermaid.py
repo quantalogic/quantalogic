@@ -1,8 +1,8 @@
 import re
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple
 
-from quantalogic.flow.flow_manager import WorkflowManager
-from quantalogic.flow.flow_manager_schema import BranchCondition, NodeDefinition, WorkflowDefinition
+from quantalogic_flow.flow.flow_manager import WorkflowManager
+from quantalogic_flow.flow.flow_manager_schema import BranchCondition, NodeDefinition, WorkflowDefinition
 
 
 def get_node_label_and_type(node_name: str, node_def: Optional[NodeDefinition], has_conditions: bool) -> Tuple[str, str, str]:

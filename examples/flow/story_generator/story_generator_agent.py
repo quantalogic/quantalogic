@@ -4,10 +4,8 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "loguru",
-#     "litellm==1.61.0",
-#     "pydantic>=2.0",
 #     "anyio",
-#     "quantalogic>=0.35",
+#     "quantalogic_flow>=0.4.0",
 #     "jinja2"  # Added for Jinja2 templating support
 # ]
 # ///
@@ -16,7 +14,7 @@ from typing import List
 import anyio
 from loguru import logger
 
-from quantalogic.flow import Nodes, Workflow
+from quantalogic_flow import Nodes, Workflow
 
 MODEL = "gemini/gemini-2.0-flash"
 DEFAULT_LLM_PARAMS = {

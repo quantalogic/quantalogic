@@ -3,14 +3,10 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "loguru",
-#     "litellm==1.61.0",
-#     "pydantic>=2.0",
 #     "anyio",
-#     "quantalogic>=0.35",
-#     "jinja2",
+#     "quantalogic-flow>=0.5.0",
 #     "typer",
 #     "pyperclip",
-#     "instructor"
 # ]
 # ///
 
@@ -23,7 +19,7 @@ import typer
 from loguru import logger
 from pydantic import BaseModel
 
-from quantalogic.flow.flow import Nodes, Workflow, WorkflowEvent, WorkflowEventType
+from quantalogic_flow.flow import Nodes, Workflow, WorkflowEvent, WorkflowEventType
 
 # Configure logging (set to DEBUG for troubleshooting)
 logger.remove()

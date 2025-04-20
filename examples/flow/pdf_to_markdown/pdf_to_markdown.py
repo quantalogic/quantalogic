@@ -3,18 +3,14 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "loguru",
-#     "litellm==1.61.0",
-#     "pydantic>=2.0",
 #     "asyncio",
-#     "jinja2",
 #     "py-zerox",
 #     "pdf2image",
 #     "pillow",
 #     "typer",
 #     "pathlib",
 #     "pathspec",
-#     "quantalogic"
+#     "quantalogic-flow>=0.5.0",
 # ]
 # ///
 
