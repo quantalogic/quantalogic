@@ -41,7 +41,8 @@ async def chat_command(shell, args: List[str]) -> str:
                 shell.history_manager.add_message("user", message)
                 if not response.startswith("Error:"):
                     shell.history_manager.add_message("assistant", response)
-            return None  # Output handled by Live display
+            console.print(Panel(Markdown(buffer), title="Chat Response", border_style="blue"))
+            return None  # Output handled by Live display and console.print
         else:
             response = await shell.current_agent.chat(
                 message,
