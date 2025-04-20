@@ -1,5 +1,13 @@
 """Quantalogic Flow package"""
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _version
+
+try:
+    __version__ = _version("quantalogic-flow")
+except PackageNotFoundError:
+    __version__ = "0.6.2"
+
 from loguru import logger
 
 # Expose key components for easy import

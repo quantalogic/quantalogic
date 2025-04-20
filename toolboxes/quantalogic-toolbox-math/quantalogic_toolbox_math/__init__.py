@@ -1,3 +1,6 @@
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _version
+
 from quantalogic_toolbox_math.tools import (
     symbolic_diff,
     symbolic_integrate,
@@ -7,6 +10,11 @@ from quantalogic_toolbox_math.tools import (
     symbolic_simplify,
     symbolic_solve,
 )
+
+try:
+    __version__ = _version("quantalogic-toolbox-math")
+except PackageNotFoundError:
+    __version__ = "0.16.0"
 
 __all__ = [
     "symbolic_simplify",
