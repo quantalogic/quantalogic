@@ -85,7 +85,7 @@ graph TD
 ### Installation & Setup
 
 #### Prerequisites
-- Python 3.12+ (required)
+- Python >= 3.10+ (required)
 - Docker (optional; sandboxed execution)
 - Poetry (optional; for source builds)
 
