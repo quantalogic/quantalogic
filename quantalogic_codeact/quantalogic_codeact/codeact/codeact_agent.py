@@ -31,7 +31,7 @@ from .xml_utils import XMLResultHandler
 
 MAX_HISTORY_TOKENS = 64*1024
 MAX_ITERATIONS = 5
-
+MAX_TOKENS = 4000
 
 class CodeActAgent:
     """Implements the ReAct framework for reasoning and acting with enhanced memory management."""
@@ -434,7 +434,8 @@ class CodeActAgent:
     async def chat(
         self,
         message: str,
-        streaming: bool = False
+        max_tokens: int = MAX_TOKENS,
+        streaming: bool = True
     ) -> str:
         """
         Handle a single chat interaction using conversation history.
@@ -442,6 +443,7 @@ class CodeActAgent:
         Args:
             message (str): The user message.
             streaming (bool): Whether to stream the response.
+            max_tokens (int): Maximum number of tokens to generate.
 
         Returns:
             str: The assistant's response.
@@ -457,7 +459,7 @@ class CodeActAgent:
             response: str = await litellm_completion(
                 model=self.reasoner.model,
                 messages=messages,
-                max_tokens=1000,
+                max_tokens=max_tokens,
                 temperature=0.7,
                 stream=streaming,
                 notify_event=self._notify_observers if streaming else None
