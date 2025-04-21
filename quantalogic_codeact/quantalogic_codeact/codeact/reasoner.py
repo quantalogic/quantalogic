@@ -1,5 +1,4 @@
 import ast
-import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional
 
@@ -14,57 +13,6 @@ from .templates import jinja_env
 from .xml_utils import XMLResultHandler, validate_xml
 
 
-async def generate_program(
-    task_description: str,
-    tools: List[Tool],
-    model: str,
-    max_tokens: int,
-    step: int,
-    notify_event: Callable,
-    streaming: bool = False
-) -> str:
-    """Generate a Python program using the specified model with streaming support and retries."""
-    tools_by_toolbox = {}
-    for tool in tools:
-        toolbox_name = tool.toolbox_name if tool.toolbox_name else "default"
-        if toolbox_name not in tools_by_toolbox:
-            tools_by_toolbox[toolbox_name] = []
-        tools_by_toolbox[toolbox_name].append(tool.to_docstring())
-
-    prompt = jinja_env.get_template("generate_program.j2").render(
-        task_description=task_description,
-        tools_by_toolbox=tools_by_toolbox
-    )
-    logger.debug(f"Generated prompt for step {step}:\n{prompt}")
-    await notify_event(PromptGeneratedEvent(
-        event_type="PromptGenerated", step_number=step, prompt=prompt
-    ))
-
-    for attempt in range(3):
-        try:
-            response = await litellm_completion(
-                model=model,
-                messages=[
-                    {"role": "system", "content": "You are a Python code generator."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=max_tokens,
-                temperature=0.3,
-                stream=streaming,
-                step=step,
-                notify_event=notify_event
-            )
-            code = response.strip()
-            return code[9:-3].strip() if code.startswith("```python") and code.endswith("```") else code
-        except LLMCompletionError as e:
-            raise e
-        except Exception as e:
-            if attempt < 2:
-                await asyncio.sleep(2 ** attempt)
-            else:
-                raise Exception(f"Code generation failed with {model} after 3 attempts: {e}")
-
-
 class PromptStrategy(ABC):
     """Abstract base class for prompt generation strategies."""
     @abstractmethod
@@ -75,11 +23,19 @@ class PromptStrategy(ABC):
 class DefaultPromptStrategy(PromptStrategy):
     """Default strategy using Jinja2 templates."""
     async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int, available_vars: List[str]) -> str:
-        return jinja_env.get_template("generate_action.j2").render(
-            task=task,
+        tools_by_toolbox = {}
+        for tool in self.tools:
+            toolbox_name = tool.toolbox_name if tool.toolbox_name else "default"
+            if toolbox_name not in tools_by_toolbox:
+                tools_by_toolbox[toolbox_name] = []
+            tools_by_toolbox[toolbox_name].append(tool.to_docstring())
+        
+        return jinja_env.get_template("action_program.j2").render(
+            task_description=task,
             history_str=history_str,
             current_step=step,
             max_iterations=max_iterations,
+            tools_by_toolbox=tools_by_toolbox,
             available_vars=available_vars
         )
 
@@ -108,6 +64,7 @@ class Reasoner(BaseReasoner):
         self.tools = tools
         self.config = config or {}
         self.prompt_strategy = prompt_strategy or DefaultPromptStrategy()
+        self.prompt_strategy.tools = tools  # Inject tools into strategy
 
     async def generate_action(
         self,
@@ -141,32 +98,47 @@ class Reasoner(BaseReasoner):
             await notify_event(PromptGeneratedEvent(
                 event_type="PromptGenerated", step_number=step, prompt=task_prompt
             ))
-            program = await generate_program(
-                task_prompt + f"\n\nVariable Types in context_vars:\n{available_var_types}",
-                self.tools, 
-                self.model, 
-                self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS), 
-                step, 
-                notify_event, 
-                streaming=streaming
-            )
-            program = self._clean_code(program)
-            response = jinja_env.get_template("response_format.j2").render(
-                task=task,
-                included_stepsincluded_stepshistory_str=history_str,
-                program=program,
-                current_step=step,
-                max_iterations=max_iterations
-            )
-            if not validate_xml(response):
-                raise ValueError("Invalid XML generated")
-            return response
+            logger.debug(f"Generated prompt for step {step}:\n{task_prompt}")
+
+            for attempt in range(3):
+                try:
+                    response = await litellm_completion(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": "You are a Python code generator."},
+                            {"role": "user", "content": task_prompt}
+                        ],
+                        max_tokens=self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS),
+                        temperature=0.3,
+                        stream=streaming,
+                        step=step,
+                        notify_event=notify_event
+                    )
+                    program = response.strip()
+                    program = self._clean_code(program)
+                    response = jinja_env.get_template("response_format.j2").render(
+                        task=task,
+                        history_str=history_str,
+                        program=program,
+                        current_step=step,
+                        max_iterations=max_iterations
+                    )
+                    if not validate_xml(response):
+                        raise ValueError("Invalid XML generated")
+                    return response
+                except Exception as e:
+                    if attempt < 2:
+                        logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying...")
+                        continue
+                    raise Exception(f"Code generation failed with {self.model} after 3 attempts: {e}")
         except LLMCompletionError as e:
             raise e
         except Exception as e:
+            logger.error(f"Error generating action: {e}")
             return XMLResultHandler.format_error_result(str(e))
 
     def _clean_code(self, code: str) -> str:
+        """Clean the generated code, removing markdown and ensuring valid syntax."""
         lines = code.splitlines()
         in_code_block = False
         code_lines = []
