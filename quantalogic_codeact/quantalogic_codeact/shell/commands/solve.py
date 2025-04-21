@@ -34,14 +34,21 @@ async def solve_command(shell, args: List[str]) -> str:
                         console.print(f"[cyan]Step {step}:[/cyan] {line}")
                     step_buffers[step] = lines[-1]
                 elif isinstance(event, ActionExecutedEvent):
-                    summary = XMLResultHandler.format_result_summary(event.result_xml)
-                    if "<Status>Error</Status>" in event.result_xml:
+                    # Format the execution result to XML then summarize
+                    xml_str = XMLResultHandler.format_execution_result(event.result)
+                    summary = XMLResultHandler.format_result_summary(xml_str)
+                    if "<Status>Error</Status>" in xml_str:
                         console.print(Panel(summary, title=f"Step {event.step_number} Error", border_style="red"))
                     else:
                         console.print(Panel(summary, title=f"Step {event.step_number} Result", border_style="magenta"))
                 elif isinstance(event, TaskCompletedEvent):
                     if event.final_answer:
-                        final_answer = XMLResultHandler.extract_result_value(event.final_answer)
+                        raw_answer = event.final_answer
+                        # if XML, extract value; else use raw
+                        if raw_answer.strip().startswith("<"):
+                            final_answer = XMLResultHandler.extract_result_value(raw_answer)
+                        else:
+                            final_answer = raw_answer
                         console.print(Panel(Markdown(final_answer), title="Final Answer", border_style="green"))
                     else:
                         console.print(Panel("Task did not complete successfully.", title="Error", border_style="red"))
@@ -87,7 +94,12 @@ async def solve_command(shell, args: List[str]) -> str:
                             f"[blue]Result:[/blue] {result_summary}",
                             border_style="cyan"
                         ))
-                final_answer = shell.current_agent._extract_response(history)
+                raw = history[-1].get("result", "")
+                # extract XML value or use raw
+                if isinstance(raw, str) and raw.strip().startswith("<"):
+                    final_answer = XMLResultHandler.extract_result_value(raw)
+                else:
+                    final_answer = raw
                 if final_answer.startswith("Error:"):
                     console.print(Panel(final_answer, title="Task Error", border_style="red"))
                 else:

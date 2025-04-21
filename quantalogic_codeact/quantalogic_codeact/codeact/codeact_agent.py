@@ -6,7 +6,6 @@ import time
 from typing import Callable, Dict, List, Optional, Tuple
 
 from loguru import logger
-from lxml import etree
 
 from quantalogic.tools import Tool
 
@@ -15,6 +14,7 @@ from .events import (
     ActionExecutedEvent,
     ActionGeneratedEvent,
     ErrorOccurredEvent,
+    ExecutionResult,
     StepCompletedEvent,
     StepStartedEvent,
     TaskCompletedEvent,
@@ -190,7 +190,7 @@ class CodeActAgent:
             logger.error(f"Error generating action: {e}")
             raise
 
-    async def execute_action(self, code: str, step: int, timeout: int = 300) -> str:
+    async def execute_action(self, code: str, step: int, timeout: int = 300) -> ExecutionResult:
         """
         Execute an action using the Executor.
 
@@ -200,65 +200,84 @@ class CodeActAgent:
             timeout (int): Execution timeout in seconds (default: 300).
 
         Returns:
-            str: Execution result in XML format.
+            ExecutionResult: Execution result as a structured Pydantic model.
         """
         try:
             start: float = time.perf_counter()
-            result_xml: str = await self.executor.execute_action(code, self.context_vars, step, timeout)
+            result: ExecutionResult = await self.executor.execute_action(code, self.context_vars, step, timeout)
             execution_time: float = time.perf_counter() - start
+            result.execution_time = execution_time  # Ensure accurate timing
             await self._notify_observers(ActionExecutedEvent(
-                event_type="ActionExecuted", step_number=step, result_xml=result_xml, execution_time=execution_time
+                event_type="ActionExecuted", step_number=step, result=result, execution_time=execution_time
             ))
-            return result_xml
+            return result
         except Exception as e:
             logger.error(f"Error executing action: {e}")
             raise
 
-    async def is_task_complete(self, task: str, history: List[Dict], result: str, success_criteria: Optional[str]) -> Tuple[bool, str]:
-        try:
-            root = etree.fromstring(result)
-            task_status = root.findtext("TaskStatus") or "inprogress"
-            reason = root.findtext("Reason") or ""
-            final_answer = root.findtext("Value") or ""
+    async def is_task_complete(self, task: str, history: List[Dict], result: ExecutionResult, success_criteria: Optional[str]) -> Tuple[bool, str]:
+        """
+        Check if the task is complete based on the execution result.
 
-            template = jinja_env.get_template("is_task_complete.j2")
-            verification_prompt = template.render(
-                task=task,
-                final_answer=final_answer,
-                task_status=task_status,
-                reason=reason,
-                history=self.history_manager.format_history(self.max_iterations)
-            )
-            verification = await litellm_completion(
-                model=self.reasoner.model,
-                messages=[{"role": "user", "content": verification_prompt}],
-                max_tokens=20,
-                temperature=0.1,
-                stream=False
-            )
-            verification = verification.lower().strip()
-            if verification == "yes":
+        Args:
+            task (str): The task being solved.
+            history (List[Dict]): Stored step history.
+            result (ExecutionResult): Result of the latest execution.
+            success_criteria (Optional[str]): Optional success criteria.
+
+        Returns:
+            Tuple[bool, str]: (is_complete, final_answer).
+        """
+        try:
+            if result.execution_status != "success":
+                logger.info(f"Task not complete at step due to execution error: {result.error}")
+                return False, ""
+
+            task_status = result.task_status
+            final_answer = result.result or ""
+
+            # Use LLM to verify completion if task is marked as completed
+            if task_status == "completed":
+                template = jinja_env.get_template("is_task_complete.j2")
+                verification_prompt = template.render(
+                    task=task,
+                    final_answer=final_answer,
+                    task_status=task_status,
+                    reason="Task marked as completed by execution result",
+                    history=self.history_manager.format_history(self.max_iterations)
+                )
+                verification = await litellm_completion(
+                    model=self.reasoner.model,
+                    messages=[{"role": "user", "content": verification_prompt}],
+                    max_tokens=20,
+                    temperature=0.1,
+                    stream=False
+                )
+                verification = verification.lower().strip()
+                if verification == "yes":
+                    logger.info(f"Task verified as complete: {final_answer}")
+                    return True, final_answer
+                elif verification == "not_solvable":
+                    logger.info(f"Task deemed unsolvable: {final_answer}")
+                    return True, f"Task is unsolvable: {final_answer}"
+                elif verification == "no":
+                    logger.info(f"LLM judge indicates task is not complete: '{verification}'")
+                    return False, ""
+                else:
+                    logger.warning(f"Unexpected judge response: '{verification}', treating as 'no'")
+                    return False, ""
+
+            # Check success criteria if provided
+            if success_criteria and final_answer and success_criteria in final_answer:
+                logger.info(f"Task completed based on success criteria: {success_criteria}")
                 return True, final_answer
-            elif verification == "not_solvable":
-                return True, f"Task is unsolvable: {reason or 'No solution possible'}"
-            elif verification == "no":
-                logger.info(f"LLM judge indicates task is not complete: '{verification}'")
-                return False, ""
-            else:
-                logger.warning(f"Unexpected judge response: '{verification}', treating as 'no'")
-                return False, ""
 
-        except etree.XMLSyntaxError:
-            pass
-
-        try:
-            if success_criteria and (result_value := XMLResultHandler.extract_result_value(result)) and success_criteria in result_value:
-                return True, result_value
+            logger.info("Task not complete: in progress or no criteria met")
             return False, ""
         except Exception as e:
             logger.error(f"Error checking task completion: {e}")
             return False, ""
-            
+
     async def _run_step(self, task: str, step: int, max_iters: int, 
                        system_prompt: Optional[str], streaming: bool) -> Dict:
         """
@@ -285,8 +304,13 @@ class CodeActAgent:
                 try:
                     response: str = await self.generate_action(task, self.history_manager.store, step, max_iters, system_prompt, streaming)
                     thought, code = XMLResultHandler.parse_action_response(response)
-                    result: str = await self.execute_action(code, step)
-                    step_data = {"step_number": step, "thought": thought, "action": code, "result": result}
+                    result: ExecutionResult = await self.execute_action(code, step)
+                    # Update context variables
+                    if result.execution_status == "success" and result.local_variables:
+                        self.context_vars.update(
+                            {k: v for k, v in result.local_variables.items() if not k.startswith("__") and not callable(v)}
+                        )
+                    step_data = {"step_number": step, "thought": thought, "action": code, "result": result.dict()}
                     self.history_manager.add(step_data)
                     return step_data
                 except LLMCompletionError as e:
@@ -319,23 +343,18 @@ class CodeActAgent:
             Tuple[bool, Dict]: (is_complete, updated_step_data).
         """
         try:
-            is_complete, final_answer = await self.is_task_complete(task, self.history_manager.store, step_data["result"], success_criteria)
-            if is_complete:
-                try:
-                    root = etree.fromstring(step_data["result"])
-                    if root.find("FinalAnswer") is None:
-                        final_answer_elem = etree.Element("FinalAnswer")
-                        final_answer_elem.text = etree.CDATA(final_answer)
-                        root.append(final_answer_elem)
-                    step_data["result"] = etree.tostring(root, pretty_print=True, encoding="unicode")
-                except etree.XMLSyntaxError as e:
-                    logger.error(f"Failed to parse result XML for appending FinalAnswer: {e}")
-                    if "<FinalAnswer>" not in step_data["result"]:
-                        step_data["result"] += f"\n<FinalAnswer><![CDATA[\n{final_answer}\n]]></FinalAnswer>"
+            result = ExecutionResult(**step_data["result"])
+            is_complete, final_answer = await self.is_task_complete(task, self.history_manager.store, result, success_criteria)
+            if is_complete and final_answer:
+                step_data["result"]["result"] = final_answer  # Update result with final answer
             await self._notify_observers(StepCompletedEvent(
-                event_type="StepCompleted", step_number=step_data["step_number"], 
-                thought=step_data["thought"], action=step_data["action"], result=step_data["result"],
-                is_complete=is_complete, final_answer=final_answer if is_complete else None
+                event_type="StepCompleted", 
+                step_number=step_data["step_number"], 
+                thought=step_data["thought"], 
+                action=step_data["action"], 
+                result=step_data["result"],
+                is_complete=is_complete, 
+                final_answer=final_answer if is_complete else None
             ))
             return is_complete, step_data
         except Exception as e:
@@ -385,7 +404,9 @@ class CodeActAgent:
                     is_complete, step_data = await self._finalize_step(task, step_data, success_criteria)
                     if is_complete:
                         await self._notify_observers(TaskCompletedEvent(
-                            event_type="TaskCompleted", final_answer=step_data["result"], reason="success"
+                            event_type="TaskCompleted", 
+                            final_answer=step_data["result"].get("result"), 
+                            reason="success"
                         ))
                         break
                 except LLMCompletionError as e:
@@ -399,9 +420,10 @@ class CodeActAgent:
                     ))
                     break
 
-            if not any("<FinalAnswer>" in step["result"] for step in self.history_manager.store):
+            if not any(step["result"].get("task_status") == "completed" for step in self.history_manager.store):
                 await self._notify_observers(TaskCompletedEvent(
-                    event_type="TaskCompleted", final_answer=None,
+                    event_type="TaskCompleted", 
+                    final_answer=None,
                     reason="max_iterations_reached" if len(self.history_manager.store) == max_iters else "error"
                 ))
             return self.history_manager.store
@@ -443,11 +465,10 @@ class CodeActAgent:
             return response.strip()
         except LLMCompletionError as e:
             logger.error(f"Chat failed: {e}")
-            # Notify observers about the error
             await self._notify_observers(ErrorOccurredEvent(
                 event_type="ErrorOccurred", error_message=str(e), step_number=1
             ))
-            raise e
+            raise
         except Exception as e:
             logger.error(f"Chat failed: {e}")
             return f"Error: Unable to process chat request due to {str(e)}"

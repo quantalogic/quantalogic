@@ -3,9 +3,6 @@
 from typing import Dict, List
 
 from loguru import logger
-from lxml import etree
-
-from .xml_utils import XMLResultHandler
 
 
 class HistoryManager:
@@ -61,22 +58,29 @@ class HistoryManager:
             included_steps: List[str] = []
             total_tokens: int = 0
             for step in reversed(self.store):
-                try:
-                    root = etree.fromstring(step['result'])
-                    vars_elem = root.find("Variables")
-                    available_vars = (
-                        [var.get('name') for var in vars_elem.findall("Variable")]
-                        if vars_elem is not None else []
-                    )
-                except etree.XMLSyntaxError:
-                    available_vars = []
+                result_dict = step['result']
+                # Format result summary
+                summary_lines = [f"- Execution Status: {result_dict['execution_status']}"]
+                if result_dict['execution_status'] == 'success':
+                    summary_lines.append(f"- Task Status: {result_dict.get('task_status', 'N/A')}")
+                    summary_lines.append(f"- Result: {result_dict.get('result', 'N/A')}")
+                    if result_dict.get('next_step'):
+                        summary_lines.append(f"- Next Step: {result_dict['next_step']}")
+                else:
+                    summary_lines.append(f"- Error: {result_dict.get('error', 'N/A')}")
+                summary_lines.append(f"- Execution Time: {result_dict.get('execution_time', 0.0):.2f} seconds")
+                if result_dict.get('local_variables'):
+                    summary_lines.append("- Variables:")
+                    for k, v in result_dict['local_variables'].items():
+                        var_str = str(v)[:500] + ("..." if len(str(v)) > 500 else "")
+                        summary_lines.append(f"  - {k}: {var_str}")
+                result_summary = "\n".join(summary_lines)
 
-                step_str: str = (
+                step_str = (
                     f"===== Step {step['step_number']} of {max_iterations} max =====\n"
                     f"Thought:\n{step['thought']}\n\n"
                     f"Action:\n{step['action']}\n\n"
-                    f"Result:\n{XMLResultHandler.format_result_summary(step['result']) if step.get('result') else 'No result available'}\n"
-                    f"Available variables: {', '.join(available_vars) or 'None'}"
+                    f"Result:\n{result_summary}"
                 )
                 step_tokens: int = len(step_str.split())
                 if total_tokens + step_tokens > self.max_tokens:

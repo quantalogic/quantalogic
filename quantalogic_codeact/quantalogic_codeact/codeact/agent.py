@@ -6,7 +6,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from jinja2 import Environment
 from loguru import logger
-from lxml import etree
 
 from quantalogic.tools import Tool
 
@@ -196,7 +195,7 @@ class Agent:
                 for observer, event_types in self._observers:
                     chat_agent.add_observer(observer, event_types)
                 history_result: List[Dict] = await chat_agent.solve(message, streaming=streaming)
-                response = self._extract_response(history_result)
+                response = history_result[-1].get("result", "")
                 # Update conversation history
                 self.conversation_history_manager.add_message("user", message)
                 self.conversation_history_manager.add_message("assistant", response)
@@ -275,7 +274,7 @@ class Agent:
             self.last_solve_context_vars = solve_agent.context_vars.copy()
             # Update conversation history
             self.conversation_history_manager.add_message("user", f"Task: {task}")
-            final_answer = self._extract_response(history_result)
+            final_answer = history_result[-1].get("result", "")
             self.conversation_history_manager.add_message("assistant", final_answer)
             return history_result
         except Exception as e:
@@ -351,27 +350,6 @@ class Agent:
         except Exception as e:
             logger.error(f"Error getting context vars: {e}")
             return {}
-
-    def _extract_response(self, history: List[Dict]) -> str:
-        """Extract a clean response from the history."""
-        try:
-            if not history:
-                return "No response generated."
-            last_result: str = history[-1].get("result", "")
-            try:
-                root = etree.fromstring(last_result)
-                if root.findtext("Status") == "Success":
-                    value: str = root.findtext("Value") or ""
-                    final_answer: Optional[str] = root.findtext("FinalAnswer")
-                    return final_answer.strip() if final_answer else value.strip()
-                else:
-                    return f"Error: {root.findtext('Value') or 'Unknown error'}"
-            except etree.XMLSyntaxError as e:
-                logger.error(f"Failed to parse response XML: {e}")
-                return last_result
-        except Exception as e:
-            logger.error(f"Error extracting response: {e}")
-            return "Error extracting response."
 
     async def _notify_observers(self, event: object) -> None:
         """Notify all subscribed observers of an event."""

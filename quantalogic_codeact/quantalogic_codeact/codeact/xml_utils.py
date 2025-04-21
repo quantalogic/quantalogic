@@ -1,10 +1,8 @@
 from typing import Any, Tuple
 
-from loguru import logger
 from lxml import etree
-
-from quantalogic_codeact.codeact.executor import AsyncExecutionResult
-
+from loguru import logger
+from quantalogic_pythonbox import AsyncExecutionResult
 
 def validate_xml(xml_string: str) -> bool:
     """Validate XML string using strict parser."""
@@ -61,9 +59,11 @@ class XMLResultHandler:
                 completed = True
                 final_answer = result.result[len("Task completed:"):].strip()
                 value = final_answer
+                next_step_desc = None
             else:
                 completed = False
                 final_answer = None
+                next_step_desc = None
                 value = str(result.result) if result.result is not None else ""
 
         root.append(format_xml_element("Value", value))
