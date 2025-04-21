@@ -2,6 +2,9 @@ from typing import Callable, List, Optional
 
 import litellm
 from litellm import exceptions
+from loguru import logger
+
+from .events import StreamTokenEvent
 
 
 class LLMCompletionError(Exception):
@@ -18,14 +21,11 @@ async def litellm_completion(
     notify_event: Optional[Callable] = None,
     **kwargs
 ) -> str:
-    """A wrapper for litellm.acompletion that supports streaming and non-streaming modes."""
-    from .events import StreamTokenEvent
-
+    """A wrapper for litellm.acompletion with streaming support and fallback to non-streaming."""
+    full_response = ""
     if stream:
         if notify_event is None:
             raise ValueError("notify_event callback is required when streaming is enabled.")
-        
-        full_response = ""
         try:
             response = await litellm.acompletion(
                 model=model,
@@ -45,26 +45,19 @@ async def litellm_completion(
                         step_number=step
                     ))
             return full_response
-        except exceptions.APIError as e:
-            # Notify user about streaming failure
-            err_msg = f"❌ Streaming completion failed: {e.__class__.__name__}: {e}"
-            if notify_event:
-                await notify_event(StreamTokenEvent(
-                    event_type="StreamError",
-                    token=err_msg,
-                    step_number=step
-                ))
-            raise LLMCompletionError(err_msg)
         except Exception as e:
-            err_msg = f"❌ Streaming completion failed: {e}"
+            # Log the issue and notify the user via the event system
+            fallback_message = "⚠️ Streaming not supported for this model, falling back to non-streaming.\n"
+            logger.warning(f"Streaming failed for model {model}: {e}. Falling back to non-streaming.")
             if notify_event:
                 await notify_event(StreamTokenEvent(
-                    event_type="StreamError",
-                    token=err_msg,
+                    event_type="StreamToken",
+                    token=fallback_message,
                     step_number=step
                 ))
-            raise LLMCompletionError(err_msg)
-    else:
+            stream = False  # Proceed with non-streaming mode
+
+    if not stream:
         try:
             response = await litellm.acompletion(
                 model=model,
@@ -76,7 +69,6 @@ async def litellm_completion(
             )
             return response.choices[0].message.content
         except exceptions.APIError as e:
-            # Clear message for non-streaming errors
             err_msg = f"❌ Completion failed: {e.__class__.__name__}: {e}"
             raise LLMCompletionError(err_msg)
         except Exception as e:
