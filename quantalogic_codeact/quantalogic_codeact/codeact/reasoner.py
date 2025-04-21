@@ -139,26 +139,22 @@ class Reasoner(BaseReasoner):
 
     def _clean_code(self, code: str) -> str:
         """Clean the generated code, removing markdown and ensuring valid syntax."""
-        lines = code.splitlines()
-        in_code_block = False
-        code_lines = []
-        
-        for line in lines:
-            if line.startswith('```python'):
-                in_code_block = True
-                code_part = line[len('```python'):].strip()
-                if code_part:
-                    code_lines.append(code_part)
-                continue
-            if in_code_block:
-                if line.startswith('```'):
-                    break
-                code_lines.append(line)
-        
-        final_code = '\n'.join(code_lines) if in_code_block else code
-        
+        import re
+        import textwrap
+
+        # Extract fenced code block (any language) or use raw code
+        match = re.search(r'```(?:[\w+-]*)\n([\s\S]*?)```', code)
+        code_content = match.group(1) if match else code
+
+        # Strip extra backticks and whitespace
+        code_content = code_content.strip('` \n')
+
+        # Dedent code for consistent formatting
+        final_code = textwrap.dedent(code_content)
+
+        # Validate syntax; if invalid, warn and return dedented code
         try:
             ast.parse(final_code)
-            return final_code
         except SyntaxError as e:
-            raise ValueError(f'Invalid Python code: {e}') from e
+            logger.warning(f"Syntax error in cleaned code: {e}, returning dedented code.")
+        return final_code
