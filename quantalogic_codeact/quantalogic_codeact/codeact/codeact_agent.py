@@ -51,7 +51,7 @@ class CodeActAgent:
         error_handler: Optional[Callable[[Exception, int], bool]] = None
     ) -> None:
         """
-        Initialize the CdeActAgent with tools, reasoning, execution, and memory components.
+        Initialize the CodeActAgent with tools, reasoning, execution, and memory components.
 
         Args:
             model (str): Language model identifier.
@@ -214,35 +214,32 @@ class CodeActAgent:
             raise
 
     async def is_task_complete(self, task: str, history: List[Dict], result: str, success_criteria: Optional[str]) -> Tuple[bool, str]:
-        """
-        Check if the task is complete based on the result.
-
-        Args:
-            task (str): The task being solved.
-            history (List[Dict]): Step history.
-            result (str): Result of the latest action.
-            success_criteria (Optional[str]): Optional success criteria.
-
-        Returns:
-            Tuple[bool, str]: (is_complete, final_answer).
-        """
         try:
             root = etree.fromstring(result)
             if root.findtext("Completed") == "true":
                 final_answer: str = root.findtext("FinalAnswer") or ""
+                verification_prompt = f"""
+    Task: {task}
+
+    Proposed Solution: {final_answer}
+
+    History:
+    {self.history_manager.format_history(self.max_iterations)}
+
+    Considering the task and the history, does the proposed solution appropriately address the task? For creative or open-ended tasks (e.g., writing a poem), accept the solution if it is a reasonable response. Answer 'yes' if it does, otherwise 'no'.
+    """
                 verification: str = await litellm_completion(
                     model=self.reasoner.model,
-                    messages=[{
-                        "role": "user",
-                        "content": f"Does '{final_answer}' solve '{task}' given history:\n{self.history_manager.format_history(self.max_iterations)}?"
-                    }],
-                    max_tokens=300,
+                    messages=[{"role": "user", "content": verification_prompt}],
+                    max_tokens=10,
                     temperature=0.1,
                     stream=False
                 )
-                if verification and "yes" in verification.lower():
+                if "yes" in verification.lower():
                     return True, final_answer
-                return True, final_answer
+                else:
+                    logger.info(f"LLM judge rejected final answer: '{final_answer}' with response: '{verification}'")
+                    return False, ""
         except etree.XMLSyntaxError:
             pass
 
@@ -253,7 +250,7 @@ class CodeActAgent:
         except Exception as e:
             logger.error(f"Error checking task completion: {e}")
             return False, ""
-
+            
     async def _run_step(self, task: str, step: int, max_iters: int, 
                        system_prompt: Optional[str], streaming: bool) -> Dict:
         """

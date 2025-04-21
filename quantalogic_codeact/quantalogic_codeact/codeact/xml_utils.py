@@ -3,6 +3,8 @@ from typing import Any, Tuple
 from loguru import logger
 from lxml import etree
 
+from quantalogic_codeact.codeact.executor import AsyncExecutionResult
+
 
 def validate_xml(xml_string: str) -> bool:
     """Validate XML string using strict parser."""
@@ -25,19 +27,52 @@ class XMLResultHandler:
     _parser = etree.XMLParser(recover=True, remove_comments=True, resolve_entities=False)
 
     @staticmethod
-    def format_execution_result(result) -> str:
-        """Format execution result as XML with proper variable handling."""
+    def format_execution_result(result: AsyncExecutionResult) -> str:
+        """Format execution result as XML, handling dictionary output."""
         root = etree.Element("ExecutionResult")
-        root.append(format_xml_element("Status", "Success" if not result.error else "Error"))
-        root.append(format_xml_element("Value", result.result or result.error))
-        root.append(format_xml_element("ExecutionTime", f"{result.execution_time:.2f} seconds"))
+        status = "Success" if not result.error else "Error"
+        root.append(format_xml_element("Status", status))
 
-        completed = result.result and result.result.startswith("Task completed:")
+        if result.error:
+            value = result.error
+            completed = False
+            final_answer = None
+            next_step_desc = None
+        elif isinstance(result.result, dict) and "status" in result.result:
+            status_value = result.result["status"]
+            if status_value == "completed":
+                completed = True
+                final_answer = result.result.get("result", "")
+                next_step_desc = None
+                value = final_answer
+            elif status_value == "inprogress":
+                completed = False
+                final_answer = None
+                next_step_desc = result.result.get("next_step", "")
+                value = result.result.get("result", "")
+            else:
+                completed = False
+                final_answer = None
+                next_step_desc = None
+                value = f"Invalid status: {status_value}"
+        else:
+            # Fallback for legacy string results
+            if isinstance(result.result, str) and result.result.startswith("Task completed:"):
+                completed = True
+                final_answer = result.result[len("Task completed:"):].strip()
+                value = final_answer
+            else:
+                completed = False
+                final_answer = None
+                value = str(result.result) if result.result is not None else ""
+
+        root.append(format_xml_element("Value", value))
+        root.append(format_xml_element("ExecutionTime", f"{result.execution_time:.2f} seconds"))
         root.append(format_xml_element("Completed", str(completed).lower()))
-        
-        if completed:
-            final_answer = result.result[len("Task completed:"):].strip()
+        if completed and final_answer is not None:
             root.append(format_xml_element("FinalAnswer", final_answer))
+        if not completed and next_step_desc:
+            root.append(format_xml_element("NextStepDescription", next_step_desc))
 
         if result.local_variables:
             vars_elem = etree.SubElement(root, "Variables")
@@ -70,6 +105,8 @@ class XMLResultHandler:
             
             if final_answer := root.findtext("FinalAnswer"):
                 lines.append(f"- Final Answer: {final_answer}")
+            if next_step_desc := root.findtext("NextStepDescription"):
+                lines.append(f"- Next Step Description: {next_step_desc}")
 
             if (vars_elem := root.find("Variables")) is not None:
                 lines.append("- Variables:")
