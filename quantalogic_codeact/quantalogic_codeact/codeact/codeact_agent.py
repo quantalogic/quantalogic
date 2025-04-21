@@ -25,6 +25,7 @@ from .executor import BaseExecutor, Executor
 from .history_manager import HistoryManager
 from .llm_util import LLMCompletionError, litellm_completion
 from .reasoner import BaseReasoner, Reasoner
+from .templates import jinja_env
 from .tools_manager import ToolRegistry
 from .xml_utils import XMLResultHandler
 
@@ -218,16 +219,12 @@ class CodeActAgent:
             root = etree.fromstring(result)
             if root.findtext("Completed") == "true":
                 final_answer: str = root.findtext("FinalAnswer") or ""
-                verification_prompt = f"""
-    Task: {task}
-
-    Proposed Solution: {final_answer}
-
-    History:
-    {self.history_manager.format_history(self.max_iterations)}
-
-    Considering the task and the history, does the proposed solution appropriately address the task? For creative or open-ended tasks (e.g., writing a poem), accept the solution if it is a reasonable response. Answer 'yes' if it does, otherwise 'no'.
-    """
+                template = jinja_env.get_template("is_task_complete.j2")
+                verification_prompt = template.render(
+                    task=task,
+                    final_answer=final_answer,
+                    history=self.history_manager.format_history(self.max_iterations)
+                )
                 verification: str = await litellm_completion(
                     model=self.reasoner.model,
                     messages=[{"role": "user", "content": verification_prompt}],
