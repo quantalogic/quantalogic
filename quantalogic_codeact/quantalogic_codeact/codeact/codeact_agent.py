@@ -453,8 +453,12 @@ class CodeActAgent:
             messages = [
                 {"role": "system", "content": self.history_manager.system_prompt or "You are a helpful AI assistant."}
             ]
-            messages.extend(self.conversation_history_manager.get_messages())
-            messages.append({"role": "user", "content": message})
+            # Include only string role and content in conversation history
+            for hist_msg in self.conversation_history_manager.get_messages():
+                role = str(hist_msg.get("role", ""))
+                content = str(hist_msg.get("content", ""))
+                messages.append({"role": role, "content": content})
+            messages.append({"role": "user", "content": str(message)})
 
             response: str = await litellm_completion(
                 model=self.reasoner.model,

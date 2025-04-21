@@ -21,6 +21,7 @@ from quantalogic_codeact.codeact.commands.toolbox.get_tool_doc import get_tool_d
 from quantalogic_codeact.codeact.commands.toolbox.install_toolbox import install_toolbox
 from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
 from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
+from quantalogic_codeact.version import get_version
 
 from .agent_state import AgentState
 from .command_registry import CommandRegistry
@@ -51,8 +52,6 @@ from .commands.tutorial import tutorial_command
 from .commands.version import version_command
 from .history_manager import HistoryManager
 from .shell_state import ShellState
-
-from quantalogic.version import get_version
 
 console = Console()
 

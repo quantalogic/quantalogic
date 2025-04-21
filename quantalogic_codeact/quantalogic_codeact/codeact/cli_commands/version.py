@@ -1,6 +1,6 @@
 import typer
 
-from quantalogic.version import get_version
+from quantalogic_codeact.version import get_version
 
 app = typer.Typer()
 
