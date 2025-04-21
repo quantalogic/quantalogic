@@ -217,26 +217,37 @@ class CodeActAgent:
     async def is_task_complete(self, task: str, history: List[Dict], result: str, success_criteria: Optional[str]) -> Tuple[bool, str]:
         try:
             root = etree.fromstring(result)
-            if root.findtext("Completed") == "true":
-                final_answer: str = root.findtext("FinalAnswer") or ""
-                template = jinja_env.get_template("is_task_complete.j2")
-                verification_prompt = template.render(
-                    task=task,
-                    final_answer=final_answer,
-                    history=self.history_manager.format_history(self.max_iterations)
-                )
-                verification: str = await litellm_completion(
-                    model=self.reasoner.model,
-                    messages=[{"role": "user", "content": verification_prompt}],
-                    max_tokens=10,
-                    temperature=0.1,
-                    stream=False
-                )
-                if "yes" in verification.lower():
-                    return True, final_answer
-                else:
-                    logger.info(f"LLM judge rejected final answer: '{final_answer}' with response: '{verification}'")
-                    return False, ""
+            task_status = root.findtext("TaskStatus") or "inprogress"
+            reason = root.findtext("Reason") or ""
+            final_answer = root.findtext("Value") or ""
+
+            template = jinja_env.get_template("is_task_complete.j2")
+            verification_prompt = template.render(
+                task=task,
+                final_answer=final_answer,
+                task_status=task_status,
+                reason=reason,
+                history=self.history_manager.format_history(self.max_iterations)
+            )
+            verification = await litellm_completion(
+                model=self.reasoner.model,
+                messages=[{"role": "user", "content": verification_prompt}],
+                max_tokens=20,
+                temperature=0.1,
+                stream=False
+            )
+            verification = verification.lower().strip()
+            if verification == "yes":
+                return True, final_answer
+            elif verification == "not_solvable":
+                return True, f"Task is unsolvable: {reason or 'No solution possible'}"
+            elif verification == "no":
+                logger.info(f"LLM judge indicates task is not complete: '{verification}'")
+                return False, ""
+            else:
+                logger.warning(f"Unexpected judge response: '{verification}', treating as 'no'")
+                return False, ""
+
         except etree.XMLSyntaxError:
             pass
 
