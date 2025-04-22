@@ -6,15 +6,16 @@ import time
 from typing import Callable, Dict, List, Optional, Tuple
 
 from loguru import logger
-from lxml import etree
 
 from quantalogic.tools import Tool
 
+from .completion_evaluator import DefaultCompletionEvaluator
 from .conversation_history_manager import ConversationHistoryManager
 from .events import (
     ActionExecutedEvent,
     ActionGeneratedEvent,
     ErrorOccurredEvent,
+    ExecutionResult,
     StepCompletedEvent,
     StepStartedEvent,
     TaskCompletedEvent,
@@ -30,7 +31,7 @@ from .xml_utils import XMLResultHandler
 
 MAX_HISTORY_TOKENS = 64*1024
 MAX_ITERATIONS = 5
-
+MAX_TOKENS = 4000
 
 class CodeActAgent:
     """Implements the ReAct framework for reasoning and acting with enhanced memory management."""
@@ -48,10 +49,11 @@ class CodeActAgent:
         tool_registry: Optional[ToolRegistry] = None,
         history_manager: Optional[HistoryManager] = None,
         conversation_history_manager: Optional[ConversationHistoryManager] = None,
-        error_handler: Optional[Callable[[Exception, int], bool]] = None
+        error_handler: Optional[Callable[[Exception, int], bool]] = None,
+        temperature: float = 0.7  # Added temperature parameter
     ) -> None:
         """
-        Initialize the CdeActAgent with tools, reasoning, execution, and memory components.
+        Initialize the CodeActAgent with tools, reasoning, execution, and memory components.
 
         Args:
             model (str): Language model identifier.
@@ -66,11 +68,13 @@ class CodeActAgent:
             history_manager (Optional[HistoryManager]): Custom task history manager.
             conversation_history_manager (Optional[ConversationHistoryManager]): Custom conversation history manager.
             error_handler (Optional[Callable[[Exception, int], bool]]): Error handler callback.
+            temperature (float): Temperature for language model generation (default: 0.7).
         """
+        self.temperature = temperature  # Store temperature
         self.tool_registry = tool_registry or ToolRegistry()
         for tool in tools:
             self.tool_registry.register(tool)
-        self.reasoner: BaseReasoner = reasoner or Reasoner(model, self.tool_registry.get_tools())
+        self.reasoner: BaseReasoner = reasoner or Reasoner(model, self.tool_registry.get_tools(), temperature=self.temperature)
         self.executor: BaseExecutor = executor or Executor(self.tool_registry.get_tools(), notify_event=self._notify_observers)
         self.max_iterations: int = max_iterations
         self.max_history_tokens: int = max_history_tokens
@@ -85,6 +89,7 @@ class CodeActAgent:
         self.context_vars: Dict = {}
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.error_handler = error_handler or (lambda e, step: False)  # Default: no retry
+        self.completion_evaluator = DefaultCompletionEvaluator()
 
     def add_observer(self, observer: Callable, event_types: List[str]) -> 'CodeActAgent':
         """Add an observer for specific event types."""
@@ -189,7 +194,7 @@ class CodeActAgent:
             logger.error(f"Error generating action: {e}")
             raise
 
-    async def execute_action(self, code: str, step: int, timeout: int = 300) -> str:
+    async def execute_action(self, code: str, step: int, timeout: int = 300) -> ExecutionResult:
         """
         Execute an action using the Executor.
 
@@ -199,60 +204,20 @@ class CodeActAgent:
             timeout (int): Execution timeout in seconds (default: 300).
 
         Returns:
-            str: Execution result in XML format.
+            ExecutionResult: Execution result as a structured Pydantic model.
         """
         try:
             start: float = time.perf_counter()
-            result_xml: str = await self.executor.execute_action(code, self.context_vars, step, timeout)
+            result: ExecutionResult = await self.executor.execute_action(code, self.context_vars, step, timeout)
             execution_time: float = time.perf_counter() - start
+            result.execution_time = execution_time  # Ensure accurate timing
             await self._notify_observers(ActionExecutedEvent(
-                event_type="ActionExecuted", step_number=step, result_xml=result_xml, execution_time=execution_time
+                event_type="ActionExecuted", step_number=step, result=result, execution_time=execution_time
             ))
-            return result_xml
+            return result
         except Exception as e:
             logger.error(f"Error executing action: {e}")
             raise
-
-    async def is_task_complete(self, task: str, history: List[Dict], result: str, success_criteria: Optional[str]) -> Tuple[bool, str]:
-        """
-        Check if the task is complete based on the result.
-
-        Args:
-            task (str): The task being solved.
-            history (List[Dict]): Step history.
-            result (str): Result of the latest action.
-            success_criteria (Optional[str]): Optional success criteria.
-
-        Returns:
-            Tuple[bool, str]: (is_complete, final_answer).
-        """
-        try:
-            root = etree.fromstring(result)
-            if root.findtext("Completed") == "true":
-                final_answer: str = root.findtext("FinalAnswer") or ""
-                verification: str = await litellm_completion(
-                    model=self.reasoner.model,
-                    messages=[{
-                        "role": "user",
-                        "content": f"Does '{final_answer}' solve '{task}' given history:\n{self.history_manager.format_history(self.max_iterations)}?"
-                    }],
-                    max_tokens=300,
-                    temperature=0.1,
-                    stream=False
-                )
-                if verification and "yes" in verification.lower():
-                    return True, final_answer
-                return True, final_answer
-        except etree.XMLSyntaxError:
-            pass
-
-        try:
-            if success_criteria and (result_value := XMLResultHandler.extract_result_value(result)) and success_criteria in result_value:
-                return True, result_value
-            return False, ""
-        except Exception as e:
-            logger.error(f"Error checking task completion: {e}")
-            return False, ""
 
     async def _run_step(self, task: str, step: int, max_iters: int, 
                        system_prompt: Optional[str], streaming: bool) -> Dict:
@@ -280,8 +245,13 @@ class CodeActAgent:
                 try:
                     response: str = await self.generate_action(task, self.history_manager.store, step, max_iters, system_prompt, streaming)
                     thought, code = XMLResultHandler.parse_action_response(response)
-                    result: str = await self.execute_action(code, step)
-                    step_data = {"step_number": step, "thought": thought, "action": code, "result": result}
+                    result: ExecutionResult = await self.execute_action(code, step)
+                    # Update context variables
+                    if result.execution_status == "success" and result.local_variables:
+                        self.context_vars.update(
+                            {k: v for k, v in result.local_variables.items() if not k.startswith("__") and not callable(v)}
+                        )
+                    step_data = {"step_number": step, "thought": thought, "action": code, "result": result.dict()}
                     self.history_manager.add(step_data)
                     return step_data
                 except LLMCompletionError as e:
@@ -314,23 +284,26 @@ class CodeActAgent:
             Tuple[bool, Dict]: (is_complete, updated_step_data).
         """
         try:
-            is_complete, final_answer = await self.is_task_complete(task, self.history_manager.store, step_data["result"], success_criteria)
-            if is_complete:
-                try:
-                    root = etree.fromstring(step_data["result"])
-                    if root.find("FinalAnswer") is None:
-                        final_answer_elem = etree.Element("FinalAnswer")
-                        final_answer_elem.text = etree.CDATA(final_answer)
-                        root.append(final_answer_elem)
-                    step_data["result"] = etree.tostring(root, pretty_print=True, encoding="unicode")
-                except etree.XMLSyntaxError as e:
-                    logger.error(f"Failed to parse result XML for appending FinalAnswer: {e}")
-                    if "<FinalAnswer>" not in step_data["result"]:
-                        step_data["result"] += f"\n<FinalAnswer><![CDATA[\n{final_answer}\n]]></FinalAnswer>"
+            result = ExecutionResult(**step_data["result"])
+            formatted_history = self.history_manager.format_history(self.max_iterations)
+            is_complete, final_answer = await self.completion_evaluator.evaluate_completion(
+                task=task,
+                formatted_history=formatted_history,
+                result=result,
+                success_criteria=success_criteria,
+                model=self.reasoner.model,
+                temperature=self.temperature
+            )
+            if is_complete and final_answer:
+                step_data["result"]["result"] = final_answer  # Update result with final answer
             await self._notify_observers(StepCompletedEvent(
-                event_type="StepCompleted", step_number=step_data["step_number"], 
-                thought=step_data["thought"], action=step_data["action"], result=step_data["result"],
-                is_complete=is_complete, final_answer=final_answer if is_complete else None
+                event_type="StepCompleted", 
+                step_number=step_data["step_number"], 
+                thought=step_data["thought"], 
+                action=step_data["action"], 
+                result=step_data["result"],
+                is_complete=is_complete, 
+                final_answer=final_answer if is_complete else None
             ))
             return is_complete, step_data
         except Exception as e:
@@ -380,7 +353,9 @@ class CodeActAgent:
                     is_complete, step_data = await self._finalize_step(task, step_data, success_criteria)
                     if is_complete:
                         await self._notify_observers(TaskCompletedEvent(
-                            event_type="TaskCompleted", final_answer=step_data["result"], reason="success"
+                            event_type="TaskCompleted", 
+                            final_answer=step_data["result"].get("result"), 
+                            reason="success"
                         ))
                         break
                 except LLMCompletionError as e:
@@ -394,9 +369,10 @@ class CodeActAgent:
                     ))
                     break
 
-            if not any("<FinalAnswer>" in step["result"] for step in self.history_manager.store):
+            if not any(step["result"].get("task_status") == "completed" for step in self.history_manager.store):
                 await self._notify_observers(TaskCompletedEvent(
-                    event_type="TaskCompleted", final_answer=None,
+                    event_type="TaskCompleted", 
+                    final_answer=None,
                     reason="max_iterations_reached" if len(self.history_manager.store) == max_iters else "error"
                 ))
             return self.history_manager.store
@@ -407,13 +383,17 @@ class CodeActAgent:
     async def chat(
         self,
         message: str,
-        streaming: bool = False
+        max_tokens: int = MAX_TOKENS,
+        temperature: Optional[float] = None,  # Allow override
+        streaming: bool = True
     ) -> str:
         """
         Handle a single chat interaction using conversation history.
 
         Args:
             message (str): The user message.
+            max_tokens (int): Maximum number of tokens to generate.
+            temperature (Optional[float]): Sampling temperature for LLM response (defaults to instance temperature).
             streaming (bool): Whether to stream the response.
 
         Returns:
@@ -424,25 +404,34 @@ class CodeActAgent:
             messages = [
                 {"role": "system", "content": self.history_manager.system_prompt or "You are a helpful AI assistant."}
             ]
-            messages.extend(self.conversation_history_manager.get_messages())
-            messages.append({"role": "user", "content": message})
+            # Include only string role and content in conversation history
+            for hist_msg in self.conversation_history_manager.get_messages():
+                role = str(hist_msg.get("role", ""))
+                content = str(hist_msg.get("content", ""))
+                messages.append({"role": role, "content": content})
+            messages.append({"role": "user", "content": str(message)})
 
             response: str = await litellm_completion(
                 model=self.reasoner.model,
                 messages=messages,
-                max_tokens=1000,
-                temperature=0.7,
+                max_tokens=max_tokens,
+                temperature=temperature if temperature is not None else self.temperature,
                 stream=streaming,
                 notify_event=self._notify_observers if streaming else None
             )
             return response.strip()
         except LLMCompletionError as e:
             logger.error(f"Chat failed: {e}")
-            # Notify observers about the error
             await self._notify_observers(ErrorOccurredEvent(
                 event_type="ErrorOccurred", error_message=str(e), step_number=1
             ))
-            raise e
+            raise
         except Exception as e:
             logger.error(f"Chat failed: {e}")
             return f"Error: Unable to process chat request due to {str(e)}"
+
+    def set_temperature(self, temperature: float) -> None:
+        """Update the temperature for the agent and its reasoner."""
+        self.temperature = temperature
+        if hasattr(self.reasoner, 'temperature'):
+            self.reasoner.temperature = temperature

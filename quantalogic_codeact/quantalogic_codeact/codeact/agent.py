@@ -6,7 +6,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from jinja2 import Environment
 from loguru import logger
-from lxml import etree
 
 from quantalogic.tools import Tool
 
@@ -48,6 +47,7 @@ class Agent:
         except Exception as e:
             logger.error(f"Failed to load plugins: {e}")
         self.model: str = config.model
+        self.temperature: float = config.temperature  # Added temperature
         self.default_tools: List[Tool] = self._get_tools()
         # If no tools are loaded, do not fall back to all registered tools
         if not self.default_tools and (not config.enabled_toolboxes or not config.tools):
@@ -70,9 +70,10 @@ class Agent:
             max_iterations=self.max_iterations,
             max_history_tokens=self.max_history_tokens,
             system_prompt=self._build_system_prompt(),
-            reasoner=Reasoner(self.model, self.default_tools),
+            reasoner=Reasoner(self.model, self.default_tools, temperature=self.temperature),
             executor=Executor(self.default_tools, self._notify_observers),
-            conversation_history_manager=self.conversation_history_manager
+            conversation_history_manager=self.conversation_history_manager,
+            temperature=self.temperature  # Pass temperature
         )
 
     def _get_tools(self) -> List[Tool]:
@@ -163,51 +164,30 @@ class Agent:
         message: str,
         history: Optional[List[Dict[str, str]]] = None,
         use_tools: bool = False,
-        tools: Optional[List[Union[Tool, Callable]]] = None,
         timeout: int = 30,
         max_tokens: int = MAX_TOKENS,
-        temperature: float = 0.7,
+        temperature: float = None,  # Allow override
         streaming: bool = False,
         reasoner_name: Optional[str] = None,
         executor_name: Optional[str] = None
     ) -> str:
         """Single-step interaction with optional custom tools, history, and streaming."""
         try:
-            system_prompt: str = self._build_system_prompt()
-            if use_tools:
-                chat_tools: List[Tool] = process_tools(tools) if tools is not None else self.default_tools
-                reasoner_name = reasoner_name or self.default_reasoner_name
-                executor_name = executor_name or self.default_executor_name
-                reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
-                executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
-                reasoner_config = self.config.reasoner.get("config", {})
-                executor_config = self.config.executor.get("config", {})
-                chat_agent = CodeActAgent(
-                    model=self.model,
-                    tools=chat_tools,
-                    max_iterations=1,
-                    max_history_tokens=self.max_history_tokens,
-                    system_prompt=system_prompt,
-                    reasoner=reasoner_cls(self.model, chat_tools, **reasoner_config),
-                    executor=executor_cls(chat_tools, self._notify_observers, **executor_config),
-                    conversation_history_manager=self.conversation_history_manager
-                )
-                chat_agent.executor.register_tool(RetrieveStepTool(chat_agent.history_manager.store))
-                for observer, event_types in self._observers:
-                    chat_agent.add_observer(observer, event_types)
-                history_result: List[Dict] = await chat_agent.solve(message, streaming=streaming)
-                response = self._extract_response(history_result)
-                # Update conversation history
-                self.conversation_history_manager.add_message("user", message)
-                self.conversation_history_manager.add_message("assistant", response)
-                return response
-            else:
-                response: str = await self.react_agent.chat(message, streaming=streaming)
-                # Update conversation history
-                self.conversation_history_manager.add_message("user", message)
-                self.conversation_history_manager.add_message("assistant", response)
-                return response
+            logger.debug(f"Agent.chat called with message={message!r}, use_tools={use_tools}, timeout={timeout}, max_tokens={max_tokens}, temperature={temperature}, streaming={streaming}, reasoner_name={reasoner_name}, executor_name={executor_name}")
+            logger.info(f"Invoking react_agent.chat for simple chat with message={message!r}, streaming={streaming}")
+            response: str = await self.react_agent.chat(
+                message,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                streaming=streaming
+            )
+            logger.info(f"Chat response (no tools): {response}")
+            # Update conversation history
+            self.conversation_history_manager.add_message("user", message)
+            self.conversation_history_manager.add_message("assistant", response)
+            return response
         except Exception as e:
+            logger.exception("Exception in Agent.chat")
             logger.error(f"Chat failed: {e}")
             return f"Error: Unable to process chat request due to {str(e)}"
 
@@ -256,9 +236,10 @@ class Agent:
                 max_iterations=max_iterations if max_iterations is not None else self.max_iterations,
                 max_history_tokens=self.max_history_tokens,
                 system_prompt=system_prompt,
-                reasoner=reasoner_cls(self.model, solve_tools, **reasoner_config),
+                reasoner=reasoner_cls(self.model, solve_tools, temperature=self.temperature, **reasoner_config),
                 executor=executor_cls(solve_tools, self._notify_observers, **executor_config),
-                conversation_history_manager=self.conversation_history_manager
+                conversation_history_manager=self.conversation_history_manager,
+                temperature=self.temperature
             )
             solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.history_manager.store))
             for observer, event_types in self._observers:
@@ -275,7 +256,7 @@ class Agent:
             self.last_solve_context_vars = solve_agent.context_vars.copy()
             # Update conversation history
             self.conversation_history_manager.add_message("user", f"Task: {task}")
-            final_answer = self._extract_response(history_result)
+            final_answer = history_result[-1].get("result", "")
             self.conversation_history_manager.add_message("assistant", final_answer)
             return history_result
         except Exception as e:
@@ -351,27 +332,6 @@ class Agent:
         except Exception as e:
             logger.error(f"Error getting context vars: {e}")
             return {}
-
-    def _extract_response(self, history: List[Dict]) -> str:
-        """Extract a clean response from the history."""
-        try:
-            if not history:
-                return "No response generated."
-            last_result: str = history[-1].get("result", "")
-            try:
-                root = etree.fromstring(last_result)
-                if root.findtext("Status") == "Success":
-                    value: str = root.findtext("Value") or ""
-                    final_answer: Optional[str] = root.findtext("FinalAnswer")
-                    return final_answer.strip() if final_answer else value.strip()
-                else:
-                    return f"Error: {root.findtext('Value') or 'Unknown error'}"
-            except etree.XMLSyntaxError as e:
-                logger.error(f"Failed to parse response XML: {e}")
-                return last_result
-        except Exception as e:
-            logger.error(f"Error extracting response: {e}")
-            return "Error extracting response."
 
     async def _notify_observers(self, event: object) -> None:
         """Notify all subscribed observers of an event."""

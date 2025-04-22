@@ -1,24 +1,24 @@
 import asyncio
 import types
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional  # Added Optional, Any
+from typing import Any, Callable, Dict, List, Optional
 
-from lxml import etree
-from quantalogic_pythonbox import AsyncExecutionResult, execute_async
+from loguru import logger
+from quantalogic_pythonbox import AsyncExecutionResult as PythonboxExecutionResult
+from quantalogic_pythonbox import execute_async
 
 from quantalogic.tools import Tool
 
-from .events import ToolExecutionCompletedEvent, ToolExecutionErrorEvent, ToolExecutionStartedEvent
+from .events import ExecutionResult, ToolExecutionCompletedEvent, ToolExecutionErrorEvent, ToolExecutionStartedEvent
 from .tools_manager import ToolRegistry
 from .utils import validate_code
-from .xml_utils import XMLResultHandler
 
 
 class BaseExecutor(ABC):
     """Abstract base class for execution components."""
 
     @abstractmethod
-    async def execute_action(self, code: str, context_vars: Dict, step: int, timeout: int) -> str:
+    async def execute_action(self, code: str, context_vars: Dict, step: int, timeout: int) -> ExecutionResult:
         pass
 
     @abstractmethod
@@ -153,18 +153,21 @@ class Executor(BaseExecutor):
 
         return wrapped_tool
 
-    async def execute_action(self, code: str, context_vars: Dict, step: int, timeout: int = 300) -> str:
+    async def execute_action(self, code: str, context_vars: Dict, step: int, timeout: int = 300) -> ExecutionResult:
         """Execute the generated code and return the result with local variables, setting the step number."""
         self.tool_namespace["context_vars"] = context_vars
         self.tool_namespace["current_step"] = step
         timeout = self.config.get("timeout", timeout)  # Use config timeout if provided
         if not validate_code(code):
-            return etree.tostring(
-                etree.Element("ExecutionResult", status="Error", message="Code lacks async main()"), encoding="unicode"
+            logger.error(f"Invalid code at step {step}: lacks async main()")
+            return ExecutionResult(
+                execution_status="error",
+                error="Code lacks async main()",
+                execution_time=0.0
             )
 
         try:
-            result: AsyncExecutionResult = await execute_async(
+            result: PythonboxExecutionResult = await execute_async(
                 code=code,
                 timeout=timeout,
                 entry_point="main",
@@ -172,15 +175,37 @@ class Executor(BaseExecutor):
                 namespace=self.tool_namespace,
                 ignore_typing=True
             )
-            if result.local_variables:
-                context_vars.update(
-                    {k: v for k, v in result.local_variables.items() if not k.startswith("__") and not callable(v)}
+            if result.error:
+                logger.error(f"Execution error at step {step}: {result.error}")
+                return ExecutionResult(
+                    execution_status="error",
+                    error=str(result.error),
+                    execution_time=result.execution_time or 0.0
                 )
-            return XMLResultHandler.format_execution_result(result)
+            task_result = result.result
+            if not isinstance(task_result, dict) or 'status' not in task_result or 'result' not in task_result:
+                logger.error(f"Invalid return format at step {step}: expected dict with 'status' and 'result'")
+                return ExecutionResult(
+                    execution_status="error",
+                    error="main() did not return a valid dictionary with 'status' and 'result'",
+                    execution_time=result.execution_time or 0.0
+                )
+            logger.info(f"Execution successful at step {step}, task status: {task_result['status']}")
+            return ExecutionResult(
+                execution_status="success",
+                task_status=task_result['status'],
+                result=str(task_result['result']),
+                next_step=task_result.get('next_step'),
+                execution_time=result.execution_time or 0.0,
+                local_variables={
+                    k: v for k, v in result.local_variables.items()
+                    if not k.startswith("__") and not callable(v)
+                }
+            )
         except Exception as e:
-            root = etree.Element("ExecutionResult")
-            root.append(etree.Element("Status", text="Error"))
-            root.append(etree.Element("Value", text=f"Execution error: {str(e)}"))
-            root.append(etree.Element("ExecutionTime", text="0.00 seconds"))
-            root.append(etree.Element("Completed", text="false"))
-            return etree.tostring(root, pretty_print=True, encoding="unicode")
+            logger.error(f"Unexpected execution error at step {step}: {e}")
+            return ExecutionResult(
+                execution_status="error",
+                error=f"Execution error: {str(e)}",
+                execution_time=0.0
+            )

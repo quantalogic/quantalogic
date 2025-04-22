@@ -24,7 +24,7 @@ async def help_command(shell, args: List[str]) -> Text:
     text.append(shell.state.mode, style="green")
     mode_info = (
         "\n- In 'codeact' mode, plain messages are treated as tasks to solve.\n"
-        "- In 'react' mode, plain messages are treated as chat messages."
+        "- In 'chat' mode, plain messages are treated as chat messages."
     )
     text.append(mode_info)
     

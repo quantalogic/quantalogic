@@ -6,6 +6,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from ...codeact.events import StreamTokenEvent
+from ..utils import display_response  # New import
 
 console = Console()
 
@@ -18,15 +19,13 @@ async def chat_command(shell, args: List[str]) -> str:
     try:
         if shell.state.streaming:
             buffer = ""
-            markdown = Markdown(buffer)
-            with Live(markdown, console=console, refresh_per_second=4) as live:
+            with Live(Markdown(buffer), console=console, refresh_per_second=4) as live:
                 def stream_observer(event):
                     nonlocal buffer
                     if isinstance(event, StreamTokenEvent):
                         if event.event_type == "StreamToken":
                             buffer += event.token
-                            markdown.text = buffer
-                            live.update(markdown)
+                            live.update(Markdown(buffer))
                         elif event.event_type == "StreamError":
                             error_message = event.token
                             live.update(Panel(error_message, title="Error", border_style="red"))
@@ -41,8 +40,11 @@ async def chat_command(shell, args: List[str]) -> str:
                 shell.history_manager.add_message("user", message)
                 if not response.startswith("Error:"):
                     shell.history_manager.add_message("assistant", response)
-            console.print(Panel(Markdown(buffer), title="Chat Response", border_style="blue"))
-            return None  # Output handled by Live display and console.print
+            if response.startswith("Error:"):
+                display_response(response, title="Error", border_style="red", is_error=True)
+            else:
+                display_response(response, title="Final Answer", border_style="green")
+            return None  # Output handled by Live display and display_response
         else:
             response = await shell.current_agent.chat(
                 message,
@@ -51,12 +53,12 @@ async def chat_command(shell, args: List[str]) -> str:
             )
             shell.history_manager.add_message("user", message)
             if response.startswith("Error:"):
-                console.print(Panel(response, title="Error", border_style="red"))
+                display_response(response, title="Error", border_style="red", is_error=True)
             else:
                 shell.history_manager.add_message("assistant", response)
-                console.print(Panel(Markdown(response), title="Chat Response", border_style="blue"))
-            return None  # Output handled by console.print
+                display_response(response, title="Final Answer", border_style="green")
+            return None  # Output handled by display_response
     except Exception as e:
         error_message = f"Error in chat: {e}"
-        console.print(Panel(error_message, title="Error", border_style="red"))
+        display_response(error_message, title="Error", border_style="red", is_error=True)
         return None

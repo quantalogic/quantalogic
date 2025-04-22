@@ -37,6 +37,7 @@ class AgentConfig:
     customizations: Optional[Dict[str, Any]] = None
     agent_tool_model: str = "gemini/gemini-2.0-flash"
     agent_tool_timeout: int = 30
+    temperature: float = 0.7  # Added temperature field
 
     def __init__(
         self,
@@ -60,7 +61,8 @@ class AgentConfig:
         profile: Optional[str] = None,
         customizations: Optional[Dict[str, Any]] = None,
         agent_tool_model: str = "gemini/gemini-2.0-flash",
-        agent_tool_timeout: int = 30
+        agent_tool_timeout: int = 30,
+        temperature: float = 0.7  # Added temperature parameter
     ) -> None:
         """Initialize configuration from arguments or a YAML file."""
         try:
@@ -74,24 +76,24 @@ class AgentConfig:
                     self._load_from_config(config, model, max_iterations, max_history_tokens, toolbox_directory,
                                           tools, enabled_toolboxes, reasoner_name, executor_name, personality,
                                           backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                          profile, customizations, agent_tool_model, agent_tool_timeout)
+                                          profile, customizations, agent_tool_model, agent_tool_timeout, temperature)
                 except FileNotFoundError as e:
                     logger.warning(f"Config file {config_path} not found: {e}. No toolboxes will be loaded.")
                     self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
                                       tools, [], reasoner_name, executor_name, personality,
                                       backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                      profile, customizations, agent_tool_model, agent_tool_timeout)
+                                      profile, customizations, agent_tool_model, agent_tool_timeout, temperature)
                 except yaml.YAMLError as e:
                     logger.error(f"Error parsing YAML config {config_path}: {e}. No toolboxes will be loaded.")
                     self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
                                       tools, [], reasoner_name, executor_name, personality,
                                       backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                      profile, customizations, agent_tool_model, agent_tool_timeout)
+                                      profile, customizations, agent_tool_model, agent_tool_timeout, temperature)
             else:
                 self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
                                   tools, enabled_toolboxes, reasoner_name, executor_name, personality,
                                   backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                  profile, customizations, agent_tool_model, agent_tool_timeout)
+                                  profile, customizations, agent_tool_model, agent_tool_timeout, temperature)
             self.__post_init__()
         except Exception as e:
             logger.error(f"Failed to initialize AgentConfig: {e}")
@@ -102,7 +104,7 @@ class AgentConfig:
         try:
             model, max_iterations, max_history_tokens, toolbox_directory, tools, enabled_toolboxes, \
             reasoner_name, executor_name, personality, backstory, sop, jinja_env, name, tools_config, \
-            reasoner, executor, profile, customizations, agent_tool_model, agent_tool_timeout = args
+            reasoner, executor, profile, customizations, agent_tool_model, agent_tool_timeout, temperature = args
             
             self.model = config.get("model", model)
             self.max_iterations = config.get("max_iterations", max_iterations)
@@ -124,6 +126,7 @@ class AgentConfig:
             self.customizations = config.get("customizations", customizations)
             self.agent_tool_model = config.get("agent_tool_model", agent_tool_model)
             self.agent_tool_timeout = config.get("agent_tool_timeout", agent_tool_timeout)
+            self.temperature = config.get("temperature", temperature)  # Added temperature
         except Exception as e:
             logger.error(f"Error loading config: {e}")
             raise
@@ -131,7 +134,7 @@ class AgentConfig:
     def _set_defaults(self, model, max_iterations, max_history_tokens, toolbox_directory,
                      tools, enabled_toolboxes, reasoner_name, executor_name, personality,
                      backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                     profile, customizations, agent_tool_model, agent_tool_timeout) -> None:
+                     profile, customizations, agent_tool_model, agent_tool_timeout, temperature) -> None:
         """Set default values for all configuration fields."""
         try:
             self.model = model
@@ -152,6 +155,7 @@ class AgentConfig:
             self.customizations = customizations
             self.agent_tool_model = agent_tool_model
             self.agent_tool_timeout = agent_tool_timeout
+            self.temperature = temperature  # Added temperature
         except Exception as e:
             logger.error(f"Error setting defaults: {e}")
             raise

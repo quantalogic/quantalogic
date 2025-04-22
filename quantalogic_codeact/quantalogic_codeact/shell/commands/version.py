@@ -1,4 +1,5 @@
-from quantalogic.version import get_version
+from quantalogic_codeact.version import get_version
+
 
 async def version_command(shell, args) -> str:
     """Show quantalogic package version."""

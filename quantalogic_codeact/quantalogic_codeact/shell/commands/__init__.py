@@ -18,6 +18,7 @@ from .tutorial import tutorial_command
 from .inputmode import inputmode_command
 from .contrast import contrast_command
 from .setmodel import setmodel_command
+from .set_temperature import set_temperature_command  # Added import
 from .config_show import config_show
 from .config_save import config_save
 from .config_load import config_load
@@ -45,6 +46,7 @@ __all__ = [
     'inputmode_command',
     'contrast_command',
     'setmodel_command',
+    'set_temperature_command',  # Added to __all__
     'config_show',
     'config_save',
     'config_load',

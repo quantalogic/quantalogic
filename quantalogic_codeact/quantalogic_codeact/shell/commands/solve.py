@@ -2,11 +2,11 @@ from typing import List
 
 from rich import print as rprint
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
 
 from ...codeact.events import ActionExecutedEvent, ErrorOccurredEvent, StreamTokenEvent, TaskCompletedEvent
 from ...codeact.xml_utils import XMLResultHandler
+from ..utils import display_response  # New import
 
 console = Console()
 
@@ -34,19 +34,26 @@ async def solve_command(shell, args: List[str]) -> str:
                         console.print(f"[cyan]Step {step}:[/cyan] {line}")
                     step_buffers[step] = lines[-1]
                 elif isinstance(event, ActionExecutedEvent):
-                    summary = XMLResultHandler.format_result_summary(event.result_xml)
-                    if "<Status>Error</Status>" in event.result_xml:
+                    # Format the execution result to XML then summarize
+                    xml_str = XMLResultHandler.format_execution_result(event.result)
+                    summary = XMLResultHandler.format_result_summary(xml_str)
+                    if "<Status>Error</Status>" in xml_str:
                         console.print(Panel(summary, title=f"Step {event.step_number} Error", border_style="red"))
                     else:
                         console.print(Panel(summary, title=f"Step {event.step_number} Result", border_style="magenta"))
                 elif isinstance(event, TaskCompletedEvent):
                     if event.final_answer:
-                        final_answer = XMLResultHandler.extract_result_value(event.final_answer)
-                        console.print(Panel(Markdown(final_answer), title="Final Answer", border_style="green"))
+                        raw_answer = event.final_answer
+                        # if XML, extract value; else use raw
+                        if raw_answer.strip().startswith("<"):
+                            final_answer = XMLResultHandler.extract_result_value(raw_answer)
+                        else:
+                            final_answer = raw_answer
+                        display_response(final_answer, title="Final Answer", border_style="green")
                     else:
-                        console.print(Panel("Task did not complete successfully.", title="Error", border_style="red"))
+                        display_response("Task did not complete successfully.", title="Error", border_style="red", is_error=True)
                 elif isinstance(event, ErrorOccurredEvent):
-                    console.print(Panel(f"[red]{event.error_message}[/red]", title="Error", border_style="red"))
+                    display_response(f"[red]{event.error_message}[/red]", title="Error", border_style="red", is_error=True)
             
             shell.current_agent.add_observer(stream_observer, ["StreamToken", "ActionExecuted", "TaskCompleted", "ErrorOccurred"])
             history = await shell.current_agent.solve(
@@ -87,16 +94,21 @@ async def solve_command(shell, args: List[str]) -> str:
                             f"[blue]Result:[/blue] {result_summary}",
                             border_style="cyan"
                         ))
-                final_answer = shell.current_agent._extract_response(history)
-                if final_answer.startswith("Error:"):
-                    console.print(Panel(final_answer, title="Task Error", border_style="red"))
+                raw = history[-1].get("result", "")
+                # extract XML value or use raw
+                if isinstance(raw, str) and raw.strip().startswith("<"):
+                    final_answer = XMLResultHandler.extract_result_value(raw)
                 else:
-                    console.print(Panel(Markdown(final_answer), title="Final Answer", border_style="green"))
+                    final_answer = raw
+                if final_answer.startswith("Error:"):
+                    display_response(final_answer, title="Error", border_style="red", is_error=True)
+                else:
+                    display_response(final_answer, title="Final Answer", border_style="green")
                 shell.history_manager.add_message("user", task)
                 shell.history_manager.add_message("assistant", final_answer)
                 return final_answer
             else:
                 return "No steps were executed."
     except Exception as e:
-        console.print(Panel(f"[red]Error solving task: {e}[/red]", title="Error", border_style="red"))
+        display_response(f"Error solving task: {e}", title="Error", border_style="red", is_error=True)
         return f"Error solving task: {e}"

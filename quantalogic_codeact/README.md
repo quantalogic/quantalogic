@@ -43,19 +43,22 @@ Whether you're a developer building intelligent systems, a researcher exploring 
 Quantalogic CodeAct is a framework within the Quantalogic ecosystem that enables the creation of AI agents capable of reasoning and acting using the ReAct paradigm. It integrates language models, extensible tools, and interactive interfaces (CLI, shell, and SDK) to empower users to solve tasks, engage in conversations, and customize agent behavior.
 
 ### CodeAct Module Overview
-The CodeAct module (located at `quantalogic_codeact/codeact`) provides the core components for building intelligent agents:
 
-```text
-quantalogic_codeact/
-└── codeact/
-    ├── agent.py          # Core agent implementing the ReAct loop (CodeActAgent)
-    ├── reasoner.py       # Generates reasoning steps or code using LLMs
-    ├── executor.py       # Safely executes Python code and tool calls
-    ├── tools/            # Built-in and extensible tool integrations
-    ├── history.py        # Manages conversational and execution history
-    ├── config.py         # Loads and validates YAML-based configuration
-    └── utils.py          # Helper functions for logging and error handling
-```
+#### Core Modules
+- **agent.py**: Core ReAct loop agent (`CodeActAgent`).
+- **agent_config.py**: Agent configuration loader and validator.
+- **reasoner.py**: Generates prompts and actions using LLMs.
+- **executor.py**: Executes Python code and tool calls safely.
+- **tools_manager.py**: Registers and loads tools and toolboxes.
+- **tools/**: Built-in tools (e.g., `AgentTool`, `RetrieveStepTool`).
+- **conversation_history_manager.py** & **history_manager.py**: Manage message and execution history.
+- **completion_evaluator.py**: Evaluates task completion via LLM verification.
+- **events.py**: Event and result data models (Pydantic).
+- **constants.py**: Project constants (models, token limits, paths).
+- **cli.py** & **cli_commands/**: CLI entrypoint and subcommands.
+- **templates/** & **prompts/**: Jinja2 templates for LLM prompts and responses.
+- **plugin_manager.py**: Plugin and toolbox discovery via entry points.
+- **xml_utils.py** & **llm_util.py**: XML formatting and LLM completion utilities.
 
 Each component follows single-responsibility design, making it easy to extend or replace parts (e.g., swap in custom executors or toolsets) to fit your domain.
 
@@ -389,8 +392,6 @@ Below is a comprehensive list of shell commands:
 ```bash
 Usage: quantalogic_codeact [OPTIONS] COMMAND [ARGS]...
 
-Set custom config path for all commands.
-
 Options:
   --config, -c PATH        Path to the configuration file to use [default: None]
   --loglevel, -l TEXT      Override the log level: DEBUG|INFO|WARNING|ERROR|CRITICAL [default: None]
@@ -412,6 +413,17 @@ Commands:
   uninstall-toolbox      Uninstall a toolbox and update the config file.
   config [OPTIONS]       Configuration commands (use `quantalogic_codeact config --help` for more).
   toolbox [OPTIONS]      Toolbox commands (use `quantalogic_codeact toolbox --help` for more).
+
+```
+> **Tip:** You can set a custom configuration file path for *any* command using the `--config` or `-c` option:
+>
+> ```bash
+> quantalogic_codeact task "Solve 2 + 2" --config ./myconfig.yaml
+> # or, using the short option:
+> quantalogic_codeact shell -c ./myconfig.yaml
+> ```
+>
+> This allows you to easily switch between different agent setups or environments.
 
 Examples:
   quantalogic_codeact shell
