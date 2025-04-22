@@ -457,9 +457,9 @@ instructor==1.7.2 ; python_version >= "3.10" and python_version < "3.13" \
 isodate==0.7.2 ; python_version >= "3.10" and python_version < "3.13" \
     --hash=sha256:28009937d8031054830160fce6d409ed342816b543597cece116d966c6d99e15 \
     --hash=sha256:4cd1aa0f43ca76f4a6c6c0292a85f40b35ec2e43e315b59f06e6d32171a953e6
-jinja2==3.1.5 ; python_version >= "3.10" and python_version < "3.13" \
-    --hash=sha256:8fefff8dc3034e27bb80d67c671eb8a9bc424c0ef4c0826edbff304cceff43bb \
-    --hash=sha256:aba0f4dc9ed8013c424088f68a5c226f7d6097ed89b246d7749c2ec4175c6adb
+jinja2==3.1.6 ; python_version >= "3.10" and python_version < "3.13" \
+    --hash=sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d \
+    --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
 jiter==0.8.2 ; python_version >= "3.10" and python_version < "3.13" \
     --hash=sha256:025337859077b41548bdcbabe38698bcd93cfe10b06ff66617a48ff92c9aec60 \
     --hash=sha256:03c9df035d4f8d647f8c210ddc2ae0728387275340668fb30d2421e17d9a0841 \
