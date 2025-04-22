@@ -157,7 +157,7 @@ class Shell:
             {"name": "history", "func": history_command, "help": "Show conversation history: /history [n]", "args": None},
             {"name": "clear", "func": clear_command, "help": "Clear conversation history: /clear", "args": []},
             {"name": "stream", "func": stream_command, "help": "Toggle streaming: /stream on|off", "args": ["on", "off"]},
-            {"name": "mode", "func": mode_command, "help": "Set or show mode: /mode [react|codeact]", "args": ["react", "codeact"]},
+            {"name": "mode", "func": mode_command, "help": "Set or show mode: /mode [chat|codeact]", "args": ["chat", "codeact"]},
             {"name": "loglevel", "func": loglevel_command, "help": "Set log level: /loglevel [DEBUG|INFO|WARNING|ERROR|CRITICAL]", "args": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]},
             {"name": "debug", "func": debug_command, "help": "Toggle debug mode: /debug on|off", "args": ["on", "off"]},
             {"name": "save", "func": save_command, "help": "Save history: /save <filename>", "args": None},
@@ -321,7 +321,7 @@ class Shell:
                     # Handle non-command input based on mode
                     if self.state.mode == "codeact":
                         await solve_command(self, [user_input])
-                    else:  # react mode
+                    else:  # chat mode
                         await chat_command(self, [user_input])
 
             except KeyboardInterrupt:

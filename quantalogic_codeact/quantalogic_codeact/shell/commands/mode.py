@@ -7,8 +7,8 @@ async def mode_command(shell, args: List[str]) -> str:
         return f"Current mode: {shell.state.mode}"
     
     mode = args[0].lower()
-    if mode in ["codeact", "react"]:
+    if mode in ["codeact", "chat"]:
         shell.state.mode = mode
         return f"Mode set to {mode}"
     else:
-        return "Invalid mode. Use /mode codeact|react"
+        return "Invalid mode. Use /mode codeact|chat"
