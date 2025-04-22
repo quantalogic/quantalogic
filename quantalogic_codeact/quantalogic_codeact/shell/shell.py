@@ -209,16 +209,29 @@ class Shell:
         pass
 
     def bottom_toolbar(self):
-        """Render a bottom toolbar with mode, agent, and model information as prompt_toolkit HTML."""
+        """Render a bottom toolbar with mode, agent, model, temperature, and version information as prompt_toolkit HTML."""
+        # Retrieve the current temperature from the agent's react_agent
+        temperature = self.current_agent.react_agent.temperature
+        
         if self.high_contrast:
-            return HTML(f'<b><style fg="ansiblack" bg="#E6E6FA">Mode: {self.state.mode} | Agent: {self.current_agent.name or "Default"} | Model: {self.current_agent.model} | Version: {get_version()}</style></b>')
+            # High-contrast mode: single style with all info
+            return HTML(
+                f'<b><style fg="ansiblack" bg="#E6E6FA">'
+                f'Mode: {self.state.mode} | '
+                f'Agent: {self.current_agent.name or "Default"} | '
+                f'Model: {self.current_agent.model} | '
+                f'Temperature: {temperature:.2f} | '
+                f'Version: {get_version()}'
+                f'</style></b>'
+            )
         else:
-            # High-contrast ANSI backgrounds for default toolbar
+            # Default mode: multi-colored sections
             return HTML(
                 f'<b>'
                 f'<style fg="ansiwhite" bg="ansired"> Mode: {self.state.mode} </style>'
                 f'<style fg="ansiwhite" bg="ansigreen"> Agent: {self.current_agent.name or "Default"} </style>'
                 f'<style fg="ansiwhite" bg="ansiblue"> Model: {self.current_agent.model} </style>'
+                f'<style fg="ansiwhite" bg="ansiyellow"> Temperature: {temperature:.2f} </style>'
                 f'<style fg="ansiwhite" bg="ansimagenta"> Version: {get_version()} </style>'
                 f'</b>'
             )
