@@ -389,8 +389,6 @@ Below is a comprehensive list of shell commands:
 ```bash
 Usage: quantalogic_codeact [OPTIONS] COMMAND [ARGS]...
 
-Set custom config path for all commands.
-
 Options:
   --config, -c PATH        Path to the configuration file to use [default: None]
   --loglevel, -l TEXT      Override the log level: DEBUG|INFO|WARNING|ERROR|CRITICAL [default: None]
@@ -412,6 +410,17 @@ Commands:
   uninstall-toolbox      Uninstall a toolbox and update the config file.
   config [OPTIONS]       Configuration commands (use `quantalogic_codeact config --help` for more).
   toolbox [OPTIONS]      Toolbox commands (use `quantalogic_codeact toolbox --help` for more).
+
+```
+> **Tip:** You can set a custom configuration file path for *any* command using the `--config` or `-c` option:
+>
+> ```bash
+> quantalogic_codeact task "Solve 2 + 2" --config ./myconfig.yaml
+> # or, using the short option:
+> quantalogic_codeact shell -c ./myconfig.yaml
+> ```
+>
+> This allows you to easily switch between different agent setups or environments.
 
 Examples:
   quantalogic_codeact shell
