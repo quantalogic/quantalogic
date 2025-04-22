@@ -162,7 +162,6 @@ class Agent:
         message: str,
         history: Optional[List[Dict[str, str]]] = None,
         use_tools: bool = False,
-        tools: Optional[List[Union[Tool, Callable]]] = None,
         timeout: int = 30,
         max_tokens: int = MAX_TOKENS,
         temperature: float = 0.7,
@@ -173,46 +172,13 @@ class Agent:
         """Single-step interaction with optional custom tools, history, and streaming."""
         try:
             logger.debug(f"Agent.chat called with message={message!r}, use_tools={use_tools}, timeout={timeout}, max_tokens={max_tokens}, temperature={temperature}, streaming={streaming}, reasoner_name={reasoner_name}, executor_name={executor_name}")
-            system_prompt: str = self._build_system_prompt()
-            if use_tools:
-                logger.debug(f"Agent.chat using tools: {[tool.name for tool in (process_tools(tools) if tools is not None else self.default_tools)]}, reasoner={reasoner_name}, executor={executor_name}")
-                chat_tools: List[Tool] = process_tools(tools) if tools is not None else self.default_tools
-                reasoner_name = reasoner_name or self.default_reasoner_name
-                executor_name = executor_name or self.default_executor_name
-                reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
-                executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
-                reasoner_config = self.config.reasoner.get("config", {})
-                executor_config = self.config.executor.get("config", {})
-                chat_agent = CodeActAgent(
-                    model=self.model,
-                    tools=chat_tools,
-                    max_iterations=1,
-                    max_history_tokens=self.max_history_tokens,
-                    system_prompt=system_prompt,
-                    reasoner=reasoner_cls(self.model, chat_tools, **reasoner_config),
-                    executor=executor_cls(chat_tools, self._notify_observers, **executor_config),
-                    conversation_history_manager=self.conversation_history_manager
-                )
-                chat_agent.executor.register_tool(RetrieveStepTool(chat_agent.history_manager.store))
-                for observer, event_types in self._observers:
-                    chat_agent.add_observer(observer, event_types)
-                logger.debug("Invoking CodeActAgent.solve for single-step chat")
-                history_result: List[Dict] = await chat_agent.solve(message, streaming=streaming)
-                logger.debug(f"CodeActAgent.solve result: {history_result}")
-                response = history_result[-1].get("result", "")
-                logger.debug(f"Chat response (tools branch): {response}")
-                # Update conversation history
-                self.conversation_history_manager.add_message("user", message)
-                self.conversation_history_manager.add_message("assistant", response)
-                return response
-            else:
-                logger.info(f"Invoking react_agent.chat for simple chat with message={message!r}, streaming={streaming}")
-                response: str = await self.react_agent.chat(message, streaming=streaming)
-                logger.info(f"Chat response (no tools): {response}")
-                # Update conversation history
-                self.conversation_history_manager.add_message("user", message)
-                self.conversation_history_manager.add_message("assistant", response)
-                return response
+            logger.info(f"Invoking react_agent.chat for simple chat with message={message!r}, streaming={streaming}")
+            response: str = await self.react_agent.chat(message, streaming=streaming)
+            logger.info(f"Chat response (no tools): {response}")
+            # Update conversation history
+            self.conversation_history_manager.add_message("user", message)
+            self.conversation_history_manager.add_message("assistant", response)
+            return response
         except Exception as e:
             logger.exception("Exception in Agent.chat")
             logger.error(f"Chat failed: {e}")
