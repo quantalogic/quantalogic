@@ -19,15 +19,13 @@ async def chat_command(shell, args: List[str]) -> str:
     try:
         if shell.state.streaming:
             buffer = ""
-            markdown = Markdown(buffer)
-            with Live(markdown, console=console, refresh_per_second=4) as live:
+            with Live(Markdown(buffer), console=console, refresh_per_second=4) as live:
                 def stream_observer(event):
                     nonlocal buffer
                     if isinstance(event, StreamTokenEvent):
                         if event.event_type == "StreamToken":
                             buffer += event.token
-                            markdown.text = buffer
-                            live.update(markdown)
+                            live.update(Markdown(buffer))
                         elif event.event_type == "StreamError":
                             error_message = event.token
                             live.update(Panel(error_message, title="Error", border_style="red"))
