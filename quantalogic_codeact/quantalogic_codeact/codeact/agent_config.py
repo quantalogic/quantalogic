@@ -5,14 +5,38 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import yaml
-from jinja2 import Environment
 from loguru import logger
 
 from quantalogic.tools import Tool
 
 from .constants import MAX_HISTORY_TOKENS
-from .templates import jinja_env as default_jinja_env
 
+
+# Structured config dataclasses
+@dataclass
+class ReasonerConfig:
+    name: str = "default"
+    config: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class ExecutorConfig:
+    name: str = "default"
+    config: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class PersonalityConfig:
+    traits: List[str] = field(default_factory=list)
+
+@dataclass
+class ToolConfig:
+    name: str
+    enabled: bool = True
+    config: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class TemplateConfig:
+    """Configuration for templating engine: directory for templates."""
+    template_dir: Optional[Path] = None
 
 @dataclass
 class AgentConfig:
@@ -28,16 +52,15 @@ class AgentConfig:
     personality: Optional[str] = None
     backstory: Optional[str] = None
     sop: Optional[str] = None
-    jinja_env: Optional[Environment] = None
+    template: TemplateConfig = field(default_factory=TemplateConfig)
     name: Optional[str] = None
     tools_config: Optional[List[Dict[str, Any]]] = None
     reasoner: Optional[Dict[str, Any]] = field(default_factory=lambda: {"name": "default"})
     executor: Optional[Dict[str, Any]] = field(default_factory=lambda: {"name": "default"})
-    profile: Optional[str] = None
-    customizations: Optional[Dict[str, Any]] = None
     agent_tool_model: str = "gemini/gemini-2.0-flash"
     agent_tool_timeout: int = 30
     temperature: float = 0.7  # Added temperature field
+    system_prompt_template: Optional[str] = None
 
     def __init__(
         self,
@@ -52,17 +75,16 @@ class AgentConfig:
         personality: Optional[str] = None,
         backstory: Optional[str] = None,
         sop: Optional[str] = None,
-        jinja_env: Optional[Environment] = None,
+        template: Optional[TemplateConfig] = None,
         config_file: Optional[str] = None,
         name: Optional[str] = None,
         tools_config: Optional[List[Dict[str, Any]]] = None,
         reasoner: Optional[Dict[str, Any]] = None,
         executor: Optional[Dict[str, Any]] = None,
-        profile: Optional[str] = None,
-        customizations: Optional[Dict[str, Any]] = None,
         agent_tool_model: str = "gemini/gemini-2.0-flash",
         agent_tool_timeout: int = 30,
-        temperature: float = 0.7  # Added temperature parameter
+        temperature: float = 0.7,  # Added temperature parameter
+        system_prompt_template: Optional[str] = None
     ) -> None:
         """Initialize configuration from arguments or a YAML file."""
         try:
@@ -75,26 +97,25 @@ class AgentConfig:
                         config: Dict = yaml.safe_load(f) or {}
                     self._load_from_config(config, model, max_iterations, max_history_tokens, toolbox_directory,
                                           tools, enabled_toolboxes, reasoner_name, executor_name, personality,
-                                          backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                          profile, customizations, agent_tool_model, agent_tool_timeout, temperature)
+                                          backstory, sop, template, name, tools_config, reasoner, executor,
+                                          agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
                 except FileNotFoundError as e:
                     logger.warning(f"Config file {config_path} not found: {e}. No toolboxes will be loaded.")
                     self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
                                       tools, [], reasoner_name, executor_name, personality,
-                                      backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                      profile, customizations, agent_tool_model, agent_tool_timeout, temperature)
+                                      backstory, sop, template, name, tools_config, reasoner, executor,
+                                      agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
                 except yaml.YAMLError as e:
                     logger.error(f"Error parsing YAML config {config_path}: {e}. No toolboxes will be loaded.")
                     self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
                                       tools, [], reasoner_name, executor_name, personality,
-                                      backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                      profile, customizations, agent_tool_model, agent_tool_timeout, temperature)
+                                      backstory, sop, template, name, tools_config, reasoner, executor,
+                                      agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
             else:
                 self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
                                   tools, enabled_toolboxes, reasoner_name, executor_name, personality,
-                                  backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                                  profile, customizations, agent_tool_model, agent_tool_timeout, temperature)
-            self.__post_init__()
+                                  backstory, sop, template, name, tools_config, reasoner, executor,
+                                  agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
         except Exception as e:
             logger.error(f"Failed to initialize AgentConfig: {e}")
             raise
@@ -103,8 +124,8 @@ class AgentConfig:
         """Load configuration from a dictionary, overriding with explicit arguments if provided."""
         try:
             model, max_iterations, max_history_tokens, toolbox_directory, tools, enabled_toolboxes, \
-            reasoner_name, executor_name, personality, backstory, sop, jinja_env, name, tools_config, \
-            reasoner, executor, profile, customizations, agent_tool_model, agent_tool_timeout, temperature = args
+            reasoner_name, executor_name, personality, backstory, sop, template, name, tools_config, \
+            reasoner, executor, agent_tool_model, agent_tool_timeout, temperature, system_prompt_template = args
             
             self.model = config.get("model", model)
             self.max_iterations = config.get("max_iterations", max_iterations)
@@ -114,27 +135,41 @@ class AgentConfig:
             # Treat empty list as no filter (i.e., include all toolboxes)
             etb = config.get("enabled_toolboxes", enabled_toolboxes)
             self.enabled_toolboxes = etb if etb else None
-            self.reasoner = config.get("reasoner", {"name": config.get("reasoner_name", reasoner_name)})
-            self.executor = config.get("executor", {"name": config.get("executor_name", executor_name)})
-            self.personality = config.get("personality", personality)
-            self.backstory = config.get("backstory", backstory)
-            self.sop = config.get("sop", sop)
-            self.jinja_env = jinja_env or default_jinja_env
+            rd = config.get("reasoner", {})
+            self.reasoner = ReasonerConfig(
+                name=rd.get("name", reasoner_name),
+                config=rd.get("config", {})
+            )
+            ed = config.get("executor", {})
+            self.executor = ExecutorConfig(
+                name=ed.get("name", executor_name),
+                config=ed.get("config", {})
+            )
+            pd = config.get("personality", {}) or {}
+            self.personality = PersonalityConfig(traits=pd.get("traits", []))
+            self.tools_config = [ToolConfig(**tc) for tc in config.get("tools_config", tools_config or [])]
+            # Load template config from YAML if present, else use passed TemplateConfig or default
+            tpl_cfg = config.get("template")
+            if isinstance(tpl_cfg, dict):
+                td = tpl_cfg.get("template_dir")
+                self.template = TemplateConfig(template_dir=Path(td) if td else None)
+            elif template is not None:
+                self.template = template
+            else:
+                self.template = TemplateConfig()
             self.name = config.get("name", name)
-            self.tools_config = config.get("tools_config", tools_config)
-            self.profile = config.get("profile", profile)
-            self.customizations = config.get("customizations", customizations)
             self.agent_tool_model = config.get("agent_tool_model", agent_tool_model)
             self.agent_tool_timeout = config.get("agent_tool_timeout", agent_tool_timeout)
             self.temperature = config.get("temperature", temperature)  # Added temperature
+            self.system_prompt_template = config.get("system_prompt_template", system_prompt_template)
         except Exception as e:
             logger.error(f"Error loading config: {e}")
             raise
 
     def _set_defaults(self, model, max_iterations, max_history_tokens, toolbox_directory,
                      tools, enabled_toolboxes, reasoner_name, executor_name, personality,
-                     backstory, sop, jinja_env, name, tools_config, reasoner, executor,
-                     profile, customizations, agent_tool_model, agent_tool_timeout, temperature) -> None:
+                     backstory, sop, template, name, tools_config, reasoner, executor,
+                     agent_tool_model, agent_tool_timeout, temperature, system_prompt_template) -> None:
         """Set default values for all configuration fields."""
         try:
             self.model = model
@@ -143,51 +178,38 @@ class AgentConfig:
             self.toolbox_directory = toolbox_directory
             self.tools = tools
             self.enabled_toolboxes = enabled_toolboxes
-            self.reasoner = reasoner if reasoner is not None else {"name": reasoner_name}
-            self.executor = executor if executor is not None else {"name": executor_name}
-            self.personality = personality
-            self.backstory = backstory
-            self.sop = sop
-            self.jinja_env = jinja_env or default_jinja_env
+            if isinstance(reasoner, dict):
+                self.reasoner = ReasonerConfig(
+                    name=reasoner.get("name", reasoner_name),
+                    config=reasoner.get("config", {})
+                )
+            else:
+                self.reasoner = reasoner if isinstance(reasoner, ReasonerConfig) else ReasonerConfig(name=reasoner_name)
+            if isinstance(executor, dict):
+                self.executor = ExecutorConfig(
+                    name=executor.get("name", executor_name),
+                    config=executor.get("config", {})
+                )
+            else:
+                self.executor = executor if isinstance(executor, ExecutorConfig) else ExecutorConfig(name=executor_name)
+            # Support various personality formats
+            if isinstance(personality, PersonalityConfig):
+                self.personality = personality
+            elif isinstance(personality, dict):
+                self.personality = PersonalityConfig(traits=personality.get("traits", []))
+            elif isinstance(personality, list):
+                self.personality = PersonalityConfig(traits=personality)
+            elif isinstance(personality, str):
+                self.personality = personality
+            else:
+                self.personality = PersonalityConfig()
+            self.tools_config = [tc if isinstance(tc, ToolConfig) else ToolConfig(**tc) for tc in (tools_config or [])]
+            self.template = template if template is not None else TemplateConfig()
             self.name = name
-            self.tools_config = tools_config
-            self.profile = profile
-            self.customizations = customizations
             self.agent_tool_model = agent_tool_model
             self.agent_tool_timeout = agent_tool_timeout
             self.temperature = temperature  # Added temperature
+            self.system_prompt_template = system_prompt_template
         except Exception as e:
             logger.error(f"Error setting defaults: {e}")
-            raise
-
-    def __post_init__(self) -> None:
-        """Apply profile defaults and customizations after initialization."""
-        try:
-            profiles = {
-                "math_expert": {
-                    "personality": {"traits": ["precise", "logical"]},
-                    "tools_config": [{"name": "math_tools", "enabled": True}],
-                    "sop": "Focus on accuracy and clarity in mathematical solutions."
-                },
-                "creative_writer": {
-                    "personality": {"traits": ["creative", "expressive"]},
-                    "tools_config": [{"name": "text_tools", "enabled": True}],
-                    "sop": "Generate engaging and imaginative content."
-                }
-            }
-            if self.profile and self.profile in profiles:
-                base_config = profiles[self.profile]
-                for key, value in base_config.items():
-                    if not getattr(self, key) or (key == "personality" and isinstance(getattr(self, key), str)):
-                        setattr(self, key, value)
-                if self.customizations:
-                    for key, value in self.customizations.items():
-                        if hasattr(self, key):
-                            current = getattr(self, key)
-                            if isinstance(current, dict):
-                                current.update(value)
-                            elif current is None or (key in ["personality", "backstory"] and isinstance(current, str)):
-                                setattr(self, key, value)
-        except Exception as e:
-            logger.error(f"Error in post_init: {e}")
             raise

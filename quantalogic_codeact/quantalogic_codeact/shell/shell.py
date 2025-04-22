@@ -1,4 +1,5 @@
 import sys
+from dataclasses import fields  # for filtering config keys
 from difflib import get_close_matches  # Added for command suggestions
 from importlib.metadata import entry_points
 from pathlib import Path
@@ -118,6 +119,12 @@ class Shell:
         config_data.pop("installed_toolboxes", None)
         config_data.pop("log_level", None)
         try:
+            # Filter out unsupported keys based on AgentConfig schema
+            valid_keys = {f.name for f in fields(AgentConfig)}
+            for key in list(config_data):
+                if key not in valid_keys:
+                    logger.warning(f"Unknown config key '{key}' ignored.")
+                    config_data.pop(key)
             default_config = AgentConfig(**config_data)
             logger.info(f"Loaded configuration from {config_manager.GLOBAL_CONFIG_PATH}")
         except Exception as e:

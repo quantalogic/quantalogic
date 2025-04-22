@@ -1,10 +1,13 @@
+from dataclasses import fields, is_dataclass
 from pathlib import Path
-import quantalogic_codeact.codeact.cli_commands.config_manager as config_manager
 from typing import List
 
 import yaml
-from jinja2 import Environment
 from loguru import logger
+
+import quantalogic_codeact.codeact.cli_commands.config_manager as config_manager
+
+from ...codeact.agent import AgentConfig
 
 
 async def config_save(shell, args: List[str]) -> str:
@@ -17,15 +20,15 @@ async def config_save(shell, args: List[str]) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     filename = str(path)
     config = shell.current_agent.config
-    config_dict = {k: v for k, v in vars(config).items() if not k.startswith('_')}
-    # Remove Jinja environment (non-serializable)
-    config_dict.pop('jinja_env', None)
+    # Build config dict strictly from AgentConfig schema
+    config_dict = {f.name: getattr(config, f.name) for f in fields(AgentConfig)}
     # Sanitize values for YAML serialization
     def sanitize(val):
+        # Convert dataclass instances to nested primitives
+        if is_dataclass(val):
+            return sanitize(vars(val))
         if isinstance(val, (str, int, float, bool, type(None))):
             return val
-        if isinstance(val, Environment):
-            return "<jinja2.Environment>"
         if isinstance(val, dict):
             return {sanitize(k): sanitize(v) for k, v in val.items()}
         if isinstance(val, (list, tuple)):

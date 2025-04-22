@@ -4,7 +4,7 @@ import asyncio
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from jinja2 import Environment
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from loguru import logger
 
 from quantalogic.tools import Tool
@@ -16,6 +16,7 @@ from .conversation_history_manager import ConversationHistoryManager
 from .executor import BaseExecutor, Executor
 from .plugin_manager import PluginManager
 from .reasoner import BaseReasoner, Reasoner
+from .templates import jinja_env as default_jinja_env
 from .tools import RetrieveStepTool
 from .tools_manager import get_default_tools
 from .utils import process_tools
@@ -58,12 +59,23 @@ class Agent:
         self.sop: Optional[str] = config.sop
         self.name: Optional[str] = config.name
         self.max_history_tokens: int = config.max_history_tokens
-        self.jinja_env: Environment = config.jinja_env
+        # Configure Jinja environment: support TemplateConfig or raw dict
+        tpl = config.template
+        td = None
+        if isinstance(tpl, dict):
+            td = tpl.get("template_dir")
+        elif hasattr(tpl, "template_dir"):
+            td = tpl.template_dir
+        if td:
+            self.jinja_env = Environment(loader=FileSystemLoader(str(td)))
+        else:
+            self.jinja_env = default_jinja_env
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.last_solve_context_vars: Dict = {}
-        self.default_reasoner_name: str = config.reasoner.get("name", config.reasoner_name)
-        self.default_executor_name: str = config.executor.get("name", config.executor_name)
+        self.default_reasoner_name: str = config.reasoner.name
+        self.default_executor_name: str = config.executor.name
         self.conversation_history_manager = ConversationHistoryManager(max_tokens=self.max_history_tokens)
+        self.system_prompt_template: Optional[str] = config.system_prompt_template
         self.react_agent = CodeActAgent(
             model=self.model,
             tools=self.default_tools,
@@ -123,41 +135,23 @@ class Agent:
             logger.error(f"Error resolving secrets in tools_config: {e}")
 
     def _build_system_prompt(self) -> str:
-        """Build a system prompt based on name, personality, backstory, and SOP."""
+        """Render system prompt via Jinja2 template only."""
+        template_name = self.system_prompt_template or "system_prompt.j2"
         try:
-            prompt = f"I am {self.name}, an AI assistant." if self.name else "You are an AI assistant."
-            if self.personality:
-                if isinstance(self.personality, str):
-                    prompt += f" I have a {self.personality} personality."
-                elif isinstance(self.personality, dict):
-                    traits = self.personality.get("traits", [])
-                    if traits:
-                        prompt += f" I have the following personality traits: {', '.join(traits)}."
-                    tone = self.personality.get("tone")
-                    if tone:
-                        prompt += f" My tone is {tone}."
-                    humor = self.personality.get("humor_level")
-                    if humor:
-                        prompt += f" My humor level is {humor}."
-            if self.backstory:
-                if isinstance(self.backstory, str):
-                    prompt += f" My backstory is: {self.backstory}"
-                elif isinstance(self.backstory, dict):
-                    origin = self.backstory.get("origin")
-                    if origin:
-                        prompt += f" I was created by {origin}."
-                    purpose = self.backstory.get("purpose")
-                    if purpose:
-                        prompt += f" My purpose is {purpose}."
-                    experience = self.backstory.get("experience")
-                    if experience:
-                        prompt += f" My experience includes: {experience}"
-            if self.sop:
-                prompt += f" Follow this standard operating procedure: {self.sop}"
-            return prompt
+            tpl = self.jinja_env.get_template(template_name)
+            context = {
+                'name': self.name,
+                'personality': self.personality,
+                'backstory': self.backstory,
+                'sop': self.sop
+            }
+            return tpl.render(**context)
+        except TemplateNotFound:
+            logger.error(f"System prompt template '{template_name}' not found.")
+            return ""
         except Exception as e:
-            logger.error(f"Error building system prompt: {e}. Using default.")
-            return "You are an AI assistant."
+            logger.error(f"Error rendering system prompt: {e}")
+            return ""
 
     async def chat(
         self,
@@ -220,8 +214,9 @@ class Agent:
             executor_name = executor_name or self.default_executor_name
             reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
             executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
-            reasoner_config = self.config.reasoner.get("config", {})
-            executor_config = self.config.executor.get("config", {})
+            # Unpack config dicts from ReasonerConfig and ExecutorConfig
+            reasoner_config = self.config.reasoner.config
+            executor_config = self.config.executor.config
             # Format history as a string for the system prompt
             history_str = ""
             if history:

@@ -1,0 +1,25 @@
+{% if name %}
+You are {{ name }}, an AI assistant.
+{% else %}
+You are an AI assistant.
+{% endif %}
+
+{% if personality %}
+  {% if personality.traits %}
+Personality traits:
+{% for trait in personality.traits %}
+- {{ trait }}
+{% endfor %}
+  {% else %}
+Personality: {{ personality }}
+  {% endif %}
+{% endif %}
+
+{% if backstory %}
+Backstory: {{ backstory }}
+{% endif %}
+
+{% if sop %}
+Standard Operating Procedure:
+{{ sop }}
+{% endif %}

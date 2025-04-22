@@ -1,7 +1,10 @@
-from typing import List
+from dataclasses import fields
 from pathlib import Path
+from typing import List
+
 import yaml
 from loguru import logger
+
 import quantalogic_codeact.codeact.cli_commands.config_manager as config_manager
 
 from ...codeact.agent import Agent, AgentConfig
@@ -18,8 +21,12 @@ async def config_load(shell, args: List[str]) -> str:
     try:
         with open(path) as f:
             new_config_dict = yaml.safe_load(f) or {}
-        # Remove log_level to avoid passing unsupported param to AgentConfig
-        new_config_dict.pop("log_level", None)
+        # Filter out unsupported keys based on AgentConfig schema
+        valid_keys = {f.name for f in fields(AgentConfig)}
+        for key in list(new_config_dict):
+            if key not in valid_keys:
+                logger.warning(f"Unknown config key '{key}' ignored.")
+                new_config_dict.pop(key)
         new_config = AgentConfig(**new_config_dict)
         # Create a new agent with the loaded configuration
         new_agent = Agent(config=new_config)
