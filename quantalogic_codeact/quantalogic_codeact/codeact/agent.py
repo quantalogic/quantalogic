@@ -47,6 +47,7 @@ class Agent:
         except Exception as e:
             logger.error(f"Failed to load plugins: {e}")
         self.model: str = config.model
+        self.temperature: float = config.temperature  # Added temperature
         self.default_tools: List[Tool] = self._get_tools()
         # If no tools are loaded, do not fall back to all registered tools
         if not self.default_tools and (not config.enabled_toolboxes or not config.tools):
@@ -69,9 +70,10 @@ class Agent:
             max_iterations=self.max_iterations,
             max_history_tokens=self.max_history_tokens,
             system_prompt=self._build_system_prompt(),
-            reasoner=Reasoner(self.model, self.default_tools),
+            reasoner=Reasoner(self.model, self.default_tools, temperature=self.temperature),
             executor=Executor(self.default_tools, self._notify_observers),
-            conversation_history_manager=self.conversation_history_manager
+            conversation_history_manager=self.conversation_history_manager,
+            temperature=self.temperature  # Pass temperature
         )
 
     def _get_tools(self) -> List[Tool]:
@@ -164,7 +166,7 @@ class Agent:
         use_tools: bool = False,
         timeout: int = 30,
         max_tokens: int = MAX_TOKENS,
-        temperature: float = 0.7,
+        temperature: float = None,  # Allow override
         streaming: bool = False,
         reasoner_name: Optional[str] = None,
         executor_name: Optional[str] = None
@@ -173,7 +175,12 @@ class Agent:
         try:
             logger.debug(f"Agent.chat called with message={message!r}, use_tools={use_tools}, timeout={timeout}, max_tokens={max_tokens}, temperature={temperature}, streaming={streaming}, reasoner_name={reasoner_name}, executor_name={executor_name}")
             logger.info(f"Invoking react_agent.chat for simple chat with message={message!r}, streaming={streaming}")
-            response: str = await self.react_agent.chat(message, streaming=streaming)
+            response: str = await self.react_agent.chat(
+                message,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                streaming=streaming
+            )
             logger.info(f"Chat response (no tools): {response}")
             # Update conversation history
             self.conversation_history_manager.add_message("user", message)
@@ -229,9 +236,10 @@ class Agent:
                 max_iterations=max_iterations if max_iterations is not None else self.max_iterations,
                 max_history_tokens=self.max_history_tokens,
                 system_prompt=system_prompt,
-                reasoner=reasoner_cls(self.model, solve_tools, **reasoner_config),
+                reasoner=reasoner_cls(self.model, solve_tools, temperature=self.temperature, **reasoner_config),
                 executor=executor_cls(solve_tools, self._notify_observers, **executor_config),
-                conversation_history_manager=self.conversation_history_manager
+                conversation_history_manager=self.conversation_history_manager,
+                temperature=self.temperature
             )
             solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.history_manager.store))
             for observer, event_types in self._observers:

@@ -45,6 +45,7 @@ from .commands.loglevel import loglevel_command
 from .commands.mode import mode_command
 from .commands.save import save_command
 from .commands.set import set_command
+from .commands.set_temperature import set_temperature_command  # Added import
 from .commands.setmodel import setmodel_command
 from .commands.solve import solve_command
 from .commands.stream import stream_command
@@ -104,6 +105,7 @@ class Shell:
                 "customizations": None,
                 "agent_tool_model": "gemini/gemini-2.0-flash",
                 "agent_tool_timeout": 30,
+                "temperature": 0.7,  # Added default temperature
                 "installed_toolboxes": [],
                 "log_level": config_manager.GLOBAL_DEFAULTS.get("log_level", "ERROR")
             }
@@ -168,6 +170,7 @@ class Shell:
             {"name": "contrast", "func": contrast_command, "help": "Toggle high-contrast mode: /contrast on|off", "args": ["on", "off"]},
             {"name": "setmodel", "func": setmodel_command, "help": "Set model and switch to a new agent: /setmodel <model_name>", "args": None},
             {"name": "set", "func": set_command, "help": "Set a config field: /set <field> <value>", "args": None},
+            {"name": "set temperature", "func": set_temperature_command, "help": "Set or show temperature: /set temperature <value>", "args": None},
             {"name": "config show", "func": config_show, "help": "Show the current configuration", "args": []},
             {"name": "config save", "func": config_save, "help": "Save the current configuration to a file: /config save <filename>", "args": None},
             {"name": "config load", "func": config_load, "help": "Load a configuration from a file: /config load <filename>", "args": None},

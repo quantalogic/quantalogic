@@ -59,9 +59,10 @@ class BaseReasoner(ABC):
 
 class Reasoner(BaseReasoner):
     """Handles action generation using the language model."""
-    def __init__(self, model: str, tools: List[Tool], config: Optional[Dict[str, Any]] = None, prompt_strategy: Optional[PromptStrategy] = None):
+    def __init__(self, model: str, tools: List[Tool], temperature: float = 0.3, config: Optional[Dict[str, Any]] = None, prompt_strategy: Optional[PromptStrategy] = None):
         self.model = model
         self.tools = tools
+        self.temperature = temperature  # Store temperature
         self.config = config or {}
         self.prompt_strategy = prompt_strategy or DefaultPromptStrategy()
         self.prompt_strategy.tools = tools  # Inject tools into strategy
@@ -109,7 +110,7 @@ class Reasoner(BaseReasoner):
                             {"role": "user", "content": task_prompt}
                         ],
                         max_tokens=self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS),
-                        temperature=0.3,
+                        temperature=self.temperature,  # Use stored temperature
                         stream=streaming,
                         step=step,
                         notify_event=notify_event

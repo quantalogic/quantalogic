@@ -49,7 +49,8 @@ class CodeActAgent:
         tool_registry: Optional[ToolRegistry] = None,
         history_manager: Optional[HistoryManager] = None,
         conversation_history_manager: Optional[ConversationHistoryManager] = None,
-        error_handler: Optional[Callable[[Exception, int], bool]] = None
+        error_handler: Optional[Callable[[Exception, int], bool]] = None,
+        temperature: float = 0.7  # Added temperature parameter
     ) -> None:
         """
         Initialize the CodeActAgent with tools, reasoning, execution, and memory components.
@@ -67,11 +68,13 @@ class CodeActAgent:
             history_manager (Optional[HistoryManager]): Custom task history manager.
             conversation_history_manager (Optional[ConversationHistoryManager]): Custom conversation history manager.
             error_handler (Optional[Callable[[Exception, int], bool]]): Error handler callback.
+            temperature (float): Temperature for language model generation (default: 0.7).
         """
+        self.temperature = temperature  # Store temperature
         self.tool_registry = tool_registry or ToolRegistry()
         for tool in tools:
             self.tool_registry.register(tool)
-        self.reasoner: BaseReasoner = reasoner or Reasoner(model, self.tool_registry.get_tools())
+        self.reasoner: BaseReasoner = reasoner or Reasoner(model, self.tool_registry.get_tools(), temperature=self.temperature)
         self.executor: BaseExecutor = executor or Executor(self.tool_registry.get_tools(), notify_event=self._notify_observers)
         self.max_iterations: int = max_iterations
         self.max_history_tokens: int = max_history_tokens
@@ -250,7 +253,7 @@ class CodeActAgent:
                     model=self.reasoner.model,
                     messages=[{"role": "user", "content": verification_prompt}],
                     max_tokens=20,
-                    temperature=0.1,
+                    temperature=self.temperature,  # Use stored temperature
                     stream=False
                 )
                 verification = verification.lower().strip()
@@ -435,7 +438,7 @@ class CodeActAgent:
         self,
         message: str,
         max_tokens: int = MAX_TOKENS,
-        temperature: float = 0.7,
+        temperature: Optional[float] = None,  # Allow override
         streaming: bool = True
     ) -> str:
         """
@@ -444,7 +447,7 @@ class CodeActAgent:
         Args:
             message (str): The user message.
             max_tokens (int): Maximum number of tokens to generate.
-            temperature (float): Sampling temperature for LLM response.
+            temperature (Optional[float]): Sampling temperature for LLM response (defaults to instance temperature).
             streaming (bool): Whether to stream the response.
 
         Returns:
@@ -466,7 +469,7 @@ class CodeActAgent:
                 model=self.reasoner.model,
                 messages=messages,
                 max_tokens=max_tokens,
-                temperature=temperature,
+                temperature=temperature if temperature is not None else self.temperature,
                 stream=streaming,
                 notify_event=self._notify_observers if streaming else None
             )
@@ -480,3 +483,9 @@ class CodeActAgent:
         except Exception as e:
             logger.error(f"Chat failed: {e}")
             return f"Error: Unable to process chat request due to {str(e)}"
+
+    def set_temperature(self, temperature: float) -> None:
+        """Update the temperature for the agent and its reasoner."""
+        self.temperature = temperature
+        if hasattr(self.reasoner, 'temperature'):
+            self.reasoner.temperature = temperature
