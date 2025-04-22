@@ -9,6 +9,7 @@ from loguru import logger
 
 from quantalogic.tools import Tool
 
+from .completion_evaluator import DefaultCompletionEvaluator
 from .conversation_history_manager import ConversationHistoryManager
 from .events import (
     ActionExecutedEvent,
@@ -25,7 +26,6 @@ from .executor import BaseExecutor, Executor
 from .history_manager import HistoryManager
 from .llm_util import LLMCompletionError, litellm_completion
 from .reasoner import BaseReasoner, Reasoner
-from .templates import jinja_env
 from .tools_manager import ToolRegistry
 from .xml_utils import XMLResultHandler
 
@@ -89,6 +89,7 @@ class CodeActAgent:
         self.context_vars: Dict = {}
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.error_handler = error_handler or (lambda e, step: False)  # Default: no retry
+        self.completion_evaluator = DefaultCompletionEvaluator()
 
     def add_observer(self, observer: Callable, event_types: List[str]) -> 'CodeActAgent':
         """Add an observer for specific event types."""
@@ -218,69 +219,6 @@ class CodeActAgent:
             logger.error(f"Error executing action: {e}")
             raise
 
-    async def is_task_complete(self, task: str, history: List[Dict], result: ExecutionResult, success_criteria: Optional[str]) -> Tuple[bool, str]:
-        """
-        Check if the task is complete based on the execution result.
-
-        Args:
-            task (str): The task being solved.
-            history (List[Dict]): Stored step history.
-            result (ExecutionResult): Result of the latest execution.
-            success_criteria (Optional[str]): Optional success criteria.
-
-        Returns:
-            Tuple[bool, str]: (is_complete, final_answer).
-        """
-        try:
-            if result.execution_status != "success":
-                logger.info(f"Task not complete at step due to execution error: {result.error}")
-                return False, ""
-
-            task_status = result.task_status
-            final_answer = result.result or ""
-
-            # Use LLM to verify completion if task is marked as completed
-            if task_status == "completed":
-                template = jinja_env.get_template("is_task_complete.j2")
-                verification_prompt = template.render(
-                    task=task,
-                    final_answer=final_answer,
-                    task_status=task_status,
-                    reason="Task marked as completed by execution result",
-                    history=self.history_manager.format_history(self.max_iterations)
-                )
-                verification = await litellm_completion(
-                    model=self.reasoner.model,
-                    messages=[{"role": "user", "content": verification_prompt}],
-                    max_tokens=20,
-                    temperature=self.temperature,  # Use stored temperature
-                    stream=False
-                )
-                verification = verification.lower().strip()
-                if verification == "yes":
-                    logger.info(f"Task verified as complete: {final_answer}")
-                    return True, final_answer
-                elif verification == "not_solvable":
-                    logger.info(f"Task deemed unsolvable: {final_answer}")
-                    return True, f"Task is unsolvable: {final_answer}"
-                elif verification == "no":
-                    logger.info(f"LLM judge indicates task is not complete: '{verification}'")
-                    return False, ""
-                else:
-                    logger.warning(f"Unexpected judge response: '{verification}', treating as 'no'")
-                    return False, ""
-
-            # Check success criteria if provided
-            if success_criteria and final_answer and success_criteria in final_answer:
-                logger.info(f"Task completed based on success criteria: {success_criteria}")
-                return True, final_answer
-
-            logger.info("Task not complete: in progress or no criteria met")
-            return False, ""
-        except Exception as e:
-            logger.error(f"Error checking task completion: {e}")
-            return False, ""
-
     async def _run_step(self, task: str, step: int, max_iters: int, 
                        system_prompt: Optional[str], streaming: bool) -> Dict:
         """
@@ -347,7 +285,15 @@ class CodeActAgent:
         """
         try:
             result = ExecutionResult(**step_data["result"])
-            is_complete, final_answer = await self.is_task_complete(task, self.history_manager.store, result, success_criteria)
+            formatted_history = self.history_manager.format_history(self.max_iterations)
+            is_complete, final_answer = await self.completion_evaluator.evaluate_completion(
+                task=task,
+                formatted_history=formatted_history,
+                result=result,
+                success_criteria=success_criteria,
+                model=self.reasoner.model,
+                temperature=self.temperature
+            )
             if is_complete and final_answer:
                 step_data["result"]["result"] = final_answer  # Update result with final answer
             await self._notify_observers(StepCompletedEvent(
