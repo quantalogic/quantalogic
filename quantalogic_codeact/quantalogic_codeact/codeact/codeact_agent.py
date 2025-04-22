@@ -435,6 +435,7 @@ class CodeActAgent:
         self,
         message: str,
         max_tokens: int = MAX_TOKENS,
+        temperature: float = 0.7,
         streaming: bool = True
     ) -> str:
         """
@@ -442,8 +443,9 @@ class CodeActAgent:
 
         Args:
             message (str): The user message.
-            streaming (bool): Whether to stream the response.
             max_tokens (int): Maximum number of tokens to generate.
+            temperature (float): Sampling temperature for LLM response.
+            streaming (bool): Whether to stream the response.
 
         Returns:
             str: The assistant's response.
@@ -464,7 +466,7 @@ class CodeActAgent:
                 model=self.reasoner.model,
                 messages=messages,
                 max_tokens=max_tokens,
-                temperature=0.7,
+                temperature=temperature,
                 stream=streaming,
                 notify_event=self._notify_observers if streaming else None
             )
