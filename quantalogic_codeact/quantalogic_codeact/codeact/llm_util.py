@@ -14,9 +14,9 @@ class LLMCompletionError(Exception):
 async def litellm_completion(
     model: str,
     messages: List[dict],
-    max_tokens: int,
     temperature: float,
     stream: bool = False,
+    max_tokens: Optional[int] = None,
     step: Optional[int] = None,
     notify_event: Optional[Callable] = None,
     **kwargs

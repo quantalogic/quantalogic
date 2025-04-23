@@ -55,6 +55,11 @@ You have access to the following pre-defined async tool functions, grouped by to
 
 ## Instructions
 
+** Always retrieve relevant conversation message(s) using:
+```python
+step{{ current_step }}_raw_message = await default.retrieve_message(nanoid='<nanoid>')
+```
+
 Before generating new actions, check if the task is already completed based on the available variables and history. If the necessary information to solve the task is already present in context_vars (e.g., a previous result), use it to avoid redundant work. For example, if a poem is available in context_vars['step1_poem'], use it directly.
 
 Ensure the program checks if the task goal is achieved using available variables before taking further actions.
@@ -100,25 +105,36 @@ IN THE CURRENT CONTEX ONLY THE DEFINED VARIABLES AND THE CONVERSATION HISTORY AR
 This only an example:
 
 <Example>
-Example task: "Translate a paragraph"
-
-If in the history, there is a variable 'step1_paragraph' with the paragraph text, then the program should be:
-
 import asyncio
 
 async def main():
-    # Get message from history by nanoid
-    message_history = await retrieve_message(nanoid='hm9N89i6y56n2hNidKzXs')
+    # Retrieve the paragraph text from previous step
     step{{ current_step }}_paragraph: str = context_vars.get('step1_paragraph', '')
-    if step{{ current_step }}_paragraph:
-        step{{ current_step }}_system_prompt: str = "You are a translation expert. Translate the given text to Spanish."
-        step{{ current_step }}_prompt: str = f"Translate the following paragraph to Spanish:\n\n{step{{ current_step }}_paragraph}"
-        step{{ current_step }}_translation: str = await default.agent_tool(
-            system_prompt=step{{ current_step }}_system_prompt,
-            prompt=step{{ current_step }}_prompt,
-            temperature=0.3
-        )
-        return {'status': 'completed', 'result': step{{ current_step }}_translation}
-    else:
-        return {'status': 'inprogress', 'result': '', 'next_step': 'Obtain the paragraph to translate'}
+    if not step{{ current_step }}_paragraph:
+        return {
+            'status': 'inprogress',
+            'result': '',
+            'next_step': 'Provide paragraph text',
+            'current_step': str({{ current_step }})
+        }
+
+    step{{ current_step }}_system_prompt: str = (
+        "You are a translation expert specializing in Spanish. "
+        "Translate the following English paragraph to Spanish, preserving tone and nuance."
+    )
+    step{{ current_step }}_prompt: str = f"""
+Translate the following paragraph to Spanish:
+
+{step{{ current_step }}_paragraph}
+"""
+    step{{ current_step }}_translation: str = await default.agent_tool(
+        system_prompt=step{{ current_step }}_system_prompt,
+        prompt=step{{ current_step }}_prompt,
+        temperature=0.3
+    )
+
+    return {
+        'status': 'completed',
+        'result': step{{ current_step }}_translation
+    }
 </Example>

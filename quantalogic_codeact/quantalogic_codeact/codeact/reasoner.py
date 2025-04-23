@@ -151,7 +151,7 @@ class Reasoner(BaseReasoner):
                     response = await litellm_completion(
                         model=self.model,
                         messages=messages,
-                        max_tokens=self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS),
+                     #   max_tokens=self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS),
                         temperature=self.temperature,
                         stream=streaming,
                         step=step,
