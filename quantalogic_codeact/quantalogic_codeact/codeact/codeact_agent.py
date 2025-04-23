@@ -424,8 +424,8 @@ class CodeActAgent:
             ]
             # Include only string role and content in conversation history
             for hist_msg in self.conversation_history_manager.get_history():
-                role = str(hist_msg.get("role", ""))
-                content = str(hist_msg.get("content", ""))
+                role = str(hist_msg.role)
+                content = str(hist_msg.content)
                 messages.append({"role": role, "content": content})
             messages.append({"role": "user", "content": str(message)})
 
