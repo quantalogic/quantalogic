@@ -16,13 +16,13 @@ from .xml_utils import XMLResultHandler, validate_xml
 class PromptStrategy(ABC):
     """Abstract base class for prompt generation strategies."""
     @abstractmethod
-    async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int, available_vars: List[str]) -> str:
+    async def generate_prompt(self, task: str, step_history_str: str, step: int, max_iterations: int, available_vars: List[str]) -> str:
         pass
 
 
 class DefaultPromptStrategy(PromptStrategy):
     """Default strategy using Jinja2 templates."""
-    async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int, available_vars: List[str]) -> str:
+    async def generate_prompt(self, task: str, step_history_str: str, step: int, max_iterations: int, available_vars: List[str]) -> str:
         tools_by_toolbox = {}
         for tool in self.tools:
             toolbox_name = tool.toolbox_name if tool.toolbox_name else "default"
@@ -36,7 +36,7 @@ class DefaultPromptStrategy(PromptStrategy):
         
         return jinja_env.get_template("action_program.j2").render(
             task_description=task,
-            history_str=history_str,
+            history_str=step_history_str,
             current_step=step,
             max_iterations=max_iterations,
             tools_by_toolbox=tools_by_toolbox,
@@ -50,13 +50,14 @@ class BaseReasoner(ABC):
     async def generate_action(
         self,
         task: str,
-        history_str: str,
+        step_history_str: str,
         step: int,
         max_iterations: int,
         system_prompt: Optional[str],
         notify_event: Callable,
         streaming: bool,
-        available_vars: List[str]
+        available_vars: List[str],
+        conversation_history: List[Dict[str, str]]
     ) -> str:
         pass
 
@@ -74,15 +75,31 @@ class Reasoner(BaseReasoner):
     async def generate_action(
         self,
         task: str,
-        history_str: str,
+        step_history_str: str,
         step: int,
         max_iterations: int,
         system_prompt: Optional[str] = None,
         notify_event: Callable = None,
         streaming: bool = False,
-        available_vars: List[str] = None
+        available_vars: List[str] = None,
+        conversation_history: List[Dict[str, str]] = None
     ) -> str:
         """Generate an action based on task and history with streaming support."""
+        if conversation_history is None:
+            conversation_history = []
+        elif isinstance(conversation_history, dict):
+            conversation_history = [conversation_history]
+        elif not isinstance(conversation_history, list):
+            raise ValueError("conversation_history must be a list of messages")
+
+        # Validate each message dict contains required keys
+        validated_history: List[Dict[str, str]] = []
+        for msg in conversation_history:
+            if not isinstance(msg, dict) or 'role' not in msg or 'content' not in msg:
+                raise ValueError("Each message in conversation_history must be a dict with 'role' and 'content'")
+            validated_history.append({'role': str(msg['role']), 'content': str(msg['content'])})
+        conversation_history = validated_history
+
         try:
             # Ensure available_vars is a list and log its contents
             available_vars = available_vars or []
@@ -101,7 +118,7 @@ class Reasoner(BaseReasoner):
 
             task_prompt = await self.prompt_strategy.generate_prompt(
                 task if not system_prompt else f"{system_prompt}\nTask: {task}",
-                history_str,
+                step_history_str,
                 step,
                 max_iterations,
                 available_vars
@@ -111,14 +128,18 @@ class Reasoner(BaseReasoner):
             ))
             logger.debug(f"Generated prompt for step {step}:\n{task_prompt}")
 
+            # Construct messages with conversation history
+            messages = [
+                {"role": "system", "content": "You are a Python code generator."}
+            ] + conversation_history + [
+                {"role": "user", "content": task_prompt}
+            ]
+
             for attempt in range(3):
                 try:
                     response = await litellm_completion(
                         model=self.model,
-                        messages=[
-                            {"role": "system", "content": "You are a Python code generator."},
-                            {"role": "user", "content": task_prompt}
-                        ],
+                        messages=messages,
                         max_tokens=self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS),
                         temperature=self.temperature,
                         stream=streaming,
@@ -129,7 +150,7 @@ class Reasoner(BaseReasoner):
                     program = self._clean_code(program)
                     response = jinja_env.get_template("response_format.j2").render(
                         task=task,
-                        history_str=history_str,
+                        history_str=step_history_str,
                         program=program,
                         current_step=step,
                         max_iterations=max_iterations

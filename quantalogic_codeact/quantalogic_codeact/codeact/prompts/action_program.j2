@@ -15,7 +15,7 @@ This is step {{ current_step }} of {{ max_iterations }} allowed steps.
 
 ## Previous Steps
 
-Previous steps:
+Previous steps for this task:
 <History>
 {{ history_str }}
 </History>
@@ -75,6 +75,7 @@ Instructions:
     - Always specify a default value to handle cases where the variable might not exist.
     - Check the 'Available Variables' section above for relevant previous results.
     - Use these variables to build on prior work rather than starting from scratch.
+    - Only use variables that are explicitly mentioned in the 'Available Variables' section.
 11. Be careful to avoid programs that cannot terminate.
 12. When defining new variables, prefix them with 'step{{ current_step }}_' (e.g., `step{{ current_step }}_result`) to ensure uniqueness across steps.
 13. Never use dangerous functions like eval, or any other unsafe operations.

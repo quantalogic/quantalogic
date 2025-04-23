@@ -217,14 +217,6 @@ class Agent:
             # Unpack config dicts from ReasonerConfig and ExecutorConfig
             reasoner_config = self.config.reasoner.config
             executor_config = self.config.executor.config
-            # Format history as a string for the system prompt
-            history_str = ""
-            if history:
-                history_str = "\n".join(
-                    f"{msg['role'].capitalize()}: {msg['content']}" 
-                    for msg in history
-                )
-                system_prompt += f"\n\nPrevious conversation:\n{history_str}"
             solve_agent = CodeActAgent(
                 model=self.model,
                 tools=solve_tools,
@@ -249,10 +241,6 @@ class Agent:
                 streaming=streaming
             )
             self.last_solve_context_vars = solve_agent.context_vars.copy()
-            # Update conversation history
-            self.conversation_history_manager.add_message("user", f"Task: {task}")
-            final_answer = history_result[-1].get("result", "")
-            self.conversation_history_manager.add_message("assistant", final_answer)
             return history_result
         except Exception as e:
             logger.error(f"Solve failed: {e}")

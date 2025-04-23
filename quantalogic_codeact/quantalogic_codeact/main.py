@@ -9,8 +9,7 @@ from loguru import logger
 
 # Default logger configuration: only show ERROR and above until overridden by --loglevel
 logger.remove()
-logger.add(sys.stderr, level="ERROR", format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | "
-           "<cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>")
+logger.add(sys.stderr, level="ERROR", format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
 
 import quantalogic_codeact.codeact.cli_commands.config_manager as cm  # noqa: E402
 from quantalogic_codeact.shell.shell import Shell  # noqa: E402
@@ -39,8 +38,7 @@ def configure(
     logger.add(
         sys.stderr,
         level=level,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | "
-               "<cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>"
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
     )
     # Launch interactive shell if no subcommand was provided
     if ctx.invoked_subcommand is None:

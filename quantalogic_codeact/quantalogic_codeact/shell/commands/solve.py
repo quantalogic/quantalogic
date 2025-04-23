@@ -58,18 +58,18 @@ async def solve_command(shell, args: List[str]) -> str:
             shell.current_agent.add_observer(stream_observer, ["StreamToken", "ActionExecuted", "TaskCompleted", "ErrorOccurred"])
             history = await shell.current_agent.solve(
                 task,
-                history=shell.history_manager.get_history(),
+                history=shell.conversation_manager.get_history(),
                 streaming=True
             )
             shell.current_agent._observers = [obs for obs in shell.current_agent._observers if obs[0] != stream_observer]
             # Append to history
-            shell.history_manager.add_message("user", task)
-            shell.history_manager.add_message("assistant", final_answer or "No final answer.")
+            shell.conversation_manager.add_message("user", task)
+            shell.conversation_manager.add_message("assistant", final_answer or "No final answer.")
             return None  # Changed to prevent redundant printing in streaming mode
         else:
             history = await shell.current_agent.solve(
                 task,
-                history=shell.history_manager.get_history(),
+                history=shell.conversation_manager.get_history(),
                 streaming=False
             )
             if history:
@@ -104,8 +104,8 @@ async def solve_command(shell, args: List[str]) -> str:
                     display_response(final_answer, title="Error", border_style="red", is_error=True)
                 else:
                     display_response(final_answer, title="Final Answer", border_style="green")
-                shell.history_manager.add_message("user", task)
-                shell.history_manager.add_message("assistant", final_answer)
+                shell.conversation_manager.add_message("user", task)
+                shell.conversation_manager.add_message("assistant", final_answer)
                 return final_answer
             else:
                 return "No steps were executed."

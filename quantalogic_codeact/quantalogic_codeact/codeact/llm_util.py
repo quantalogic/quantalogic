@@ -72,4 +72,16 @@ async def litellm_completion(
             err_msg = f"❌ Completion failed: {e.__class__.__name__}: {e}"
             raise LLMCompletionError(err_msg)
         except Exception as e:
-            raise LLMCompletionError(f"❌ Completion failed: {e}")
+            # Async non-streaming failed, fallback to sync completion
+            logger.warning(f"Async completion failed for model {model}: {e}. Trying sync completion.")
+            try:
+                sync_resp = litellm.completion(
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    **kwargs
+                )
+                return sync_resp.choices[0].message.content
+            except Exception as sync_e:
+                raise LLMCompletionError(f"❌ Sync completion fallback failed: {sync_e}")

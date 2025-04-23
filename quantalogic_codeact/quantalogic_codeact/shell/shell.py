@@ -22,6 +22,7 @@ from quantalogic_codeact.codeact.commands.toolbox.get_tool_doc import get_tool_d
 from quantalogic_codeact.codeact.commands.toolbox.install_toolbox import install_toolbox
 from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
 from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
+from quantalogic_codeact.codeact.conversation_history_manager import ConversationHistoryManager
 from quantalogic_codeact.version import get_version
 
 from .agent_state import AgentState
@@ -52,7 +53,6 @@ from .commands.solve import solve_command
 from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
 from .commands.version import version_command
-from .history_manager import HistoryManager
 from .shell_state import ShellState
 
 console = Console()
@@ -87,7 +87,7 @@ class Shell:
         )
         
         # Initialize history manager
-        self.history_manager = HistoryManager()
+        self.conversation_manager = ConversationHistoryManager()
         
         # Load or initialize global config
         if not config_manager.GLOBAL_CONFIG_PATH.exists():
@@ -152,7 +152,7 @@ class Shell:
     @property
     def current_message_history(self) -> List[Dict[str, str]]:
         """Get the current agent's message history."""
-        return self.history_manager.get_history()
+        return self.conversation_manager.get_history()
 
     def _register_builtin_commands(self) -> None:
         """Register all built-in commands with their arguments for autocompletion."""

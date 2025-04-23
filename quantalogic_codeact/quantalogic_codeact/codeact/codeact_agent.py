@@ -117,35 +117,10 @@ class CodeActAgent:
         except Exception as e:
             logger.error(f"Error notifying observers: {e}")
 
-    def construct_prompt(self, task: str, task_goal: str = None) -> str:
-        """
-        Construct the prompt with task goal, task history, and conversation summary.
-
-        Args:
-            task (str): The task to address.
-            task_goal (str, optional): The explicit goal for the task.
-
-        Returns:
-            str: The constructed prompt.
-        """
-        try:
-            goal = task_goal or task
-            task_prompt = f"Goal: {goal}\nTask: {task}"
-            task_history = self.working_memory.format_history(self.max_iterations)
-            conv_summary = self.conversation_history_manager.summarize(task)
-            return (
-                f"{task_prompt}\n\n"
-                f"Task Steps Taken:\n{task_history}\n\n"
-                f"Conversation Background:\n{conv_summary}"
-            )
-        except Exception as e:
-            logger.error(f"Error constructing prompt: {e}")
-            return task
-
+  
     async def generate_action(
         self,
         task: str,
-        history: List[Dict],
         step: int,
         max_iterations: int,
         system_prompt: Optional[str] = None,
@@ -156,7 +131,6 @@ class CodeActAgent:
 
         Args:
             task (str): The task to address.
-            history (List[Dict]): Stored step history.
             step (int): Current step number.
             max_iterations (int): Maximum allowed steps.
             system_prompt (Optional[str]): Override system prompt (optional).
@@ -166,18 +140,20 @@ class CodeActAgent:
             str: Generated action in XML format.
         """
         try:
-            history_str: str = self.working_memory.format_history(max_iterations)
+            step_history_str: str = self.working_memory.format_history(max_iterations)
             available_vars: List[str] = list(self.context_vars.keys())
+            conversation_history: List[Dict[str, str]] = self.conversation_history_manager.get_history()
             start: float = time.perf_counter()
             response: str = await self.reasoner.generate_action(
-                task, 
-                history_str, 
-                step, 
-                max_iterations, 
+                task,
+                step_history_str,
+                step,
+                max_iterations,
                 system_prompt or self.working_memory.system_prompt,
-                self._notify_observers, 
-                streaming=streaming, 
-                available_vars=available_vars
+                self._notify_observers,
+                streaming=streaming,
+                available_vars=available_vars,
+                conversation_history=conversation_history
             )
             thought, code = XMLResultHandler.parse_action_response(response)
             gen_time: float = time.perf_counter() - start
@@ -243,7 +219,7 @@ class CodeActAgent:
             ))
             for attempt in range(3):
                 try:
-                    response: str = await self.generate_action(task, self.working_memory.store, step, max_iters, system_prompt, streaming)
+                    response: str = await self.generate_action(task, step, max_iters, system_prompt, streaming)
                     thought, code = XMLResultHandler.parse_action_response(response)
                     result: ExecutionResult = await self.execute_action(code, step)
                     # Update context variables
@@ -336,11 +312,12 @@ class CodeActAgent:
         try:
             max_iters: int = max_iterations if max_iterations is not None else self.max_iterations
             self.working_memory.clear()  # Reset task history for new task
+            self.context_vars.clear() # Clear previous context variables
             if system_prompt is not None:
                 self.working_memory.system_prompt = system_prompt
             self.working_memory.task_description = task
             # Initialize context_vars with conversation history and previous task variables
-            self.context_vars["conversation_history"] = self.conversation_history_manager.get_messages()
+            self.context_vars["conversation_history"] = self.conversation_history_manager.get_history()
             # Retain non-private, non-callable variables from previous tasks
             previous_vars = {k: v for k, v in self.context_vars.items() if not k.startswith("__") and not callable(v)}
             logger.debug(f"Starting task with context_vars: {previous_vars}")
@@ -408,11 +385,12 @@ class CodeActAgent:
                 {"role": "system", "content": self.working_memory.system_prompt or "You are a helpful AI assistant."}
             ]
             # Include only string role and content in conversation history
-            for hist_msg in self.conversation_history_manager.get_messages():
+            for hist_msg in self.conversation_history_manager.get_history():
                 role = str(hist_msg.get("role", ""))
                 content = str(hist_msg.get("content", ""))
                 messages.append({"role": role, "content": content})
             messages.append({"role": "user", "content": str(message)})
+
 
             response: str = await litellm_completion(
                 model=self.reasoner.model,

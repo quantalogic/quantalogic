@@ -33,13 +33,13 @@ async def chat_command(shell, args: List[str]) -> str:
                 shell.current_agent.add_observer(stream_observer, ["StreamToken", "StreamError"])
                 response = await shell.current_agent.chat(
                     message,
-                    history=shell.history_manager.get_history(),
+                    history=shell.conversation_manager.get_history(),
                     streaming=True
                 )
                 shell.current_agent.remove_observer(stream_observer)
-                shell.history_manager.add_message("user", message)
+                shell.conversation_manager.add_message("user", message)
                 if not response.startswith("Error:"):
-                    shell.history_manager.add_message("assistant", response)
+                    shell.conversation_manager.add_message("assistant", response)
             if response.startswith("Error:"):
                 display_response(response, title="Error", border_style="red", is_error=True)
             else:
@@ -48,14 +48,14 @@ async def chat_command(shell, args: List[str]) -> str:
         else:
             response = await shell.current_agent.chat(
                 message,
-                history=shell.history_manager.get_history(),
+                history=shell.conversation_manager.get_history(),
                 streaming=False
             )
-            shell.history_manager.add_message("user", message)
+            shell.conversation_manager.add_message("user", message)
             if response.startswith("Error:"):
                 display_response(response, title="Error", border_style="red", is_error=True)
             else:
-                shell.history_manager.add_message("assistant", response)
+                shell.conversation_manager.add_message("assistant", response)
                 display_response(response, title="Final Answer", border_style="green")
             return None  # Output handled by display_response
     except Exception as e:
