@@ -332,7 +332,7 @@ class CodeActAgent:
         """
         try:
             max_iters: int = max_iterations if max_iterations is not None else self.max_iterations
-            self.working_memory.clear()  # Reset task history for new task
+            self.working_memory.clear()  # Reset working memory for a new task
             self.context_vars.clear()  # Clear previous context variables
             if system_prompt is not None:
                 self.working_memory.system_prompt = system_prompt

@@ -106,7 +106,7 @@ class Reasoner(BaseReasoner):
             logger.debug(f"Step {step}: Generating action with available_vars: {available_vars}")
 
             task_prompt = await self.prompt_strategy.generate_prompt(
-                task if not system_prompt else f"{system_prompt}\nTask: {task}",
+                task if not system_prompt else f"### Personality Prompt: {system_prompt}\n###Task: {task}",
                 step_history_str,
                 step,
                 max_iterations,
