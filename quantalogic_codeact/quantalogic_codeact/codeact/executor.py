@@ -19,6 +19,12 @@ ALLOWED_MODULES = ["asyncio", "math", "random", "time","typing","datetime","data
 class BaseExecutor(ABC):
     """Abstract base class for execution components."""
 
+    @property
+    @abstractmethod
+    def allowed_modules(self) -> List[str]:
+        """Allowed modules for code execution."""
+        pass
+
     @abstractmethod
     async def execute_action(self, code: str, context_vars: Dict, step: int, timeout: int) -> ExecutionResult:
         pass
@@ -40,8 +46,8 @@ class Executor(BaseExecutor):
         self.conversation_manager = conversation_manager
         self.config = config or {}
         self.verbose = verbose
-        self.allowed_modules = allowed_modules  # store allowed modules for execute_action
         self.tool_namespace = self._build_tool_namespace()
+        self._allowed_modules = allowed_modules
 
     def _build_tool_namespace(self) -> Dict:
         """Build the namespace with tools grouped by toolbox using SimpleNamespace."""
@@ -107,6 +113,10 @@ class Executor(BaseExecutor):
             "context_vars": {},
             **toolboxes,
         }
+
+    @property
+    def allowed_modules(self) -> List[str]:
+        return self._allowed_modules
 
     def register_tool(self, tool: Tool) -> None:
         """Register a new tool dynamically at runtime."""
