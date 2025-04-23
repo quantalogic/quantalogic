@@ -1,7 +1,8 @@
 import typer
 from rich.console import Console
-from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox_core import uninstall_toolbox_core
+
 from quantalogic_codeact.codeact.cli_commands.config_manager import load_project_config, save_project_config
+from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox_core import uninstall_toolbox_core
 
 app = typer.Typer()
 console = Console()
