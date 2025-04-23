@@ -1,8 +1,9 @@
 import ast
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from loguru import logger
+from lxml import etree
 
 from quantalogic.tools import Tool
 
@@ -134,8 +135,7 @@ class Reasoner(BaseReasoner):
                         step=step,
                         notify_event=notify_event
                     )
-                    program = response.strip()
-                    program = self._clean_code(program)
+                    program = self._clean_code(response)
                     response = jinja_env.get_template("response_format.j2").render(
                         task=task,
                         history_str=step_history_str,
@@ -143,8 +143,12 @@ class Reasoner(BaseReasoner):
                         current_step=step,
                         max_iterations=max_iterations
                     )
+                    logger.debug(f"Raws Generated response for step {step}:\n{response}")
                     if not validate_xml(response):
                         raise ValueError("Invalid XML generated")
+                    thought, code = self._parse_response(response)
+                    if not code:
+                        raise ValueError("No valid Python code extracted from response")
                     return response
                 except Exception as e:
                     if attempt < 2:
@@ -162,15 +166,15 @@ class Reasoner(BaseReasoner):
         import re
         import textwrap
 
-        # Extract fenced code block (any language) or use raw code
-        match = re.search(r'```(?:[\w+-]*)\n([\s\S]*?)```', code)
+        # Extract code from fenced block if present, otherwise use raw input
+        match = re.search(r'```(?:[\w+-]*)\n([\s\S]*?)```', code, re.DOTALL)
         code_content = match.group(1) if match else code
 
         # Strip extra backticks and whitespace
         code_content = code_content.strip('` \n')
 
-        # Dedent code for consistent formatting
-        final_code = textwrap.dedent(code_content)
+        # Dedent for consistent formatting
+        final_code = textwrap.dedent(code_content).strip()
 
         # Validate syntax; if invalid, warn and return dedented code
         try:
@@ -178,3 +182,25 @@ class Reasoner(BaseReasoner):
         except SyntaxError as e:
             logger.warning(f"Syntax error in cleaned code: {e}, returning dedented code.")
         return final_code
+
+    def _parse_response(self, response: str) -> Tuple[str, str]:
+        """Parse the XML response to extract thought and code reliably."""
+        import re
+
+        # Extract the XML part if surrounded by extra text
+        xml_match = re.search(r'<Action>.*?</Action>', response, re.DOTALL)
+        if not xml_match:
+            logger.error("No <Action> tag found in response")
+            return "", ""
+
+        xml_str = xml_match.group(0)
+        try:
+            parser = etree.XMLParser(recover=True, remove_comments=True, resolve_entities=False)
+            tree = etree.fromstring(xml_str, parser=parser)
+            thought = tree.findtext('Thought', default="")
+            code_element = tree.find('Code')
+            code = code_element.text.strip() if code_element is not None else ""
+            return thought, code
+        except etree.XMLSyntaxError as e:
+            logger.error(f"Failed to parse XML: {e}")
+            return "", ""
