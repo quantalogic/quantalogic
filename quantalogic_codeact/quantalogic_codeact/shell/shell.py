@@ -167,7 +167,7 @@ class Shell:
             {"name": "chat", "func": chat_command, "help": "Chat with the agent: /chat <message>", "args": None},
             {"name": "solve", "func": solve_command, "help": "Solve a task: /solve <task>", "args": None},
             {"name": "compose", "func": compose_command, "help": "Compose input in external editor: /compose", "args": []},
-            {"name": "edit", "func": edit_command, "help": "Edit last user message: /edit", "args": []},
+            {"name": "edit", "func": edit_command, "help": "Edit a previous user message: /edit [INDEX_OR_ID]", "args": []},
             {"name": "exit", "func": exit_command, "help": "Exit the shell: /exit", "args": []},
             {"name": "history", "func": history_command, "help": "Show conversation history: /history [n]", "args": None},
             {"name": "clear", "func": clear_command, "help": "Clear conversation history: /clear", "args": []},
