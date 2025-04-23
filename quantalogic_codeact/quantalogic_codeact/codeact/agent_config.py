@@ -47,6 +47,7 @@ class AgentConfig:
     max_history_tokens: int = MAX_HISTORY_TOKENS
     toolbox_directory: str = "toolboxes"
     enabled_toolboxes: Optional[List[str]] = None
+    installed_toolboxes: Optional[List[Dict[str, Any]]] = None
     reasoner_name: str = "default"
     executor_name: str = "default"
     personality: Optional[str] = None
@@ -70,6 +71,7 @@ class AgentConfig:
         max_history_tokens: int = MAX_HISTORY_TOKENS,
         toolbox_directory: str = "toolboxes",
         enabled_toolboxes: Optional[List[str]] = None,
+        installed_toolboxes: Optional[List[Dict[str, Any]]] = None,
         reasoner_name: str = "default",
         executor_name: str = "default",
         personality: Optional[str] = None,
@@ -96,24 +98,24 @@ class AgentConfig:
                     with open(config_path) as f:
                         config: Dict = yaml.safe_load(f) or {}
                     self._load_from_config(config, model, max_iterations, max_history_tokens, toolbox_directory,
-                                          tools, enabled_toolboxes, reasoner_name, executor_name, personality,
+                                          tools, enabled_toolboxes, installed_toolboxes, reasoner_name, executor_name, personality,
                                           backstory, sop, template, name, tools_config, reasoner, executor,
                                           agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
                 except FileNotFoundError as e:
                     logger.warning(f"Config file {config_path} not found: {e}. No toolboxes will be loaded.")
                     self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                      tools, [], reasoner_name, executor_name, personality,
+                                      tools, enabled_toolboxes, installed_toolboxes, reasoner_name, executor_name, personality,
                                       backstory, sop, template, name, tools_config, reasoner, executor,
                                       agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
                 except yaml.YAMLError as e:
                     logger.error(f"Error parsing YAML config {config_path}: {e}. No toolboxes will be loaded.")
                     self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                      tools, [], reasoner_name, executor_name, personality,
+                                      tools, enabled_toolboxes, installed_toolboxes, reasoner_name, executor_name, personality,
                                       backstory, sop, template, name, tools_config, reasoner, executor,
                                       agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
             else:
                 self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                  tools, enabled_toolboxes, reasoner_name, executor_name, personality,
+                                  tools, enabled_toolboxes, installed_toolboxes, reasoner_name, executor_name, personality,
                                   backstory, sop, template, name, tools_config, reasoner, executor,
                                   agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
         except Exception as e:
@@ -123,7 +125,7 @@ class AgentConfig:
     def _load_from_config(self, config: Dict, *args) -> None:
         """Load configuration from a dictionary, overriding with explicit arguments if provided."""
         try:
-            model, max_iterations, max_history_tokens, toolbox_directory, tools, enabled_toolboxes, \
+            model, max_iterations, max_history_tokens, toolbox_directory, tools, enabled_toolboxes, installed_toolboxes, \
             reasoner_name, executor_name, personality, backstory, sop, template, name, tools_config, \
             reasoner, executor, agent_tool_model, agent_tool_timeout, temperature, system_prompt_template = args
             
@@ -135,6 +137,7 @@ class AgentConfig:
             # Treat empty list as no filter (i.e., include all toolboxes)
             etb = config.get("enabled_toolboxes", enabled_toolboxes)
             self.enabled_toolboxes = etb if etb else None
+            self.installed_toolboxes = config.get("installed_toolboxes", installed_toolboxes)
             rd = config.get("reasoner", {})
             self.reasoner = ReasonerConfig(
                 name=rd.get("name", reasoner_name),
@@ -167,7 +170,7 @@ class AgentConfig:
             raise
 
     def _set_defaults(self, model, max_iterations, max_history_tokens, toolbox_directory,
-                     tools, enabled_toolboxes, reasoner_name, executor_name, personality,
+                     tools, enabled_toolboxes, installed_toolboxes, reasoner_name, executor_name, personality,
                      backstory, sop, template, name, tools_config, reasoner, executor,
                      agent_tool_model, agent_tool_timeout, temperature, system_prompt_template) -> None:
         """Set default values for all configuration fields."""
@@ -178,6 +181,7 @@ class AgentConfig:
             self.toolbox_directory = toolbox_directory
             self.tools = tools
             self.enabled_toolboxes = enabled_toolboxes
+            self.installed_toolboxes = installed_toolboxes
             if isinstance(reasoner, dict):
                 self.reasoner = ReasonerConfig(
                     name=reasoner.get("name", reasoner_name),

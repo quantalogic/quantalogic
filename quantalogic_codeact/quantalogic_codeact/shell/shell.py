@@ -116,7 +116,6 @@ class Shell:
         else:
             config_data = config_manager.load_global_config()
         # Prepare AgentConfig args
-        config_data.pop("installed_toolboxes", None)
         config_data.pop("log_level", None)
         try:
             # Filter out unsupported keys based on AgentConfig schema
