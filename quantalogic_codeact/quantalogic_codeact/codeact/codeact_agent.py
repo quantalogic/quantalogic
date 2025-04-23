@@ -67,8 +67,8 @@ class CodeActAgent:
             reasoner (Optional[BaseReasoner]): Custom reasoner instance.
             executor (Optional[BaseExecutor]): Custom executor instance.
             tool_registry (Optional[ToolRegistry]): Custom tool registry.
-            history_manager (Optional[WorkingMemory]): Custom task history manager.
-            conversation_history_manager (Optional[ConversationHistoryManager]): Custom conversation history manager.
+            working_memory (Optional[WorkingMemory]): Custom working memory manager.
+            conversation_manager (Optional[ConversationManager]): Custom conversation manager.
             error_handler (Optional[Callable[[Exception, int], bool]]): Error handler callback.
             temperature (float): Temperature for language model generation (default: 0.7).
         """
