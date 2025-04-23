@@ -10,7 +10,6 @@ from .loglevel import loglevel_command
 from .mode import mode_command
 from .solve import solve_command
 from .stream import stream_command
-from .debug import debug_command
 from .save import save_command
 from .load import load_command
 from .agent import agent_command
@@ -38,7 +37,6 @@ __all__ = [
     'stream_command',
     'mode_command',
     'loglevel_command',
-    'debug_command',
     'save_command',
     'load_command',
     'agent_command',

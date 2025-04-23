@@ -38,7 +38,6 @@ from .commands.config_load import config_load
 from .commands.config_save import config_save
 from .commands.config_show import config_show
 from .commands.contrast import contrast_command
-from .commands.debug import debug_command
 from .commands.edit import edit_command
 from .commands.exit import exit_command
 from .commands.help import help_command
@@ -174,7 +173,6 @@ class Shell:
             {"name": "stream", "func": stream_command, "help": "Toggle streaming: /stream on|off", "args": ["on", "off"]},
             {"name": "mode", "func": mode_command, "help": "Set or show mode: /mode [chat|codeact]", "args": ["chat", "codeact"]},
             {"name": "loglevel", "func": loglevel_command, "help": "Set log level: /loglevel [DEBUG|INFO|WARNING|ERROR|CRITICAL]", "args": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]},
-            {"name": "debug", "func": debug_command, "help": "Toggle debug mode: /debug on|off", "args": ["on", "off"]},
             {"name": "save", "func": save_command, "help": "Save history: /save <filename>", "args": None},
             {"name": "load", "func": load_command, "help": "Load history: /load <filename>", "args": None},
             {"name": "agent", "func": agent_command, "help": "Switch agent: /agent <name>", "args": list(self.agents.keys())},

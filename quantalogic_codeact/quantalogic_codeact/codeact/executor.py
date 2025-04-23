@@ -14,6 +14,7 @@ from .events import ExecutionResult, ToolExecutionCompletedEvent, ToolExecutionE
 from .tools_manager import ToolRegistry
 from .utils import validate_code
 
+ALLOWED_MODULES = ["asyncio", "math", "random", "time","typing","datetime","dataclasses"]
 
 class BaseExecutor(ABC):
     """Abstract base class for execution components."""
@@ -30,7 +31,7 @@ class BaseExecutor(ABC):
 class Executor(BaseExecutor):
     """Manages action execution and context updates with dynamic tool registration."""
 
-    def __init__(self, tools: List[Tool], notify_event: Callable, conversation_manager: ConversationManager, config: Optional[Dict[str, Any]] = None, verbose: bool = True):
+    def __init__(self, tools: List[Tool], notify_event: Callable, conversation_manager: ConversationManager, config: Optional[Dict[str, Any]] = None, verbose: bool = True, allowed_modules: Optional[List[str]] = ALLOWED_MODULES):
         self.registry = ToolRegistry()
         for tool in tools:
             self.registry.register(tool)
@@ -39,6 +40,7 @@ class Executor(BaseExecutor):
         self.conversation_manager = conversation_manager
         self.config = config or {}
         self.verbose = verbose
+        self.allowed_modules = allowed_modules  # store allowed modules for execute_action
         self.tool_namespace = self._build_tool_namespace()
 
     def _build_tool_namespace(self) -> Dict:
@@ -173,7 +175,7 @@ class Executor(BaseExecutor):
                 code=code,
                 timeout=timeout,
                 entry_point="main",
-                allowed_modules=["asyncio", "math", "random", "time","typing","datetime"],
+                allowed_modules=self.allowed_modules,
                 namespace=self.tool_namespace,
                 ignore_typing=True
             )
