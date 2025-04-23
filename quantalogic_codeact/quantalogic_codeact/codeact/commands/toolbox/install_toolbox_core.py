@@ -1,7 +1,8 @@
 import importlib
 import re
 import subprocess
-from importlib.metadata import entry_points, version as metadata_version
+from importlib.metadata import entry_points
+from importlib.metadata import version as metadata_version
 from pathlib import Path
 
 from quantalogic_codeact.codeact.cli import plugin_manager

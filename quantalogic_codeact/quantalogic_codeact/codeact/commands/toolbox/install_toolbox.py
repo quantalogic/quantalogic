@@ -1,4 +1,5 @@
 import asyncio
+
 from quantalogic_codeact.codeact.cli_commands.config_manager import load_global_config
 from quantalogic_codeact.codeact.commands.toolbox.install_toolbox_core import install_toolbox_core
 
@@ -25,4 +26,6 @@ async def install_toolbox(shell, args: list[str]) -> str:
     cfg.installed_toolboxes = global_cfg.get("installed_toolboxes", [])
     # Reload plugins to register changes
     shell.current_agent.plugin_manager.load_plugins(force=True)
+    # Refresh default_tools to include newly installed plugin tools
+    shell.current_agent.default_tools = shell.current_agent._get_tools()
     return "\n".join(messages)
