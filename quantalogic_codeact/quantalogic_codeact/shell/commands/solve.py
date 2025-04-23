@@ -21,10 +21,16 @@ async def solve_command(shell, args: List[str]) -> str:
         if shell.state.streaming:
             step_buffers = {}
             final_answer = None
+            first_token_received = False
+            status = console.status("Waiting for first token...", spinner="dots")
+            status.start()
             
             def stream_observer(event):
-                nonlocal final_answer
+                nonlocal final_answer, first_token_received
                 if isinstance(event, StreamTokenEvent):
+                    if not first_token_received:
+                        first_token_received = True
+                        status.stop()
                     step = event.step_number or 1
                     if step not in step_buffers:
                         step_buffers[step] = ""
@@ -65,17 +71,21 @@ async def solve_command(shell, args: List[str]) -> str:
                 history=shell.conversation_manager.get_history(),
                 streaming=True
             )
+            status.stop()
             shell.current_agent._observers = [obs for obs in shell.current_agent._observers if obs[0] != stream_observer]
             # Append to history
             shell.conversation_manager.add_message("user", task)
             shell.conversation_manager.add_message("assistant", final_answer or "No final answer.")
             return ""  # Prevent CLI from rendering None panel in streaming mode
         else:
+            status = console.status("Processing...", spinner="dots")
+            status.start()
             history = await shell.current_agent.solve(
                 task,
                 history=shell.conversation_manager.get_history(),
                 streaming=False
             )
+            status.stop()
             if history:
                 for step in history:
                     thought = step.get('thought', '')
