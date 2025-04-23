@@ -10,7 +10,7 @@ console = Console()
 
 async def edit_command(shell, args: List[str]) -> str:
     """Edit the last user message in an external editor: /edit"""
-    history = shell.history_manager.get_history()
+    history = shell.current_message_history
     # Collect all user messages
     user_msgs = [m for m in history if m.get("role") == "user"]
     if not user_msgs:

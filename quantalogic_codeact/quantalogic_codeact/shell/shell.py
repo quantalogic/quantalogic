@@ -18,8 +18,11 @@ from rich.panel import Panel
 
 import quantalogic_codeact.codeact.cli_commands.config_manager as config_manager
 from quantalogic_codeact.codeact.agent import Agent, AgentConfig
+from quantalogic_codeact.codeact.commands.toolbox.disable_toolbox import disable_toolbox
+from quantalogic_codeact.codeact.commands.toolbox.enable_toolbox import enable_toolbox
 from quantalogic_codeact.codeact.commands.toolbox.get_tool_doc import get_tool_doc
 from quantalogic_codeact.codeact.commands.toolbox.install_toolbox import install_toolbox
+from quantalogic_codeact.codeact.commands.toolbox.installed_toolbox import installed_toolbox
 from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
 from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
 from quantalogic_codeact.codeact.conversation_manager import ConversationManager
@@ -186,6 +189,9 @@ class Shell:
             {"name": "config load", "func": config_load, "help": "Load a configuration from a file: /config load <filename>", "args": None},
             {"name": "toolbox install", "func": install_toolbox, "help": "Install a toolbox: /toolbox install <toolbox_name>", "args": None},
             {"name": "toolbox uninstall", "func": uninstall_toolbox, "help": "Uninstall a toolbox: /toolbox uninstall <toolbox_name>", "args": None},
+            {"name": "toolbox installed", "func": installed_toolbox, "help": "Show installed toolboxes: /toolbox installed", "args": None},
+            {"name": "toolbox enable", "func": enable_toolbox, "help": "Enable a toolbox: /toolbox enable <toolbox_name>", "args": None},
+            {"name": "toolbox disable", "func": disable_toolbox, "help": "Disable a toolbox: /toolbox disable <toolbox_name>", "args": None},
             {"name": "toolbox tools", "func": list_toolbox_tools, "help": "List tools in a toolbox: /toolbox tools <toolbox_name>", "args": None},
             {"name": "toolbox doc", "func": get_tool_doc, "help": "Show tool documentation: /toolbox doc <toolbox_name> <tool_name>", "args": None},
             {"name": "listmodels", "func": listmodels_command, "help": "List models using LLM util: /listmodels", "args": []},
