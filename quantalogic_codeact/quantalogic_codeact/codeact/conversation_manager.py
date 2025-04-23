@@ -46,3 +46,10 @@ class ConversationManager:
             logger.error(f"Error getting history: {e}")
             return []
 
+    def clear_history(self) -> None:
+        """Clear the conversation history."""
+        try:
+            self.messages.clear()
+            logger.debug("Cleared conversation history.")
+        except Exception as e:
+            logger.error(f"Failed to clear conversation history: {e}")
