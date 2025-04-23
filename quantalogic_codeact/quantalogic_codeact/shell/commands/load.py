@@ -12,7 +12,8 @@ async def load_command(shell, args: List[str]) -> str:
     try:
         with open(filename) as f:
             history = json.load(f)
-        shell.history_manager._history = history
+        shell.conversation_manager.messages = history
+        shell.conversation_manager.message_dict = {m['nanoid']: m for m in history}
         return f"History loaded from {filename}"
     except Exception as e:
         if shell.debug:

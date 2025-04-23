@@ -1,6 +1,7 @@
 import asyncio
-import subprocess
-from importlib.metadata import entry_points
+
+from quantalogic_codeact.codeact.cli_commands.config_manager import load_global_config
+from quantalogic_codeact.codeact.commands.toolbox.install_toolbox_core import install_toolbox_core
 
 
 async def install_toolbox(shell, args: list[str]) -> str:
@@ -16,23 +17,15 @@ async def install_toolbox(shell, args: list[str]) -> str:
     if not args:
         return "Usage: /toolbox install <toolbox_name>"
     toolbox_name = args[0]
-    try:
-        await asyncio.to_thread(subprocess.run, ["uv", "pip", "install", toolbox_name], check=True)
-        # Immediately detect and enable new toolboxes from entry points
-        eps = entry_points(group="quantalogic.tools")
-        to_enable = [ep.name for ep in eps]
-        if not to_enable:
-            to_enable = [toolbox_name]
-        cfg = shell.current_agent.config
-        if cfg.enabled_toolboxes is None:
-            cfg.enabled_toolboxes = []
-        for name in to_enable:
-            if name not in cfg.enabled_toolboxes:
-                cfg.enabled_toolboxes.append(name)
-        # Reload plugins to register new toolbox immediately
-        shell.current_agent.plugin_manager.load_plugins(force=True)
-        return f"Toolbox '{', '.join(to_enable)}' installed and activated."
-    except subprocess.CalledProcessError as e:
-        if shell.debug:
-            shell.logger.exception("Install toolbox error")
-        return f"Failed to install toolbox: {e}"
+    # Delegate to core installer for shared logic
+    messages = await asyncio.to_thread(install_toolbox_core, toolbox_name)
+    # Sync in-memory AgentConfig with global state
+    cfg = shell.current_agent.config
+    global_cfg = load_global_config()
+    cfg.enabled_toolboxes = global_cfg.get("enabled_toolboxes", [])
+    cfg.installed_toolboxes = global_cfg.get("installed_toolboxes", [])
+    # Reload plugins to register changes
+    shell.current_agent.plugin_manager.load_plugins(force=True)
+    # Refresh default_tools to include newly installed plugin tools
+    shell.current_agent.default_tools = shell.current_agent._get_tools()
+    return "\n".join(messages)

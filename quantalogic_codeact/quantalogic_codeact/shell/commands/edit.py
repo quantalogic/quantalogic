@@ -9,21 +9,39 @@ from rich.console import Console
 console = Console()
 
 async def edit_command(shell, args: List[str]) -> str:
-    """Edit the last user message in an external editor: /edit"""
-    history = shell.history_manager.get_history()
+    """Edit a previous user message in an external editor.
+
+    Usage:
+      /edit [INDEX_OR_ID]
+
+    Examples:
+      /edit        # edit last message
+      /edit 3      # edit 3rd user message
+      /edit -1     # edit last message
+      /edit <id>   # edit by message ID
+    """
+    history = shell.current_message_history
     # Collect all user messages
     user_msgs = [m for m in history if m.get("role") == "user"]
     if not user_msgs:
         return "No user message found to edit."
-    # Determine target index (1-based), default to last
-    if args and args[0].isdigit():
-        idx = int(args[0]) - 1
-        if idx < 0 or idx >= len(user_msgs):
-            return f"Invalid message index {args[0]}; there are {len(user_msgs)} user messages."
+    # Select message by index or ID
+    if args:
+        key = args[0]
+        try:
+            n = int(key)
+            idx = n - 1 if n > 0 else len(user_msgs) + n
+            if idx < 0 or idx >= len(user_msgs):
+                return f"Invalid message index {key}; there are {len(user_msgs)} user messages."
+            selected = user_msgs[idx]
+        except ValueError:
+            selected = next((m for m in user_msgs if m.get("nanoid") == key), None)
+            if not selected:
+                return f"No user message found with ID {key}."
     else:
-        idx = len(user_msgs) - 1
-    last_msg = user_msgs[idx]
-    old_content = last_msg.get("content", "")
+        selected = user_msgs[-1]
+    nanoid = selected.get("nanoid")
+    old_content = selected.get("content", "")
 
     editor = os.getenv("EDITOR", "vim")
     console.print("[bold blue]Opening external editor for last message...[/bold blue]")
@@ -36,10 +54,16 @@ async def edit_command(shell, args: List[str]) -> str:
             new_content = f.read().strip()
         if not new_content:
             return "Edited content is empty. Aborting edit."
-        # Update history and queue next input
-        last_msg["content"] = new_content
+        # Update conversation manager message object
+        msg_obj = shell.conversation_manager.message_dict.get(nanoid)
+        if msg_obj:
+            msg_obj.content = new_content
+        else:
+            for m in shell.conversation_manager.messages:
+                if m.nanoid == nanoid:
+                    m.content = new_content
+                    break
         console.print("[bold green]Edited content updated (not resubmitted).[/bold green]")
-        # Prefill next prompt with edited content (manual submit)
         shell.next_input_text = new_content
         return ""
     except subprocess.CalledProcessError as e:

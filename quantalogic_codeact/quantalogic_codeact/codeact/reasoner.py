@@ -1,65 +1,87 @@
 import ast
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from loguru import logger
+from lxml import etree
 
 from quantalogic.tools import Tool
 
 from .constants import MAX_GENERATE_PROGRAM_TOKENS
 from .events import PromptGeneratedEvent
 from .llm_util import LLMCompletionError, litellm_completion
+from .message import Message
 from .templates import jinja_env
 from .xml_utils import XMLResultHandler, validate_xml
 
 
 class PromptStrategy(ABC):
     """Abstract base class for prompt generation strategies."""
+
     @abstractmethod
-    async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int, available_vars: List[str]) -> str:
+    async def generate_prompt(
+        self, task: str, step_history_str: str, step: int, max_iterations: int, available_vars: List[str]
+    ) -> str:
         pass
 
 
 class DefaultPromptStrategy(PromptStrategy):
     """Default strategy using Jinja2 templates."""
-    async def generate_prompt(self, task: str, history_str: str, step: int, max_iterations: int, available_vars: List[str]) -> str:
+
+    async def generate_prompt(
+        self, task: str, step_history_str: str, step: int, max_iterations: int, available_vars: List[str]
+    ) -> str:
         tools_by_toolbox = {}
         for tool in self.tools:
             toolbox_name = tool.toolbox_name if tool.toolbox_name else "default"
             if toolbox_name not in tools_by_toolbox:
                 tools_by_toolbox[toolbox_name] = []
             tools_by_toolbox[toolbox_name].append(tool.to_docstring())
-        
+
+        # Ensure available_vars is a list and log its contents
+        available_vars = available_vars or []
+        logger.debug(f"Rendering prompt with available_vars: {available_vars}")
+
         return jinja_env.get_template("action_program.j2").render(
             task_description=task,
-            history_str=history_str,
+            history_str=step_history_str,
             current_step=step,
             max_iterations=max_iterations,
             tools_by_toolbox=tools_by_toolbox,
-            available_vars=available_vars
+            available_vars=available_vars,
         )
 
 
 class BaseReasoner(ABC):
     """Abstract base class for reasoning components."""
+
     @abstractmethod
     async def generate_action(
         self,
         task: str,
-        history_str: str,
+        step_history_str: str,
         step: int,
         max_iterations: int,
         system_prompt: Optional[str],
         notify_event: Callable,
         streaming: bool,
-        available_vars: List[str]
+        available_vars: List[str],
+        conversation_history: List[Message],
     ) -> str:
         pass
 
 
 class Reasoner(BaseReasoner):
     """Handles action generation using the language model."""
-    def __init__(self, model: str, tools: List[Tool], temperature: float = 0.3, config: Optional[Dict[str, Any]] = None, prompt_strategy: Optional[PromptStrategy] = None):
+
+    def __init__(
+        self,
+        model: str,
+        tools: List[Tool],
+        temperature: float = 0.3,
+        config: Optional[Dict[str, Any]] = None,
+        prompt_strategy: Optional[PromptStrategy] = None,
+    ):
         self.model = model
         self.tools = tools
         self.temperature = temperature  # Store temperature
@@ -70,62 +92,85 @@ class Reasoner(BaseReasoner):
     async def generate_action(
         self,
         task: str,
-        history_str: str,
+        step_history_str: str,
         step: int,
         max_iterations: int,
         system_prompt: Optional[str] = None,
         notify_event: Callable = None,
         streaming: bool = False,
-        available_vars: List[str] = None
+        available_vars: List[str] = None,
+        conversation_history: List[Message] = None,
     ) -> str:
         """Generate an action based on task and history with streaming support."""
+        # Normalize and convert history items to dicts
+        conv_items = conversation_history or []
+        if not isinstance(conv_items, list):
+            raise ValueError("conversation_history must be a list of Message or dict")
+        conversation_history = []
+        for msg in conv_items:
+            if isinstance(msg, Message):
+                conversation_history.append(
+                    {"role": msg.role, "content": f"nanoid:{msg.nanoid}\n{msg.content}"}
+                )
+            elif isinstance(msg, dict):
+                # Add nanoid if available
+                content = msg.get("content")
+                if "nanoid" in msg:
+                    content = f"nanoid:{msg["nanoid"]}\n{msg["content"]}"
+                conversation_history.append({"role": msg.get("role"), "content": content})
+            else:
+                raise ValueError(f"Invalid message type {type(msg)} in conversation_history")
+
         try:
-            # Prepare type hints for available variables based on tool return types
-            available_var_types = {}
-            for var_name in available_vars or []:
-                # Infer type from tool documentation if possible (simplified heuristic)
-                if "plan" in var_name.lower():
-                    available_var_types[var_name] = "PlanResult (has attributes: task_id, task_description, subtasks)"
-                else:
-                    available_var_types[var_name] = "Unknown (check history or assume str)"
+            # Ensure available_vars is a list and log its contents
+            available_vars = available_vars or []
+            logger.debug(f"Step {step}: Generating action with available_vars: {available_vars}")
 
             task_prompt = await self.prompt_strategy.generate_prompt(
-                task if not system_prompt else f"{system_prompt}\nTask: {task}",
-                history_str,
+                task if not system_prompt else f"### Personality Prompt: {system_prompt}\n###Task: {task}",
+                step_history_str,
                 step,
                 max_iterations,
-                available_vars or []  # Default to empty list if None
+                available_vars,
             )
-            await notify_event(PromptGeneratedEvent(
-                event_type="PromptGenerated", step_number=step, prompt=task_prompt
-            ))
+            await notify_event(PromptGeneratedEvent(event_type="PromptGenerated", step_number=step, prompt=task_prompt))
             logger.debug(f"Generated prompt for step {step}:\n{task_prompt}")
+
+            # Construct messages with conversation history
+            messages = (
+                [{"role": "system", "content": "You are a Python code generator."}]
+                + conversation_history
+                + [{"role": "user", "content": task_prompt}]
+            )
+
+            # display conversation history
+            logger.debug(f"👨‍🍳 Conversation history for step {step}:\n{conversation_history}")
 
             for attempt in range(3):
                 try:
                     response = await litellm_completion(
                         model=self.model,
-                        messages=[
-                            {"role": "system", "content": "You are a Python code generator."},
-                            {"role": "user", "content": task_prompt}
-                        ],
-                        max_tokens=self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS),
-                        temperature=self.temperature,  # Use stored temperature
+                        messages=messages,
+                     #   max_tokens=self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS),
+                        temperature=self.temperature,
                         stream=streaming,
                         step=step,
-                        notify_event=notify_event
+                        notify_event=notify_event,
                     )
-                    program = response.strip()
-                    program = self._clean_code(program)
+                    program = self._clean_code(response)
                     response = jinja_env.get_template("response_format.j2").render(
                         task=task,
-                        history_str=history_str,
+                        history_str=step_history_str,
                         program=program,
                         current_step=step,
-                        max_iterations=max_iterations
+                        max_iterations=max_iterations,
                     )
+                    logger.debug(f"Raws Generated response for step {step}:\n{response}")
                     if not validate_xml(response):
                         raise ValueError("Invalid XML generated")
+                    thought, code = self._parse_response(response)
+                    if not code:
+                        raise ValueError("No valid Python code extracted from response")
                     return response
                 except Exception as e:
                     if attempt < 2:
@@ -143,15 +188,15 @@ class Reasoner(BaseReasoner):
         import re
         import textwrap
 
-        # Extract fenced code block (any language) or use raw code
-        match = re.search(r'```(?:[\w+-]*)\n([\s\S]*?)```', code)
+        # Extract code from fenced block if present, otherwise use raw input
+        match = re.search(r"```(?:[\w+-]*)\n([\s\S]*?)```", code, re.DOTALL)
         code_content = match.group(1) if match else code
 
         # Strip extra backticks and whitespace
-        code_content = code_content.strip('` \n')
+        code_content = code_content.strip("` \n")
 
-        # Dedent code for consistent formatting
-        final_code = textwrap.dedent(code_content)
+        # Dedent for consistent formatting
+        final_code = textwrap.dedent(code_content).strip()
 
         # Validate syntax; if invalid, warn and return dedented code
         try:
@@ -159,3 +204,25 @@ class Reasoner(BaseReasoner):
         except SyntaxError as e:
             logger.warning(f"Syntax error in cleaned code: {e}, returning dedented code.")
         return final_code
+
+    def _parse_response(self, response: str) -> Tuple[str, str]:
+        """Parse the XML response to extract thought and code reliably."""
+        import re
+
+        # Extract the XML part if surrounded by extra text
+        xml_match = re.search(r"<Action>.*?</Action>", response, re.DOTALL)
+        if not xml_match:
+            logger.error("No <Action> tag found in response")
+            return "", ""
+
+        xml_str = xml_match.group(0)
+        try:
+            parser = etree.XMLParser(recover=True, remove_comments=True, resolve_entities=False)
+            tree = etree.fromstring(xml_str, parser=parser)
+            thought = tree.findtext("Thought", default="")
+            code_element = tree.find("Code")
+            code = code_element.text.strip() if code_element is not None else ""
+            return thought, code
+        except etree.XMLSyntaxError as e:
+            logger.error(f"Failed to parse XML: {e}")
+            return "", ""

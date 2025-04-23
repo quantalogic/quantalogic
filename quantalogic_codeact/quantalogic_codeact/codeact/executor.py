@@ -9,6 +9,7 @@ from quantalogic_pythonbox import execute_async
 
 from quantalogic.tools import Tool
 
+from .conversation_manager import ConversationManager
 from .events import ExecutionResult, ToolExecutionCompletedEvent, ToolExecutionErrorEvent, ToolExecutionStartedEvent
 from .tools_manager import ToolRegistry
 from .utils import validate_code
@@ -29,12 +30,13 @@ class BaseExecutor(ABC):
 class Executor(BaseExecutor):
     """Manages action execution and context updates with dynamic tool registration."""
 
-    def __init__(self, tools: List[Tool], notify_event: Callable, config: Optional[Dict[str, Any]] = None, verbose: bool = True):
+    def __init__(self, tools: List[Tool], notify_event: Callable, conversation_manager: ConversationManager, config: Optional[Dict[str, Any]] = None, verbose: bool = True):
         self.registry = ToolRegistry()
         for tool in tools:
             self.registry.register(tool)
         self.tools: Dict[tuple[str, str], Tool] = self.registry.tools
         self.notify_event = notify_event
+        self.conversation_manager = conversation_manager
         self.config = config or {}
         self.verbose = verbose
         self.tool_namespace = self._build_tool_namespace()
@@ -171,7 +173,7 @@ class Executor(BaseExecutor):
                 code=code,
                 timeout=timeout,
                 entry_point="main",
-                allowed_modules=["asyncio", "math", "random", "time"],
+                allowed_modules=["asyncio", "math", "random", "time","typing","datetime"],
                 namespace=self.tool_namespace,
                 ignore_typing=True
             )

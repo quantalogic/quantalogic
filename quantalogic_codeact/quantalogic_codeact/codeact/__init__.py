@@ -12,7 +12,7 @@ from .constants import (
     MAX_TOKENS,
     TEMPLATE_DIR,
 )
-from .conversation_history_manager import ConversationHistoryManager
+from .conversation_manager import ConversationManager
 from .events import (
     ActionExecutedEvent,
     ActionGeneratedEvent,
@@ -30,7 +30,6 @@ from .events import (
     ToolExecutionStartedEvent,
 )
 from .executor import BaseExecutor, Executor
-from .history_manager import HistoryManager
 from .llm_util import LLMCompletionError, litellm_completion
 from .plugin_manager import PluginManager
 from .reasoner import BaseReasoner, DefaultPromptStrategy, PromptStrategy, Reasoner
@@ -38,6 +37,7 @@ from .templates import jinja_env
 from .tools import AgentTool, RetrieveStepTool
 from .tools_manager import ToolRegistry, get_default_tools
 from .utils import log_async_tool, log_tool_method, process_tools, validate_code
+from .working_memory import WorkingMemory
 from .xml_utils import XMLResultHandler, format_xml_element, validate_xml
 
 __all__ = [
@@ -54,7 +54,7 @@ __all__ = [
     "MAX_HISTORY_TOKENS",
     "MAX_TOKENS",
     "TEMPLATE_DIR",
-    "ConversationHistoryManager",
+    "ConversationManager",
     "ActionExecutedEvent",
     "ActionGeneratedEvent",
     "ErrorOccurredEvent",
@@ -71,7 +71,6 @@ __all__ = [
     "StreamTokenEvent",
     "BaseExecutor",
     "Executor",
-    "HistoryManager",
     "LLMCompletionError",
     "litellm_completion",
     "PluginManager",
@@ -91,4 +90,5 @@ __all__ = [
     "XMLResultHandler",
     "format_xml_element",
     "validate_xml",
+    "WorkingMemory",
 ]

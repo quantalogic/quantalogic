@@ -1,4 +1,5 @@
 import sys
+from dataclasses import fields  # for filtering config keys
 from difflib import get_close_matches  # Added for command suggestions
 from importlib.metadata import entry_points
 from pathlib import Path
@@ -17,10 +18,14 @@ from rich.panel import Panel
 
 import quantalogic_codeact.codeact.cli_commands.config_manager as config_manager
 from quantalogic_codeact.codeact.agent import Agent, AgentConfig
+from quantalogic_codeact.codeact.commands.toolbox.disable_toolbox import disable_toolbox
+from quantalogic_codeact.codeact.commands.toolbox.enable_toolbox import enable_toolbox
 from quantalogic_codeact.codeact.commands.toolbox.get_tool_doc import get_tool_doc
 from quantalogic_codeact.codeact.commands.toolbox.install_toolbox import install_toolbox
+from quantalogic_codeact.codeact.commands.toolbox.installed_toolbox import installed_toolbox
 from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
 from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
+from quantalogic_codeact.codeact.conversation_manager import ConversationManager
 from quantalogic_codeact.version import get_version
 
 from .agent_state import AgentState
@@ -51,7 +56,6 @@ from .commands.solve import solve_command
 from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
 from .commands.version import version_command
-from .history_manager import HistoryManager
 from .shell_state import ShellState
 
 console = Console()
@@ -85,8 +89,8 @@ class Shell:
             mode="codeact"
         )
         
-        # Initialize history manager
-        self.history_manager = HistoryManager()
+        # Initialize conversation manager
+        self.conversation_manager = ConversationManager()
         
         # Load or initialize global config
         if not config_manager.GLOBAL_CONFIG_PATH.exists():
@@ -115,9 +119,14 @@ class Shell:
         else:
             config_data = config_manager.load_global_config()
         # Prepare AgentConfig args
-        config_data.pop("installed_toolboxes", None)
         config_data.pop("log_level", None)
         try:
+            # Filter out unsupported keys based on AgentConfig schema
+            valid_keys = {f.name for f in fields(AgentConfig)}
+            for key in list(config_data):
+                if key not in valid_keys:
+                    logger.warning(f"Unknown config key '{key}' ignored.")
+                    config_data.pop(key)
             default_config = AgentConfig(**config_data)
             logger.info(f"Loaded configuration from {config_manager.GLOBAL_CONFIG_PATH}")
         except Exception as e:
@@ -145,7 +154,11 @@ class Shell:
     @property
     def current_message_history(self) -> List[Dict[str, str]]:
         """Get the current agent's message history."""
-        return self.history_manager.get_history()
+        # Convert Message objects to dicts for compatibility with history_command
+        return [
+            {"role": msg.role, "content": msg.content, "nanoid": msg.nanoid}
+            for msg in self.conversation_manager.get_history()
+        ]
 
     def _register_builtin_commands(self) -> None:
         """Register all built-in commands with their arguments for autocompletion."""
@@ -154,7 +167,7 @@ class Shell:
             {"name": "chat", "func": chat_command, "help": "Chat with the agent: /chat <message>", "args": None},
             {"name": "solve", "func": solve_command, "help": "Solve a task: /solve <task>", "args": None},
             {"name": "compose", "func": compose_command, "help": "Compose input in external editor: /compose", "args": []},
-            {"name": "edit", "func": edit_command, "help": "Edit last user message: /edit", "args": []},
+            {"name": "edit", "func": edit_command, "help": "Edit a previous user message: /edit [INDEX_OR_ID]", "args": []},
             {"name": "exit", "func": exit_command, "help": "Exit the shell: /exit", "args": []},
             {"name": "history", "func": history_command, "help": "Show conversation history: /history [n]", "args": None},
             {"name": "clear", "func": clear_command, "help": "Clear conversation history: /clear", "args": []},
@@ -176,6 +189,9 @@ class Shell:
             {"name": "config load", "func": config_load, "help": "Load a configuration from a file: /config load <filename>", "args": None},
             {"name": "toolbox install", "func": install_toolbox, "help": "Install a toolbox: /toolbox install <toolbox_name>", "args": None},
             {"name": "toolbox uninstall", "func": uninstall_toolbox, "help": "Uninstall a toolbox: /toolbox uninstall <toolbox_name>", "args": None},
+            {"name": "toolbox installed", "func": installed_toolbox, "help": "Show installed toolboxes: /toolbox installed", "args": None},
+            {"name": "toolbox enable", "func": enable_toolbox, "help": "Enable a toolbox: /toolbox enable <toolbox_name>", "args": None},
+            {"name": "toolbox disable", "func": disable_toolbox, "help": "Disable a toolbox: /toolbox disable <toolbox_name>", "args": None},
             {"name": "toolbox tools", "func": list_toolbox_tools, "help": "List tools in a toolbox: /toolbox tools <toolbox_name>", "args": None},
             {"name": "toolbox doc", "func": get_tool_doc, "help": "Show tool documentation: /toolbox doc <toolbox_name> <tool_name>", "args": None},
             {"name": "listmodels", "func": listmodels_command, "help": "List models using LLM util: /listmodels", "args": []},

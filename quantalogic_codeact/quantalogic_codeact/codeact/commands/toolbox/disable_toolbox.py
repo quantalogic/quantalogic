@@ -1,17 +1,17 @@
 import asyncio
 
 from quantalogic_codeact.codeact.cli_commands.config_manager import load_global_config
-from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox_core import uninstall_toolbox_core
+from quantalogic_codeact.codeact.commands.toolbox.disable_toolbox_core import disable_toolbox_core
 
 
-async def uninstall_toolbox(shell, args: list[str]) -> str:
-    """Uninstall a toolbox and sync AgentConfig."""
+async def disable_toolbox(shell, args: list[str]) -> str:
+    """Disable a toolbox and sync AgentConfig."""
     if not args:
-        return "Usage: /toolbox uninstall <toolbox_name>"
+        return "Usage: /toolbox disable <toolbox_name>"
     name = args[0]
-    # Delegate core uninstall logic
-    messages = await asyncio.to_thread(uninstall_toolbox_core, name)
-    # Sync AgentConfig with global state
+    # Delegate to core logic
+    messages = await asyncio.to_thread(disable_toolbox_core, name)
+    # Sync in-memory AgentConfig with global state
     cfg = shell.current_agent.config
     global_cfg = load_global_config()
     cfg.enabled_toolboxes = global_cfg.get("enabled_toolboxes", [])

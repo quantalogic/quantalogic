@@ -4,7 +4,7 @@ import asyncio
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from jinja2 import Environment
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from loguru import logger
 
 from quantalogic.tools import Tool
@@ -12,11 +12,14 @@ from quantalogic.tools import Tool
 from .agent_config import AgentConfig
 from .codeact_agent import CodeActAgent
 from .constants import MAX_TOKENS
-from .conversation_history_manager import ConversationHistoryManager
+from .conversation_manager import ConversationManager
 from .executor import BaseExecutor, Executor
+from .message import Message
 from .plugin_manager import PluginManager
 from .reasoner import BaseReasoner, Reasoner
+from .templates import jinja_env as default_jinja_env
 from .tools import RetrieveStepTool
+from .tools.retrieve_message_tool import RetrieveMessageTool
 from .tools_manager import get_default_tools
 from .utils import process_tools
 
@@ -58,12 +61,23 @@ class Agent:
         self.sop: Optional[str] = config.sop
         self.name: Optional[str] = config.name
         self.max_history_tokens: int = config.max_history_tokens
-        self.jinja_env: Environment = config.jinja_env
+        # Configure Jinja environment: support TemplateConfig or raw dict
+        tpl = config.template
+        td = None
+        if isinstance(tpl, dict):
+            td = tpl.get("template_dir")
+        elif hasattr(tpl, "template_dir"):
+            td = tpl.template_dir
+        if td:
+            self.jinja_env = Environment(loader=FileSystemLoader(str(td)))
+        else:
+            self.jinja_env = default_jinja_env
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.last_solve_context_vars: Dict = {}
-        self.default_reasoner_name: str = config.reasoner.get("name", config.reasoner_name)
-        self.default_executor_name: str = config.executor.get("name", config.executor_name)
-        self.conversation_history_manager = ConversationHistoryManager(max_tokens=self.max_history_tokens)
+        self.default_reasoner_name: str = config.reasoner.name
+        self.default_executor_name: str = config.executor.name
+        self.conversation_manager = ConversationManager(max_tokens=self.max_history_tokens)
+        self.system_prompt_template: Optional[str] = config.system_prompt_template
         self.react_agent = CodeActAgent(
             model=self.model,
             tools=self.default_tools,
@@ -71,8 +85,8 @@ class Agent:
             max_history_tokens=self.max_history_tokens,
             system_prompt=self._build_system_prompt(),
             reasoner=Reasoner(self.model, self.default_tools, temperature=self.temperature),
-            executor=Executor(self.default_tools, self._notify_observers),
-            conversation_history_manager=self.conversation_history_manager,
+            executor=Executor(self.default_tools, self._notify_observers, self.conversation_manager),
+            conversation_manager=self.conversation_manager,
             temperature=self.temperature  # Pass temperature
         )
 
@@ -123,46 +137,28 @@ class Agent:
             logger.error(f"Error resolving secrets in tools_config: {e}")
 
     def _build_system_prompt(self) -> str:
-        """Build a system prompt based on name, personality, backstory, and SOP."""
+        """Render system prompt via Jinja2 template only."""
+        template_name = self.system_prompt_template or "system_prompt.j2"
         try:
-            prompt = f"I am {self.name}, an AI assistant." if self.name else "You are an AI assistant."
-            if self.personality:
-                if isinstance(self.personality, str):
-                    prompt += f" I have a {self.personality} personality."
-                elif isinstance(self.personality, dict):
-                    traits = self.personality.get("traits", [])
-                    if traits:
-                        prompt += f" I have the following personality traits: {', '.join(traits)}."
-                    tone = self.personality.get("tone")
-                    if tone:
-                        prompt += f" My tone is {tone}."
-                    humor = self.personality.get("humor_level")
-                    if humor:
-                        prompt += f" My humor level is {humor}."
-            if self.backstory:
-                if isinstance(self.backstory, str):
-                    prompt += f" My backstory is: {self.backstory}"
-                elif isinstance(self.backstory, dict):
-                    origin = self.backstory.get("origin")
-                    if origin:
-                        prompt += f" I was created by {origin}."
-                    purpose = self.backstory.get("purpose")
-                    if purpose:
-                        prompt += f" My purpose is {purpose}."
-                    experience = self.backstory.get("experience")
-                    if experience:
-                        prompt += f" My experience includes: {experience}"
-            if self.sop:
-                prompt += f" Follow this standard operating procedure: {self.sop}"
-            return prompt
+            tpl = self.jinja_env.get_template(template_name)
+            context = {
+                'name': self.name,
+                'personality': self.personality,
+                'backstory': self.backstory,
+                'sop': self.sop
+            }
+            return tpl.render(**context)
+        except TemplateNotFound:
+            logger.error(f"System prompt template '{template_name}' not found.")
+            return ""
         except Exception as e:
-            logger.error(f"Error building system prompt: {e}. Using default.")
-            return "You are an AI assistant."
+            logger.error(f"Error rendering system prompt: {e}")
+            return ""
 
     async def chat(
         self,
         message: str,
-        history: Optional[List[Dict[str, str]]] = None,
+        history: Optional[List[Message]] = None,
         use_tools: bool = False,
         timeout: int = 30,
         max_tokens: int = MAX_TOKENS,
@@ -175,6 +171,9 @@ class Agent:
         try:
             logger.debug(f"Agent.chat called with message={message!r}, use_tools={use_tools}, timeout={timeout}, max_tokens={max_tokens}, temperature={temperature}, streaming={streaming}, reasoner_name={reasoner_name}, executor_name={executor_name}")
             logger.info(f"Invoking react_agent.chat for simple chat with message={message!r}, streaming={streaming}")
+            # Override conversation history if provided
+            if history is not None:
+                self.conversation_manager.messages = history.copy()
             response: str = await self.react_agent.chat(
                 message,
                 max_tokens=max_tokens,
@@ -183,8 +182,8 @@ class Agent:
             )
             logger.info(f"Chat response (no tools): {response}")
             # Update conversation history
-            self.conversation_history_manager.add_message("user", message)
-            self.conversation_history_manager.add_message("assistant", response)
+            self.conversation_manager.add_message("user", message)
+            self.conversation_manager.add_message("assistant", response)
             return response
         except Exception as e:
             logger.exception("Exception in Agent.chat")
@@ -202,7 +201,7 @@ class Agent:
     async def solve(
         self,
         task: str,
-        history: Optional[List[Dict[str, str]]] = None,
+        history: Optional[List[Message]] = None,
         success_criteria: Optional[str] = None,
         task_goal: Optional[str] = None,
         max_iterations: Optional[int] = None,
@@ -220,16 +219,9 @@ class Agent:
             executor_name = executor_name or self.default_executor_name
             reasoner_cls = self.plugin_manager.reasoners.get(reasoner_name, Reasoner)
             executor_cls = self.plugin_manager.executors.get(executor_name, Executor)
-            reasoner_config = self.config.reasoner.get("config", {})
-            executor_config = self.config.executor.get("config", {})
-            # Format history as a string for the system prompt
-            history_str = ""
-            if history:
-                history_str = "\n".join(
-                    f"{msg['role'].capitalize()}: {msg['content']}" 
-                    for msg in history
-                )
-                system_prompt += f"\n\nPrevious conversation:\n{history_str}"
+            # Unpack config dicts from ReasonerConfig and ExecutorConfig
+            reasoner_config = self.config.reasoner.config
+            executor_config = self.config.executor.config
             solve_agent = CodeActAgent(
                 model=self.model,
                 tools=solve_tools,
@@ -237,14 +229,18 @@ class Agent:
                 max_history_tokens=self.max_history_tokens,
                 system_prompt=system_prompt,
                 reasoner=reasoner_cls(self.model, solve_tools, temperature=self.temperature, **reasoner_config),
-                executor=executor_cls(solve_tools, self._notify_observers, **executor_config),
-                conversation_history_manager=self.conversation_history_manager,
+                executor=executor_cls(solve_tools, self._notify_observers, self.conversation_manager, **executor_config),
+                conversation_manager=self.conversation_manager,
                 temperature=self.temperature
             )
-            solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.history_manager.store))
+            solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.working_memory.store))
+            solve_agent.executor.register_tool(RetrieveMessageTool(conversation_manager=self.conversation_manager))
             for observer, event_types in self._observers:
                 solve_agent.add_observer(observer, event_types)
             
+            # Override conversation history if provided
+            if history is not None:
+                self.conversation_manager.messages = history.copy()
             history_result: List[Dict] = await solve_agent.solve(
                 task,
                 success_criteria,
@@ -254,10 +250,6 @@ class Agent:
                 streaming=streaming
             )
             self.last_solve_context_vars = solve_agent.context_vars.copy()
-            # Update conversation history
-            self.conversation_history_manager.add_message("user", f"Task: {task}")
-            final_answer = history_result[-1].get("result", "")
-            self.conversation_history_manager.add_message("assistant", final_answer)
             return history_result
         except Exception as e:
             logger.error(f"Solve failed: {e}")

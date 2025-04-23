@@ -28,7 +28,7 @@ class AgentTool(Tool):
                     ToolArgument(
                         name="history",
                         arg_type="list",
-                        description="Optional list of previous messages, each with 'role' and 'content' (e.g., [{'role': 'user', 'content': 'Hi'}])",
+                        description="Optional list of previous messages, each with 'role' and 'content' to gives context to the model (e.g., [{'role': 'user', 'content': 'Hi'}])",
                         required=False
                     ),
                     ToolArgument(

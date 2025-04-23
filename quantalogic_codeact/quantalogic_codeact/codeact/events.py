@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,24 @@ class ExecutionResult(BaseModel):
     result: Optional[str] = None
     next_step: Optional[str] = None
     local_variables: Optional[Dict[str, Any]] = None
+
+    def to_summary(self) -> str:
+        """Generate a formatted summary of the execution result."""
+        lines = [f"- Execution Status: {self.execution_status}"]
+        if self.execution_status == 'success':
+            lines.append(f"- Task Status: {self.task_status or 'N/A'}")
+            lines.append(f"- Result: {self.result or 'N/A'}")
+            if self.next_step:
+                lines.append(f"- Next Step: {self.next_step}")
+        else:
+            lines.append(f"- Error: {self.error or 'N/A'}")
+        lines.append(f"- Execution Time: {self.execution_time:.2f} seconds")
+        if self.local_variables:
+            lines.append("- Variables:")
+            for k, v in self.local_variables.items():
+                var_str = str(v)[:500] + ("..." if len(str(v)) > 500 else "")
+                lines.append(f"  - {k}: {var_str}")
+        return "\n".join(lines)
 
 class TaskStartedEvent(Event):
     task_description: str

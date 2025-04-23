@@ -1,5 +1,7 @@
-from dataclasses import fields
-from typing import get_args, get_origin, List, Union
+from dataclasses import fields, is_dataclass
+from typing import List, Union, get_args, get_origin
+
+from yaml import safe_load
 
 from ...codeact.agent import Agent
 from ..agent_state import AgentState
@@ -29,6 +31,43 @@ async def set_command(shell, args: List[str]) -> str:
 
     field = field_dict[field_name]
     field_type = field.type
+
+    # Generic support for complex types via YAML or literal mapping/list
+    try:
+        # Handle quoted YAML literals (e.g. "/set personality '{traits: a,b}'")
+        val_to_parse = value_str
+        if len(val_to_parse) > 1 and ((val_to_parse[0] == val_to_parse[-1] == '"') or (val_to_parse[0] == val_to_parse[-1] == "'")):
+            val_to_parse = val_to_parse[1:-1]
+        parsed = safe_load(val_to_parse) if val_to_parse else None
+    except Exception:
+        parsed = None
+    if isinstance(parsed, (dict, list)) or (is_dataclass(field_type) and isinstance(parsed, dict)):
+        # Instantiate dataclass or assign list/dict directly
+        if is_dataclass(field_type):
+            # Special-case personality comma-separated traits
+            if field_name == 'personality' and isinstance(parsed, dict):
+                traits = parsed.get('traits')
+                if isinstance(traits, str):
+                    parsed['traits'] = [t.strip() for t in traits.split(',') if t.strip()]
+            try:
+                value = field_type(**parsed)
+            except Exception:
+                return f"Invalid mapping for {field_name}; expected keys for {field_type.__name__}."
+        else:
+            value = parsed
+        # Create new config and agent
+        new_conf = {f.name: getattr(current_config, f.name) for f in field_dict.values()}
+        new_conf[field_name] = value
+        new_cfg = type(current_config)(**new_conf)
+        new_agent = Agent(config=new_cfg)
+        new_agent.add_observer(shell._stream_token_observer, ["StreamToken"])
+        i = 1
+        while f"agent_{i}" in shell.agents:
+            i += 1
+        name = f"agent_{i}"
+        shell.agents[name] = AgentState(agent=new_agent)
+        shell.current_agent_name = name
+        return f"Created and switched to new agent: {name} with {field_name} set to {value}"
 
     try:
         # Convert value based on field type, supporting Optional

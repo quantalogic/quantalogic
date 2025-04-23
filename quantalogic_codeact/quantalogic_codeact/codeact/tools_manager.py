@@ -9,7 +9,7 @@ import loguru
 
 from quantalogic_toolbox import Tool, create_tool
 
-from .tools import AgentTool, RetrieveStepTool
+from .tools import AgentTool, RetrieveMessageTool, RetrieveStepTool
 
 
 class ToolRegistry:
@@ -130,7 +130,8 @@ def get_default_tools(
         
         static_tools: List[Tool] = [
             AgentTool(model=model),
-            RetrieveStepTool(history_store or [])
+            RetrieveStepTool(history_store or []),
+            RetrieveMessageTool(history_store or []),
         ]
 
         # Log available tools before filtering
