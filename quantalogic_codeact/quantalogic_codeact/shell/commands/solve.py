@@ -20,6 +20,7 @@ async def solve_command(shell, args: List[str]) -> str:
     try:
         if shell.state.streaming:
             step_buffers = {}
+            # no block state; uniform Step prefix for all lines
             final_answer = None
             first_token_received = False
             status = console.status("Waiting for first token...", spinner="dots")
@@ -35,12 +36,17 @@ async def solve_command(shell, args: List[str]) -> str:
                     if step not in step_buffers:
                         step_buffers[step] = ""
                     step_buffers[step] += event.token
-                    # Process buffer for complete lines
+                    # Process buffer for complete lines uniformly
                     lines = step_buffers[step].split('\n')
                     for line in lines[:-1]:
                         console.print(f"[cyan]Step {step}:[/cyan] {line}")
                     step_buffers[step] = lines[-1]
                 elif isinstance(event, ActionExecutedEvent):
+                    # Flush any remaining buffers before showing result panel
+                    for s, buf in step_buffers.items():
+                        if buf:
+                            console.print(f"[cyan]Step {s}:[/cyan] {buf}")
+                            step_buffers[s] = ""
                     # Format the execution result to XML then summarize
                     xml_str = XMLResultHandler.format_execution_result(event.result)
                     if isinstance(event.result, dict):
@@ -52,6 +58,11 @@ async def solve_command(shell, args: List[str]) -> str:
                     else:
                         console.print(Panel(summary, title=f"Step {event.step_number} Result", border_style="magenta"))
                 elif isinstance(event, TaskCompletedEvent):
+                    # Flush any remaining buffers before finalizing step display
+                    for s, buf in step_buffers.items():
+                        if buf:
+                            console.print(f"[cyan]Step {s}:[/cyan] {buf}")
+                            step_buffers[s] = ""
                     if event.final_answer:
                         raw_answer = event.final_answer
                         # if XML, extract value; else use raw
