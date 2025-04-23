@@ -1,3 +1,4 @@
+import json
 from typing import List
 
 from rich import print as rprint
@@ -36,7 +37,10 @@ async def solve_command(shell, args: List[str]) -> str:
                 elif isinstance(event, ActionExecutedEvent):
                     # Format the execution result to XML then summarize
                     xml_str = XMLResultHandler.format_execution_result(event.result)
-                    summary = XMLResultHandler.format_result_summary(xml_str)
+                    if isinstance(event.result, dict):
+                        summary = json.dumps(event.result, indent=2)
+                    else:
+                        summary = XMLResultHandler.format_result_summary(xml_str)
                     if "<Status>Error</Status>" in xml_str:
                         console.print(Panel(summary, title=f"Step {event.step_number} Error", border_style="red"))
                     else:
@@ -65,7 +69,7 @@ async def solve_command(shell, args: List[str]) -> str:
             # Append to history
             shell.conversation_manager.add_message("user", task)
             shell.conversation_manager.add_message("assistant", final_answer or "No final answer.")
-            return None  # Changed to prevent redundant printing in streaming mode
+            return ""  # Prevent CLI from rendering None panel in streaming mode
         else:
             history = await shell.current_agent.solve(
                 task,
@@ -77,7 +81,10 @@ async def solve_command(shell, args: List[str]) -> str:
                     thought = step.get('thought', '')
                     action = step.get('action', '')
                     result = step.get('result', '')
-                    result_summary = XMLResultHandler.format_result_summary(result)
+                    if isinstance(result, dict):
+                        result_summary = json.dumps(result, indent=2)
+                    else:
+                        result_summary = XMLResultHandler.format_result_summary(result)
                     if "<Status>Error</Status>" in result:
                         rprint(Panel(
                             f"[cyan]Step {step['step_number']}:[/cyan]\n"
@@ -95,18 +102,33 @@ async def solve_command(shell, args: List[str]) -> str:
                             border_style="cyan"
                         ))
                 raw = history[-1].get("result", "")
-                # extract XML value or use raw
-                if isinstance(raw, str) and raw.strip().startswith("<"):
-                    final_answer = XMLResultHandler.extract_result_value(raw)
+                # Handle different result types for final answer
+                if isinstance(raw, dict):
+                    error_val = raw.get('error')
+                    if error_val:
+                        final_display = error_val
+                        display_response(final_display, title="Error", border_style="red", is_error=True)
+                    else:
+                        # Use the 'result' field as final answer
+                        final_display = raw.get('result', json.dumps(raw, indent=2))
+                        display_response(final_display, title="Final Answer", border_style="green")
+                elif isinstance(raw, str) and raw.strip().startswith("<"):
+                    # Extract value from XML
+                    final_display = XMLResultHandler.extract_result_value(raw)
+                    display_response(final_display, title="Final Answer", border_style="green")
+                elif isinstance(raw, str):
+                    final_display = raw
+                    if final_display.startswith("Error:"):
+                        display_response(final_display, title="Error", border_style="red", is_error=True)
+                    else:
+                        display_response(final_display, title="Final Answer", border_style="green")
                 else:
-                    final_answer = raw
-                if final_answer.startswith("Error:"):
-                    display_response(final_answer, title="Error", border_style="red", is_error=True)
-                else:
-                    display_response(final_answer, title="Final Answer", border_style="green")
+                    # Fallback to string representation
+                    final_display = str(raw)
+                    display_response(final_display, title="Final Answer", border_style="green")
                 shell.conversation_manager.add_message("user", task)
-                shell.conversation_manager.add_message("assistant", final_answer)
-                return final_answer
+                shell.conversation_manager.add_message("assistant", final_display)
+                return final_display
             else:
                 return "No steps were executed."
     except Exception as e:
