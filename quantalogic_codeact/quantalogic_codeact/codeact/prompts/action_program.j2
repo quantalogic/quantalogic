@@ -13,12 +13,14 @@ You are a Python code generator. Your task is to create a Python program that so
 
 This is step {{ current_step }} of {{ max_iterations }} allowed steps.
 
+{% if history_str %}
 ## Previous Steps
 
 Previous steps for this task:
 <History>
 {{ history_str }}
 </History>
+{% endif %}
 
 ## Available Variables
 
@@ -90,8 +92,8 @@ Instructions:
 18. Use proper async/await syntax for all asynchronous operations.
 19. If there were errors in previous steps, review the error messages in the <History> section and adjust your code to avoid similar issues.
 20. For example, if a variable was missing, check `context_vars` with a default value; if a tool call failed, verify the arguments match the tool's requirements.
-21. Use the `retrieve_message` tool to access messages from the conversation history by their nanoid.
-22. Use the `retrieve_step` tool to access the result of a previous step by its step number.
+21. Use the `retrieve_message` tool to access messages from the conversation history by their id, quicker and more efficient than rewriting the message from history.
+22. Use the `retrieve_step` tool to access the result of a previous step by its step number, quicker and more efficient than rewriting the result.
 
 IN THE CURRENT CONTEX ONLY THE DEFINED VARIABLES AND THE CONVERSATION HISTORY ARE AVAILABLE.
 
@@ -105,6 +107,8 @@ If in the history, there is a variable 'step1_paragraph' with the paragraph text
 import asyncio
 
 async def main():
+    # Get message from history by nanoid
+    message_history = await retrieve_message(nanoid='hm9N89i6y56n2hNidKzXs')
     step{{ current_step }}_paragraph: str = context_vars.get('step1_paragraph', '')
     if step{{ current_step }}_paragraph:
         step{{ current_step }}_system_prompt: str = "You are a translation expert. Translate the given text to Spanish."
