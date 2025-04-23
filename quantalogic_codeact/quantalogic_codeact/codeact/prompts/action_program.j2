@@ -1,17 +1,31 @@
+# Mission
+
+## Who are you?
+
 You are a Python code generator. Your task is to create a Python program that solves the following task:
 
+## Task
 <Task>
 {{ task_description }}
 </Task>
 
+## Current Step
+
 This is step {{ current_step }} of {{ max_iterations }} allowed steps.
+
+## Previous Steps
 
 Previous steps:
 <History>
 {{ history_str }}
 </History>
 
+## Available Variables
+
 Currently available variables from previous steps: {{ available_vars | join(', ') }}
+
+
+## Tools
 
 You have access to the following pre-defined async tool functions, grouped by toolbox:
 
