@@ -1,29 +1,21 @@
 import asyncio
-import subprocess
+from quantalogic_codeact.codeact.cli_commands.config_manager import load_global_config
+from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox_core import uninstall_toolbox_core
 
 
 async def uninstall_toolbox(shell, args: list[str]) -> str:
-    """Uninstall a toolbox using uv pip uninstall.
-
-    Args:
-        shell: The Shell instance, providing context (e.g., debug mode).
-        args: List of command arguments (expects a single toolbox name).
-
-    Returns:
-        str: A message indicating success or failure.
-    """
+    """Uninstall a toolbox and sync AgentConfig."""
     if not args:
         return "Usage: /toolbox uninstall <toolbox_name>"
-    toolbox_name = args[0]
-    try:
-        await asyncio.to_thread(subprocess.run, ["uv", "pip", "uninstall", toolbox_name], check=True)
-        # Immediately disable toolbox and reload plugins
-        cfg = shell.current_agent.config
-        if cfg.enabled_toolboxes and toolbox_name in cfg.enabled_toolboxes:
-            cfg.enabled_toolboxes.remove(toolbox_name)
-        shell.current_agent.plugin_manager.load_plugins(force=True)
-        return f"Toolbox '{toolbox_name}' uninstalled and deactivated."
-    except subprocess.CalledProcessError as e:
-        if shell.debug:
-            shell.logger.exception("Uninstall toolbox error")
-        return f"Failed to uninstall toolbox: {e}"
+    name = args[0]
+    # Delegate core uninstall logic
+    messages = await asyncio.to_thread(uninstall_toolbox_core, name)
+    # Sync AgentConfig with global state
+    cfg = shell.current_agent.config
+    global_cfg = load_global_config()
+    cfg.enabled_toolboxes = global_cfg.get("enabled_toolboxes", [])
+    cfg.installed_toolboxes = global_cfg.get("installed_toolboxes", [])
+    # Reload plugins and refresh default tools
+    shell.current_agent.plugin_manager.load_plugins(force=True)
+    shell.current_agent.default_tools = shell.current_agent._get_tools()
+    return "\n".join(messages)
