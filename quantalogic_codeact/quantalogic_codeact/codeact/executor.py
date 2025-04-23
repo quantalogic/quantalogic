@@ -173,7 +173,7 @@ class Executor(BaseExecutor):
                 code=code,
                 timeout=timeout,
                 entry_point="main",
-                allowed_modules=["asyncio", "math", "random", "time","typing"],
+                allowed_modules=["asyncio", "math", "random", "time","typing","datetime"],
                 namespace=self.tool_namespace,
                 ignore_typing=True
             )
