@@ -12,7 +12,7 @@ from .constants import (
     MAX_TOKENS,
     TEMPLATE_DIR,
 )
-from .conversation_history_manager import ConversationHistoryManager
+from .conversation_manager import ConversationManager
 from .events import (
     ActionExecutedEvent,
     ActionGeneratedEvent,
@@ -54,7 +54,7 @@ __all__ = [
     "MAX_HISTORY_TOKENS",
     "MAX_TOKENS",
     "TEMPLATE_DIR",
-    "ConversationHistoryManager",
+    "ConversationManager",
     "ActionExecutedEvent",
     "ActionGeneratedEvent",
     "ErrorOccurredEvent",

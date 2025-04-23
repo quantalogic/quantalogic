@@ -7,7 +7,7 @@ from loguru import logger
 from .message import Message
 
 
-class ConversationHistoryManager:
+class ConversationManager:
     """Manages the storage and summarization of conversation history in LiteLLM format."""
     
     def __init__(self, max_tokens: int = 64*1024):
@@ -41,7 +41,6 @@ class ConversationHistoryManager:
     def get_history(self) -> List[Message]:
         """Alias for get_messages."""
         try:
-            logger.debug(f"Getting conversation history: {self.messages}")
             return self.messages
         except Exception as e:
             logger.error(f"Error getting history: {e}")

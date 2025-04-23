@@ -22,7 +22,7 @@ from quantalogic_codeact.codeact.commands.toolbox.get_tool_doc import get_tool_d
 from quantalogic_codeact.codeact.commands.toolbox.install_toolbox import install_toolbox
 from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
 from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
-from quantalogic_codeact.codeact.conversation_history_manager import ConversationHistoryManager
+from quantalogic_codeact.codeact.conversation_manager import ConversationManager
 from quantalogic_codeact.version import get_version
 
 from .agent_state import AgentState
@@ -86,8 +86,8 @@ class Shell:
             mode="codeact"
         )
         
-        # Initialize history manager
-        self.conversation_manager = ConversationHistoryManager()
+        # Initialize conversation manager
+        self.conversation_manager = ConversationManager()
         
         # Load or initialize global config
         if not config_manager.GLOBAL_CONFIG_PATH.exists():

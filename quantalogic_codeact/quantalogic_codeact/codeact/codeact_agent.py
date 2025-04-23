@@ -10,7 +10,7 @@ from loguru import logger
 from quantalogic.tools import Tool
 
 from .completion_evaluator import DefaultCompletionEvaluator
-from .conversation_history_manager import ConversationHistoryManager
+from .conversation_manager import ConversationManager
 from .events import (
     ActionExecutedEvent,
     ActionGeneratedEvent,
@@ -30,13 +30,14 @@ from .tools_manager import ToolRegistry
 from .working_memory import WorkingMemory
 from .xml_utils import XMLResultHandler
 
-MAX_HISTORY_TOKENS = 64*1024
+MAX_HISTORY_TOKENS = 64 * 1024
 MAX_ITERATIONS = 5
 MAX_TOKENS = 4000
 
+
 class CodeActAgent:
     """Implements the ReAct framework for reasoning and acting with enhanced memory management."""
-    
+
     def __init__(
         self,
         model: str,
@@ -49,9 +50,9 @@ class CodeActAgent:
         executor: Optional[BaseExecutor] = None,
         tool_registry: Optional[ToolRegistry] = None,
         working_memory: Optional[WorkingMemory] = None,
-        conversation_history_manager: Optional[ConversationHistoryManager] = None,
+        conversation_manager: Optional[ConversationManager] = None,
         error_handler: Optional[Callable[[Exception, int], bool]] = None,
-        temperature: float = 0.7  # Added temperature parameter
+        temperature: float = 0.7,  # Added temperature parameter
     ) -> None:
         """
         Initialize the CodeActAgent with tools, reasoning, execution, and memory components.
@@ -75,24 +76,26 @@ class CodeActAgent:
         self.tool_registry = tool_registry or ToolRegistry()
         for tool in tools:
             self.tool_registry.register(tool)
-        self.reasoner: BaseReasoner = reasoner or Reasoner(model, self.tool_registry.get_tools(), temperature=self.temperature)
-        self.executor: BaseExecutor = executor or Executor(self.tool_registry.get_tools(), notify_event=self._notify_observers)
+        self.reasoner: BaseReasoner = reasoner or Reasoner(
+            model, self.tool_registry.get_tools(), temperature=self.temperature
+        )
+        self.executor: BaseExecutor = executor or Executor(
+            self.tool_registry.get_tools(), notify_event=self._notify_observers
+        )
         self.max_iterations: int = max_iterations
         self.max_history_tokens: int = max_history_tokens
         self.working_memory: WorkingMemory = working_memory or WorkingMemory(
-            max_tokens=max_history_tokens,
-            system_prompt=system_prompt,
-            task_description=task_description
+            max_tokens=max_history_tokens, system_prompt=system_prompt, task_description=task_description
         )
-        self.conversation_history_manager: ConversationHistoryManager = conversation_history_manager or ConversationHistoryManager(
-            max_tokens=max_history_tokens
+        self.conversation_history_manager: ConversationManager = (
+            conversation_manager or ConversationManager(max_tokens=max_history_tokens)
         )
         self.context_vars: Dict = {}
         self._observers: List[Tuple[Callable, List[str]]] = []
         self.error_handler = error_handler or (lambda e, step: False)  # Default: no retry
         self.completion_evaluator = DefaultCompletionEvaluator()
 
-    def add_observer(self, observer: Callable, event_types: List[str]) -> 'CodeActAgent':
+    def add_observer(self, observer: Callable, event_types: List[str]) -> "CodeActAgent":
         """Add an observer for specific event types."""
         try:
             self._observers.append((observer, event_types))
@@ -113,19 +116,13 @@ class CodeActAgent:
                     else:
                         # Wrap sync observer in coroutine
                         coroutines.append(asyncio.to_thread(lambda: result))
-            
+
             await asyncio.gather(*coroutines, return_exceptions=True)
         except Exception as e:
             logger.error(f"Error notifying observers: {e}")
 
-  
     async def generate_action(
-        self,
-        task: str,
-        step: int,
-        max_iterations: int,
-        system_prompt: Optional[str] = None,
-        streaming: bool = False
+        self, task: str, step: int, max_iterations: int, system_prompt: Optional[str] = None, streaming: bool = False
     ) -> str:
         """
         Generate an action using the Reasoner, passing available variables.
@@ -163,16 +160,20 @@ class CodeActAgent:
                 self._notify_observers,
                 streaming=streaming,
                 available_vars=available_vars,
-                conversation_history=conversation_history
+                conversation_history=conversation_history,
             )
             thought, code = XMLResultHandler.parse_action_response(response)
             gen_time: float = time.perf_counter() - start
-            await self._notify_observers(ThoughtGeneratedEvent(
-                event_type="ThoughtGenerated", step_number=step, thought=thought, generation_time=gen_time
-            ))
-            await self._notify_observers(ActionGeneratedEvent(
-                event_type="ActionGenerated", step_number=step, action_code=code, generation_time=gen_time
-            ))
+            await self._notify_observers(
+                ThoughtGeneratedEvent(
+                    event_type="ThoughtGenerated", step_number=step, thought=thought, generation_time=gen_time
+                )
+            )
+            await self._notify_observers(
+                ActionGeneratedEvent(
+                    event_type="ActionGenerated", step_number=step, action_code=code, generation_time=gen_time
+                )
+            )
             if not response.endswith("</Code>"):
                 logger.warning(f"Response might be truncated at step {step}")
             return response
@@ -197,16 +198,19 @@ class CodeActAgent:
             result: ExecutionResult = await self.executor.execute_action(code, self.context_vars, step, timeout)
             execution_time: float = time.perf_counter() - start
             result.execution_time = execution_time  # Ensure accurate timing
-            await self._notify_observers(ActionExecutedEvent(
-                event_type="ActionExecuted", step_number=step, result=result, execution_time=execution_time
-            ))
+            await self._notify_observers(
+                ActionExecutedEvent(
+                    event_type="ActionExecuted", step_number=step, result=result, execution_time=execution_time
+                )
+            )
             return result
         except Exception as e:
             logger.error(f"Error executing action: {e}")
             raise
 
-    async def _run_step(self, task: str, step: int, max_iters: int, 
-                       system_prompt: Optional[str], streaming: bool) -> Dict:
+    async def _run_step(
+        self, task: str, step: int, max_iters: int, system_prompt: Optional[str], streaming: bool
+    ) -> Dict:
         """
         Execute a single step of the ReAct loop with retry logic.
 
@@ -221,12 +225,14 @@ class CodeActAgent:
             Dict: Step data (step_number, thought, action, result).
         """
         try:
-            await self._notify_observers(StepStartedEvent(
-                event_type="StepStarted",
-                step_number=step,
-                system_prompt=self.working_memory.system_prompt,
-                task_description=self.working_memory.task_description
-            ))
+            await self._notify_observers(
+                StepStartedEvent(
+                    event_type="StepStarted",
+                    step_number=step,
+                    system_prompt=self.working_memory.system_prompt,
+                    task_description=self.working_memory.task_description,
+                )
+            )
             for attempt in range(3):
                 try:
                     response: str = await self.generate_action(task, step, max_iters, system_prompt, streaming)
@@ -234,30 +240,33 @@ class CodeActAgent:
                     result: ExecutionResult = await self.execute_action(code, step)
                     # Update context variables
                     if result.execution_status == "success" and result.local_variables:
-                        new_vars = {k: v for k, v in result.local_variables.items() if not k.startswith("__") and not callable(v)}
+                        new_vars = {
+                            k: v
+                            for k, v in result.local_variables.items()
+                            if not k.startswith("__") and not callable(v)
+                        }
                         self.context_vars.update(new_vars)
                         logger.debug(f"Step {step}: Updated context_vars with {new_vars}")
                     step_data = {"step_number": step, "thought": thought, "action": code, "result": result.dict()}
                     self.working_memory.add(step_data)
                     return step_data
                 except LLMCompletionError as e:
-                    await self._notify_observers(ErrorOccurredEvent(
-                        event_type="ErrorOccurred", error_message=str(e), step_number=step
-                    ))
+                    await self._notify_observers(
+                        ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=step)
+                    )
                     raise
                 except Exception as e:
                     if not self.error_handler(e, step) or attempt == 2:
-                        await self._notify_observers(ErrorOccurredEvent(
-                            event_type="ErrorOccurred", error_message=str(e), step_number=step
-                        ))
+                        await self._notify_observers(
+                            ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=step)
+                        )
                         raise
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    await asyncio.sleep(2**attempt)  # Exponential backoff
         except Exception as e:
             logger.error(f"Error running step {step}: {e}")
             raise
 
-    async def _finalize_step(self, task: str, step_data: Dict, 
-                            success_criteria: Optional[str]) -> Tuple[bool, Dict]:
+    async def _finalize_step(self, task: str, step_data: Dict, success_criteria: Optional[str]) -> Tuple[bool, Dict]:
         """
         Check completion and notify observers for a step.
 
@@ -278,19 +287,21 @@ class CodeActAgent:
                 result=result,
                 success_criteria=success_criteria,
                 model=self.reasoner.model,
-                temperature=self.temperature
+                temperature=self.temperature,
             )
             if is_complete and final_answer:
                 step_data["result"]["result"] = final_answer  # Update result with final answer
-            await self._notify_observers(StepCompletedEvent(
-                event_type="StepCompleted", 
-                step_number=step_data["step_number"], 
-                thought=step_data["thought"], 
-                action=step_data["action"], 
-                result=step_data["result"],
-                is_complete=is_complete, 
-                final_answer=final_answer if is_complete else None
-            ))
+            await self._notify_observers(
+                StepCompletedEvent(
+                    event_type="StepCompleted",
+                    step_number=step_data["step_number"],
+                    thought=step_data["thought"],
+                    action=step_data["action"],
+                    result=step_data["result"],
+                    is_complete=is_complete,
+                    final_answer=final_answer if is_complete else None,
+                )
+            )
             return is_complete, step_data
         except Exception as e:
             logger.error(f"Error finalizing step {step_data['step_number']}: {e}")
@@ -303,7 +314,7 @@ class CodeActAgent:
         task_goal: Optional[str] = None,
         system_prompt: Optional[str] = None,
         max_iterations: Optional[int] = None,
-        streaming: bool = False
+        streaming: bool = False,
     ) -> List[Dict]:
         """
         Solve a task using the ReAct framework with persistent memory and explicit goal.
@@ -322,52 +333,67 @@ class CodeActAgent:
         try:
             max_iters: int = max_iterations if max_iterations is not None else self.max_iterations
             self.working_memory.clear()  # Reset task history for new task
-            self.context_vars.clear() # Clear previous context variables
+            self.context_vars.clear()  # Clear previous context variables
             if system_prompt is not None:
                 self.working_memory.system_prompt = system_prompt
             self.working_memory.task_description = task
             # Initialize context_vars with conversation history and previous task variables
             # Log conversation history
             logger.debug(f"Conversation history: {self.conversation_history_manager.get_history()}")
-            self.context_vars["conversation_history"] = self.conversation_history_manager.get_history()
+            self.context_vars["conversation_history"] = [
+                {"role": message.role, "content": message.content}
+                for message in self.conversation_history_manager.get_history()
+            ]
             # Retain non-private, non-callable variables from previous tasks
             previous_vars = {k: v for k, v in self.context_vars.items() if not k.startswith("__") and not callable(v)}
             logger.debug(f"Starting task with context_vars: {previous_vars}")
-            await self._notify_observers(TaskStartedEvent(
-                event_type="TaskStarted",
-                task_description=task,
-                system_prompt=self.working_memory.system_prompt
-            ))
+            await self._notify_observers(
+                TaskStartedEvent(
+                    event_type="TaskStarted", task_description=task, system_prompt=self.working_memory.system_prompt
+                )
+            )
 
             for step in range(1, max_iters + 1):
                 try:
                     step_data: Dict = await self._run_step(task, step, max_iters, system_prompt, streaming)
                     is_complete, step_data = await self._finalize_step(task, step_data, success_criteria)
                     if is_complete:
-                        await self._notify_observers(TaskCompletedEvent(
-                            event_type="TaskCompleted", 
-                            final_answer=step_data["result"].get("result"), 
-                            reason="success"
-                        ))
+                        await self._notify_observers(
+                            TaskCompletedEvent(
+                                event_type="TaskCompleted",
+                                final_answer=step_data["result"].get("result"),
+                                reason="success",
+                            )
+                        )
                         break
                 except LLMCompletionError as e:
-                    await self._notify_observers(ErrorOccurredEvent(
-                        event_type="ErrorOccurred", error_message=str(e), step_number=step
-                    ))
+                    await self._notify_observers(
+                        ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=step)
+                    )
                     raise
                 except Exception as e:
-                    await self._notify_observers(ErrorOccurredEvent(
-                        event_type="ErrorOccurred", error_message=str(e), step_number=step
-                    ))
+                    await self._notify_observers(
+                        ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=step)
+                    )
                     break
 
             if not any(step.result.task_status == "completed" for step in self.working_memory.store):
-                await self._notify_observers(TaskCompletedEvent(
-                    event_type="TaskCompleted", 
-                    final_answer=None,
-                    reason="max_iterations_reached" if len(self.working_memory.store) == max_iters else "error"
-                ))
-            return [{"step_number": step.step_number, "thought": step.thought, "action": step.action, "result": step.result.dict()} for step in self.working_memory.store]
+                await self._notify_observers(
+                    TaskCompletedEvent(
+                        event_type="TaskCompleted",
+                        final_answer=None,
+                        reason="max_iterations_reached" if len(self.working_memory.store) == max_iters else "error",
+                    )
+                )
+            return [
+                {
+                    "step_number": step.step_number,
+                    "thought": step.thought,
+                    "action": step.action,
+                    "result": step.result.dict(),
+                }
+                for step in self.working_memory.store
+            ]
         except Exception as e:
             logger.error(f"Error solving task: {e}")
             return [{"error": str(e)}]
@@ -377,7 +403,7 @@ class CodeActAgent:
         message: str,
         max_tokens: int = MAX_TOKENS,
         temperature: Optional[float] = None,  # Allow override
-        streaming: bool = True
+        streaming: bool = True,
     ) -> str:
         """
         Handle a single chat interaction using conversation history.
@@ -403,21 +429,20 @@ class CodeActAgent:
                 messages.append({"role": role, "content": content})
             messages.append({"role": "user", "content": str(message)})
 
-
             response: str = await litellm_completion(
                 model=self.reasoner.model,
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature if temperature is not None else self.temperature,
                 stream=streaming,
-                notify_event=self._notify_observers if streaming else None
+                notify_event=self._notify_observers if streaming else None,
             )
             return response.strip()
         except LLMCompletionError as e:
             logger.error(f"Chat failed: {e}")
-            await self._notify_observers(ErrorOccurredEvent(
-                event_type="ErrorOccurred", error_message=str(e), step_number=1
-            ))
+            await self._notify_observers(
+                ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=1)
+            )
             raise
         except Exception as e:
             logger.error(f"Chat failed: {e}")
@@ -426,5 +451,5 @@ class CodeActAgent:
     def set_temperature(self, temperature: float) -> None:
         """Update the temperature for the agent and its reasoner."""
         self.temperature = temperature
-        if hasattr(self.reasoner, 'temperature'):
+        if hasattr(self.reasoner, "temperature"):
             self.reasoner.temperature = temperature

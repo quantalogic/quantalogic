@@ -12,7 +12,7 @@ from quantalogic.tools import Tool
 from .agent_config import AgentConfig
 from .codeact_agent import CodeActAgent
 from .constants import MAX_TOKENS
-from .conversation_history_manager import ConversationHistoryManager
+from .conversation_manager import ConversationManager
 from .executor import BaseExecutor, Executor
 from .message import Message
 from .plugin_manager import PluginManager
@@ -75,7 +75,7 @@ class Agent:
         self.last_solve_context_vars: Dict = {}
         self.default_reasoner_name: str = config.reasoner.name
         self.default_executor_name: str = config.executor.name
-        self.conversation_history_manager = ConversationHistoryManager(max_tokens=self.max_history_tokens)
+        self.conversation_manager = ConversationManager(max_tokens=self.max_history_tokens)
         self.system_prompt_template: Optional[str] = config.system_prompt_template
         self.react_agent = CodeActAgent(
             model=self.model,
@@ -85,7 +85,7 @@ class Agent:
             system_prompt=self._build_system_prompt(),
             reasoner=Reasoner(self.model, self.default_tools, temperature=self.temperature),
             executor=Executor(self.default_tools, self._notify_observers),
-            conversation_history_manager=self.conversation_history_manager,
+            conversation_manager=self.conversation_manager,
             temperature=self.temperature  # Pass temperature
         )
 
@@ -172,7 +172,7 @@ class Agent:
             logger.info(f"Invoking react_agent.chat for simple chat with message={message!r}, streaming={streaming}")
             # Override conversation history if provided
             if history is not None:
-                self.conversation_history_manager.messages = history.copy()
+                self.conversation_manager.messages = history.copy()
             response: str = await self.react_agent.chat(
                 message,
                 max_tokens=max_tokens,
@@ -181,8 +181,8 @@ class Agent:
             )
             logger.info(f"Chat response (no tools): {response}")
             # Update conversation history
-            self.conversation_history_manager.add_message("user", message)
-            self.conversation_history_manager.add_message("assistant", response)
+            self.conversation_manager.add_message("user", message)
+            self.conversation_manager.add_message("assistant", response)
             return response
         except Exception as e:
             logger.exception("Exception in Agent.chat")
@@ -229,7 +229,7 @@ class Agent:
                 system_prompt=system_prompt,
                 reasoner=reasoner_cls(self.model, solve_tools, temperature=self.temperature, **reasoner_config),
                 executor=executor_cls(solve_tools, self._notify_observers, **executor_config),
-                conversation_history_manager=self.conversation_history_manager,
+                conversation_manager=self.conversation_manager,
                 temperature=self.temperature
             )
             solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.working_memory.store))
@@ -238,7 +238,7 @@ class Agent:
             
             # Override conversation history if provided
             if history is not None:
-                self.conversation_history_manager.messages = history.copy()
+                self.conversation_manager.messages = history.copy()
             history_result: List[Dict] = await solve_agent.solve(
                 task,
                 success_criteria,
