@@ -7,11 +7,12 @@ from loguru import logger
 from quantalogic.tools import Tool, ToolArgument
 
 from ..utils import log_tool_method
+from ..working_memory import Step
 
 
 class RetrieveStepTool(Tool):
     """Tool to retrieve information from a specific previous step with indexed access."""
-    def __init__(self, history_store: List[dict], config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, history_store: List[Step], config: Optional[Dict[str, Any]] = None) -> None:
         """Initialize the RetrieveStepTool with history store."""
         try:
             super().__init__(
@@ -23,7 +24,7 @@ class RetrieveStepTool(Tool):
                 return_type="string"
             )
             self.config = config or {}
-            self.history_index: Dict[int, dict] = {i + 1: step for i, step in enumerate(history_store)}
+            self.history_index: Dict[int, Step] = {i + 1: step for i, step in enumerate(history_store)}
         except Exception as e:
             logger.error(f"Failed to initialize RetrieveStepTool: {e}")
             raise
@@ -37,12 +38,12 @@ class RetrieveStepTool(Tool):
                 error_msg = f"Error: Step {step_number} is out of range (1-{len(self.history_index)})"
                 logger.error(error_msg)
                 raise ValueError(error_msg)
-            step: dict = self.history_index[step_number]
+            step: Step = self.history_index[step_number]
             result = (
                 f"Step {step_number}:\n"
-                f"Thought: {step['thought']}\n"
-                f"Action: {step['action']}\n"
-                f"Result: {step['result']}"
+                f"Thought: {step.thought}\n"
+                f"Action: {step.action}\n"
+                f"Result:\n{step.result.to_summary()}"
             )
             logger.info(f"Retrieved step {step_number} successfully")
             return result

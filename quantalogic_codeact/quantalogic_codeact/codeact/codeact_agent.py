@@ -23,10 +23,10 @@ from .events import (
     ThoughtGeneratedEvent,
 )
 from .executor import BaseExecutor, Executor
-from .history_manager import HistoryManager
 from .llm_util import LLMCompletionError, litellm_completion
 from .reasoner import BaseReasoner, Reasoner
 from .tools_manager import ToolRegistry
+from .working_memory import WorkingMemory
 from .xml_utils import XMLResultHandler
 
 MAX_HISTORY_TOKENS = 64*1024
@@ -47,7 +47,7 @@ class CodeActAgent:
         reasoner: Optional[BaseReasoner] = None,
         executor: Optional[BaseExecutor] = None,
         tool_registry: Optional[ToolRegistry] = None,
-        history_manager: Optional[HistoryManager] = None,
+        working_memory: Optional[WorkingMemory] = None,
         conversation_history_manager: Optional[ConversationHistoryManager] = None,
         error_handler: Optional[Callable[[Exception, int], bool]] = None,
         temperature: float = 0.7  # Added temperature parameter
@@ -65,7 +65,7 @@ class CodeActAgent:
             reasoner (Optional[BaseReasoner]): Custom reasoner instance.
             executor (Optional[BaseExecutor]): Custom executor instance.
             tool_registry (Optional[ToolRegistry]): Custom tool registry.
-            history_manager (Optional[HistoryManager]): Custom task history manager.
+            history_manager (Optional[WorkingMemory]): Custom task history manager.
             conversation_history_manager (Optional[ConversationHistoryManager]): Custom conversation history manager.
             error_handler (Optional[Callable[[Exception, int], bool]]): Error handler callback.
             temperature (float): Temperature for language model generation (default: 0.7).
@@ -78,7 +78,7 @@ class CodeActAgent:
         self.executor: BaseExecutor = executor or Executor(self.tool_registry.get_tools(), notify_event=self._notify_observers)
         self.max_iterations: int = max_iterations
         self.max_history_tokens: int = max_history_tokens
-        self.history_manager: HistoryManager = history_manager or HistoryManager(
+        self.working_memory: WorkingMemory = working_memory or WorkingMemory(
             max_tokens=max_history_tokens,
             system_prompt=system_prompt,
             task_description=task_description
@@ -131,7 +131,7 @@ class CodeActAgent:
         try:
             goal = task_goal or task
             task_prompt = f"Goal: {goal}\nTask: {task}"
-            task_history = self.history_manager.format_history(self.max_iterations)
+            task_history = self.working_memory.format_history(self.max_iterations)
             conv_summary = self.conversation_history_manager.summarize(task)
             return (
                 f"{task_prompt}\n\n"
@@ -166,7 +166,7 @@ class CodeActAgent:
             str: Generated action in XML format.
         """
         try:
-            history_str: str = self.history_manager.format_history(max_iterations)
+            history_str: str = self.working_memory.format_history(max_iterations)
             available_vars: List[str] = list(self.context_vars.keys())
             start: float = time.perf_counter()
             response: str = await self.reasoner.generate_action(
@@ -174,7 +174,7 @@ class CodeActAgent:
                 history_str, 
                 step, 
                 max_iterations, 
-                system_prompt or self.history_manager.system_prompt,
+                system_prompt or self.working_memory.system_prompt,
                 self._notify_observers, 
                 streaming=streaming, 
                 available_vars=available_vars
@@ -238,12 +238,12 @@ class CodeActAgent:
             await self._notify_observers(StepStartedEvent(
                 event_type="StepStarted",
                 step_number=step,
-                system_prompt=self.history_manager.system_prompt,
-                task_description=self.history_manager.task_description
+                system_prompt=self.working_memory.system_prompt,
+                task_description=self.working_memory.task_description
             ))
             for attempt in range(3):
                 try:
-                    response: str = await self.generate_action(task, self.history_manager.store, step, max_iters, system_prompt, streaming)
+                    response: str = await self.generate_action(task, self.working_memory.store, step, max_iters, system_prompt, streaming)
                     thought, code = XMLResultHandler.parse_action_response(response)
                     result: ExecutionResult = await self.execute_action(code, step)
                     # Update context variables
@@ -252,7 +252,7 @@ class CodeActAgent:
                             {k: v for k, v in result.local_variables.items() if not k.startswith("__") and not callable(v)}
                         )
                     step_data = {"step_number": step, "thought": thought, "action": code, "result": result.dict()}
-                    self.history_manager.add(step_data)
+                    self.working_memory.add(step_data)
                     return step_data
                 except LLMCompletionError as e:
                     await self._notify_observers(ErrorOccurredEvent(
@@ -285,7 +285,7 @@ class CodeActAgent:
         """
         try:
             result = ExecutionResult(**step_data["result"])
-            formatted_history = self.history_manager.format_history(self.max_iterations)
+            formatted_history = self.working_memory.format_history(self.max_iterations)
             is_complete, final_answer = await self.completion_evaluator.evaluate_completion(
                 task=task,
                 formatted_history=formatted_history,
@@ -335,16 +335,16 @@ class CodeActAgent:
         """
         try:
             max_iters: int = max_iterations if max_iterations is not None else self.max_iterations
-            self.history_manager.clear()  # Reset task history for new task
+            self.working_memory.clear()  # Reset task history for new task
             if system_prompt is not None:
-                self.history_manager.system_prompt = system_prompt
-            self.history_manager.task_description = task
+                self.working_memory.system_prompt = system_prompt
+            self.working_memory.task_description = task
             # Add conversation history to context_vars
             self.context_vars["conversation_history"] = self.conversation_history_manager.get_messages()
             await self._notify_observers(TaskStartedEvent(
                 event_type="TaskStarted",
                 task_description=task,
-                system_prompt=self.history_manager.system_prompt
+                system_prompt=self.working_memory.system_prompt
             ))
 
             for step in range(1, max_iters + 1):
@@ -369,13 +369,13 @@ class CodeActAgent:
                     ))
                     break
 
-            if not any(step["result"].get("task_status") == "completed" for step in self.history_manager.store):
+            if not any(step.result.task_status == "completed" for step in self.working_memory.store):
                 await self._notify_observers(TaskCompletedEvent(
                     event_type="TaskCompleted", 
                     final_answer=None,
-                    reason="max_iterations_reached" if len(self.history_manager.store) == max_iters else "error"
+                    reason="max_iterations_reached" if len(self.working_memory.store) == max_iters else "error"
                 ))
-            return self.history_manager.store
+            return [{"step_number": step.step_number, "thought": step.thought, "action": step.action, "result": step.result.dict()} for step in self.working_memory.store]
         except Exception as e:
             logger.error(f"Error solving task: {e}")
             return [{"error": str(e)}]
@@ -402,7 +402,7 @@ class CodeActAgent:
         try:
             # Construct messages including conversation history
             messages = [
-                {"role": "system", "content": self.history_manager.system_prompt or "You are a helpful AI assistant."}
+                {"role": "system", "content": self.working_memory.system_prompt or "You are a helpful AI assistant."}
             ]
             # Include only string role and content in conversation history
             for hist_msg in self.conversation_history_manager.get_messages():

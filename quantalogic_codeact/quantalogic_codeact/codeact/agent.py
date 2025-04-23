@@ -236,7 +236,7 @@ class Agent:
                 conversation_history_manager=self.conversation_history_manager,
                 temperature=self.temperature
             )
-            solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.history_manager.store))
+            solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.working_memory.store))
             for observer, event_types in self._observers:
                 solve_agent.add_observer(observer, event_types)
             
