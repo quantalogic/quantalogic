@@ -248,9 +248,9 @@ class CodeActAgent:
                     result: ExecutionResult = await self.execute_action(code, step)
                     # Update context variables
                     if result.execution_status == "success" and result.local_variables:
-                        self.context_vars.update(
-                            {k: v for k, v in result.local_variables.items() if not k.startswith("__") and not callable(v)}
-                        )
+                        new_vars = {k: v for k, v in result.local_variables.items() if not k.startswith("__") and not callable(v)}
+                        self.context_vars.update(new_vars)
+                        logger.debug(f"Step {step}: Updated context_vars with {new_vars}")
                     step_data = {"step_number": step, "thought": thought, "action": code, "result": result.dict()}
                     self.working_memory.add(step_data)
                     return step_data
@@ -339,8 +339,11 @@ class CodeActAgent:
             if system_prompt is not None:
                 self.working_memory.system_prompt = system_prompt
             self.working_memory.task_description = task
-            # Add conversation history to context_vars
+            # Initialize context_vars with conversation history and previous task variables
             self.context_vars["conversation_history"] = self.conversation_history_manager.get_messages()
+            # Retain non-private, non-callable variables from previous tasks
+            previous_vars = {k: v for k, v in self.context_vars.items() if not k.startswith("__") and not callable(v)}
+            logger.debug(f"Starting task with context_vars: {previous_vars}")
             await self._notify_observers(TaskStartedEvent(
                 event_type="TaskStarted",
                 task_description=task,

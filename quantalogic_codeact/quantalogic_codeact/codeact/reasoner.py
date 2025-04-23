@@ -30,6 +30,10 @@ class DefaultPromptStrategy(PromptStrategy):
                 tools_by_toolbox[toolbox_name] = []
             tools_by_toolbox[toolbox_name].append(tool.to_docstring())
         
+        # Ensure available_vars is a list and log its contents
+        available_vars = available_vars or []
+        logger.debug(f"Rendering prompt with available_vars: {available_vars}")
+        
         return jinja_env.get_template("action_program.j2").render(
             task_description=task,
             history_str=history_str,
@@ -80,12 +84,18 @@ class Reasoner(BaseReasoner):
     ) -> str:
         """Generate an action based on task and history with streaming support."""
         try:
+            # Ensure available_vars is a list and log its contents
+            available_vars = available_vars or []
+            logger.debug(f"Step {step}: Generating action with available_vars: {available_vars}")
+
             # Prepare type hints for available variables based on tool return types
             available_var_types = {}
-            for var_name in available_vars or []:
+            for var_name in available_vars:
                 # Infer type from tool documentation if possible (simplified heuristic)
                 if "plan" in var_name.lower():
                     available_var_types[var_name] = "PlanResult (has attributes: task_id, task_description, subtasks)"
+                elif "poem" in var_name.lower():
+                    available_var_types[var_name] = "str (poem text)"
                 else:
                     available_var_types[var_name] = "Unknown (check history or assume str)"
 
@@ -94,7 +104,7 @@ class Reasoner(BaseReasoner):
                 history_str,
                 step,
                 max_iterations,
-                available_vars or []  # Default to empty list if None
+                available_vars
             )
             await notify_event(PromptGeneratedEvent(
                 event_type="PromptGenerated", step_number=step, prompt=task_prompt
@@ -110,7 +120,7 @@ class Reasoner(BaseReasoner):
                             {"role": "user", "content": task_prompt}
                         ],
                         max_tokens=self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS),
-                        temperature=self.temperature,  # Use stored temperature
+                        temperature=self.temperature,
                         stream=streaming,
                         step=step,
                         notify_event=notify_event
