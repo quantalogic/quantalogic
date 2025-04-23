@@ -1,23 +1,10 @@
 """Manages conversation history in LiteLLM message format."""
 
-from dataclasses import dataclass
-from typing import Any, List
+from typing import List
 
 from loguru import logger
 
-
-@dataclass
-class Message:
-    role: str
-    content: str
-
-    def __getitem__(self, key: str) -> Any:
-        """Allow dict-like access to role and content."""
-        if key == "role":
-            return self.role
-        if key == "content":
-            return self.content
-        raise KeyError(f"Message has no key {key}")
+from .message import Message
 
 
 class ConversationHistoryManager:
@@ -60,26 +47,3 @@ class ConversationHistoryManager:
             logger.error(f"Error getting history: {e}")
             return []
 
-    def summarize(self, task: str = None) -> str:
-        """
-        Summarize the conversation history, optionally filtering for relevance to the task.
-
-        Args:
-            task (str, optional): The current task to filter relevant messages.
-
-        Returns:
-            str: A formatted summary of the conversation history.
-        """
-        try:
-            if not self.messages:
-                return "No prior conversation."
-            if task:
-                # Simple filter: include messages mentioning the task
-                relevant = [msg for msg in self.messages if task.lower() in msg.content.lower()]
-                if not relevant:
-                    return "No relevant prior conversation."
-                return "\n".join(f"{msg.role.capitalize()}: {msg.content}" for msg in relevant)
-            return "\n".join(f"{msg.role.capitalize()}: {msg.content}" for msg in self.messages)
-        except Exception as e:
-            logger.error(f"Error summarizing conversation history: {e}")
-            return "Error summarizing conversation history."

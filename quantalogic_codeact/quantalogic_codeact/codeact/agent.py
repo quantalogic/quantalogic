@@ -14,6 +14,7 @@ from .codeact_agent import CodeActAgent
 from .constants import MAX_TOKENS
 from .conversation_history_manager import ConversationHistoryManager
 from .executor import BaseExecutor, Executor
+from .message import Message
 from .plugin_manager import PluginManager
 from .reasoner import BaseReasoner, Reasoner
 from .templates import jinja_env as default_jinja_env
@@ -156,7 +157,7 @@ class Agent:
     async def chat(
         self,
         message: str,
-        history: Optional[List[Dict[str, str]]] = None,
+        history: Optional[List[Message]] = None,
         use_tools: bool = False,
         timeout: int = 30,
         max_tokens: int = MAX_TOKENS,
@@ -169,6 +170,9 @@ class Agent:
         try:
             logger.debug(f"Agent.chat called with message={message!r}, use_tools={use_tools}, timeout={timeout}, max_tokens={max_tokens}, temperature={temperature}, streaming={streaming}, reasoner_name={reasoner_name}, executor_name={executor_name}")
             logger.info(f"Invoking react_agent.chat for simple chat with message={message!r}, streaming={streaming}")
+            # Override conversation history if provided
+            if history is not None:
+                self.conversation_history_manager.messages = history.copy()
             response: str = await self.react_agent.chat(
                 message,
                 max_tokens=max_tokens,
@@ -196,7 +200,7 @@ class Agent:
     async def solve(
         self,
         task: str,
-        history: Optional[List[Dict[str, str]]] = None,
+        history: Optional[List[Message]] = None,
         success_criteria: Optional[str] = None,
         task_goal: Optional[str] = None,
         max_iterations: Optional[int] = None,
@@ -232,6 +236,9 @@ class Agent:
             for observer, event_types in self._observers:
                 solve_agent.add_observer(observer, event_types)
             
+            # Override conversation history if provided
+            if history is not None:
+                self.conversation_history_manager.messages = history.copy()
             history_result: List[Dict] = await solve_agent.solve(
                 task,
                 success_criteria,

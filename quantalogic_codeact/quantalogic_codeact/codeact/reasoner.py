@@ -9,6 +9,7 @@ from quantalogic.tools import Tool
 from .constants import MAX_GENERATE_PROGRAM_TOKENS
 from .events import PromptGeneratedEvent
 from .llm_util import LLMCompletionError, litellm_completion
+from .message import Message
 from .templates import jinja_env
 from .xml_utils import XMLResultHandler, validate_xml
 
@@ -57,7 +58,7 @@ class BaseReasoner(ABC):
         notify_event: Callable,
         streaming: bool,
         available_vars: List[str],
-        conversation_history: List[Dict[str, str]]
+        conversation_history: List[Message]
     ) -> str:
         pass
 
@@ -82,23 +83,21 @@ class Reasoner(BaseReasoner):
         notify_event: Callable = None,
         streaming: bool = False,
         available_vars: List[str] = None,
-        conversation_history: List[Dict[str, str]] = None
+        conversation_history: List[Message] = None
     ) -> str:
         """Generate an action based on task and history with streaming support."""
-        if conversation_history is None:
-            conversation_history = []
-        elif isinstance(conversation_history, dict):
-            conversation_history = [conversation_history]
-        elif not isinstance(conversation_history, list):
-            raise ValueError("conversation_history must be a list of messages")
-
-        # Validate each message dict contains required keys
-        validated_history: List[Dict[str, str]] = []
-        for msg in conversation_history:
-            if not isinstance(msg, dict) or 'role' not in msg or 'content' not in msg:
-                raise ValueError("Each message in conversation_history must be a dict with 'role' and 'content'")
-            validated_history.append({'role': str(msg['role']), 'content': str(msg['content'])})
-        conversation_history = validated_history
+        # Normalize and convert history items to dicts
+        conv_items = conversation_history or []
+        if not isinstance(conv_items, list):
+            raise ValueError("conversation_history must be a list of Message or dict")
+        conversation_history = []
+        for msg in conv_items:
+            if isinstance(msg, Message):
+                conversation_history.append({"role": msg.role, "content": msg.content})
+            elif isinstance(msg, dict):
+                conversation_history.append({"role": msg.get("role"), "content": msg.get("content")})
+            else:
+                raise ValueError(f"Invalid message type {type(msg)} in conversation_history")
 
         try:
             # Ensure available_vars is a list and log its contents

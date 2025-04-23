@@ -24,6 +24,7 @@ from .events import (
 )
 from .executor import BaseExecutor, Executor
 from .llm_util import LLMCompletionError, litellm_completion
+from .message import Message
 from .reasoner import BaseReasoner, Reasoner
 from .tools_manager import ToolRegistry
 from .working_memory import WorkingMemory
@@ -142,7 +143,16 @@ class CodeActAgent:
         try:
             step_history_str: str = self.working_memory.format_history(max_iterations)
             available_vars: List[str] = list(self.context_vars.keys())
-            conversation_history: List[Dict[str, str]] = self.conversation_history_manager.get_history()
+            # Convert Message or dict objects to dicts for reasoning
+            history_msgs = self.conversation_history_manager.get_history()
+            conversation_history: List[Dict[str, str]] = []
+            for msg in history_msgs:
+                if isinstance(msg, Message):
+                    conversation_history.append({"role": msg.role, "content": msg.content})
+                elif isinstance(msg, dict):
+                    conversation_history.append({"role": msg.get("role"), "content": msg.get("content")})
+                else:
+                    raise ValueError(f"Invalid message type {type(msg)} in history")
             start: float = time.perf_counter()
             response: str = await self.reasoner.generate_action(
                 task,
