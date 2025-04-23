@@ -80,7 +80,7 @@ class CodeActAgent:
             model, self.tool_registry.get_tools(), temperature=self.temperature
         )
         self.executor: BaseExecutor = executor or Executor(
-            self.tool_registry.get_tools(), notify_event=self._notify_observers
+            self.tool_registry.get_tools(), self._notify_observers, conversation_manager
         )
         self.max_iterations: int = max_iterations
         self.max_history_tokens: int = max_history_tokens
@@ -145,9 +145,9 @@ class CodeActAgent:
             conversation_history: List[Dict[str, str]] = []
             for msg in history_msgs:
                 if isinstance(msg, Message):
-                    conversation_history.append({"role": msg.role, "content": msg.content})
+                    conversation_history.append({"role": msg.role, "content": msg.content, "nanoid": msg.nanoid})
                 elif isinstance(msg, dict):
-                    conversation_history.append({"role": msg.get("role"), "content": msg.get("content")})
+                    conversation_history.append({"role": msg.get("role"), "content": msg.get("content"), "nanoid": msg.get("nanoid")})
                 else:
                     raise ValueError(f"Invalid message type {type(msg)} in history")
             start: float = time.perf_counter()
@@ -341,7 +341,7 @@ class CodeActAgent:
             # Log conversation history
             logger.debug(f"Conversation history: {self.conversation_history_manager.get_history()}")
             self.context_vars["conversation_history"] = [
-                {"role": message.role, "content": message.content}
+                {"role": message.role, "content": message.content, "nanoid": message.nanoid}
                 for message in self.conversation_history_manager.get_history()
             ]
             # Retain non-private, non-callable variables from previous tasks

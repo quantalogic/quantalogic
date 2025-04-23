@@ -154,7 +154,7 @@ class Shell:
         """Get the current agent's message history."""
         # Convert Message objects to dicts for compatibility with history_command
         return [
-            {"role": msg.role, "content": msg.content}
+            {"role": msg.role, "content": msg.content, "nanoid": msg.nanoid}
             for msg in self.conversation_manager.get_history()
         ]
 

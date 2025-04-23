@@ -23,19 +23,20 @@ async def history_command(shell, args: List[str]) -> Group:
     blocks = []
     # Title header
     blocks.append(Text(f"Conversation History ({len(history_list)} messages)", style="bold underline cyan"))
+    # Note: nanoid shown per message below instead of a global list
     # Build each pair
     for idx, pair in enumerate(pairs, start=1):
         # User part
         user_msg = pair[0]
         text_block = Text()
-        text_block.append(f"[{idx * 2 - 1}] User: ", style="bold blue")
+        text_block.append(f"[{idx * 2 - 1}] User (id={user_msg['nanoid']}): ", style="bold blue")
         text_block.append(user_msg["content"] + "\n")
         blocks.append(text_block)
         # Assistant part
         if len(pair) > 1:
             assistant_msg = pair[1]
             text_block = Text()
-            text_block.append(f"[{idx * 2}] Assistant: ", style="bold green")
+            text_block.append(f"[{idx * 2}] Assistant (id={assistant_msg['nanoid']}): ", style="bold green")
             text_block.append(assistant_msg["content"] + "\n")
             blocks.append(text_block)
         # Separator rule

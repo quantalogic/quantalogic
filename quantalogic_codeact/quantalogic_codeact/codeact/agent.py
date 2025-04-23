@@ -19,6 +19,7 @@ from .plugin_manager import PluginManager
 from .reasoner import BaseReasoner, Reasoner
 from .templates import jinja_env as default_jinja_env
 from .tools import RetrieveStepTool
+from .tools.retrieve_message_tool import RetrieveMessageTool
 from .tools_manager import get_default_tools
 from .utils import process_tools
 
@@ -84,7 +85,7 @@ class Agent:
             max_history_tokens=self.max_history_tokens,
             system_prompt=self._build_system_prompt(),
             reasoner=Reasoner(self.model, self.default_tools, temperature=self.temperature),
-            executor=Executor(self.default_tools, self._notify_observers),
+            executor=Executor(self.default_tools, self._notify_observers, self.conversation_manager),
             conversation_manager=self.conversation_manager,
             temperature=self.temperature  # Pass temperature
         )
@@ -228,11 +229,12 @@ class Agent:
                 max_history_tokens=self.max_history_tokens,
                 system_prompt=system_prompt,
                 reasoner=reasoner_cls(self.model, solve_tools, temperature=self.temperature, **reasoner_config),
-                executor=executor_cls(solve_tools, self._notify_observers, **executor_config),
+                executor=executor_cls(solve_tools, self._notify_observers, self.conversation_manager, **executor_config),
                 conversation_manager=self.conversation_manager,
                 temperature=self.temperature
             )
             solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.working_memory.store))
+            solve_agent.executor.register_tool(RetrieveMessageTool(conversation_manager=self.conversation_manager))
             for observer, event_types in self._observers:
                 solve_agent.add_observer(observer, event_types)
             

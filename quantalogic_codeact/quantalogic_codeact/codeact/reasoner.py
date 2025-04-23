@@ -17,37 +17,44 @@ from .xml_utils import XMLResultHandler, validate_xml
 
 class PromptStrategy(ABC):
     """Abstract base class for prompt generation strategies."""
+
     @abstractmethod
-    async def generate_prompt(self, task: str, step_history_str: str, step: int, max_iterations: int, available_vars: List[str]) -> str:
+    async def generate_prompt(
+        self, task: str, step_history_str: str, step: int, max_iterations: int, available_vars: List[str]
+    ) -> str:
         pass
 
 
 class DefaultPromptStrategy(PromptStrategy):
     """Default strategy using Jinja2 templates."""
-    async def generate_prompt(self, task: str, step_history_str: str, step: int, max_iterations: int, available_vars: List[str]) -> str:
+
+    async def generate_prompt(
+        self, task: str, step_history_str: str, step: int, max_iterations: int, available_vars: List[str]
+    ) -> str:
         tools_by_toolbox = {}
         for tool in self.tools:
             toolbox_name = tool.toolbox_name if tool.toolbox_name else "default"
             if toolbox_name not in tools_by_toolbox:
                 tools_by_toolbox[toolbox_name] = []
             tools_by_toolbox[toolbox_name].append(tool.to_docstring())
-        
+
         # Ensure available_vars is a list and log its contents
         available_vars = available_vars or []
         logger.debug(f"Rendering prompt with available_vars: {available_vars}")
-        
+
         return jinja_env.get_template("action_program.j2").render(
             task_description=task,
             history_str=step_history_str,
             current_step=step,
             max_iterations=max_iterations,
             tools_by_toolbox=tools_by_toolbox,
-            available_vars=available_vars
+            available_vars=available_vars,
         )
 
 
 class BaseReasoner(ABC):
     """Abstract base class for reasoning components."""
+
     @abstractmethod
     async def generate_action(
         self,
@@ -59,14 +66,22 @@ class BaseReasoner(ABC):
         notify_event: Callable,
         streaming: bool,
         available_vars: List[str],
-        conversation_history: List[Message]
+        conversation_history: List[Message],
     ) -> str:
         pass
 
 
 class Reasoner(BaseReasoner):
     """Handles action generation using the language model."""
-    def __init__(self, model: str, tools: List[Tool], temperature: float = 0.3, config: Optional[Dict[str, Any]] = None, prompt_strategy: Optional[PromptStrategy] = None):
+
+    def __init__(
+        self,
+        model: str,
+        tools: List[Tool],
+        temperature: float = 0.3,
+        config: Optional[Dict[str, Any]] = None,
+        prompt_strategy: Optional[PromptStrategy] = None,
+    ):
         self.model = model
         self.tools = tools
         self.temperature = temperature  # Store temperature
@@ -84,7 +99,7 @@ class Reasoner(BaseReasoner):
         notify_event: Callable = None,
         streaming: bool = False,
         available_vars: List[str] = None,
-        conversation_history: List[Message] = None
+        conversation_history: List[Message] = None,
     ) -> str:
         """Generate an action based on task and history with streaming support."""
         # Normalize and convert history items to dicts
@@ -94,9 +109,15 @@ class Reasoner(BaseReasoner):
         conversation_history = []
         for msg in conv_items:
             if isinstance(msg, Message):
-                conversation_history.append({"role": msg.role, "content": msg.content})
+                conversation_history.append(
+                    {"role": msg.role, "content": f"nanoid:{msg.nanoid}\n{msg.content}"}
+                )
             elif isinstance(msg, dict):
-                conversation_history.append({"role": msg.get("role"), "content": msg.get("content")})
+                # Add nanoid if available
+                content = msg.get("content")
+                if "nanoid" in msg:
+                    content = f"nanoid:{msg["nanoid"]}\n{msg["content"]}"
+                conversation_history.append({"role": msg.get("role"), "content": content})
             else:
                 raise ValueError(f"Invalid message type {type(msg)} in conversation_history")
 
@@ -110,19 +131,20 @@ class Reasoner(BaseReasoner):
                 step_history_str,
                 step,
                 max_iterations,
-                available_vars
+                available_vars,
             )
-            await notify_event(PromptGeneratedEvent(
-                event_type="PromptGenerated", step_number=step, prompt=task_prompt
-            ))
+            await notify_event(PromptGeneratedEvent(event_type="PromptGenerated", step_number=step, prompt=task_prompt))
             logger.debug(f"Generated prompt for step {step}:\n{task_prompt}")
 
             # Construct messages with conversation history
-            messages = [
-                {"role": "system", "content": "You are a Python code generator."}
-            ] + conversation_history + [
-                {"role": "user", "content": task_prompt}
-            ]
+            messages = (
+                [{"role": "system", "content": "You are a Python code generator."}]
+                + conversation_history
+                + [{"role": "user", "content": task_prompt}]
+            )
+
+            # display conversation history
+            logger.debug(f"👨‍🍳 Conversation history for step {step}:\n{conversation_history}")
 
             for attempt in range(3):
                 try:
@@ -133,7 +155,7 @@ class Reasoner(BaseReasoner):
                         temperature=self.temperature,
                         stream=streaming,
                         step=step,
-                        notify_event=notify_event
+                        notify_event=notify_event,
                     )
                     program = self._clean_code(response)
                     response = jinja_env.get_template("response_format.j2").render(
@@ -141,7 +163,7 @@ class Reasoner(BaseReasoner):
                         history_str=step_history_str,
                         program=program,
                         current_step=step,
-                        max_iterations=max_iterations
+                        max_iterations=max_iterations,
                     )
                     logger.debug(f"Raws Generated response for step {step}:\n{response}")
                     if not validate_xml(response):
@@ -167,11 +189,11 @@ class Reasoner(BaseReasoner):
         import textwrap
 
         # Extract code from fenced block if present, otherwise use raw input
-        match = re.search(r'```(?:[\w+-]*)\n([\s\S]*?)```', code, re.DOTALL)
+        match = re.search(r"```(?:[\w+-]*)\n([\s\S]*?)```", code, re.DOTALL)
         code_content = match.group(1) if match else code
 
         # Strip extra backticks and whitespace
-        code_content = code_content.strip('` \n')
+        code_content = code_content.strip("` \n")
 
         # Dedent for consistent formatting
         final_code = textwrap.dedent(code_content).strip()
@@ -188,7 +210,7 @@ class Reasoner(BaseReasoner):
         import re
 
         # Extract the XML part if surrounded by extra text
-        xml_match = re.search(r'<Action>.*?</Action>', response, re.DOTALL)
+        xml_match = re.search(r"<Action>.*?</Action>", response, re.DOTALL)
         if not xml_match:
             logger.error("No <Action> tag found in response")
             return "", ""
@@ -197,8 +219,8 @@ class Reasoner(BaseReasoner):
         try:
             parser = etree.XMLParser(recover=True, remove_comments=True, resolve_entities=False)
             tree = etree.fromstring(xml_str, parser=parser)
-            thought = tree.findtext('Thought', default="")
-            code_element = tree.find('Code')
+            thought = tree.findtext("Thought", default="")
+            code_element = tree.find("Code")
             code = code_element.text.strip() if code_element is not None else ""
             return thought, code
         except etree.XMLSyntaxError as e:

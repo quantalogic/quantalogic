@@ -27,7 +27,7 @@ Currently available variables from previous steps:
 {% for var in available_vars %}
 - {{ var }}: Accessible via context_vars.get('{{ var }}', default_value)
 {% endfor %}
-- conversation_history: A list of Message objects with attributes 'role' and 'content', representing the entire conversation history.
+- conversation_history: A list of dictionaries with 'role', 'content', and 'nanoid', representing the entire conversation history.
 {% else %}
 No variables available from previous steps.
 {% endif %}
@@ -37,6 +37,9 @@ No variables available from previous steps.
 You have access to the following pre-defined async tool functions, grouped by toolbox:
 
 <Tools>
+### namespace default
+--- Begin tools for namespace default ---
+- retrieve_message(nanoid: str) -> str: Retrieve the content of a message by its nanoid.
 {% for toolbox_name, docstrings in tools_by_toolbox.items() %}
 ### namespace {{ toolbox_name }}
 
@@ -87,6 +90,8 @@ Instructions:
 18. Use proper async/await syntax for all asynchronous operations.
 19. If there were errors in previous steps, review the error messages in the <History> section and adjust your code to avoid similar issues.
 20. For example, if a variable was missing, check `context_vars` with a default value; if a tool call failed, verify the arguments match the tool's requirements.
+21. Use the `retrieve_message` tool to access messages from the conversation history by their nanoid.
+22. Use the `retrieve_step` tool to access the result of a previous step by its step number.
 
 IN THE CURRENT CONTEX ONLY THE DEFINED VARIABLES AND THE CONVERSATION HISTORY ARE AVAILABLE.
 

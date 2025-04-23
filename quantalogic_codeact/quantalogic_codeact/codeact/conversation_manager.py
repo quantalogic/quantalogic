@@ -1,6 +1,6 @@
 """Manages conversation history in LiteLLM message format."""
 
-from typing import List
+from typing import Dict, List
 
 from loguru import logger
 
@@ -18,8 +18,9 @@ class ConversationManager:
             max_tokens (int): Maximum number of tokens for conversation history (default: 65536).
         """
         self.messages: List[Message] = []
+        self.message_dict: Dict[str, Message] = {}
         self.max_tokens: int = max_tokens
-        logger.debug(f"Initialized ConversationHistoryManager with max_tokens: {max_tokens}")
+        logger.debug(f"Initialized ConversationManager with max_tokens: {max_tokens}")
 
     def add_message(self, role: str, content: str) -> None:
         """
@@ -30,13 +31,13 @@ class ConversationManager:
             content (str): The content of the message.
         """
         try:
-            self.messages.append(Message(role=role, content=content))
-            logger.debug(f"Added message with role '{role}' and content '{content}'")
+            message = Message(role=role, content=content)
+            self.messages.append(message)
+            self.message_dict[message.nanoid] = message
+            logger.debug(f"Added message with nanoid '{message.nanoid}' and role '{role}'")
             # TODO: Add token counting and trimming if exceeding max_tokens
         except Exception as e:
             logger.error(f"Failed to add message: {e}")
-
-
 
     def get_history(self) -> List[Message]:
         """Alias for get_messages."""
@@ -50,6 +51,7 @@ class ConversationManager:
         """Clear the conversation history."""
         try:
             self.messages.clear()
+            self.message_dict.clear()
             logger.debug("Cleared conversation history.")
         except Exception as e:
             logger.error(f"Failed to clear conversation history: {e}")
