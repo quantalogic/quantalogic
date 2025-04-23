@@ -317,6 +317,8 @@ class CodeActAgent:
                 self.working_memory.system_prompt = system_prompt
             self.working_memory.task_description = task
             # Initialize context_vars with conversation history and previous task variables
+            # Log conversation history
+            logger.debug(f"Conversation history: {self.conversation_history_manager.get_history()}")
             self.context_vars["conversation_history"] = self.conversation_history_manager.get_history()
             # Retain non-private, non-callable variables from previous tasks
             previous_vars = {k: v for k, v in self.context_vars.items() if not k.startswith("__") and not callable(v)}

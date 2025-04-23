@@ -1,7 +1,7 @@
 """Manages conversation history in LiteLLM message format."""
 
 from dataclasses import dataclass
-from typing import List
+from typing import Any, List
 
 from loguru import logger
 
@@ -10,6 +10,15 @@ from loguru import logger
 class Message:
     role: str
     content: str
+
+    def __getitem__(self, key: str) -> Any:
+        """Allow dict-like access to role and content."""
+        if key == "role":
+            return self.role
+        if key == "content":
+            return self.content
+        raise KeyError(f"Message has no key {key}")
+
 
 class ConversationHistoryManager:
     """Manages the storage and summarization of conversation history in LiteLLM format."""
@@ -45,6 +54,7 @@ class ConversationHistoryManager:
     def get_history(self) -> List[Message]:
         """Alias for get_messages."""
         try:
+            logger.debug(f"Getting conversation history: {self.messages}")
             return self.messages
         except Exception as e:
             logger.error(f"Error getting history: {e}")

@@ -152,7 +152,11 @@ class Shell:
     @property
     def current_message_history(self) -> List[Dict[str, str]]:
         """Get the current agent's message history."""
-        return self.conversation_manager.get_history()
+        # Convert Message objects to dicts for compatibility with history_command
+        return [
+            {"role": msg.role, "content": msg.content}
+            for msg in self.conversation_manager.get_history()
+        ]
 
     def _register_builtin_commands(self) -> None:
         """Register all built-in commands with their arguments for autocompletion."""

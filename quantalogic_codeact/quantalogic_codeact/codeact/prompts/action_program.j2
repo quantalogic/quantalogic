@@ -27,6 +27,7 @@ Currently available variables from previous steps:
 {% for var in available_vars %}
 - {{ var }}: Accessible via context_vars.get('{{ var }}', default_value)
 {% endfor %}
+- conversation_history: A list of Message objects with attributes 'role' and 'content', representing the entire conversation history.
 {% else %}
 No variables available from previous steps.
 {% endif %}
@@ -72,10 +73,10 @@ Instructions:
 9. Express all string variables as multiline strings, starting at the beginning of a line.
 10. Access variables from previous steps using the `context_vars` dictionary:
     - Use `context_vars.get("variable_name", default_value)` to safely retrieve variables (e.g., `previous_sum = context_vars.get("step1_sum", 0)`).
+    - VERY IMPORTANT: Never use variables that are not explicitly mentioned in the 'Available Variables' section.
     - Always specify a default value to handle cases where the variable might not exist.
     - Check the 'Available Variables' section above for relevant previous results.
     - Use these variables to build on prior work rather than starting from scratch.
-    - Only use variables that are explicitly mentioned in the 'Available Variables' section.
 11. Be careful to avoid programs that cannot terminate.
 12. When defining new variables, prefix them with 'step{{ current_step }}_' (e.g., `step{{ current_step }}_result`) to ensure uniqueness across steps.
 13. Never use dangerous functions like eval, or any other unsafe operations.
@@ -87,17 +88,22 @@ Instructions:
 19. If there were errors in previous steps, review the error messages in the <History> section and adjust your code to avoid similar issues.
 20. For example, if a variable was missing, check `context_vars` with a default value; if a tool call failed, verify the arguments match the tool's requirements.
 
-Example task: "Translate a poem"
+IN THE CURRENT CONTEX ONLY THE DEFINED VARIABLES AND THE CONVERSATION HISTORY ARE AVAILABLE.
 
-If in the history, there is a variable 'step1_poem' with the poem text, then the program should be:
+This only an example:
+
+<Example>
+Example task: "Translate a paragraph"
+
+If in the history, there is a variable 'step1_paragraph' with the paragraph text, then the program should be:
 
 import asyncio
 
 async def main():
-    step{{ current_step }}_poem: str = context_vars.get('step1_poem', '')
-    if step{{ current_step }}_poem:
+    step{{ current_step }}_paragraph: str = context_vars.get('step1_paragraph', '')
+    if step{{ current_step }}_paragraph:
         step{{ current_step }}_system_prompt: str = "You are a translation expert. Translate the given text to Spanish."
-        step{{ current_step }}_prompt: str = f"Translate the following poem to Spanish:\n\n{step{{ current_step }}_poem}"
+        step{{ current_step }}_prompt: str = f"Translate the following paragraph to Spanish:\n\n{step{{ current_step }}_paragraph}"
         step{{ current_step }}_translation: str = await default.agent_tool(
             system_prompt=step{{ current_step }}_system_prompt,
             prompt=step{{ current_step }}_prompt,
@@ -105,4 +111,5 @@ async def main():
         )
         return {'status': 'completed', 'result': step{{ current_step }}_translation}
     else:
-        return {'status': 'inprogress', 'result': '', 'next_step': 'Obtain the poem to translate'}
+        return {'status': 'inprogress', 'result': '', 'next_step': 'Obtain the paragraph to translate'}
+</Example>

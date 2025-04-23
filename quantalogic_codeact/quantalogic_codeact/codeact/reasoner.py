@@ -105,17 +105,6 @@ class Reasoner(BaseReasoner):
             available_vars = available_vars or []
             logger.debug(f"Step {step}: Generating action with available_vars: {available_vars}")
 
-            # Prepare type hints for available variables based on tool return types
-            available_var_types = {}
-            for var_name in available_vars:
-                # Infer type from tool documentation if possible (simplified heuristic)
-                if "plan" in var_name.lower():
-                    available_var_types[var_name] = "PlanResult (has attributes: task_id, task_description, subtasks)"
-                elif "poem" in var_name.lower():
-                    available_var_types[var_name] = "str (poem text)"
-                else:
-                    available_var_types[var_name] = "Unknown (check history or assume str)"
-
             task_prompt = await self.prompt_strategy.generate_prompt(
                 task if not system_prompt else f"{system_prompt}\nTask: {task}",
                 step_history_str,
