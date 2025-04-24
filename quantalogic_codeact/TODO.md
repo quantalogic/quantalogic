@@ -5,6 +5,8 @@
 - [ ] 2 modes CodeAct and direct response
 - [ ] Better personnality configuration
     - [ ] Better Model for configuration
+- [ ] Human Interractions
+    - [ ] Questions (list of choices), with comments
 - [ ] Support of Image Analysis
 - [ ] Support of Audio Analysis
 - [ ] Support of Video Analysis

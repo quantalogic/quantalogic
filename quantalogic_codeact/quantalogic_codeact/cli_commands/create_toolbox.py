@@ -30,19 +30,27 @@ def create_toolbox(
     version = "0.1.0"
     package_dir = toolbox_dir / package_name
     package_dir.mkdir()
-    # Create __init__.py with version info
-    init_file = package_dir / "__init__.py"
-    init_file.write_text(f'""" {name} toolbox package """\n__version__ = "{version}"\n')
 
-    # Render and write template files
+    # Render and write template files (including __init__.py)
     context = {"name": name, "package_name": package_name, "version": version}
-    for template_name in ["pyproject.toml.j2", "tools.py.j2", "README.md.j2"]:
+    template_files = [
+        "pyproject.toml.j2",
+        "tools.py.j2",
+        "README.md.j2",
+        "__init__.py.j2",
+    ]
+    for template_name in template_files:
         template = env.get_template(template_name)
         content = template.render(**context)
-        output_file = toolbox_dir / template_name.replace(".j2", "")
         if template_name == "tools.py.j2":
             output_file = package_dir / "tools.py"
+        elif template_name == "__init__.py.j2":
+            output_file = package_dir / "__init__.py"
+        else:
+            output_file = toolbox_dir / template_name.replace(".j2", "")
         output_file.write_text(content.strip())
 
-    logger.info(f"Created starter toolbox project: {name}")
-    console.print(f"[green]Created starter toolbox project: {name}[/green]")
+    # Inform user of toolbox path
+    toolbox_path = toolbox_dir.resolve()
+    logger.info(f"Created starter toolbox project '{name}' at: {toolbox_path}")
+    typer.echo(f"Toolbox created at: {toolbox_path}")
