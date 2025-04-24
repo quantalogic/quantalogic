@@ -22,6 +22,16 @@ async def set_command(shell, args: List[str]) -> str:
 
     field_name = args[0]
     value_str = " ".join(args[1:])
+
+    # Handle setting maxiterations in shell state
+    if field_name.lower() == 'maxiterations':
+        try:
+            val = int(value_str)
+            shell.state.max_iterations = val
+            return f"Max iterations set to {val}"
+        except ValueError:
+            return "Invalid value for maxiterations: must be integer"
+
     current_config = shell.current_agent.config
 
     # Get valid fields from AgentConfig
