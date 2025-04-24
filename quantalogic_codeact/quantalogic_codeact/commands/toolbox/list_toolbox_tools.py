@@ -1,3 +1,4 @@
+from quantalogic_codeact.cli_commands.config_manager import load_global_config
 from quantalogic_codeact.codeact.plugin_manager import PluginManager
 
 

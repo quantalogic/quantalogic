@@ -1,6 +1,6 @@
 from typing import List
 
-from quantalogic_codeact.codeact.cli_commands.config_manager import load_global_config
+from quantalogic_codeact.cli_commands.config_manager import load_global_config
 
 
 async def installed_toolbox(shell, args: List[str]) -> str:

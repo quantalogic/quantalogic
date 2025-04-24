@@ -144,8 +144,6 @@ async def run_react_agent(
     reasoner_name=None,
     executor_name=None,
     tools_config=None,
-    profile=None,
-    customizations=None,
     temperature: float = 0.7  # Added temperature parameter
 ) -> None:
     """Run the Agent with detailed event monitoring."""
@@ -167,8 +165,6 @@ async def run_react_agent(
         reasoner_name=reasoner_name if reasoner_name else "default",
         executor_name=executor_name if executor_name else "default",
         tools_config=tools_config,
-        profile=profile,
-        customizations=customizations,
         temperature=temperature  # Added temperature
     )
     
@@ -200,20 +196,17 @@ def task(
     reasoner: str = typer.Option(None, help="Name of the reasoner to use"),
     executor: str = typer.Option(None, help="Name of the executor to use"),
     tools_config: str = typer.Option(None, help="JSON/YAML string for tools_config"),
-    profile: str = typer.Option(None, help="Agent profile (e.g., 'math_expert')"),
-    customizations: str = typer.Option(None, help="JSON/YAML string for customizations"),
     temperature: float = typer.Option(0.7, help="Temperature for the language model (0 to 1)")  # Added temperature option
 ) -> None:
     """CLI command to run the Agent with detailed event monitoring."""
     try:
         # Parse optional JSON/YAML strings
         tools_config_list = json.loads(tools_config) if tools_config else None
-        customizations_dict = json.loads(customizations) if customizations else None
         asyncio.run(run_react_agent(
             task, model, max_iterations, success_criteria,
             personality=personality, backstory=backstory, sop=sop, debug=debug,
             streaming=streaming, reasoner_name=reasoner, executor_name=executor,
-            tools_config=tools_config_list, profile=profile, customizations=customizations_dict,
+            tools_config=tools_config_list,
             temperature=temperature  # Added temperature
         ))
     except Exception as e:

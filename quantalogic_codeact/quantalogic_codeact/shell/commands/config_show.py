@@ -5,7 +5,7 @@ from jinja2 import Environment
 from rich.console import Console
 from rich.table import Table
 
-import quantalogic_codeact.codeact.cli_commands.config_manager as config_manager
+import quantalogic_codeact.cli_commands.config_manager as config_manager
 
 console = Console()
 

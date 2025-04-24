@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from quantalogic_codeact.codeact.cli_commands.config_manager import load_global_config, save_global_config
+from quantalogic_codeact.cli_commands.config_manager import load_global_config, save_global_config
 
 app = typer.Typer()
 console = Console()
@@ -64,7 +64,7 @@ def install_toolbox(
                 "version": version
             })
         else:
-            from quantalogic_codeact.codeact.cli import plugin_manager
+            from quantalogic_codeact.cli import plugin_manager
             for ep in installed_eps:
                 # Load the module and register tools
                 try:

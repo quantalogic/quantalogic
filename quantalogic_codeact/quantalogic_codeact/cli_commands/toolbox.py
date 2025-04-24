@@ -3,13 +3,13 @@ import asyncio
 import typer
 from rich.console import Console
 
-from quantalogic_codeact.codeact.commands.toolbox import (
+from quantalogic_codeact.codeact.plugin_manager import PluginManager
+from quantalogic_codeact.commands.toolbox import (
     get_tool_doc,
     install_toolbox,
     list_toolbox_tools,
     uninstall_toolbox,
 )
-from quantalogic_codeact.codeact.plugin_manager import PluginManager
 
 app = typer.Typer()
 console = Console()

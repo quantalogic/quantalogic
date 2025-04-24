@@ -6,8 +6,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from quantalogic_codeact.codeact.cli import plugin_manager
-from quantalogic_codeact.codeact.cli_commands.config_manager import GLOBAL_CONFIG_PATH, load_global_config
+from quantalogic_codeact.cli import plugin_manager
+from quantalogic_codeact.cli_commands.config_manager import GLOBAL_CONFIG_PATH, load_global_config
 
 app = typer.Typer()
 console = Console()

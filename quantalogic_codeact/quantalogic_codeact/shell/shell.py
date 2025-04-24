@@ -16,16 +16,16 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-import quantalogic_codeact.codeact.cli_commands.config_manager as config_manager
+import quantalogic_codeact.cli_commands.config_manager as config_manager
 from quantalogic_codeact.codeact.agent import Agent, AgentConfig
-from quantalogic_codeact.codeact.commands.toolbox.disable_toolbox import disable_toolbox
-from quantalogic_codeact.codeact.commands.toolbox.enable_toolbox import enable_toolbox
-from quantalogic_codeact.codeact.commands.toolbox.get_tool_doc import get_tool_doc
-from quantalogic_codeact.codeact.commands.toolbox.install_toolbox import install_toolbox
-from quantalogic_codeact.codeact.commands.toolbox.installed_toolbox import installed_toolbox
-from quantalogic_codeact.codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
-from quantalogic_codeact.codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
 from quantalogic_codeact.codeact.conversation_manager import ConversationManager
+from quantalogic_codeact.commands.toolbox.disable_toolbox import disable_toolbox
+from quantalogic_codeact.commands.toolbox.enable_toolbox import enable_toolbox
+from quantalogic_codeact.commands.toolbox.get_tool_doc import get_tool_doc
+from quantalogic_codeact.commands.toolbox.install_toolbox import install_toolbox
+from quantalogic_codeact.commands.toolbox.installed_toolbox import installed_toolbox
+from quantalogic_codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
+from quantalogic_codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
 from quantalogic_codeact.version import get_version
 
 from .agent_state import AgentState

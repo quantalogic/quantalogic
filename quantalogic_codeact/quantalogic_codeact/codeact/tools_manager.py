@@ -122,7 +122,7 @@ def get_default_tools(
     tools_config: Optional[List[dict[str, Any]]] = None
 ) -> List[Tool]:
     """Dynamically load default tools using the pre-loaded registry from PluginManager."""
-    from .cli import plugin_manager
+    from quantalogic_codeact.cli import plugin_manager
 
     try:
         plugin_manager.load_plugins()

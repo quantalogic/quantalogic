@@ -5,8 +5,8 @@ from importlib.metadata import entry_points
 from importlib.metadata import version as metadata_version
 from pathlib import Path
 
-from quantalogic_codeact.codeact.cli import plugin_manager
-from quantalogic_codeact.codeact.cli_commands.config_manager import load_global_config, save_global_config
+from quantalogic_codeact.cli_commands.config_manager import load_global_config, save_global_config
+from quantalogic_codeact.codeact.plugin_manager import PluginManager
 
 
 def install_toolbox_core(toolbox_name: str) -> list[str]:
@@ -73,11 +73,12 @@ def install_toolbox_core(toolbox_name: str) -> list[str]:
             "path": path
         })
     # Register tools for new toolbox
+    plugin_manager_instance = PluginManager()
     for ep in installed_eps:
         try:
             module = ep.load()
             if hasattr(module, "get_tools"):
-                plugin_manager.tools.register_tools_from_module(module, toolbox_name=ep.name)
+                plugin_manager_instance.tools.register_tools_from_module(module, toolbox_name=ep.name)
                 messages.append(f"Tools registered for toolbox '{ep.name}'.")
         except Exception as e:
             messages.append(f"Warning: Could not register tools for '{ep.name}': {e}")

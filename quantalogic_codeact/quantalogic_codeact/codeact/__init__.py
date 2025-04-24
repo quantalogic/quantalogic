@@ -1,6 +1,6 @@
 from .agent import Agent
 from .agent_config import AgentConfig
-from .cli import plugin_manager
+from ..cli import plugin_manager
 from .codeact_agent import CodeActAgent
 from .completion_evaluator import CompletionEvaluator, DefaultCompletionEvaluator
 from .constants import (

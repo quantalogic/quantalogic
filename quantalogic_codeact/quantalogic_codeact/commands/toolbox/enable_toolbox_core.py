@@ -1,6 +1,6 @@
 from typing import List
 
-import quantalogic_codeact.codeact.cli_commands.config_manager as config_manager
+import quantalogic_codeact.cli_commands.config_manager as config_manager
 
 
 def enable_toolbox_core(toolbox_name: str) -> List[str]:

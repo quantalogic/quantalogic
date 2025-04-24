@@ -1,9 +1,8 @@
-
 import typer
 import yaml
 from loguru import logger
 
-from quantalogic_codeact.codeact.cli_commands.config_manager import GLOBAL_CONFIG_PATH
+from quantalogic_codeact.cli_commands.config_manager import GLOBAL_CONFIG_PATH
 
 app = typer.Typer()
 

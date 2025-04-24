@@ -1,7 +1,7 @@
 import asyncio
 
-from quantalogic_codeact.codeact.cli_commands.config_manager import load_global_config
-from quantalogic_codeact.codeact.commands.toolbox.install_toolbox_core import install_toolbox_core
+from quantalogic_codeact.cli_commands.config_manager import load_global_config
+from quantalogic_codeact.commands.toolbox.install_toolbox_core import install_toolbox_core
 
 
 async def install_toolbox(shell, args: list[str]) -> str:

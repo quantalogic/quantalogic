@@ -11,7 +11,7 @@ from loguru import logger
 logger.remove()
 logger.add(sys.stderr, level="ERROR", format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
 
-import quantalogic_codeact.codeact.cli_commands.config_manager as cm  # noqa: E402
+import quantalogic_codeact.cli_commands.config_manager as cm  # noqa: E402
 from quantalogic_codeact.shell.shell import Shell  # noqa: E402
 
 app = typer.Typer()
@@ -53,11 +53,11 @@ def shell(ctx: typer.Context):
     shell_instance = Shell(cli_log_level=log_level)
     asyncio.run(shell_instance.run())
 
-# Dynamically load CLI commands from codeact/cli_commands/
-cli_commands_dir = Path(__file__).parent / "codeact" / "cli_commands"
+# Dynamically load CLI commands from cli_commands/
+cli_commands_dir = Path(__file__).parent / "cli_commands"
 for file in cli_commands_dir.glob("*.py"):
     if file.stem != "__init__":
-        module_name = f"quantalogic_codeact.codeact.cli_commands.{file.stem}"
+        module_name = f"quantalogic_codeact.cli_commands.{file.stem}"
         try:
             module = importlib.import_module(module_name)
             # Handle direct command functions (e.g., task.py)
