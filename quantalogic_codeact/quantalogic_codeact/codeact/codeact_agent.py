@@ -160,6 +160,7 @@ class CodeActAgent:
                 self._notify_observers,
                 streaming=streaming,
                 available_vars=available_vars,
+                allowed_modules=self.executor.allowed_modules,
                 conversation_history=conversation_history,
             )
             thought, code = XMLResultHandler.parse_action_response(response)

@@ -71,7 +71,7 @@ Ensure the program checks if the task goal is achieved using available variables
 
 Instructions:
 1. Generate a simple Python program, avoiding complex logic, and return it as a single string. Call no more than 3 functions.
-2. Only import from the following allowed modules: `asyncio`, `math`, `random`, `time`, `typing`, `datetime`, `dataclasses`.
+2. Only import from the following allowed modules: `{{ allowed_modules | join('`, `') }}`.
 3. Define an async function named main() that solves the task.
 4. Use the pre-defined tool functions by calling them with await and prefixing them with their toolbox name (e.g., `await {{ toolbox_name }}.tool_name(arg1, arg2)`). For core tools, use `default.tool_name` (e.g., `await default.agent_tool(...)`).
 5. Do not redefine the tool functions within the program; assume they are already available in the namespace under their toolbox names (e.g., `default.agent_tool` for core tools).
