@@ -19,6 +19,25 @@ Quantalogic CodeAct is a powerful, modular framework designed to create and mana
     - [Shell Commands](#shell-commands)
     - [CLI Commands](#cli-commands)
   - [Examples](#examples)
+
+---
+
+## Toolbox System Documentation
+
+For a comprehensive guide on creating, configuring, and managing toolboxes in Quantalogic, see the [Toolbox Documentation](docs/01-quantalogic-toolbox.md).
+
+This document covers:
+- The motivation and benefits of using toolboxes
+- Toolbox structure and anatomy
+- How to define and register tools
+- Discovery and registration process
+- Tool execution and configuration (including YAML examples)
+- Managing toolboxes via CLI and interactive shell
+- Best practices for tool development
+- Security, performance, and testing tips
+- Frequently asked questions (FAQ)
+
+Refer to the [Toolbox Documentation](docs/01-quantalogic-toolbox.md) for details and hands-on examples.
   - [Configuration](#configuration)
 - [Contributing](#contributing)
 - [License](#license)
@@ -425,20 +444,21 @@ Commands:
 >
 > This allows you to easily switch between different agent setups or environments.
 
-Examples:
-  quantalogic_codeact shell
-  quantalogic_codeact task "Solve 2 + 2" --streaming
-  quantalogic_codeact create-toolbox my_toolbox
-  quantalogic_codeact config-load ./myconfig.yaml
-  quantalogic_codeact list-models
-  quantalogic_codeact list-toolboxes
-  quantalogic_codeact install-toolbox math_tools
-  quantalogic_codeact uninstall-toolbox math_tools
-```
-
 ### Examples
 
+```bash
+quantalogic_codeact shell
+quantalogic_codeact task "Solve 2 + 2" --streaming
+quantalogic_codeact create-toolbox my_toolbox
+quantalogic_codeact config-load ./myconfig.yaml
+quantalogic_codeact list-models
+quantalogic_codeact list-toolboxes
+quantalogic_codeact install-toolbox math_tools
+quantalogic_codeact uninstall-toolbox math_tools
+```
+
 For a detailed guide on agent configuration, see [examples/README.md](examples/README.md). A sample configuration is provided in [examples/agent_sample.yaml](examples/agent_sample.yaml):
+
 ```yaml
 model: "deepseek/deepseek-chat"
 max_iterations: 5

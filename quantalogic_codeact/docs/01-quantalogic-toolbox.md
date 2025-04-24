@@ -1,45 +1,72 @@
-# 01. Quantalogic Toolbox Overview
+# Quantalogic Toolbox Documentation
 
-Quantalogic’s toolbox system provides a modular, type-safe, and self-documenting way to extend your AI agent with new capabilities. By writing plain Python functions—annotated with type hints and docstrings—you get:
+The Quantalogic Toolbox system empowers developers to extend AI agents with modular, type-safe, and self-documenting tools written in Python. By defining tools as Python functions with type hints and docstrings, you enable automatic discovery, input/output validation, and rich documentation generation. Toolboxes are ideal for adding capabilities like file operations, API integrations, or custom business logic to AI agents without modifying their core functionality.
 
-- **Automatic discovery** via Python entry points
-- **Validation** of inputs and outputs
-- **Rich documentation** generated from your code
-- **Seamless sync/async execution** under the hood
+## Table of Contents
+- [Why Use a Toolbox?](#why-use-a-toolbox)
+- [Anatomy of a Toolbox](#anatomy-of-a-toolbox)
+  - [Declaring Your Tools](#declaring-your-tools)
+  - [Managing Dependencies](#managing-dependencies)
+  - [Toolbox Structure](#toolbox-structure)
+- [Discovery and Registration](#discovery-and-registration)
+- [Tool Definition and Execution](#tool-definition-and-execution)
+  - [Defining Tools](#defining-tools)
+  - [Executing Tools](#executing-tools)
+  - [Error Handling](#error-handling)
+- [Automatic Documentation](#automatic-documentation)
+- [Installing and Managing Toolboxes](#installing-and-managing-toolboxes)
+  - [CLI Mode](#cli-mode)
+  - [Shell Mode](#shell-mode)
+  - [Key Differences](#key-differences)
+- [Using Custom Configurations](#using-custom-configurations)
+  - [Global Configuration](#global-configuration)
+  - [Project-Specific Configuration](#project-specific-configuration)
+  - [Tool-Specific Configuration](#tool-specific-configuration)
+  - [Working Example: Injected Configuration](#working-example-injected-configuration)
+- [Best Practices](#best-practices)
+  - [Structured Returns](#structured-returns)
+  - [Pagination and Limiting](#pagination-and-limiting)
+  - [Environment Variables](#environment-variables)
+  - [Tool Versioning](#tool-versioning)
+- [Security Considerations](#security-considerations)
+- [Performance Optimization](#performance-optimization)
+- [Testing Your Tools](#testing-your-tools)
+- [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
 
 ---
 
-## 1. Why Use a Toolbox?
+## Why Use a Toolbox?
 
-AI agents grow complex when handling file I/O, external APIs, or custom business logic. Toolboxes solve this by:
+Quantalogic Toolboxes provide a modular framework for extending AI agents, simplifying the integration of complex functionalities such as file I/O, external APIs, or domain-specific logic. Key benefits include:
 
-- Keeping domain logic decoupled from core agent flow
-- Allowing teams to build, test, and publish independently
-- Providing clear contracts (types + examples) for each tool
-- Enabling hot-plugging of new features without redeploying the core agent
+- **Decoupled Logic**: Separates domain-specific code from the agent’s core, improving maintainability.
+- **Independent Development**: Enables teams to build, test, and publish toolboxes independently.
+- **Type Safety**: Leverages Python type hints for automatic validation of inputs and outputs.
+- **Hot-Pluggable Features**: Allows adding or updating tools without redeploying the agent.
+- **Rich Documentation**: Generates detailed documentation automatically from code metadata.
 
+**Example Use Case**: A team wants an AI agent to read and process text files. Instead of modifying the agent’s core, they create a `file_toolbox` with a `read_file` tool, which can be installed and used immediately.
 
-## 2. Anatomy of a Toolbox
+---
 
-A toolbox is a self-contained Python package with three main parts:
+## Anatomy of a Toolbox
 
-```text
-my_file_toolbox/
-├─ pyproject.toml     # metadata + entry-point declaration
-├─ my_file_toolbox/   # Python package
-│   ├─ __init__.py    # exports get_tools()
-│   └─ tools.py       # your async tool functions
-└─ README.md          # optional user guide
-```
+A toolbox is a self-contained Python package with a standardized structure, designed for easy creation and integration.
 
-### 2.1 Declaring Your Tools
+### Declaring Your Tools
 
-In `tools.py`, define async or sync functions with type hints and docstrings:
+Tools are defined in a `tools.py` file as Python functions, which can be synchronous or asynchronous. Each tool must include type hints and a docstring to enable automatic validation and documentation generation.
+
+**Example: Synchronous and Asynchronous Tools**
 
 ```python
+# my_toolbox/tools.py
+def sync_tool(x: int) -> str:
+    """Convert an integer to string."""
+    return str(x)
+
 async def read_file(path: str) -> str:
-    """
-    Read a local file and return its contents.
+    """Read a local file and return its contents.
 
     Args:
         path: Path to the file.
@@ -51,34 +78,76 @@ async def read_file(path: str) -> str:
         return f.read()
 ```
 
-Then expose them in `__init__.py`:
+### Managing Dependencies
 
-```python
-from importlib.metadata import entry_points
-from quantalogic_toolbox.tool import create_tool
+Dependencies are specified in the `pyproject.toml` file to ensure tools have access to required libraries.
 
-# discover and register tools in this package
-
-def get_tools():
-    return [read_file]
-```
-
-`pyproject.toml` needs an entry point under `quantalogic.tools`:
+**Example: Adding a Dependency**
 
 ```toml
-[project.entry-points.quantalogic.tools]
-my_file_toolbox = "my_file_toolbox"
+# my_toolbox/pyproject.toml
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.28.0"  # For HTTP requests in tools
 ```
 
+### Toolbox Structure
 
-## 3. Discovery & Registration
+A typical toolbox has the following structure:
 
-At startup, the core agent uses **PluginManager** to scan Python entry points:
+```
+my_toolbox/
+├── pyproject.toml     # Metadata and entry-point declaration
+├── my_toolbox/
+│   ├── __init__.py    # Exports get_tools()
+│   └── tools.py       # Tool functions
+└── README.md          # Optional user guide
+```
 
-1. Calls `importlib.metadata.entry_points(group="quantalogic.tools")`
-2. For each entry: imports the toolbox package
-3. Executes its `get_tools()` to register all [Tool](#) instances
-4. Stores them in a central **ToolRegistry** for invocation
+Expose tools in `__init__.py`:
+
+```python
+# my_toolbox/__init__.py
+from .tools import sync_tool, read_file
+
+def get_tools():
+    return [sync_tool, read_file]
+```
+
+Declare the toolbox in `pyproject.toml`:
+
+```toml
+[tool.poetry]
+name = "my-toolbox"
+version = "0.1.0"
+description = "A custom toolbox for Quantalogic"
+authors = ["Your Name <you@example.com>"]
+packages = [{ include = "my_toolbox" }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+quantalogic = ">0.60.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.plugins."quantalogic.tools"]
+my_toolbox = "my_toolbox"
+```
+
+---
+
+## Discovery and Registration
+
+At startup, the Quantalogic agent uses the `PluginManager` to discover and register toolboxes:
+
+1. Scans Python entry points under the `quantalogic.tools` group using `importlib.metadata.entry_points`.
+2. Imports each toolbox package.
+3. Calls the `get_tools()` function to retrieve tool functions.
+4. Registers tools in a central `ToolRegistry` for invocation.
+
+**Sequence Diagram**
 
 ```mermaid
 sequenceDiagram
@@ -93,176 +162,436 @@ sequenceDiagram
     EP->>TB: import package
     TB->>Registry: register(create_tool(fn))
   end
-```  
-
-
-## 4. Tool Definition & Execution
-
-Under the hood, `create_tool(func)` uses:
-
-- **AST + inspect** to read function signature, defaults, and docstring
-- **Pydantic** (`ToolArgument`) to validate & describe each parameter
-- A dynamic subclass of **ToolDefinition** with:
-  - `.execute(...)` & `.async_execute(...)` methods
-  - Full metadata: names, types, descriptions, examples, return schemas
-
-Once registered, invoking a tool is as simple as:
-
-```python
-result = await registry.get("read_file").async_execute(path="./data.txt")
-```  
-
-or via the Quantalogic CLI:
-
-```bash
-/toolbox tools             # list all tools
-/toolbox read_file ./data
 ```
 
+**Note**: Only toolboxes listed in `enabled_toolboxes` in the configuration file are loaded, enabling selective activation.
 
-## 5. Automatic Documentation
+---
 
-Every Tool instance carries its own spec. You can generate docs programmatically:
+## Tool Definition and Execution
 
-```python
-for tool in registry.get_tools():
-    md = tool.to_markdown()
-    print(md)
-```
+### Defining Tools
 
-- **to_markdown()** emits a Markdown page with tables for arguments, return schemas, and usage examples
-- **to_docstring()** gives a Python docstring you can embed in Sphinx or IDEs
-- **to_json()** yields a machine-readable schema for tooling and validation
+Tools are Python functions wrapped as `Tool` instances via the `create_tool` function. Each tool includes:
 
+- **Metadata**: Name, description, arguments, return type, etc.
+- **Execution Methods**: `execute` (synchronous) and `async_execute` (asynchronous).
 
-## 6. Tips & Best Practices
-
-### 6.1 Using dataclasses for structured returns
-
-You can return Python `@dataclass` instances; the toolbox will serialize them as dictionaries automatically:
+**Example: Complex Tool with Structured Return**
 
 ```python
 from dataclasses import dataclass
+from typing import List
+import os
+
 @dataclass
 class FileInfo:
     name: str
     size: int
 
-async def list_files(path: str) -> list[FileInfo]:
-    import os
+async def list_files(path: str) -> List[FileInfo]:
+    """List files in a directory.
+
+    Args:
+        path: Directory path.
+
+    Returns:
+        List of FileInfo objects containing file names and sizes.
+    """
     files = os.listdir(path)
     return [FileInfo(name=f, size=os.path.getsize(os.path.join(path, f))) for f in files]
 ```
 
-#### Reconstructing dataclass from dict
+### Executing Tools
 
-When tools return dictionaries (e.g. via JSON or CLI), you can recreate your `@dataclass`:
+Tools are executed within the agent’s task-solving process or programmatically, not as direct CLI commands.
+
+- **Programmatic Invocation**:
+  ```python
+  from quantalogic_codeact.codeact.tools_manager import ToolRegistry
+  registry = ToolRegistry()
+  result = await registry.get("read_file").async_execute(path="./data.txt")
+  ```
+
+- **Shell Task Solving**:
+  Tools are invoked indirectly when solving tasks in the interactive shell:
+  ```bash
+  /solve "Read the contents of ./data.txt"
+  ```
+  This triggers the agent to use tools like `read_file` from registered toolboxes, managed by the `Executor` class.
+
+**Note**: Direct CLI invocation of tools (e.g., `quantalogic_codeagent toolbox read_file --path ./data.txt`) is not supported. Instead, tools are used within task-solving or programmatic contexts.
+
+### Error Handling
+
+Tools should handle errors to prevent agent crashes. Use try-except blocks to manage exceptions:
+
+```python
+async def read_file(path: str) -> str:
+    """Read a file or return an error message."""
+    try:
+        with open(path, 'r') as f:
+            return f.read()
+    except FileNotFoundError:
+        return "Error: File not found"
+    except Exception as e:
+        return f"Error: {str(e)}"
+```
+
+---
+
+## Automatic Documentation
+
+Each `Tool` instance carries a specification, enabling programmatic documentation generation:
+
+- **`to_markdown()`**: Generates a Markdown page with tables for arguments, return schemas, and examples.
+- **`to_docstring()`**: Produces a Python docstring for use in Sphinx or IDEs.
+- **`to_json()`**: Yields a machine-readable schema for validation or tooling.
+
+**Example: Generating Markdown**
+
+```python
+from quantalogic_codeact.codeact.tools_manager import ToolRegistry
+registry = ToolRegistry()
+for tool in registry.get_tools():
+    print(tool.to_markdown())
+```
+
+**Sample Output for `read_file`**
+
+```markdown
+`read_file`:
+- **Description**: Read a local file and return its contents.
+
+- **Parameters**:
+  - `path`: (string, required)
+    Path to the file.
+
+- **Usage**:
+```xml
+<read_file>
+  <path>./data.txt</path>
+</read_file>
+```
+
+- **Returns**: `string` - File contents as a string.
+- **Example Return Value**: `"Hello, Quantalogic!"`
+```
+
+---
+
+## Installing and Managing Toolboxes
+
+Toolboxes are managed via the command-line interface (CLI) or interactive shell, using shared logic.
+
+### CLI Mode
+
+Use the CLI for scripting or automation:
+
+```bash
+# Install from PyPI
+quantalogic_codeagent toolbox install quantalogic-toolbox-files
+
+# Install from a local wheel file
+quantalogic_codeagent toolbox install ./dist/my_toolbox-1.0.0-py3-none-any.whl
+
+# Uninstall a toolbox
+quantalogic_codeagent toolbox uninstall quantalogic-toolbox-files
+
+# List installed toolboxes
+quantalogic_codeagent toolbox installed
+```
+
+### Shell Mode
+
+Use `/toolbox` commands in the interactive shell for dynamic management:
+
+```bash
+/toolbox install quantalogic-toolbox-files
+/toolbox uninstall quantalogic-toolbox-files
+/toolbox installed
+/toolbox tools quantalogic_toolbox_files  # List tools
+/toolbox doc quantalogic_toolbox_files read_file  # Show tool documentation
+```
+
+### Key Differences
+
+| Feature                | CLI Mode                          | Shell Mode                              |
+|------------------------|-----------------------------------|-----------------------------------------|
+| **Scope**              | System/global                    | Current session + global                |
+| **Immediate Refresh**  | No (requires agent restart)      | Yes (tools available instantly)         |
+| **Scripting**          | Yes                              | No                                      |
+| **Feedback**           | Limited (stdout)                 | Rich, contextual in-shell output        |
+
+---
+
+## Using Custom Configurations
+
+The Quantalogic agent supports flexible configuration through YAML files. Configurations define settings like installed toolboxes, enabled toolboxes, logging levels, and tool-specific overrides.
+
+### Global Configuration
+
+The default configuration is stored at `~/.quantalogic/config.yaml`, specifying installed and enabled toolboxes, logging levels, and other settings.
+
+**Example: Global Config**
+
+```yaml
+log_level: ERROR
+installed_toolboxes:
+  - name: quantalogic_toolbox_files
+    package: quantalogic-toolbox-files
+    version: 0.1.0
+enabled_toolboxes:
+  - quantalogic_toolbox_files
+```
+
+### Project-Specific Configuration
+
+Start the agent with a custom config file to isolate settings for a project:
+
+```bash
+quantalogic_codeagent --config ./my_project_config.yaml
+```
+
+**Behavior**:
+- Loads settings and toolboxes from the specified file.
+- Updates (e.g., install/uninstall) affect only this file.
+- Supports multiple configs for different environments (e.g., `config-dev.yaml`, `config-prod.yaml`).
+
+### Tool-Specific Configuration
+
+Override tool settings using a `tools_config` list in the configuration file. Each entry specifies a tool’s name and properties like `enabled`, `timeout`, or `default`, which are applied to the `Tool` instance during registration.
+
+**Example: Tool-Specific Config**
+
+```yaml
+tools_config:
+  - name: read_file
+    enabled: true
+    timeout: 10
+    default: "./README.md"
+    return_example: "# README\nThis is an example file."
+  - name: write_file
+    enabled: false
+  - name: list_files
+    timeout: 30
+```
+
+**CLI Usage**:
+
+```bash
+# Direct YAML string
+quantalogic_codeagent toolbox --tools-config "tools_config: [{name: read_file, timeout: 10}]"
+
+# From file
+quantalogic_codeagent toolbox --tools-config "$(cat my_tools.yaml)"
+```
+
+**How It Works**:
+1. Registers all static and plugin tools.
+2. Filters tools based on `enabled_toolboxes` in the config.
+3. Applies `tools_config` overrides to matching tools by setting attributes on `Tool` instances.
+4. Returns the final list of available tools for the agent.
+
+### Working Example: Injected Configuration
+
+To illustrate configuration injection, consider a scenario where a team develops a `weather_toolbox` with a `get_weather` tool that fetches weather data from an external API. The tool requires an API key and a timeout, specified in a YAML config file and injected during execution.
+
+#### Step 1: Define the Tool
+
+Create a `weather_toolbox` with a `get_weather` tool:
+
+```python
+# weather_toolbox/weather_toolbox/tools.py
+import aiohttp
+
+async def get_weather(city: str, api_key: str, timeout: int = 5) -> dict:
+    """Fetch weather data for a city.
+
+    Args:
+        city: Name of the city (e.g., "London").
+        api_key: API key for the weather service.
+        timeout: Request timeout in seconds (default: 5).
+
+    Returns:
+        Dictionary containing weather data (e.g., temperature, description).
+    """
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://api.weather.example.com/data?city={city}&key={api_key}",
+                timeout=timeout
+            ) as response:
+                return await response.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_tools():
+    return [get_weather]
+```
+
+#### Step 2: Create the YAML Config File
+
+Define a project-specific configuration file (`weather_config.yaml`):
+
+```yaml
+log_level: INFO
+installed_toolboxes:
+  - name: weather_toolbox
+    package: weather-toolbox
+    version: 0.1.0
+enabled_toolboxes:
+  - weather_toolbox
+tools_config:
+  - name: get_weather
+    enabled: true
+    api_key: "{{ env.WEATHER_API_KEY }}"  # Resolved from environment variable
+    timeout: 8
+    return_example: '{"city": "London", "temperature": 15, "description": "Cloudy"}'
+```
+
+**Environment Setup**:
+Set the environment variable for the API key:
+```bash
+export WEATHER_API_KEY="your-api-key-here"
+```
+
+#### Step 3: Install the Toolbox
+
+Install the `weather_toolbox` using the CLI:
+
+```bash
+quantalogic_codeagent toolbox install weather-toolbox
+```
+
+#### Step 4: Run the Agent with the Config
+
+Start the agent with the custom config file:
+
+```bash
+quantalogic_codeagent --config ./weather_config.yaml
+```
+
+In the interactive shell, solve a task that uses the `get_weather` tool:
+
+```bash
+/toolbox installed
+# Output: weather_toolbox
+
+/solve "Get the weather for London"
+```
+
+**Execution Flow**:
+1. The agent loads `weather_config.yaml`, registering the `weather_toolbox` and applying `tools_config` overrides.
+2. The `get_weather` tool is configured with `api_key="your-api-key-here"` (resolved from `WEATHER_API_KEY`) and `timeout=8`.
+3. The task `/solve "Get the weather for London"` triggers the agent to generate code that calls `get_weather`:
+   ```python
+   async def main():
+       result = await weather_toolbox.get_weather(city="London", api_key=context_vars.get('weather_api_key', ''), timeout=8)
+       return {'status': 'completed', 'result': str(result)}
+   ```
+4. The `context_vars` dictionary includes the `weather_api_key` from the config, injected during execution.
+5. The tool executes, fetching weather data and returning it to the agent.
+
+**Sample Output**:
+```bash
+Final Answer: {"city": "London", "temperature": 15, "description": "Cloudy"}
+```
+
+#### Step 5: Verify Tool Documentation
+
+Check the tool’s documentation to confirm the injected configuration:
+
+```bash
+/toolbox doc weather_toolbox get_weather
+```
+
+**Sample Output**:
+
+```markdown
+`get_weather`:
+- **Description**: Fetch weather data for a city.
+
+- **Parameters**:
+  - `city`: (string, required)
+    Name of the city (e.g., "London").
+  - `api_key`: (string, required, default: your-api-key-here)
+    API key for the weather service.
+  - `timeout`: (integer, optional, default: 8)
+    Request timeout in seconds.
+
+- **Returns**: `dict` - Dictionary containing weather data.
+- **Example Return Value**: `{"city": "London", "temperature": 15, "description": "Cloudy"}`
+```
+
+This example demonstrates how a YAML config file injects an API key and timeout into a tool, enabling seamless integration with the agent’s task-solving process.
+
+---
+
+## Best Practices
+
+### Structured Returns
+
+Use Python dataclasses for structured outputs, which are serialized as dictionaries automatically:
+
+```python
+from dataclasses import dataclass
+from typing import List
+import os
+
+@dataclass
+class FileInfo:
+    name: str
+    size: int
+
+async def list_files(path: str) -> List[FileInfo]:
+    """List files in a directory."""
+    files = os.listdir(path)
+    return [FileInfo(name=f, size=os.path.getsize(os.path.join(path, f))) for f in files]
+```
+
+**Reconstructing Dataclass**:
 
 ```python
 data = {"name": "example.txt", "size": 1024}
 file_info = FileInfo(**data)
-print(file_info.name, file_info.size)
+print(file_info.name, file_info.size)  # example.txt 1024
 ```
 
-This allows you to work with structured objects in your agent code while relying on dict-based transport under the hood.
-
-#### 6.1.1 Accessing fields and using `.get()`
-
-While dataclasses use direct attribute access (`file_info.name`), you can also:
-
-- Convert to `dict` and call `.get()`:
-  ```python
-  from dataclasses import asdict
-  d = asdict(file_info)
-  d.get("name")
-  ```
-- Add a helper method on your dataclass:
-  ```python
-  @dataclass
-  class FileInfo:
-      name: str
-      size: int
-      def get(self, key, default=None):
-          return getattr(self, key, default)
-  ```
-Direct attribute access remains the most idiomatic, but these patterns give you `.get()`-style flexibility.
-
-### 6.2 Pagination & limiting results
-
-For tools that return large lists, add `limit` and `offset` parameters:
+**Accessing Fields with `.get()`**:
 
 ```python
-async def list_items(limit: int = 10, offset: int = 0) -> list[str]:
-    all_items = fetch_all_items()
-    return all_items[offset: offset + limit]
+from dataclasses import asdict
+d = asdict(file_info)
+print(d.get("name"))  # example.txt
 ```
 
-### 6.3 Environment variables & configuration
+### Pagination and Limiting
 
-Read secrets or settings via `os.getenv` or Pydantic `BaseSettings`:
+Add `limit` and `offset` parameters for large datasets:
+
+```python
+async def list_items(limit: int = 10, offset: int = 0) -> List[str]:
+    """List items with pagination."""
+    all_items = fetch_all_items()
+    return all_items[offset:offset + limit]
+```
+
+### Environment Variables
+
+Use `os.getenv` or Pydantic `BaseSettings` for managing secrets:
 
 ```python
 import os
-
 API_KEY = os.getenv("API_KEY")
 
 async def fetch_data(query: str) -> dict:
+    """Fetch data using an API key."""
     response = http_call(query, api_key=API_KEY)
     return response.json()
 ```
 
-### 6.4 End-to-End Toolbox Example
-
-1. Scaffold a new toolbox:
-   ```bash
-   quantalogic-toolbox create my_toolbox
-   cd my_toolbox
-   ```
-2. Define tools in `tools.py`:
-   ```python
-   from quantalogic_toolbox.tool import create_tool
-
-   async def echo(msg: str, count: int = 1) -> str:
-       """Repeat a message a given number of times."""
-       return msg * count
-   ```
-3. Register in `__init__.py`:
-   ```python
-   from .tools import echo
-   from quantalogic_toolbox.tool import create_tool
-
-   def get_tools():
-       return [echo]
-   ```
-4. Add entry point in `pyproject.toml`:
-   ```toml
-   [project.entry-points.quantalogic.tools]
-   my_toolbox = "my_toolbox"
-   ```
-5. Install and test via CLI:
-   ```bash
-   /toolbox echo "hi" --count 3
-   ```
-
-### 6.5 Configuration & Secrets Injection
-
-The agent loads global (and project) settings from YAML (`~/.quantalogic/config.yaml`) and injects them into every tool’s execution namespace as the `context_vars` dictionary.
-
-> **Note:** You do _not_ need to declare `context_vars` in your function signature—it is available as a global variable in the execution namespace. If you prefer explicit injection, set `need_variables=True` when creating your tool to have `context_vars` passed as an argument.
-
-For example:
-```python
-async def call_api(endpoint: str) -> dict:
-    # read from config or env
-    api_key = context_vars.get('API_KEY')
-    import os
-    api_key = api_key or os.getenv('API_KEY')
-
-    response = http_call(endpoint, headers={'Authorization': api_key})
-    return response.json()
-```
-
-Alternatively, use Pydantic `BaseSettings` in your toolbox for cleaner env handling:
+**Using Pydantic**:
 
 ```python
 from pydantic import BaseSettings
@@ -279,146 +608,131 @@ async def fetch_data(query: str) -> dict:
     return http_call(query, api_key=settings.api_key, timeout=settings.timeout)
 ```
 
-### 6.6 Tool-specific YAML Configuration (tools_config)
+### Tool Versioning
 
-You can fine-tune or override settings on a per-tool basis by passing a `tools_config` list of mappings (JSON/YAML) to your agent. Each entry should include:
-- `name`: the tool’s `name` or `toolbox_name`
-- `enabled`: `true` (default) or `false` to disable the tool
-- Any other ToolDefinition property (e.g., `need_variables`, `timeout`, `default`, `return_example`)
+Use semantic versioning in `pyproject.toml` to ensure compatibility:
 
-#### Example `tools_config` (YAML)
-
-```yaml
-# List of tool overrides
-tools_config:
-  - name: read_file            # Tool name or toolbox_name
-    enabled: true              # Enable this tool (default: true)
-    need_variables: true       # Inject context_vars as argument
-    timeout: 10                # Set a custom timeout (seconds)
-    default: "./README.md"     # Default value for the 'path' argument
-    return_example: |
-      "# README\nThis is an example file."
-  - name: write_file
-    enabled: false             # Disable this tool
-  - name: summarize_text
-    timeout: 30                # Override only the timeout
+```toml
+[tool.poetry]
+version = "0.1.0"
 ```
 
-You can use any property from the ToolDefinition schema for overrides.
+Document changes in `README.md` or a changelog to communicate updates.
 
 ---
-**CLI Usage**
 
-You can supply `tools_config` either directly as a YAML/JSON string or by loading from a file:
+## Security Considerations
+
+Secure tool development is critical to prevent vulnerabilities:
+
+- **Input Validation**: Prevent injection attacks by validating inputs:
+  ```python
+  async def safe_tool(input: str) -> str:
+      """Process alphanumeric input only."""
+      if not input.isalnum():
+          raise ValueError("Input must be alphanumeric")
+      return input
+  ```
+
+- **Avoid Unsafe Operations**: Do not use `eval()`, `exec()`, or similar functions.
+- **Sanitize File Paths**: Prevent directory traversal:
+  ```python
+  import os
+  async def read_file(path: str) -> str:
+      """Read a file with path sanitization."""
+      safe_path = os.path.normpath(os.path.join(os.getcwd(), path))
+      if not safe_path.startswith(os.getcwd()):
+          raise ValueError("Invalid file path")
+      with open(safe_path, 'r') as f:
+          return f.read()
+  ```
+
+- **Limit Resource Access**: Restrict tools to specific directories or APIs using permissions.
+
+---
+
+## Performance Optimization
+
+Optimize tools to ensure efficient execution:
+
+- **Use Async I/O**: For network or file operations, leverage asynchronous libraries:
+  ```python
+  import aiohttp
+  async def fetch_data(url: str) -> str:
+      """Fetch data asynchronously."""
+      async with aiohttp.ClientSession() as session:
+          async with session.get(url) as resp:
+              return await resp.text()
+  ```
+
+- **Cache Results**: Use `functools.lru_cache` for expensive computations:
+  ```python
+  from functools import lru_cache
+  @lru_cache(maxsize=100)
+  async def compute_expensive(value: int) -> int:
+      """Cache expensive computation."""
+      return value * 2
+  ```
+
+- **Limit Resource Usage**: Set timeouts for long-running operations:
+  ```python
+  async def long_running_task() -> str:
+      """Run task with timeout."""
+      async with asyncio.timeout(10):
+          return "Done"
+  ```
+
+---
+
+## Testing Your Tools
+
+Test tools independently using `pytest` and `pytest-asyncio` to ensure reliability:
+
+**Example: Testing a File Reader**
+
+```python
+# tests/test_tools.py
+import pytest
+from my_toolbox.tools import read_file
+
+@pytest.mark.asyncio
+async def test_read_file(tmp_path):
+    file_path = tmp_path / "test.txt"
+    file_path.write_text("Hello, Quantalogic!")
+    result = await read_file(str(file_path))
+    assert result == "Hello, Quantalogic!"
+```
+
+**Running Tests**:
 
 ```bash
-# Direct YAML string
-/toolbox --tools-config "tools_config: [{name: read_file, need_variables: true}]"
-
-# From file
-config=$(<my_tools.yaml)
-/toolbox --tools-config "$config"
+pytest --asyncio-mode=auto
 ```
 
 ---
-### How `tools_config` Works
 
-When you provide a `tools_config`, the agent:
+## Frequently Asked Questions (FAQ)
 
-1. **Registers all static and plugin tools**
-2. **Filters plugin tools** by `enabled_toolboxes` (if provided)
-3. **Applies your overrides** by setting attributes (like `need_variables`, `timeout`, etc.) on each matching `Tool` instance
-4. **Returns the final list** of tools that will be available to the agent
+- **Q: How do I debug a tool that fails silently?**
+  - **A**: Enable debug logging with `quantalogic_codeagent --loglevel DEBUG` or `/loglevel DEBUG` to capture detailed logs.
 
-This allows you to customize, enable, or disable tools for each run—without modifying code.
+- **Q: Can I use synchronous tools?**
+  - **A**: Yes, synchronous tools are supported and executed via `asyncio.to_thread` for compatibility.
 
+- **Q: How do I access variables from previous steps?**
+  - **A**: Use `context_vars` in executed code (not directly in tools):
+    ```python
+    previous_result = context_vars.get('step1_result', '')
+    ```
 
+- **Q: What if a toolbox installation fails?**
+  - **A**: Check the error message in the CLI output to ensure the package is available on PyPI or the wheel file is valid.
 
----
+- **Q: How do I update a toolbox?**
+  - **A**: Reinstall with `quantalogic_codeagent toolbox install my_toolbox --force` to update to the latest version.
 
-## 7. Installing and Managing Toolboxes: CLI vs Shell
-
-Quantalogic supports toolbox management via both the **command-line interface (CLI)** and the **interactive shell**. Both modes ultimately call the same core logic, but they differ in usage and context:
-
-### CLI Mode
-
-Use the CLI for scripting, automation, or when working outside the agent shell. Toolbox commands are run directly in your terminal:
-
-```bash
-# Install a toolbox from PyPI
-quantalogic_codeagent toolbox install my_toolbox_package
-
-# Install from a local wheel file
-quantalogic_codeagent toolbox install ./dist/my_toolbox-1.0.0-py3-none-any.whl
-
-# Uninstall a toolbox by name or package
-quantalogic_codeagent toolbox uninstall my_toolbox_package
-
-# List installed toolboxes
-quantalogic_codeagent toolbox installed
-```
-
-- **Effect:** Updates the global configuration (`~/.quantalogic/config.yaml`).
-- **When to use:** For system-wide or automated toolbox management.
-
-### Shell Mode
-
-Inside the Quantalogic agent shell, use `/toolbox` commands for immediate, interactive changes:
-
-```shell
-/toolbox install my_toolbox_package
-/toolbox uninstall my_toolbox_package
-/toolbox installed
-```
-
-- **Effect:** Also updates the global config, but additionally refreshes the current agent’s in-memory config and tool registry on the fly.
-- **When to use:** For dynamic, session-based toolbox management while working interactively with an agent.
-
-#### Key Differences
-
-| Feature                | CLI Mode                                 | Shell Mode                                 |
-|------------------------|------------------------------------------|--------------------------------------------|
-| Scope                  | System/global                            | Current agent session + global             |
-| Immediate tool refresh | No (restart agent to reload)             | Yes (tools available instantly)            |
-| Scripting/automation   | Yes                                      | No                                         |
-| Interactive feedback   | Limited (stdout)                         | Rich, contextual in-shell output           |
-
-**Tip:** Both modes share the same backend logic—use whichever fits your workflow!
-
-
----
-
-## 8. Using a Custom Config File at Startup
-
-You can start the Quantalogic agent with a specific YAML config file, rather than the default (`~/.quantalogic/config.yaml`). This enables project-based or environment-specific isolation of toolboxes and settings.
-
-### What Happens When You Specify a Config File
-
-- **The agent loads all settings, toolboxes, and secrets from your chosen config file.**
-    - Only toolboxes listed as installed/enabled in this file are available.
-    - API keys, environment variables, and custom settings are loaded from this file.
-- **Toolbox management commands** (install/uninstall/list) will update the specified config file, not the default.
-- **Session behavior:**
-    - In CLI mode: all changes affect only the chosen config file.
-    - In shell mode: the agent session uses this config, and all interactive changes persist to it.
-- **You can maintain multiple config files** for different projects, users, or environments (e.g., `config-dev.yaml`, `config-prod.yaml`).
-- **If no config is specified,** the default global config is used.
-
-### Example Usage
-
-```bash
-# Start agent with a project-specific config
-quantalogic_codeagent --config ./my_project_config.yaml
-
-# All toolbox operations now affect this file
-quantalogic_codeagent toolbox install my_toolbox
-quantalogic_codeagent toolbox uninstall my_toolbox
-quantalogic_codeagent toolbox installed
-```
-
-**Summary:**
-Specifying a config file at startup gives you full control over toolboxes and settings, lets you isolate environments, and ensures all changes are made to the config file you choose.
-
+- **Q: Can I invoke tools directly from the CLI?**
+  - **A**: No, tools are used within task-solving (e.g., `/solve "Read ./data.txt"`) or programmatically, not as direct CLI commands.
 
 ---
 
