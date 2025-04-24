@@ -1,6 +1,7 @@
 from typing import List
 
 from rich.console import Group
+from rich.markdown import Markdown
 from rich.rule import Rule
 from rich.text import Text
 
@@ -28,17 +29,13 @@ async def history_command(shell, args: List[str]) -> Group:
     for idx, pair in enumerate(pairs, start=1):
         # User part
         user_msg = pair[0]
-        text_block = Text()
-        text_block.append(f"[{idx * 2 - 1}] User (id={user_msg['nanoid']}): ", style="bold blue")
-        text_block.append(user_msg["content"] + "\n")
-        blocks.append(text_block)
+        blocks.append(Text(f"[{idx * 2 - 1}] User (id={user_msg['nanoid']}): ", style="bold blue"))
+        blocks.append(Markdown(user_msg["content"]))
         # Assistant part
         if len(pair) > 1:
             assistant_msg = pair[1]
-            text_block = Text()
-            text_block.append(f"[{idx * 2}] Assistant (id={assistant_msg['nanoid']}): ", style="bold green")
-            text_block.append(assistant_msg["content"] + "\n")
-            blocks.append(text_block)
+            blocks.append(Text(f"[{idx * 2}] Assistant (id={assistant_msg['nanoid']}): ", style="bold green"))
+            blocks.append(Markdown(assistant_msg["content"]))
         # Separator rule
         blocks.append(Rule(style="dim"))
     return Group(*blocks)
