@@ -46,7 +46,7 @@ async def disable_toolbox(shell, args: list[str]) -> str:
         
         # Reload plugins and refresh default tools
         shell.current_agent.plugin_manager.load_plugins(force=True)
-        shell.current_agent.default_tools = shell.current_agent._get_tools()
+        shell.current_agent.refresh_tools()
         
         return "\n".join(messages)
     except Exception as e:

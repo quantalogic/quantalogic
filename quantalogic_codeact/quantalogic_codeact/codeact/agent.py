@@ -60,7 +60,7 @@ class Agent:
         # Initialize conversation manager before getting tools to ensure it's available
         self.conversation_manager = ConversationManager(max_tokens=self.max_history_tokens)
         # Now get tools with conversation_manager initialized
-        self.default_tools: List[Tool] = self._get_tools()
+        self.default_tools: List[Tool] = self._load_and_configure_tools()
         # If no tools are loaded, do not fall back to all registered tools
         if not self.default_tools and (not config.enabled_toolboxes or not config.tools):
             logger.info("No tools loaded from configuration; no toolboxes specified.")
@@ -92,8 +92,35 @@ class Agent:
             temperature=self.temperature  # Pass temperature
         )
 
-    def _get_tools(self) -> List[Tool]:
-        """Load tools, applying tools_config if provided."""
+    @property
+    def tools(self) -> List[Tool]:
+        """Get the configured tools based on current toolbox settings.
+        
+        This property provides access to the agent's tools, loading and configuring them
+        based on the current toolbox settings and configurations.
+        
+        Returns:
+            List[Tool]: The list of configured tools
+        """
+        return self._load_and_configure_tools()
+    
+    def refresh_tools(self) -> None:
+        """Explicitly refresh the tools after configuration changes.
+        
+        This method should be called when toolbox configurations change and
+        the tools need to be reloaded with the new settings.
+        """
+        self.default_tools = self._load_and_configure_tools()
+    
+    def _load_and_configure_tools(self) -> List[Tool]:
+        """Load and configure tools based on current settings.
+        
+        This is an internal method that handles the loading and configuration of tools
+        based on the current toolbox settings.
+        
+        Returns:
+            List[Tool]: The list of configured tools
+        """
         try:
             # Log what enabled_toolboxes is before we use it
             logger.debug(f"Initializing agent tools with enabled_toolboxes: {self.config.enabled_toolboxes}")
