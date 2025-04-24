@@ -29,8 +29,17 @@ async def install_toolbox(shell, args: list[str]) -> str:
         # Sync in-memory AgentConfig with global state
         cfg = shell.current_agent.config
         global_cfg = load_global_config()
-        cfg.enabled_toolboxes = global_cfg.enabled_toolboxes or []
+        
+        # Update installed_toolboxes with the latest from global config
         cfg.installed_toolboxes = global_cfg.installed_toolboxes or []
+        
+        # Update enabled flags on installed_toolboxes based on global config's enabled state
+        enabled_toolboxes = set(tb.name for tb in global_cfg.installed_toolboxes if tb.enabled)
+        for i, tb in enumerate(cfg.installed_toolboxes):
+            if tb.name in enabled_toolboxes:
+                cfg.installed_toolboxes[i].enabled = True
+            else:
+                cfg.installed_toolboxes[i].enabled = False
 
         # Reload plugins to register changes
         shell.current_agent.plugin_manager.load_plugins(force=True)

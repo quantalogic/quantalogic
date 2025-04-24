@@ -140,6 +140,7 @@ class Shell:
             {"name": "config show", "func": config_show, "help": "Show the current configuration", "args": []},
             {"name": "config save", "func": config_save, "help": "Save the current configuration to a file: /config save <filename>", "args": None},
             {"name": "config load", "func": config_load, "help": "Load a configuration from a file: /config load <filename>", "args": None},
+            {"name": "toolbox", "func": list_toolbox_tools, "help": "List tools in enabled toolboxes: /toolbox [<toolbox_name>]", "args": None},
             {"name": "toolbox install", "func": install_toolbox, "help": "Install a toolbox: /toolbox install <toolbox_name>", "args": None},
             {"name": "toolbox uninstall", "func": uninstall_toolbox, "help": "Uninstall a toolbox: /toolbox uninstall <toolbox_name>", "args": None},
             {"name": "toolbox installed", "func": installed_toolbox, "help": "Show installed toolboxes: /toolbox installed", "args": None},
@@ -290,7 +291,7 @@ class Shell:
                         if result and matched_command not in ["chat", "solve", "tutorial"]:
                             # Use Markdown rendering for toolbox commands
                             border_color = "bright_blue" if self.high_contrast else "blue"
-                            if matched_command in ["toolbox doc", "toolbox tools"]:
+                            if matched_command in ["toolbox doc", "toolbox tools", "toolbox"]:
                                 console.print(Markdown(result))
                             else:
                                 title = "Conversation History" if matched_command == "history" else f"{matched_command.capitalize()} Command"

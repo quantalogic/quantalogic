@@ -1,8 +1,49 @@
-from typing import List
+import importlib.metadata
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from loguru import logger
 
 from quantalogic_codeact.cli_commands.config_manager import load_global_config, save_global_config
+from quantalogic_codeact.codeact.agent_config import Toolbox
+
+
+def find_toolbox_in_environment(toolbox_name: str) -> Optional[Dict[str, str]]:
+    """Find a toolbox in the environment that's not registered in config.
+    
+    Args:
+        toolbox_name: Name of the toolbox to look for
+        
+    Returns:
+        Dict with package, version and path if found, None otherwise
+    """
+    try:
+        # Check for entry points in quantalogic.tools group
+        entry_points = importlib.metadata.entry_points(group="quantalogic.tools")
+        for ep in entry_points:
+            if ep.name == toolbox_name:
+                module = ep.load()
+                module_path = getattr(module, "__file__", None)
+                dist = importlib.metadata.distribution(ep.value.split(":")[0])
+                return {
+                    "package": dist.metadata["Name"],
+                    "version": dist.version,
+                    "path": str(Path(module_path).resolve()) if module_path else None
+                }
+                
+        # Also search directly in installed packages
+        for dist in importlib.metadata.distributions():
+            if dist.metadata["Name"] == toolbox_name:
+                return {
+                    "package": dist.metadata["Name"],
+                    "version": dist.version,
+                    "path": None  # We don't have the path in this case
+                }
+        
+        return None
+    except Exception as e:
+        logger.error(f"Error finding toolbox in environment: {e}")
+        return None
 
 
 def enable_toolbox_core(toolbox_name: str) -> List[str]:
@@ -13,7 +54,7 @@ def enable_toolbox_core(toolbox_name: str) -> List[str]:
     installed = global_cfg.installed_toolboxes or []
 
     try:
-        # Find and enable toolbox
+        # First check if already installed and just needs enabling
         for tb in installed:
             if tb.name == toolbox_name:
                 if tb.enabled:
@@ -23,8 +64,22 @@ def enable_toolbox_core(toolbox_name: str) -> List[str]:
                 messages.append(f"Toolbox '{toolbox_name}' enabled.")
                 break
         else:
-            messages.append(f"Toolbox '{toolbox_name}' is not installed.")
-            return messages
+            # If not in installed_toolboxes, check if it's available in the environment
+            toolbox_info = find_toolbox_in_environment(toolbox_name)
+            if toolbox_info:
+                # Auto-register the toolbox before enabling
+                new_toolbox = Toolbox(
+                    name=toolbox_name,
+                    package=toolbox_info["package"],
+                    version=toolbox_info["version"],
+                    path=toolbox_info["path"],
+                    enabled=True  # Enable it right away
+                )
+                global_cfg.installed_toolboxes.append(new_toolbox)
+                messages.append(f"Toolbox '{toolbox_name}' auto-registered from environment and enabled.")
+            else:
+                messages.append(f"Toolbox '{toolbox_name}' is not installed or available.")
+                return messages
 
         # Save config
         try:

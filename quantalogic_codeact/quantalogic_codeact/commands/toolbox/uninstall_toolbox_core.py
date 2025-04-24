@@ -12,9 +12,7 @@ def uninstall_toolbox_core(toolbox_name: str) -> List[str]:
     # Load global configuration
     global_cfg = load_global_config()
     installed = global_cfg.installed_toolboxes or []
-    enabled = global_cfg.enabled_toolboxes or []
     original_installed = installed.copy()
-    original_enabled = enabled.copy()
 
     try:
         # Find entries by toolbox name
@@ -24,7 +22,8 @@ def uninstall_toolbox_core(toolbox_name: str) -> List[str]:
             for tb in entries:
                 package = tb.package
                 try:
-                    subprocess.run(["uv", "pip", "uninstall", "-y", package], check=True, capture_output=True, text=True)
+                    # Use yes command to pipe 'y' responses to confirm uninstall
+                    subprocess.run(["pip", "uninstall", package], input="y\n", text=True, check=True, capture_output=True)
                     messages.append(f"Package '{package}' uninstalled.")
                 except subprocess.CalledProcessError as e:
                     logger.error(f"Failed to uninstall package '{package}': {e.stderr}")
@@ -34,9 +33,10 @@ def uninstall_toolbox_core(toolbox_name: str) -> List[str]:
             # Update config: remove uninstalled entries
             new_installed = [tb for tb in installed if tb.name != toolbox_name]
             global_cfg.installed_toolboxes = new_installed
-            # Disable toolbox
-            new_enabled = [name for name in enabled if name != toolbox_name]
-            global_cfg.enabled_toolboxes = new_enabled
+            # Update enabled status in installed toolboxes
+            for i, tb in enumerate(global_cfg.installed_toolboxes):
+                if tb.name == toolbox_name:
+                    global_cfg.installed_toolboxes[i].enabled = False
 
             # Save config
             try:
@@ -47,7 +47,6 @@ def uninstall_toolbox_core(toolbox_name: str) -> List[str]:
                 logger.error(f"Failed to save config after uninstalling '{toolbox_name}': {e}")
                 # Rollback: Restore original config state
                 global_cfg.installed_toolboxes = original_installed
-                global_cfg.enabled_toolboxes = original_enabled
                 messages.append(f"Error: Failed to save config: {e}. Uninstallation reverted.")
                 return messages
 
@@ -57,7 +56,8 @@ def uninstall_toolbox_core(toolbox_name: str) -> List[str]:
             for tb in package_entries:
                 package = toolbox_name
                 try:
-                    subprocess.run(["uv", "pip", "uninstall", "-y", package], check=True, capture_output=True, text=True)
+                    # Use yes command to pipe 'y' responses to confirm uninstall
+                    subprocess.run(["pip", "uninstall", package], input="y\n", text=True, check=True, capture_output=True)
                     messages.append(f"Package '{package}' uninstalled.")
                 except subprocess.CalledProcessError as e:
                     logger.error(f"Failed to uninstall package '{package}': {e.stderr}")
@@ -68,9 +68,10 @@ def uninstall_toolbox_core(toolbox_name: str) -> List[str]:
             # Update config: remove entries by package
             new_installed = [tb for tb in installed if tb.package != toolbox_name]
             global_cfg.installed_toolboxes = new_installed
-            # Disable toolboxes
-            new_enabled = [name for name in enabled if name not in [tb.name for tb in package_entries]]
-            global_cfg.enabled_toolboxes = new_enabled
+            # Update enabled status in installed toolboxes
+            for i, tb in enumerate(global_cfg.installed_toolboxes):
+                if tb.name in [tbe.name for tbe in package_entries]:
+                    global_cfg.installed_toolboxes[i].enabled = False
 
             # Save config
             try:
@@ -81,7 +82,6 @@ def uninstall_toolbox_core(toolbox_name: str) -> List[str]:
                 logger.error(f"Failed to save config after uninstalling '{toolbox_name}': {e}")
                 # Rollback: Restore original config state
                 global_cfg.installed_toolboxes = original_installed
-                global_cfg.enabled_toolboxes = original_enabled
                 messages.append(f"Error: Failed to save config: {e}. Uninstallation reverted.")
                 return messages
 
@@ -93,6 +93,5 @@ def uninstall_toolbox_core(toolbox_name: str) -> List[str]:
         logger.error(f"Unexpected error during toolbox uninstallation: {e}")
         # Rollback: Restore original config state
         global_cfg.installed_toolboxes = original_installed
-        global_cfg.enabled_toolboxes = original_enabled
         messages.append(f"Error: Failed to uninstall toolbox '{toolbox_name}': {e}")
         return messages

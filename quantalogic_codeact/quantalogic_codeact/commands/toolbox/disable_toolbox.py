@@ -14,8 +14,15 @@ async def disable_toolbox(shell, args: list[str]) -> str:
     # Sync in-memory AgentConfig with global state
     cfg = shell.current_agent.config
     global_cfg = load_global_config()
-    cfg.enabled_toolboxes = global_cfg.enabled_toolboxes or []
-    cfg.installed_toolboxes = global_cfg.installed_toolboxes or []
+    # Update installed_toolboxes with enabled status from global config
+    enabled_toolboxes = set(tb.name for tb in global_cfg.installed_toolboxes if tb.enabled)
+    
+    # Update agent config's installed_toolboxes
+    for i, tb in enumerate(cfg.installed_toolboxes):
+        if tb.name in enabled_toolboxes:
+            cfg.installed_toolboxes[i].enabled = True
+        else:
+            cfg.installed_toolboxes[i].enabled = False
     # Reload plugins and refresh default tools
     shell.current_agent.plugin_manager.load_plugins(force=True)
     shell.current_agent.default_tools = shell.current_agent._get_tools()
