@@ -22,28 +22,6 @@ Quantalogic CodeAct is a powerful, modular framework designed to create and mana
 
 ---
 
-## Toolbox System Documentation
-
-For a comprehensive guide on creating, configuring, and managing toolboxes in Quantalogic, see the [Toolbox Documentation](docs/01-quantalogic-toolbox.md).
-
-This document covers:
-- The motivation and benefits of using toolboxes
-- Toolbox structure and anatomy
-- How to define and register tools
-- Discovery and registration process
-- Tool execution and configuration (including YAML examples)
-- Managing toolboxes via CLI and interactive shell
-- Best practices for tool development
-- Security, performance, and testing tips
-- Frequently asked questions (FAQ)
-
-Refer to the [Toolbox Documentation](docs/01-quantalogic-toolbox.md) for details and hands-on examples.
-  - [Configuration](#configuration)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
 ## Why CodeAct?
 
 AI agents need to go beyond simple responses to solve complex, multi-step tasks, adapt to diverse contexts, and provide user-friendly interactions. CodeAct addresses these challenges by offering:
@@ -507,6 +485,47 @@ tools_config:
 ```
 
 Use `/config save` or `/config load` in the shell to manage configurations, or modify the file directly.
+
+
+## Toolbox System Documentation
+
+For a comprehensive guide on creating, configuring, and managing toolboxes in Quantalogic, see the [Toolbox Documentation](docs/01-quantalogic-toolbox.md).
+
+This document covers:
+- The motivation and benefits of using toolboxes
+- Toolbox structure and anatomy
+- How to define and register tools
+- Discovery and registration process
+- Tool execution and configuration (including YAML examples)
+- Managing toolboxes via CLI and interactive shell
+- Best practices for tool development
+- Security, performance, and testing tips
+- Frequently asked questions (FAQ)
+
+---
+
+Refer to the [Toolbox Documentation](docs/01-quantalogic-toolbox.md) for details and hands-on examples.
+  - [Configuration](#configuration)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Memory Systems Documentation
+
+For a detailed explanation of how agent memory works in Quantalogic CodeAct, see the [Memory Systems Documentation](docs/02-quantalogic-codeagent-memory.md).
+
+This document covers:
+- The purpose and necessity of memory in CodeAct agents
+- Overview of two key memory types:
+  - **WorkingMemory**: Task-specific, transient memory that tracks the current task’s steps, intermediate results, and execution context
+  - **ConversationMemory**: Persistent memory that stores the history of user-agent interactions for long-term conversational context
+- How these memory systems interact to enable context-aware, multi-step problem solving
+- Implementation details, including class structure, data flow, and example scenarios
+- Analysis of memory roles and a sequence diagram of agent-memory-user interactions
+
+Refer to [Memory Systems Documentation](docs/02-quantalogic-codeagent-memory.md) for in-depth technical details and practical examples.
+
 
 ---
 
