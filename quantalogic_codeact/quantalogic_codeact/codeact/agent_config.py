@@ -40,6 +40,7 @@ class Toolbox(BaseModel):
     version: str = Field(..., description="Version of the toolbox")
     path: Optional[str] = Field(None, description="Filesystem path to the toolbox module")
     enabled: bool = Field(default=True, description="Whether the toolbox is enabled")
+    tool_configs: List["ToolConfig"] = Field(default_factory=list, description="Per-tool configuration for this toolbox")
 
 
 class ToolConfig(BaseModel):
@@ -54,7 +55,6 @@ class AgentConfig(BaseModel):
     model: str = Field(default="gemini/gemini-2.0-flash", description="The LLM model to use")
     max_iterations: int = Field(default=5, ge=1, le=100, description="Maximum reasoning steps")
     max_history_tokens: int = Field(default=MAX_HISTORY_TOKENS, ge=1000, description="Max tokens for history")
-    toolbox_directory: str = Field(default="toolboxes", description="Directory for toolboxes")
     installed_toolboxes: List[Toolbox] = Field(default_factory=list, description="List of installed toolboxes")
     reasoner_name: str = Field(default="default", description="Name of the reasoner")
     executor_name: str = Field(default="default", description="Name of the executor")
@@ -63,14 +63,12 @@ class AgentConfig(BaseModel):
     sop: Optional[str] = None
     template: TemplateConfig = Field(default_factory=TemplateConfig)
     name: Optional[str] = None
-    tools_config: Optional[List[ToolConfig]] = Field(default_factory=list, description="Configurations for specific tools")
     reasoner: ReasonerConfig = Field(default_factory=lambda: ReasonerConfig(name="default"))
     executor: ExecutorConfig = Field(default_factory=lambda: ExecutorConfig(name="default"))
     agent_tool_model: str = Field(default="gemini/gemini-2.0-flash", description="Model for agent tool")
     agent_tool_timeout: int = Field(default=30, ge=1, description="Timeout for agent tool")
     temperature: float = Field(default=0.7, ge=0.0, le=1.0, description="Temperature for LLM generation")
     system_prompt_template: Optional[str] = None
-    config_file: Optional[str] = None  # Support file-based initialization
     mode: str = Field(default="codeact", description="Operating mode: 'codeact' or 'chat'")
     streaming: bool = Field(default=True, description="Enable streaming output for real-time token generation")
     log_level: str = Field(default="ERROR", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
@@ -97,13 +95,6 @@ class AgentConfig(BaseModel):
     def validate_model(cls, v):
         if not v:
             raise ValueError("Model must be specified")
-        return v
-
-    @validator("config_file", pre=True, always=True)
-    def validate_config_file(cls, v, values):
-        """Ensure config_file is a string or None, deferring file loading to load_from_file."""
-        if v is not None and not isinstance(v, str):
-            raise ValueError("config_file must be a string or None")
         return v
 
     @validator("reasoner", pre=True)
@@ -140,13 +131,6 @@ class AgentConfig(BaseModel):
         else:
             logger.warning(f"Unexpected personality type {type(v)}: {v}. Falling back to empty PersonalityConfig.")
             return PersonalityConfig()
-
-    @validator("tools_config", pre=True)
-    def validate_tools_config(cls, v):
-        """Convert tools_config to list of ToolConfig."""
-        if v is None:
-            return []
-        return [tc if isinstance(tc, ToolConfig) else ToolConfig(**tc) for tc in v]
 
     @validator("installed_toolboxes", pre=True)
     def validate_installed_toolboxes(cls, v):
@@ -191,8 +175,6 @@ class AgentConfig(BaseModel):
             config_path = Path(path).expanduser().resolve()
             with open(config_path) as f:
                 data = yaml.safe_load(f) or {}
-            # Ensure config_file is not included in the data to avoid recursive validation
-            data.pop("config_file", None)
             return cls(**data)
         except FileNotFoundError as e:
             logger.warning(f"Config file {path} not found: {e}. Using defaults.")
@@ -210,7 +192,7 @@ class AgentConfig(BaseModel):
             config_path = Path(path).expanduser().resolve()
             config_path.parent.mkdir(parents=True, exist_ok=True)
             with open(config_path, "w") as f:
-                yaml.safe_dump(self.dict(exclude={"config_file"}), f, default_flow_style=False)
+                yaml.safe_dump(self.dict(), f, default_flow_style=False)
         except Exception as e:
             logger.error(f"Failed to save config to {path}: {e}")
             raise

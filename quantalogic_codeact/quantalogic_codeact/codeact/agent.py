@@ -109,23 +109,34 @@ class Agent:
                 history_store=self.conversation_manager.messages if hasattr(self, 'conversation_manager') else None,
                 enabled_toolboxes=self.config.enabled_toolboxes
             )
-            if not self.config.tools_config:
+            # Gather per-tool configs from enabled toolboxes
+            tool_confs = []
+            for tb in self.config.installed_toolboxes or []:
+                if tb.enabled:
+                    tool_confs.extend(tb.tool_configs or [])
+            # If no overrides, return base
+            if not tool_confs:
                 return base_tools
-            
-            self._resolve_secrets(self.config.tools_config)
+            # Resolve env vars in each config dict
+            for tc in tool_confs:
+                for k, v in getattr(tc, 'config', {}).items():
+                    if isinstance(v, str) and '{{ env.' in v:
+                        env_key = v.strip('{} ').split('.')[-1]
+                        setattr(tc, k, os.getenv(env_key, v))
+            # Apply overrides
             filtered_tools = []
-            processed_names = set()
-            for tool_conf in self.config.tools_config:
-                tool_name = tool_conf.name
-                if tool_conf.enabled:
-                    tool = next((t for t in base_tools if t.name == tool_name or t.toolbox_name == tool_name), None)
-                    if tool and tool.name not in processed_names:
-                        for key, value in tool_conf.config.items():
+            processed = set()
+            for tc in tool_confs:
+                if tc.enabled:
+                    tool = next((t for t in base_tools if t.name == tc.name or t.toolbox_name == tc.name), None)
+                    if tool and tool.name not in processed:
+                        for key, value in tc.config.items():
                             setattr(tool, key, value)
                         filtered_tools.append(tool)
-                        processed_names.add(tool.name)
+                        processed.add(tool.name)
+            # Append remaining
             for tool in base_tools:
-                if tool.name not in processed_names:
+                if tool.name not in processed:
                     filtered_tools.append(tool)
             logger.info(f"Loaded {len(filtered_tools)} tools successfully.")
             return filtered_tools

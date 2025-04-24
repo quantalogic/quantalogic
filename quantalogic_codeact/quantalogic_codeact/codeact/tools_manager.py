@@ -3,10 +3,11 @@
 import importlib
 import importlib.metadata
 import inspect
-from typing import Any, List, Optional
+from typing import List, Optional
 
 import loguru
 
+from quantalogic_codeact.codeact.agent_config import Toolbox
 from quantalogic_toolbox import Tool, create_tool
 
 from .tools import AgentTool, RetrieveMessageTool, RetrieveStepTool
@@ -119,7 +120,7 @@ def get_default_tools(
     model: str,
     history_store: Optional[List[dict]] = None,
     enabled_toolboxes: Optional[List[str]] = None,
-    tools_config: Optional[List[dict[str, Any]]] = None
+    installed_toolboxes: Optional[List[Toolbox]]=None
 ) -> List[Tool]:
     """Dynamically load default tools using the pre-loaded registry from PluginManager."""
     from quantalogic_codeact.cli import plugin_manager
@@ -158,24 +159,27 @@ def get_default_tools(
         loguru.logger.info(f"Static tools loaded: {[(t.toolbox_name or 'default', t.name) for t in static_tools]}")
         loguru.logger.info(f"Plugin tools loaded: {[(t.toolbox_name or 'default', t.name) for t in plugin_tools]}")
 
-        # Apply tools_config filtering to plugin tools
-        if tools_config:
+        # Apply per-toolbox configurations
+        # Flatten tool_configs from enabled toolboxes
+        tool_confs = []
+        if installed_toolboxes:
+            for tb in installed_toolboxes:
+                if tb.enabled:
+                    tool_confs.extend(tb.tool_configs or [])
+        if tool_confs:
             filtered_plugin_tools: List[Tool] = []
-            processed_names = set()
-            for tool_conf in tools_config:
-                if tool_conf.get("enabled", True):
-                    tool = next(
-                        (t for t in plugin_tools if t.name == tool_conf["name"] or t.toolbox_name == tool_conf["name"]),
-                        None
-                    )
-                    if tool and tool.name not in processed_names:
-                        for key, value in tool_conf.items():
-                            if key not in ["name", "enabled"]:
-                                setattr(tool, key, value)
+            processed = set()
+            for tc in tool_confs:
+                if tc.enabled:
+                    tool = next((t for t in plugin_tools if t.name == tc.name or t.toolbox_name == tc.name), None)
+                    if tool and tool.name not in processed:
+                        for key, value in tc.config.items():
+                            setattr(tool, key, value)
                         filtered_plugin_tools.append(tool)
-                        processed_names.add(tool.name)
+                        processed.add(tool.name)
+            # Add remaining
             for tool in plugin_tools:
-                if tool.name not in processed_names:
+                if tool.name not in processed:
                     filtered_plugin_tools.append(tool)
             plugin_tools = filtered_plugin_tools
 
