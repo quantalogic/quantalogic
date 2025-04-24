@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import yaml
 
 # Centralized global config
