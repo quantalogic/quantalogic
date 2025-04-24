@@ -3,11 +3,15 @@ from typing import List
 
 
 @dataclass
-class FileInfo:
+class FileInfo(dict):
     name: str
     path: str
     is_dir: bool
     size: int
+
+    def __post_init__(self):
+        """Populate dict with field values for dict compatibility."""
+        dict.__init__(self, name=self.name, path=self.path, is_dir=self.is_dir, size=self.size)
 
 
 async def list_files_tool(path: str) -> List[FileInfo]:
@@ -83,4 +87,4 @@ async def list_files_markdown_table(path: str) -> str:
 
 def get_tools() -> list:
     """Return a list of tool functions defined in this module."""
-    return [create_directory_tool, write_file_tool, read_file_tool, read_file_block_tool, list_files_markdown_table]
+    return [list_files_tool, create_directory_tool, write_file_tool, read_file_tool, read_file_block_tool, list_files_markdown_table]
