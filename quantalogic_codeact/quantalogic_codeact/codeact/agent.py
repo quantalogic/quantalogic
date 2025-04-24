@@ -103,10 +103,11 @@ class Agent:
                 self.config.enabled_toolboxes = []
                 logger.warning("Enabled toolboxes was None, defaulting to empty list")
             
-            base_tools = (
-                process_tools(self.config.tools)
-                if self.config.tools is not None
-                else get_default_tools(self.model, history_store=self.conversation_manager.messages if hasattr(self, 'conversation_manager') else None, enabled_toolboxes=self.config.enabled_toolboxes)
+            # Load default tools from configured toolboxes
+            base_tools = get_default_tools(
+                self.model,
+                history_store=self.conversation_manager.messages if hasattr(self, 'conversation_manager') else None,
+                enabled_toolboxes=self.config.enabled_toolboxes
             )
             if not self.config.tools_config:
                 return base_tools

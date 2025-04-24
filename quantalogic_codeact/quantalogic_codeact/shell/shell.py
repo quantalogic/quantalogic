@@ -137,6 +137,7 @@ class Shell:
             {"name": "setmodel", "func": setmodel_command, "help": "Set model and switch to a new agent: /setmodel <model_name>", "args": None},
             {"name": "set", "func": set_command, "help": "Set a config field: /set <field> <value>", "args": None},
             {"name": "set temperature", "func": set_temperature_command, "help": "Set or show temperature: /set temperature <value>", "args": None},
+            {"name": "config", "func": config_show, "help": "Show the current configuration", "args": []},
             {"name": "config show", "func": config_show, "help": "Show the current configuration", "args": []},
             {"name": "config save", "func": config_save, "help": "Save the current configuration to a file: /config save <filename>", "args": None},
             {"name": "config load", "func": config_load, "help": "Load a configuration from a file: /config load <filename>", "args": None},

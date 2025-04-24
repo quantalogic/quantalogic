@@ -1,13 +1,11 @@
 """High-level interface for the Quantalogic Agent with modular configuration."""
 
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import yaml
 from loguru import logger
 from pydantic import BaseModel, Field, root_validator, validator
-
-from quantalogic.tools import Tool
 
 from .constants import MAX_HISTORY_TOKENS
 
@@ -55,7 +53,6 @@ class AgentConfig(BaseModel):
     """Comprehensive configuration for the Agent, loadable from a YAML file or direct arguments."""
     model: str = Field(default="gemini/gemini-2.0-flash", description="The LLM model to use")
     max_iterations: int = Field(default=5, ge=1, le=100, description="Maximum reasoning steps")
-    tools: Optional[List[Union[Tool, Callable]]] = None
     max_history_tokens: int = Field(default=MAX_HISTORY_TOKENS, ge=1000, description="Max tokens for history")
     toolbox_directory: str = Field(default="toolboxes", description="Directory for toolboxes")
     installed_toolboxes: List[Toolbox] = Field(default_factory=list, description="List of installed toolboxes")
