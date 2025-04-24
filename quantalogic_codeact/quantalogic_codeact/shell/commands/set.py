@@ -36,7 +36,7 @@ async def set_command(shell, args: List[str]) -> str:
 
     # Generic support for complex types via YAML or literal mapping/list
     try:
-        # Handle quoted YAML literals (e.g. "/set personality '{traits: a,b}'")
+        # Handle quoted YAML literals (e.g. "/set personality '{traits: [witty]}'")
         val_to_parse = value_str
         if len(val_to_parse) > 1 and ((val_to_parse[0] == val_to_parse[-1] == '"') or (val_to_parse[0] == val_to_parse[-1] == "'")):
             val_to_parse = val_to_parse[1:-1]
@@ -45,17 +45,13 @@ async def set_command(shell, args: List[str]) -> str:
         parsed = None
     
     if isinstance(parsed, (dict, list)):
-        # Handle complex types (e.g., lists, dicts, dataclasses)
+        # Handle complex types (e.g., lists, dicts, Pydantic models)
         try:
             # For lists, assign directly if field_type is a list
             if get_origin(field_type) is list:
                 value = parsed
-            elif isinstance(field_type, type) and hasattr(field_type, '__init__'):
-                # For dataclasses or other complex types, try to instantiate
-                if field_name == 'personality' and isinstance(parsed, dict):
-                    traits = parsed.get('traits')
-                    if isinstance(traits, str):
-                        parsed['traits'] = [t.strip() for t in traits.split(',') if t.strip()]
+            elif isinstance(field_type, type) and issubclass(field_type, BaseModel):
+                # For Pydantic models, instantiate with parsed dict
                 value = field_type(**parsed)
             else:
                 return f"Invalid mapping for {field_name}; expected format for {field_type.__name__}."
@@ -95,6 +91,13 @@ async def set_command(shell, args: List[str]) -> str:
                     value = value_str.lower() in ["true", "1", "yes"]
                 elif t is list:
                     value = value_str.split()
+                elif issubclass(t, BaseModel):
+                    # Handle Pydantic models with YAML parsing
+                    try:
+                        parsed = safe_load(value_str)
+                        value = t(**parsed)
+                    except Exception as e:
+                        return f"Invalid value for {field_name}: {e}"
                 else:
                     return f"Setting field '{field_name}' of type {field_type} is not supported via /set. Use /config save and edit the file."
         else:
@@ -108,6 +111,13 @@ async def set_command(shell, args: List[str]) -> str:
                 value = value_str.lower() in ["true", "1", "yes"]
             elif field_type is list:
                 value = value_str.split()
+            elif issubclass(field_type, BaseModel):
+                # Handle Pydantic models with YAML parsing
+                try:
+                    parsed = safe_load(value_str)
+                    value = field_type(**parsed)
+                except Exception as e:
+                    return f"Invalid value for {field_name}: {e}"
             else:
                 return f"Setting field '{field_name}' of type {field_type} is not supported via /set. Use /config save and edit the file."
 

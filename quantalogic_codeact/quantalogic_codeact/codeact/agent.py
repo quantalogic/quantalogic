@@ -51,16 +51,19 @@ class Agent:
             logger.error(f"Failed to load plugins: {e}")
         self.model: str = config.model
         self.temperature: float = config.temperature  # Added temperature
-        self.default_tools: List[Tool] = self._get_tools()
-        # If no tools are loaded, do not fall back to all registered tools
-        if not self.default_tools and (not config.enabled_toolboxes or not config.tools):
-            logger.info("No tools loaded from configuration; no toolboxes specified.")
         self.max_iterations: int = config.max_iterations
         self.personality = config.personality
         self.backstory = config.backstory
         self.sop: Optional[str] = config.sop
         self.name: Optional[str] = config.name
         self.max_history_tokens: int = config.max_history_tokens
+        # Initialize conversation manager before getting tools to ensure it's available
+        self.conversation_manager = ConversationManager(max_tokens=self.max_history_tokens)
+        # Now get tools with conversation_manager initialized
+        self.default_tools: List[Tool] = self._get_tools()
+        # If no tools are loaded, do not fall back to all registered tools
+        if not self.default_tools and (not config.enabled_toolboxes or not config.tools):
+            logger.info("No tools loaded from configuration; no toolboxes specified.")
         # Configure Jinja environment: support TemplateConfig or raw dict
         tpl = config.template
         td = None
@@ -76,7 +79,6 @@ class Agent:
         self.last_solve_context_vars: Dict = {}
         self.default_reasoner_name: str = config.reasoner.name
         self.default_executor_name: str = config.executor.name
-        self.conversation_manager = ConversationManager(max_tokens=self.max_history_tokens)
         self.system_prompt_template: Optional[str] = config.system_prompt_template
         self.react_agent = CodeActAgent(
             model=self.model,
@@ -93,10 +95,18 @@ class Agent:
     def _get_tools(self) -> List[Tool]:
         """Load tools, applying tools_config if provided."""
         try:
+            # Log what enabled_toolboxes is before we use it
+            logger.debug(f"Initializing agent tools with enabled_toolboxes: {self.config.enabled_toolboxes}")
+            
+            # Ensure enabled_toolboxes is a list (fallback to empty list if None)
+            if self.config.enabled_toolboxes is None:
+                self.config.enabled_toolboxes = []
+                logger.warning("Enabled toolboxes was None, defaulting to empty list")
+            
             base_tools = (
                 process_tools(self.config.tools)
                 if self.config.tools is not None
-                else get_default_tools(self.model, enabled_toolboxes=self.config.enabled_toolboxes)
+                else get_default_tools(self.model, history_store=self.conversation_manager.messages if hasattr(self, 'conversation_manager') else None, enabled_toolboxes=self.config.enabled_toolboxes)
             )
             if not self.config.tools_config:
                 return base_tools
@@ -105,13 +115,12 @@ class Agent:
             filtered_tools = []
             processed_names = set()
             for tool_conf in self.config.tools_config:
-                tool_name = tool_conf.get("name")
-                if tool_conf.get("enabled", True):
+                tool_name = tool_conf.name
+                if tool_conf.enabled:
                     tool = next((t for t in base_tools if t.name == tool_name or t.toolbox_name == tool_name), None)
                     if tool and tool.name not in processed_names:
-                        for key, value in tool_conf.items():
-                            if key not in ["name", "enabled"]:
-                                setattr(tool, key, value)
+                        for key, value in tool_conf.config.items():
+                            setattr(tool, key, value)
                         filtered_tools.append(tool)
                         processed_names.add(tool.name)
             for tool in base_tools:
@@ -143,7 +152,7 @@ class Agent:
             tpl = self.jinja_env.get_template(template_name)
             context = {
                 'name': self.name,
-                'personality': self.personality,
+                'personality': self.personality.traits if self.personality else [],  # Use traits from PersonalityConfig
                 'backstory': self.backstory,
                 'sop': self.sop
             }

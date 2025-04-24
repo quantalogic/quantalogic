@@ -7,7 +7,8 @@ from rich.panel import Panel
 from rich.text import Text
 
 from quantalogic_codeact.cli import plugin_manager
-from quantalogic_codeact.cli_commands.config_manager import GLOBAL_CONFIG_PATH, load_global_config
+from quantalogic_codeact.cli_commands.config_constants import GLOBAL_CONFIG_PATH
+from quantalogic_codeact.cli_commands.config_functions import load_global_config
 
 app = typer.Typer()
 console = Console()
@@ -35,11 +36,11 @@ def list_toolboxes(
     """List installed toolboxes, optionally with detailed tool information and documentation."""
     # Load config
     config = load_global_config()
-    enabled_toolboxes = config.get("enabled_toolboxes", [])
+    enabled_toolboxes = config.enabled_toolboxes or []
     
     console.print(f"[bold]Config file:[/bold] {GLOBAL_CONFIG_PATH}")
     
-    installed_toolboxes = config.get("installed_toolboxes", [])
+    installed_toolboxes = config.installed_toolboxes or []
     
     if not installed_toolboxes:
         console.print("[yellow]No toolboxes installed.[/yellow]")
@@ -49,21 +50,21 @@ def list_toolboxes(
         console.print("[bold cyan]Installed Toolboxes:[/bold cyan]")
         for tb in installed_toolboxes:
             try:
-                module_path = get_module_path(tb["name"])
-                status_mark = "[green]enabled[/green]" if tb["name"] in enabled_toolboxes else "[dim]disabled[/dim]"
+                module_path = get_module_path(tb.name)
+                status_mark = "[green]enabled[/green]" if tb.name in enabled_toolboxes else "[dim]disabled[/dim]"
                 console.print(
-                    f"- {tb['name']} {status_mark} (package: {tb['package']}, version: {tb['version']}, "
+                    f"- {tb.name} {status_mark} (package: {tb.package}, version: {tb.version}, "
                     f"path: [italic]{module_path}[/italic])"
                 )
             except Exception as e:
-                console.print(f"[red]Error processing '{tb['name']}': {str(e)}[/red]")
+                console.print(f"[red]Error processing '{tb.name}': {str(e)}[/red]")
     else:
         plugin_manager.load_plugins(force=True)  # Force reload to ensure latest tools
         for tb in installed_toolboxes:
             try:
-                toolbox_name = tb["name"]
-                package = tb["package"]
-                version = tb["version"]
+                toolbox_name = tb.name
+                package = tb.package
+                version = tb.version
                 module_path = get_module_path(toolbox_name)
                 tools = [
                     tool for (tb_name, _), tool in plugin_manager.tools.tools.items()
@@ -99,4 +100,4 @@ def list_toolboxes(
                 )
                 console.print(panel)
             except Exception as e:
-                console.print(f"[red]Error processing toolbox '{tb['name']}': {str(e)}[/red]")
+                console.print(f"[red]Error processing toolbox '{tb.name}': {str(e)}[/red]")

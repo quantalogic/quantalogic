@@ -62,6 +62,9 @@ class Shell:
     def __init__(self, agent_config: Optional[AgentConfig] = None, cli_log_level: Optional[str] = None):
         # Configure logger based on config file (default ERROR)
         self.agent_config = agent_config or AgentConfig.load_from_file(config_manager.GLOBAL_CONFIG_PATH)
+        # Ensure config is properly initialized with required fields
+        if hasattr(config_manager, 'ensure_config_initialized'):
+            self.agent_config = config_manager.ensure_config_initialized(self.agent_config)
         if cli_log_level:
             level = cli_log_level.upper()
         else:
@@ -81,6 +84,9 @@ class Shell:
         # Initialize conversation manager
         self.conversation_manager = ConversationManager()
         
+        # Debug log for enabled_toolboxes value before agent initialization
+        logger.debug(f"Shell initializing agent with enabled_toolboxes: {self.agent_config.enabled_toolboxes}")
+    
         # Initialize the default agent with the loaded config
         default_agent = Agent(config=self.agent_config)
         default_agent.add_observer(self._stream_token_observer, ["StreamToken"])

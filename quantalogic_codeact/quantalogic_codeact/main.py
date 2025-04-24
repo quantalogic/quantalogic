@@ -29,7 +29,15 @@ def configure(
 ):
     """Set custom config path for all commands."""
     # Load or initialize AgentConfig
-    agent_config = AgentConfig.load_from_file(config) if config else AgentConfig()
+    if config:
+        agent_config = AgentConfig.load_from_file(config)
+    else:
+        # Use the global config path when no explicit config is provided
+        agent_config = AgentConfig.load_from_file(cm.GLOBAL_CONFIG_PATH)
+        # Ensure required fields are initialized
+        if hasattr(cm, 'ensure_config_initialized'):
+            agent_config = cm.ensure_config_initialized(agent_config)
+    
     ctx.obj = {"agent_config": agent_config, "log_level": log_level}
     # Configure logger based on config and CLI override
     level = log_level.upper() if log_level else agent_config.log_level.upper() if hasattr(agent_config, 'log_level') else cm.GLOBAL_DEFAULTS["log_level"].upper()

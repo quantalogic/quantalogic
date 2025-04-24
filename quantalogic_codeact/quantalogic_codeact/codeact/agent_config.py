@@ -1,6 +1,5 @@
 """High-level interface for the Quantalogic Agent with modular configuration."""
 
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -13,35 +12,43 @@ from quantalogic.tools import Tool
 from .constants import MAX_HISTORY_TOKENS
 
 
-# Structured config dataclasses
-@dataclass
-class ReasonerConfig:
-    name: str = "default"
-    config: Dict[str, Any] = field(default_factory=dict)
+# Structured config models (replaced dataclasses with Pydantic BaseModel)
+class ReasonerConfig(BaseModel):
+    """Configuration for the reasoner component."""
+    name: str = Field(default="default", description="Name of the reasoner")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Additional reasoner configuration")
 
 
-@dataclass
-class ExecutorConfig:
-    name: str = "default"
-    config: Dict[str, Any] = field(default_factory=dict)
+class ExecutorConfig(BaseModel):
+    """Configuration for the executor component."""
+    name: str = Field(default="default", description="Name of the executor")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Additional executor configuration")
 
 
-@dataclass
-class PersonalityConfig:
-    traits: List[str] = field(default_factory=list)
+class PersonalityConfig(BaseModel):
+    """Configuration for the agent's personality."""
+    traits: List[str] = Field(default_factory=list, description="List of personality traits")
 
 
-@dataclass
-class ToolConfig:
-    name: str
-    enabled: bool = True
-    config: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class TemplateConfig:
+class TemplateConfig(BaseModel):
     """Configuration for templating engine: directory for templates."""
-    template_dir: Optional[Path] = None
+    template_dir: Optional[Path] = Field(None, description="Directory for Jinja2 templates")
+
+
+# Pydantic models for toolbox and tool configuration
+class Toolbox(BaseModel):
+    """Represents a single installed toolbox."""
+    name: str = Field(..., description="Name of the toolbox")
+    package: str = Field(..., description="Package name in PyPI or local path")
+    version: str = Field(..., description="Version of the toolbox")
+    path: Optional[str] = Field(None, description="Filesystem path to the toolbox module")
+
+
+class ToolConfig(BaseModel):
+    """Represents configuration for a specific tool within a toolbox."""
+    name: str = Field(..., description="Name of the tool")
+    enabled: bool = Field(True, description="Whether the tool is enabled")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Additional tool configuration")
 
 
 class AgentConfig(BaseModel):
@@ -52,15 +59,15 @@ class AgentConfig(BaseModel):
     max_history_tokens: int = Field(default=MAX_HISTORY_TOKENS, ge=1000, description="Max tokens for history")
     toolbox_directory: str = Field(default="toolboxes", description="Directory for toolboxes")
     enabled_toolboxes: Optional[List[str]] = None
-    installed_toolboxes: Optional[List[Dict[str, Any]]] = None
+    installed_toolboxes: Optional[List[Toolbox]] = Field(default_factory=list, description="List of installed toolboxes")
     reasoner_name: str = Field(default="default", description="Name of the reasoner")
     executor_name: str = Field(default="default", description="Name of the executor")
-    personality: Optional[str] = None
+    personality: Optional[PersonalityConfig] = Field(default_factory=PersonalityConfig, description="Agent personality configuration")
     backstory: Optional[str] = None
     sop: Optional[str] = None
     template: TemplateConfig = Field(default_factory=TemplateConfig)
     name: Optional[str] = None
-    tools_config: Optional[List[Dict[str, Any]]] = None
+    tools_config: Optional[List[ToolConfig]] = Field(default_factory=list, description="Configurations for specific tools")
     reasoner: ReasonerConfig = Field(default_factory=lambda: ReasonerConfig(name="default"))
     executor: ExecutorConfig = Field(default_factory=lambda: ExecutorConfig(name="default"))
     agent_tool_model: str = Field(default="gemini/gemini-2.0-flash", description="Model for agent tool")
@@ -89,10 +96,7 @@ class AgentConfig(BaseModel):
     def validate_reasoner(cls, v):
         """Convert reasoner dict to ReasonerConfig."""
         if isinstance(v, dict):
-            return ReasonerConfig(
-                name=v.get("name", "default"),
-                config=v.get("config", {})
-            )
+            return ReasonerConfig(**v)
         elif isinstance(v, ReasonerConfig):
             return v
         raise ValueError("reasoner must be a dict or ReasonerConfig")
@@ -101,10 +105,7 @@ class AgentConfig(BaseModel):
     def validate_executor(cls, v):
         """Convert executor dict to ExecutorConfig."""
         if isinstance(v, dict):
-            return ExecutorConfig(
-                name=v.get("name", "default"),
-                config=v.get("config", {})
-            )
+            return ExecutorConfig(**v)
         elif isinstance(v, ExecutorConfig):
             return v
         raise ValueError("executor must be a dict or ExecutorConfig")
@@ -115,12 +116,16 @@ class AgentConfig(BaseModel):
         if isinstance(v, PersonalityConfig):
             return v
         elif isinstance(v, dict):
-            return PersonalityConfig(traits=v.get("traits", []))
+            return PersonalityConfig(**v)
         elif isinstance(v, list):
             return PersonalityConfig(traits=v)
         elif isinstance(v, str):
             return PersonalityConfig(traits=[v])
-        return PersonalityConfig()
+        elif v is None:
+            return PersonalityConfig()
+        else:
+            logger.warning(f"Unexpected personality type {type(v)}: {v}. Falling back to empty PersonalityConfig.")
+            return PersonalityConfig()
 
     @validator("tools_config", pre=True)
     def validate_tools_config(cls, v):
@@ -129,13 +134,28 @@ class AgentConfig(BaseModel):
             return []
         return [tc if isinstance(tc, ToolConfig) else ToolConfig(**tc) for tc in v]
 
+    @validator("installed_toolboxes", pre=True)
+    def validate_installed_toolboxes(cls, v):
+        """Convert installed_toolboxes to list of Toolbox."""
+        if v is None:
+            return []
+        return [tb if isinstance(tb, Toolbox) else Toolbox(**tb) for tb in v]
+        
+    @validator("enabled_toolboxes", pre=True)
+    def validate_enabled_toolboxes(cls, v):
+        """Ensure enabled_toolboxes is always a list."""
+        if v is None:
+            return []
+        return v
+
     @validator("template", pre=True)
     def validate_template(cls, v):
         """Convert template dict to TemplateConfig."""
         if isinstance(v, dict):
-            td = v.get("template_dir")
-            return TemplateConfig(template_dir=Path(td) if td else None)
-        return v or TemplateConfig()
+            return TemplateConfig(**v)
+        elif isinstance(v, TemplateConfig):
+            return v
+        return TemplateConfig()
 
     @validator("mode")
     def validate_mode(cls, v):
