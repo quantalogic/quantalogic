@@ -65,6 +65,15 @@ class Shell:
         # Ensure config is properly initialized with required fields
         if hasattr(config_manager, 'ensure_config_initialized'):
             self.agent_config = config_manager.ensure_config_initialized(self.agent_config)
+            
+        # Create default config file if it doesn't exist
+        config_path = Path(config_manager.GLOBAL_CONFIG_PATH)
+        if not config_path.exists():
+            try:
+                logger.info(f"Creating default configuration file at {config_path}")
+                self.agent_config.save_to_file(str(config_path))
+            except Exception as e:
+                logger.error(f"Failed to create default config file: {e}")
         if cli_log_level:
             level = cli_log_level.upper()
         else:

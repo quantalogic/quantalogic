@@ -59,6 +59,8 @@ def enable_toolbox_core(toolbox_name: str) -> List[str]:
             if tb.name == toolbox_name:
                 if tb.enabled:
                     messages.append(f"Toolbox '{toolbox_name}' is already enabled.")
+                    # Always save config even if no change to ensure persistence
+                    save_global_config(global_cfg)
                     return messages
                 tb.enabled = True
                 messages.append(f"Toolbox '{toolbox_name}' enabled.")
@@ -78,8 +80,43 @@ def enable_toolbox_core(toolbox_name: str) -> List[str]:
                 global_cfg.installed_toolboxes.append(new_toolbox)
                 messages.append(f"Toolbox '{toolbox_name}' auto-registered from environment and enabled.")
             else:
-                messages.append(f"Toolbox '{toolbox_name}' is not installed or available.")
-                return messages
+                # Try to register all available toolboxes in environment first
+                # This helps ensure all available toolboxes are in the config
+                registered_new = False
+                entry_points = importlib.metadata.entry_points(group="quantalogic.tools")
+                for ep in entry_points:
+                    # Skip already installed toolboxes
+                    if any(tb.name == ep.name for tb in installed):
+                        continue
+                        
+                    # Register this new toolbox
+                    env_toolbox = find_toolbox_in_environment(ep.name)
+                    if env_toolbox:
+                        new_tb = Toolbox(
+                            name=ep.name,
+                            package=env_toolbox["package"],
+                            version=env_toolbox["version"],
+                            path=env_toolbox["path"],
+                            enabled=False  # Not enabled by default
+                        )
+                        global_cfg.installed_toolboxes.append(new_tb)
+                        registered_new = True
+                        logger.info(f"Auto-discovered toolbox '{ep.name}' and added to config.")
+                        
+                        # If this is the one we're looking for, enable it
+                        if ep.name == toolbox_name:
+                            new_tb.enabled = True
+                            messages.append(f"Toolbox '{toolbox_name}' auto-registered from environment and enabled.")
+                            break
+                            
+                # If we registered new toolboxes but not the one we're looking for
+                if registered_new and not any(tb.name == toolbox_name and tb.enabled for tb in global_cfg.installed_toolboxes):
+                    messages.append(f"Toolbox '{toolbox_name}' is not installed or available, but discovered other toolboxes.")
+                    save_global_config(global_cfg)
+                    return messages
+                elif not registered_new:
+                    messages.append(f"Toolbox '{toolbox_name}' is not installed or available.")
+                    return messages
 
         # Save config
         try:

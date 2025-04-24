@@ -18,18 +18,32 @@ async def enable_toolbox(shell, args: list[str]) -> str:
         if any("Error" in msg for msg in messages):
             return "\n".join(messages)
         
-        # Sync in-memory AgentConfig with global state
-        cfg = shell.current_agent.config
+        # Reload global config to get latest changes
         global_cfg = load_global_config()
-        # Update installed_toolboxes with enabled status from global config
+        
+        # Get a fresh reference to the agent config
+        cfg = shell.current_agent.config
+        
+        # Synchronize in-memory AgentConfig with global state
         enabled_toolboxes = set(tb.name for tb in global_cfg.installed_toolboxes if tb.enabled)
         
-        # Update agent config's installed_toolboxes
+        # Handle any new toolboxes that may have been auto-discovered
+        # Add any toolboxes present in global config but not in agent config
+        agent_toolbox_names = {tb.name for tb in cfg.installed_toolboxes}
+        
+        # Add missing toolboxes from global config to agent config
+        for tb in global_cfg.installed_toolboxes:
+            if tb.name not in agent_toolbox_names:
+                logger.info(f"Adding toolbox '{tb.name}' to agent config")
+                cfg.installed_toolboxes.append(tb)
+        
+        # Update enabled status for all toolboxes
         for i, tb in enumerate(cfg.installed_toolboxes):
-            if tb.name in enabled_toolboxes:
-                cfg.installed_toolboxes[i].enabled = True
-            else:
-                cfg.installed_toolboxes[i].enabled = False
+            tb.enabled = tb.name in enabled_toolboxes
+        
+        # Save agent config to ensure changes persist
+        from quantalogic_codeact.cli_commands.config_manager import save_global_config
+        save_global_config(cfg)
         
         # Reload plugins and refresh default tools
         shell.current_agent.plugin_manager.load_plugins(force=True)

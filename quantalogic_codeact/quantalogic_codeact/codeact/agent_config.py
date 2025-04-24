@@ -50,6 +50,10 @@ class ToolConfig(BaseModel):
     config: Dict[str, Any] = Field(default_factory=dict, description="Additional tool configuration")
 
 
+# Resolve forward references for Toolbox
+Toolbox.update_forward_refs()
+
+
 class AgentConfig(BaseModel):
     """Comprehensive configuration for the Agent, loadable from a YAML file or direct arguments."""
     model: str = Field(default="gemini/gemini-2.0-flash", description="The LLM model to use")
@@ -173,12 +177,24 @@ class AgentConfig(BaseModel):
         """Load configuration from a YAML file."""
         try:
             config_path = Path(path).expanduser().resolve()
+            if not config_path.exists():
+                # Create the config file with default settings if it doesn't exist
+                logger.info(f"Config file {path} not found. Creating with default settings.")
+                config = cls()  # Create default config
+                try:
+                    config_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(config_path, "w") as f:
+                        yaml.safe_dump(config.dict(), f, default_flow_style=False)
+                    logger.info(f"Created default config file at {config_path}")
+                    return config
+                except Exception as create_err:
+                    logger.error(f"Failed to create default config file: {create_err}")
+                    return config
+            
+            # File exists, load it
             with open(config_path) as f:
                 data = yaml.safe_load(f) or {}
             return cls(**data)
-        except FileNotFoundError as e:
-            logger.warning(f"Config file {path} not found: {e}. Using defaults.")
-            return cls()
         except yaml.YAMLError as e:
             logger.error(f"Error parsing YAML config {path}: {e}. Using defaults.")
             return cls()
