@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import yaml
 from loguru import logger
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, root_validator, validator
 
 from quantalogic.tools import Tool
 
@@ -35,13 +35,13 @@ class TemplateConfig(BaseModel):
     template_dir: Optional[Path] = Field(None, description="Directory for Jinja2 templates")
 
 
-# Pydantic models for toolbox and tool configuration
 class Toolbox(BaseModel):
     """Represents a single installed toolbox."""
     name: str = Field(..., description="Name of the toolbox")
     package: str = Field(..., description="Package name in PyPI or local path")
     version: str = Field(..., description="Version of the toolbox")
     path: Optional[str] = Field(None, description="Filesystem path to the toolbox module")
+    enabled: bool = Field(default=True, description="Whether the toolbox is enabled")
 
 
 class ToolConfig(BaseModel):
@@ -58,8 +58,7 @@ class AgentConfig(BaseModel):
     tools: Optional[List[Union[Tool, Callable]]] = None
     max_history_tokens: int = Field(default=MAX_HISTORY_TOKENS, ge=1000, description="Max tokens for history")
     toolbox_directory: str = Field(default="toolboxes", description="Directory for toolboxes")
-    enabled_toolboxes: Optional[List[str]] = None
-    installed_toolboxes: Optional[List[Toolbox]] = Field(default_factory=list, description="List of installed toolboxes")
+    installed_toolboxes: List[Toolbox] = Field(default_factory=list, description="List of installed toolboxes")
     reasoner_name: str = Field(default="default", description="Name of the reasoner")
     executor_name: str = Field(default="default", description="Name of the executor")
     personality: Optional[PersonalityConfig] = Field(default_factory=PersonalityConfig, description="Agent personality configuration")
@@ -78,6 +77,24 @@ class AgentConfig(BaseModel):
     mode: str = Field(default="codeact", description="Operating mode: 'codeact' or 'chat'")
     streaming: bool = Field(default=True, description="Enable streaming output for real-time token generation")
     log_level: str = Field(default="ERROR", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
+
+    @root_validator(pre=True)
+    def migrate_enabled_toolboxes(cls, values):
+        """Migrate legacy enabled_toolboxes to enabled field in installed_toolboxes."""
+        enabled_toolboxes = values.pop("enabled_toolboxes", [])  # Remove legacy field
+        installed_toolboxes = values.get("installed_toolboxes", [])
+        if enabled_toolboxes and installed_toolboxes:
+            for tb in installed_toolboxes:
+                if isinstance(tb, dict):
+                    tb["enabled"] = tb.get("name", "") in enabled_toolboxes
+                elif isinstance(tb, Toolbox):
+                    tb.enabled = tb.name in enabled_toolboxes
+        return values
+
+    @property
+    def enabled_toolboxes(self) -> List[str]:
+        """Return list of enabled toolbox names for compatibility."""
+        return [tb.name for tb in self.installed_toolboxes if tb.enabled]
 
     @validator("model")
     def validate_model(cls, v):
@@ -140,13 +157,6 @@ class AgentConfig(BaseModel):
         if v is None:
             return []
         return [tb if isinstance(tb, Toolbox) else Toolbox(**tb) for tb in v]
-        
-    @validator("enabled_toolboxes", pre=True)
-    def validate_enabled_toolboxes(cls, v):
-        """Ensure enabled_toolboxes is always a list."""
-        if v is None:
-            return []
-        return v
 
     @validator("template", pre=True)
     def validate_template(cls, v):

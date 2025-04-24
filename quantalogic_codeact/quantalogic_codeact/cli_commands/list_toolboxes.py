@@ -12,7 +12,6 @@ from quantalogic_codeact.cli_commands.config_functions import load_global_config
 
 app = typer.Typer()
 console = Console()
-# Config file managed via config_manager
 
 def get_module_path(toolbox_name: str) -> str:
     """Retrieve the filesystem path of the module for a given toolbox."""
@@ -36,7 +35,6 @@ def list_toolboxes(
     """List installed toolboxes, optionally with detailed tool information and documentation."""
     # Load config
     config = load_global_config()
-    enabled_toolboxes = config.enabled_toolboxes or []
     
     console.print(f"[bold]Config file:[/bold] {GLOBAL_CONFIG_PATH}")
     
@@ -51,7 +49,7 @@ def list_toolboxes(
         for tb in installed_toolboxes:
             try:
                 module_path = get_module_path(tb.name)
-                status_mark = "[green]enabled[/green]" if tb.name in enabled_toolboxes else "[dim]disabled[/dim]"
+                status_mark = "[green]enabled[/green]" if tb.enabled else "[dim]disabled[/dim]"
                 console.print(
                     f"- {tb.name} {status_mark} (package: {tb.package}, version: {tb.version}, "
                     f"path: [italic]{module_path}[/italic])"

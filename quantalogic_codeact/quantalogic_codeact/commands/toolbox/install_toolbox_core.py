@@ -8,7 +8,7 @@ from pathlib import Path
 from loguru import logger
 
 from quantalogic_codeact.cli_commands.config_manager import load_global_config, save_global_config
-from quantalogic_codeact.codeact.agent_config import Toolbox  # Import Toolbox model
+from quantalogic_codeact.codeact.agent_config import Toolbox
 from quantalogic_codeact.codeact.plugin_manager import PluginManager
 
 
@@ -45,7 +45,6 @@ def install_toolbox_core(toolbox_name: str) -> list[str]:
 
     # Load current config
     cfg = load_global_config()
-    original_enabled = cfg.enabled_toolboxes or []
     original_installed = cfg.installed_toolboxes or []
 
     try:
@@ -84,7 +83,8 @@ def install_toolbox_core(toolbox_name: str) -> list[str]:
                 name=name,
                 package=pkg,
                 version=ver,
-                path=path
+                path=path,
+                enabled=True  # Enable by default
             ))
 
         # Register tools for new toolbox
@@ -101,11 +101,6 @@ def install_toolbox_core(toolbox_name: str) -> list[str]:
 
         # Update config
         cfg.installed_toolboxes = new_installed + installed_entries
-        enabled = original_enabled.copy()
-        for name in to_enable:
-            if name not in enabled:
-                enabled.append(name)
-        cfg.enabled_toolboxes = enabled
 
         # Save config
         try:
@@ -122,7 +117,6 @@ def install_toolbox_core(toolbox_name: str) -> list[str]:
                 messages.append(f"Error: Failed to rollback installation of '{package_name}': {rollback_e}")
             # Restore original config state
             cfg.installed_toolboxes = original_installed
-            cfg.enabled_toolboxes = original_enabled
             messages.append(f"Error: Failed to save config: {e}. Installation reverted.")
             return messages
 

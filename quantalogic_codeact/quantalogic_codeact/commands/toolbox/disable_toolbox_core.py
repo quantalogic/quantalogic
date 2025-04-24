@@ -10,33 +10,38 @@ def disable_toolbox_core(toolbox_name: str) -> List[str]:
     messages: List[str] = []
     # Load global configuration
     global_cfg = load_global_config()
-    enabled = global_cfg.enabled_toolboxes or []
-    original_enabled = enabled.copy()
+    installed = global_cfg.installed_toolboxes or []
 
     try:
-        if toolbox_name not in enabled:
-            messages.append(f"Toolbox '{toolbox_name}' is not enabled.")
+        # Find and disable toolbox
+        for tb in installed:
+            if tb.name == toolbox_name:
+                if not tb.enabled:
+                    messages.append(f"Toolbox '{toolbox_name}' is already disabled.")
+                    return messages
+                tb.enabled = False
+                messages.append(f"Toolbox '{toolbox_name}' disabled.")
+                break
+        else:
+            messages.append(f"Toolbox '{toolbox_name}' is not installed.")
             return messages
-
-        # Disable toolbox
-        new_enabled = [name for name in enabled if name != toolbox_name]
-        global_cfg.enabled_toolboxes = new_enabled
 
         # Save config
         try:
             save_global_config(global_cfg)
-            messages.append(f"Toolbox '{toolbox_name}' disabled.")
             return messages
         except Exception as e:
             logger.error(f"Failed to save config after disabling '{toolbox_name}': {e}")
-            # Rollback: Restore original enabled_toolboxes
-            global_cfg.enabled_toolboxes = original_enabled
+            # Rollback: Re-enable the toolbox
+            for tb in installed:
+                if tb.name == toolbox_name:
+                    tb.enabled = True
+                    break
             messages.append(f"Error: Failed to save config: {e}. Disabling reverted.")
             return messages
 
     except Exception as e:
         logger.error(f"Unexpected error during toolbox disabling: {e}")
-        # Rollback: Restore original enabled_toolboxes
-        global_cfg.enabled_toolboxes = original_enabled
+        # Rollback: Ensure no changes persist
         messages.append(f"Error: Failed to disable toolbox '{toolbox_name}': {e}")
         return messages
