@@ -93,25 +93,8 @@ class Shell:
         
         # Load or initialize global config
         if not config_manager.GLOBAL_CONFIG_PATH.exists():
-            default_data = {
-                "model": "gemini/gemini-2.0-flash",
-                "max_iterations": 5,
-                "enabled_toolboxes": [],
-                "reasoner": {"name": "default"},
-                "executor": {"name": "default"},
-                "personality": None,
-                "backstory": None,
-                "sop": None,
-                "name": None,
-                "tools_config": None,
-                "profile": None,
-                "customizations": None,
-                "agent_tool_model": "gemini/gemini-2.0-flash",
-                "agent_tool_timeout": 30,
-                "temperature": 0.7,  # Added default temperature
-                "installed_toolboxes": [],
-                "log_level": config_manager.GLOBAL_DEFAULTS.get("log_level", "ERROR")
-            }
+            default_config = AgentConfig.get_default()
+            default_data = default_config.to_dict()
             config_manager.save_global_config(default_data)
             logger.info(f"Created global configuration at {config_manager.GLOBAL_CONFIG_PATH}")
             config_data = default_data
@@ -130,7 +113,7 @@ class Shell:
             logger.info(f"Loaded configuration from {config_manager.GLOBAL_CONFIG_PATH}")
         except Exception as e:
             logger.error(f"Failed to initialize AgentConfig: {e}. Using minimal configuration.")
-            default_config = AgentConfig()
+            default_config = AgentConfig.get_default()
         
         # Initialize the default agent with the loaded or default config
         default_agent = Agent(config=agent_config or default_config)

@@ -217,3 +217,13 @@ class AgentConfig:
         except Exception as e:
             logger.error(f"Error setting defaults: {e}")
             raise
+
+    @classmethod
+    def get_default(cls) -> "AgentConfig":
+        """Return a default AgentConfig instance with all default values."""
+        return cls()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the AgentConfig instance into a dictionary suitable for saving."""
+        from dataclasses import asdict
+        return asdict(self)
