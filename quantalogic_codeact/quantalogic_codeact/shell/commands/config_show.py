@@ -9,10 +9,10 @@ async def config_show(shell, args: List[str]) -> str:
     """Show the current configuration."""
     output = []
     config_file_path = str(config_manager.GLOBAL_CONFIG_PATH)
-    output.append(f"Config file path: {config_file_path}")
+    output.append(f"[bold yellow]Config file path:[/] {config_file_path}")
 
     if not isinstance(shell.agent_config, BaseModel):
-        return "Error: Configuration is not a valid Pydantic model."
+        return "[bold red]Error: Configuration is not a valid Pydantic model.[/bold red]"
 
     # Iterate over Pydantic model fields
     for field_name, field_info in shell.agent_config.model_fields.items():
@@ -24,6 +24,6 @@ async def config_show(shell, args: List[str]) -> str:
             value_str = value.__dict__
         else:
             value_str = value
-        output.append(f"{field_name}: {value_str}")
+        output.append(f"[bold cyan]{field_name}:[/] [green]{value_str}[/green]")
 
     return "\n".join(output)
