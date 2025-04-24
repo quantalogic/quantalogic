@@ -1,21 +1,12 @@
 from typing import List
 
-from rich.console import Console
-from rich.panel import Panel
-
-console = Console()
 
 async def tutorial_command(shell, args: List[str]) -> str:
-    """Display a tutorial for new users."""
-    tutorial = (
-        "Welcome to Quantalogic Shell!\n\n"
-        "1. Type messages to chat (chat mode) or solve tasks (codeact mode).\n"
-        "2. Use /mode [chat|codeact] to switch modes.\n"
-        "3. Commands start with '/': try /help, /chat, /solve.\n"
-        "4. Press Enter to send, Ctrl+J for new lines.\n"
-        "5. Use /history to see past messages.\n"
-        "6. Type /exit to quit."
+    """Show tutorial: /tutorial"""
+    tutorial_text = (
+        f"Tutorial for Quantalogic Shell in {shell.agent_config.mode} mode:\n"
+        f"1. Use /chat or plain messages (in chat mode) to interact with the agent.\n"
+        f"2. Use /solve or plain messages (in codeact mode) to solve tasks.\n"
+        f"3. Type /help for a list of commands."
     )
-    border_color = "bright_blue" if shell.high_contrast else "blue"
-    console.print(Panel(tutorial, title="Tutorial", border_style=border_color))
-    return ""
+    return tutorial_text

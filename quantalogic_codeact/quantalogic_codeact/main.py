@@ -12,6 +12,7 @@ logger.remove()
 logger.add(sys.stderr, level="ERROR", format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
 
 import quantalogic_codeact.cli_commands.config_manager as cm  # noqa: E402
+from quantalogic_codeact.codeact.agent_config import AgentConfig  # Import AgentConfig  # noqa: E402
 from quantalogic_codeact.shell.shell import Shell  # noqa: E402
 
 app = typer.Typer()
@@ -27,13 +28,11 @@ def configure(
     ),
 ):
     """Set custom config path for all commands."""
-    if config:
-        real = config.expanduser().resolve()
-        cm.GLOBAL_CONFIG_PATH = real
-        cm.PROJECT_CONFIG_PATH = real
-    ctx.obj = {"config_path": cm.GLOBAL_CONFIG_PATH, "log_level": log_level}
+    # Load or initialize AgentConfig
+    agent_config = AgentConfig.load_from_file(config) if config else AgentConfig()
+    ctx.obj = {"agent_config": agent_config, "log_level": log_level}
     # Configure logger based on config and CLI override
-    level = log_level.upper() if log_level else cm.load_global_config().get("log_level", cm.GLOBAL_DEFAULTS["log_level"]).upper()
+    level = log_level.upper() if log_level else agent_config.log_level.upper() if hasattr(agent_config, 'log_level') else cm.GLOBAL_DEFAULTS["log_level"].upper()
     logger.remove()
     logger.add(
         sys.stderr,
@@ -42,7 +41,7 @@ def configure(
     )
     # Launch interactive shell if no subcommand was provided
     if ctx.invoked_subcommand is None:
-        shell_instance = Shell(cli_log_level=log_level)
+        shell_instance = Shell(agent_config=agent_config, cli_log_level=log_level)
         asyncio.run(shell_instance.run())
         raise typer.Exit()
 
@@ -50,7 +49,8 @@ def configure(
 def shell(ctx: typer.Context):
     """Start the interactive shell."""
     log_level = ctx.obj.get("log_level")
-    shell_instance = Shell(cli_log_level=log_level)
+    agent_config = ctx.obj["agent_config"]
+    shell_instance = Shell(agent_config=agent_config, cli_log_level=log_level)
     asyncio.run(shell_instance.run())
 
 # Dynamically load CLI commands from cli_commands/

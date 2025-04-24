@@ -49,13 +49,12 @@ from .commands.loglevel import loglevel_command
 from .commands.mode import mode_command
 from .commands.save import save_command
 from .commands.set import set_command
-from .commands.set_temperature import set_temperature_command  # Added import
+from .commands.set_temperature import set_temperature_command
 from .commands.setmodel import setmodel_command
 from .commands.solve import solve_command
 from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
 from .commands.version import version_command
-from .shell_state import ShellState
 
 console = Console()
 
@@ -63,11 +62,11 @@ class Shell:
     """Interactive CLI shell for dialog with Quantalogic agents."""
     def __init__(self, agent_config: Optional[AgentConfig] = None, cli_log_level: Optional[str] = None):
         # Configure logger based on config file (default ERROR)
-        cfg = config_manager.load_global_config()
+        self.agent_config = agent_config or AgentConfig.load_from_file(config_manager.GLOBAL_CONFIG_PATH)
         if cli_log_level:
             level = cli_log_level.upper()
         else:
-            level = cfg.get("log_level", config_manager.GLOBAL_DEFAULTS.get("log_level", "ERROR")).upper()
+            level = self.agent_config.log_level.upper() if hasattr(self.agent_config, 'log_level') else config_manager.GLOBAL_DEFAULTS.get("log_level", "ERROR").upper()
         logger.remove()
         self.logger_sink_id = logger.add(
             sys.stderr,
@@ -80,43 +79,11 @@ class Shell:
         self.high_contrast = False  # For accessibility
         self.multiline = False  # Default to single-line input
         
-        # Initialize shell state
-        self.state = ShellState(
-            model_name="deepseek/deepseek-chat",
-            max_iterations=10,
-            streaming=True,
-            mode="codeact"
-        )
-        
         # Initialize conversation manager
         self.conversation_manager = ConversationManager()
         
-        # Load or initialize global config
-        if not config_manager.GLOBAL_CONFIG_PATH.exists():
-            default_config = AgentConfig.get_default()
-            default_data = default_config.to_dict()
-            config_manager.save_global_config(default_data)
-            logger.info(f"Created global configuration at {config_manager.GLOBAL_CONFIG_PATH}")
-            config_data = default_data
-        else:
-            config_data = config_manager.load_global_config()
-        # Prepare AgentConfig args
-        config_data.pop("log_level", None)
-        try:
-            # Filter out unsupported keys based on AgentConfig schema
-            valid_keys = {f.name for f in fields(AgentConfig)}
-            for key in list(config_data):
-                if key not in valid_keys:
-                    logger.warning(f"Unknown config key '{key}' ignored.")
-                    config_data.pop(key)
-            default_config = AgentConfig(**config_data)
-            logger.info(f"Loaded configuration from {config_manager.GLOBAL_CONFIG_PATH}")
-        except Exception as e:
-            logger.error(f"Failed to initialize AgentConfig: {e}. Using minimal configuration.")
-            default_config = AgentConfig.get_default()
-        
-        # Initialize the default agent with the loaded or default config
-        default_agent = Agent(config=agent_config or default_config)
+        # Initialize the default agent with the loaded config
+        default_agent = Agent(config=self.agent_config)
         default_agent.add_observer(self._stream_token_observer, ["StreamToken"])
         self.agents: Dict[str, AgentState] = {
             "default": AgentState(agent=default_agent)
@@ -214,10 +181,10 @@ class Shell:
             # High-contrast mode: single style with all info
             return HTML(
                 f'<b><style fg="ansiblack" bg="#E6E6FA">'
-                f'Mode: {self.state.mode} | '
+                f'Mode: {self.agent_config.mode} | '
                 f'Agent: {self.current_agent.name or "Default"} | '
                 f'Model: {self.current_agent.model} | '
-                f'MaxIter: {self.state.max_iterations} | '
+                f'MaxIter: {self.agent_config.max_iterations} | '
                 f'Temperature: {temperature:.2f} | '
                 f'Version: {get_version()}'
                 f'</style></b>'
@@ -226,10 +193,10 @@ class Shell:
             # Default mode: multi-colored sections
             return HTML(
                 f'<b>'
-                f'<style fg="ansiwhite" bg="ansired"> Mode: {self.state.mode} </style>'
+                f'<style fg="ansiwhite" bg="ansired"> Mode: {self.agent_config.mode} </style>'
                 f'<style fg="ansiwhite" bg="ansigreen"> Agent: {self.current_agent.name or "Default"} </style>'
                 f'<style fg="ansiwhite" bg="ansiblue"> Model: {self.current_agent.model} </style>'
-                f'<style fg="ansiwhite" bg="ansicyan"> MaxIter: {self.state.max_iterations} </style>'
+                f'<style fg="ansiwhite" bg="ansicyan"> MaxIter: {self.agent_config.max_iterations} </style>'
                 f'<style fg="ansiwhite" bg="ansiyellow"> Temperature: {temperature:.2f} </style>'
                 f'<style fg="ansiwhite" bg="ansimagenta"> Version: {get_version()} </style>'
                 f'</b>'
@@ -261,7 +228,7 @@ class Shell:
             message=lambda: HTML(
                 f'<ansigreen>[cfg:{config_manager.GLOBAL_CONFIG_PATH.name}]</ansigreen> '
                 f'<ansicyan>[{self.current_agent.name or "Agent"}]</ansicyan> '
-                f'<ansiyellow>[{self.state.mode}]></ansiyellow> '
+                f'<ansiyellow>[{self.agent_config.mode}]></ansiyellow> '
             ),
             completer=completer,
             multiline=self.multiline,
@@ -275,8 +242,8 @@ class Shell:
         welcome_message = (
             f"Welcome to Quantalogic Shell (v{get_version()}).\n\n"
             f"Interacting with agent: {self.current_agent.name or 'Agent'}\n"
-            f"Mode: {self.state.mode} - plain messages are "
-            f"{'tasks to solve' if self.state.mode == 'codeact' else 'chat messages'}.\n\n"
+            f"Mode: {self.agent_config.mode} - plain messages are "
+            f"{'tasks to solve' if self.agent_config.mode == 'codeact' else 'chat messages'}.\n\n"
             f"Type /help for commands. Press Enter to send, Ctrl+J for new lines."
         )
         console.print(Panel(welcome_message, title="Quantalogic Shell", border_style="blue"))
@@ -334,7 +301,7 @@ class Shell:
                         console.print(Panel(error_message, title="Error", border_style=border_style))
                 else:
                     # Handle non-command input based on mode
-                    if self.state.mode == "codeact":
+                    if self.agent_config.mode == "codeact":
                         await solve_command(self, [user_input])
                     else:  # chat mode
                         await chat_command(self, [user_input])

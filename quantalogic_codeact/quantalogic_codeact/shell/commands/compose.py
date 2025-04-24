@@ -1,42 +1,50 @@
 import os
-import subprocess
 import tempfile
 from typing import List
 
 from loguru import logger
 from rich.console import Console
+from rich.panel import Panel
 
-from .chat import chat_command
-from .solve import solve_command
+from ..commands.chat import chat_command
+from ..commands.solve import solve_command
 
 console = Console()
 
+
 async def compose_command(shell, args: List[str]) -> str:
-    """Compose multi-line input using an external editor: /compose"""
-    editor = os.getenv("EDITOR", "vim")
-    console.print("[bold blue]Opening external editor...[/bold blue]")
-    with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tmp:
-        tmp_path = tmp.name
+    """Compose input in external editor: /compose"""
+    editor = os.environ.get("EDITOR", "vim")
+    
     try:
-        subprocess.run([editor, tmp_path], check=True)
-        with open(tmp_path) as f:
-            content = f.read().strip()
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".txt", delete=False) as temp_file:
+            temp_file_path = temp_file.name
+        
+        # Open the editor
+        console.print("Opening external editor...")
+        os.system(f"{editor} {temp_file_path}")
+        
+        # Read the edited content
+        with open(temp_file_path, "r") as temp_file:
+            content = temp_file.read().strip()
+        
+        # Clean up the temporary file
+        os.unlink(temp_file_path)
+        
         if not content:
-            return "No input provided."
-        console.print("[bold blue]Input received from editor.[/bold blue]")
-        if shell.state.mode == "codeact":
-            await solve_command(shell, [content])
-        else:  # react mode
-            await chat_command(shell, [content])
-        return ""  # Output is handled by solve or chat command
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error with editor: {e}")
-        return f"Error with editor: {e}"
+            return "No input provided from editor."
+        
+        console.print("Input received from editor.")
+        logger.debug(f"Composed input: {content}")
+        
+        # Process the input based on mode
+        if shell.agent_config.mode == "codeact":
+            return await solve_command(shell, [content])
+        else:
+            return await chat_command(shell, [content])
+    
     except Exception as e:
         logger.error(f"Error in compose command: {e}")
+        console.print(Panel(f"Error in compose command: {e}", title="Error", border_style="red"))
         return f"Error in compose command: {e}"
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except Exception as e:
-            logger.warning(f"Failed to delete temporary file: {e}")

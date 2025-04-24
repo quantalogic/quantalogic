@@ -38,6 +38,7 @@ ignore = [
     "D415", # First line should end with a period
     "D104", # First word of the docstring should not be This
     'UP038', # Remove unnecessary type annotations
+    'N805', # Function name should be lowercase
 ]
 
 # Docstring configuration

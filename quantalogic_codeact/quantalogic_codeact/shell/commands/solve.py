@@ -18,7 +18,7 @@ async def solve_command(shell, args: List[str]) -> str:
     
     task = " ".join(args)
     try:
-        if shell.state.streaming:
+        if shell.agent_config.streaming:
             step_buffers = {}
             # no block state; uniform Step prefix for all lines
             final_answer = None

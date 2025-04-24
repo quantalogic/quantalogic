@@ -9,7 +9,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from quantalogic_codeact.codeact.agent import Agent, AgentConfig
+from quantalogic_codeact.codeact.agent import Agent
+from quantalogic_codeact.codeact.agent_config import AgentConfig
 from quantalogic_codeact.codeact.constants import DEFAULT_MODEL, LOG_FILE
 from quantalogic_codeact.codeact.events import (
     ActionExecutedEvent,
@@ -132,8 +133,7 @@ class ProgressMonitor:
 
 async def run_react_agent(
     task: str,
-    model: str,
-    max_iterations: int,
+    agent_config: AgentConfig,  # Use passed AgentConfig
     success_criteria: str = None,
     tools=None,
     personality=None,
@@ -144,31 +144,24 @@ async def run_react_agent(
     reasoner_name=None,
     executor_name=None,
     tools_config=None,
-    temperature: float = 0.7  # Added temperature parameter
 ) -> None:
     """Run the Agent with detailed event monitoring."""
     logger.remove()
     logger.add(sys.stderr, level="DEBUG" if debug else "INFO")
     logger.add(LOG_FILE, level="DEBUG" if debug else "INFO")
 
-    tools = tools if tools is not None else get_default_tools(model, tools_config=tools_config)
+    tools = tools if tools is not None else get_default_tools(agent_config.model, tools_config=tools_config)
     processed_tools = process_tools(tools)
 
-    # Create AgentConfig with all parameters
-    config = AgentConfig(
-        model=model,
-        max_iterations=max_iterations,
-        tools=processed_tools,
-        personality=personality,
-        backstory=backstory,
-        sop=sop,
-        reasoner_name=reasoner_name if reasoner_name else "default",
-        executor_name=executor_name if executor_name else "default",
-        tools_config=tools_config,
-        temperature=temperature  # Added temperature
-    )
+    # Update AgentConfig with CLI-provided values
+    agent_config.personality = personality or agent_config.personality
+    agent_config.backstory = backstory or agent_config.backstory
+    agent_config.sop = sop or agent_config.sop
+    agent_config.reasoner_name = reasoner_name or agent_config.reasoner_name
+    agent_config.executor_name = executor_name or agent_config.executor_name
+    agent_config.tools_config = json.loads(tools_config) if tools_config else agent_config.tools_config
     
-    agent = Agent(config=config)
+    agent = Agent(config=agent_config)
     
     progress_monitor = ProgressMonitor()
     solve_agent = agent
@@ -184,6 +177,7 @@ async def run_react_agent(
                                 reasoner_name=reasoner_name, executor_name=executor_name)
 
 def task(
+    ctx: typer.Context,
     task: str = typer.Argument(..., help="The task to solve"),
     model: str = typer.Option(DEFAULT_MODEL, help="The litellm model to use"),
     max_iterations: int = typer.Option(5, help="Maximum reasoning steps"),
@@ -196,18 +190,22 @@ def task(
     reasoner: str = typer.Option(None, help="Name of the reasoner to use"),
     executor: str = typer.Option(None, help="Name of the executor to use"),
     tools_config: str = typer.Option(None, help="JSON/YAML string for tools_config"),
-    temperature: float = typer.Option(0.7, help="Temperature for the language model (0 to 1)")  # Added temperature option
+    temperature: float = typer.Option(0.7, help="Temperature for the language model (0 to 1)")
 ) -> None:
     """CLI command to run the Agent with detailed event monitoring."""
     try:
-        # Parse optional JSON/YAML strings
-        tools_config_list = json.loads(tools_config) if tools_config else None
+        # Get AgentConfig from context
+        agent_config = ctx.obj["agent_config"]
+        # Update with CLI-provided values
+        updated_config = agent_config.copy(deep=True)
+        updated_config.model = model
+        updated_config.max_iterations = max_iterations
+        updated_config.temperature = temperature
         asyncio.run(run_react_agent(
-            task, model, max_iterations, success_criteria,
+            task, updated_config, success_criteria,
             personality=personality, backstory=backstory, sop=sop, debug=debug,
             streaming=streaming, reasoner_name=reasoner, executor_name=executor,
-            tools_config=tools_config_list,
-            temperature=temperature  # Added temperature
+            tools_config=tools_config
         ))
     except Exception as e:
         logger.error(f"Agent failed: {e}")
