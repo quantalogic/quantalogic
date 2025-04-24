@@ -55,6 +55,7 @@ Toolbox.update_forward_refs()
 
 class AgentConfig(BaseModel):
     """Comprehensive configuration for the Agent, loadable from a YAML file or direct arguments."""
+    version: str = Field(default="1.0", description="Configuration schema version")
     model: str = Field(default="gemini/gemini-2.0-flash", description="The LLM model to use")
     max_iterations: int = Field(default=5, ge=1, le=100, description="Maximum reasoning steps")
     max_history_tokens: int = Field(default=MAX_HISTORY_TOKENS, ge=1000, description="Max tokens for history")
