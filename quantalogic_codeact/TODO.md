@@ -3,8 +3,8 @@
 ## Improvements
 - [X] shell command /set max_iterations
 - [ ] 2 modes CodeAct and direct response
-- [ ] Better personnality configuration
-    - [ ] Better Model for configuration
+- [X] Better personnality configuration
+    - [X] Better Model for configuration
 - [ ] Human Interractions
     - [ ] Questions (list of choices), with comments
 - [ ] Support of Image Analysis
@@ -15,7 +15,7 @@
     - [ ] Working memory tokens
     - [ ] Conversation history tokens
 - [ ] LLM toolbox (litellm)
-    - [ ] Allow configuration of custome mode by config files
+    - [ ] Allow configuration of custom mode by config files
     - [ ] Tokens and cost trackers
     - [ ] get info about a model
         - [ ] Image analysis support
