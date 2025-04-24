@@ -8,6 +8,7 @@ from loguru import logger
 from pydantic import BaseModel, Field, root_validator, validator
 
 from .constants import MAX_HISTORY_TOKENS
+from .personality_config import PersonalityConfig
 
 
 # Structured config models (replaced dataclasses with Pydantic BaseModel)
@@ -23,9 +24,7 @@ class ExecutorConfig(BaseModel):
     config: Dict[str, Any] = Field(default_factory=dict, description="Additional executor configuration")
 
 
-class PersonalityConfig(BaseModel):
-    """Configuration for the agent's personality."""
-    traits: List[str] = Field(default_factory=list, description="List of personality traits")
+# PersonalityConfig is now imported from personality_config.py
 
 
 class TemplateConfig(BaseModel):
@@ -62,17 +61,14 @@ class AgentConfig(BaseModel):
     installed_toolboxes: List[Toolbox] = Field(default_factory=list, description="List of installed toolboxes")
     reasoner_name: str = Field(default="default", description="Name of the reasoner")
     executor_name: str = Field(default="default", description="Name of the executor")
-    personality: Optional[PersonalityConfig] = Field(default_factory=PersonalityConfig, description="Agent personality configuration")
-    backstory: Optional[str] = None
-    sop: Optional[str] = None
+    personality: PersonalityConfig = Field(default_factory=PersonalityConfig, description="Comprehensive agent personality configuration")
     template: TemplateConfig = Field(default_factory=TemplateConfig)
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, description="Agent name")
     reasoner: ReasonerConfig = Field(default_factory=lambda: ReasonerConfig(name="default"))
     executor: ExecutorConfig = Field(default_factory=lambda: ExecutorConfig(name="default"))
     agent_tool_model: str = Field(default="gemini/gemini-2.0-flash", description="Model for agent tool")
     agent_tool_timeout: int = Field(default=30, ge=1, description="Timeout for agent tool")
     temperature: float = Field(default=0.7, ge=0.0, le=1.0, description="Temperature for LLM generation")
-    system_prompt_template: Optional[str] = None
     mode: str = Field(default="codeact", description="Operating mode: 'codeact' or 'chat'")
     streaming: bool = Field(default=True, description="Enable streaming output for real-time token generation")
     log_level: str = Field(default="ERROR", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
@@ -121,15 +117,11 @@ class AgentConfig(BaseModel):
 
     @validator("personality", pre=True)
     def validate_personality(cls, v):
-        """Handle various personality formats."""
+        """Ensure personality is a PersonalityConfig instance."""
         if isinstance(v, PersonalityConfig):
             return v
         elif isinstance(v, dict):
             return PersonalityConfig(**v)
-        elif isinstance(v, list):
-            return PersonalityConfig(traits=v)
-        elif isinstance(v, str):
-            return PersonalityConfig(traits=[v])
         elif v is None:
             return PersonalityConfig()
         else:

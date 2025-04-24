@@ -31,9 +31,10 @@ class StyleConfig(BaseModel):
 
 class PersonalityConfig(BaseModel):
     """Configuration for the agent's personality."""
-    system: str = Field(..., description="System prompt for personality behavior")
+    system: str = Field("", description="System prompt for personality behavior")
     bio: List[str] = Field(default_factory=list, description="Short bio lines")
     lore: List[str] = Field(default_factory=list, description="Extended backstory entries")
+    sop: str = Field("", description="Standard Operating Procedure that must be strictly followed")
     message_examples: List[MessageExample] = Field(
         default_factory=list,
         description="Example dialogues illustrating tone and style",

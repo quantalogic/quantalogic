@@ -53,8 +53,6 @@ class Agent:
         self.temperature: float = config.temperature  # Added temperature
         self.max_iterations: int = config.max_iterations
         self.personality = config.personality
-        self.backstory = config.backstory
-        self.sop: Optional[str] = config.sop
         self.name: Optional[str] = config.name
         self.max_history_tokens: int = config.max_history_tokens
         # Initialize conversation manager before getting tools to ensure it's available
@@ -79,7 +77,6 @@ class Agent:
         self.last_solve_context_vars: Dict = {}
         self.default_reasoner_name: str = config.reasoner.name
         self.default_executor_name: str = config.executor.name
-        self.system_prompt_template: Optional[str] = config.system_prompt_template
         self.react_agent = CodeActAgent(
             model=self.model,
             tools=self.default_tools,
@@ -186,14 +183,12 @@ class Agent:
 
     def _build_system_prompt(self) -> str:
         """Render system prompt via Jinja2 template only."""
-        template_name = self.system_prompt_template or "system_prompt.j2"
+        template_name = "system_prompt.j2"
         try:
             tpl = self.jinja_env.get_template(template_name)
             context = {
                 'name': self.name,
-                'personality': self.personality.traits if self.personality else [],  # Use traits from PersonalityConfig
-                'backstory': self.backstory,
-                'sop': self.sop
+                'personality': self.personality
             }
             return tpl.render(**context)
         except TemplateNotFound:

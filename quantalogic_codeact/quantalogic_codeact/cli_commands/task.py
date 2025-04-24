@@ -26,8 +26,8 @@ from quantalogic_codeact.codeact.events import (
     ToolExecutionErrorEvent,
     ToolExecutionStartedEvent,
 )
+from quantalogic_codeact.codeact.personality_config import PersonalityConfig
 from quantalogic_codeact.codeact.tools_manager import get_default_tools
-from quantalogic_codeact.codeact.utils import process_tools
 from quantalogic_codeact.codeact.xml_utils import XMLResultHandler
 
 console = Console()
@@ -136,9 +136,7 @@ async def run_react_agent(
     agent_config: AgentConfig,  # Use passed AgentConfig
     success_criteria: str = None,
     tools=None,
-    personality=None,
-    backstory=None,
-    sop=None,
+    personality_config: PersonalityConfig = None,
     debug: bool = False,
     streaming: bool = False,
     reasoner_name=None,
@@ -150,13 +148,12 @@ async def run_react_agent(
     logger.add(sys.stderr, level="DEBUG" if debug else "INFO")
     logger.add(LOG_FILE, level="DEBUG" if debug else "INFO")
 
+    # Get default tools if none provided
     tools = tools if tools is not None else get_default_tools(agent_config.model, tools_config=tools_config)
-    processed_tools = process_tools(tools)
 
     # Update AgentConfig with CLI-provided values
-    agent_config.personality = personality or agent_config.personality
-    agent_config.backstory = backstory or agent_config.backstory
-    agent_config.sop = sop or agent_config.sop
+    if personality_config:
+        agent_config.personality = personality_config
     agent_config.reasoner_name = reasoner_name or agent_config.reasoner_name
     agent_config.executor_name = executor_name or agent_config.executor_name
     agent_config.tools_config = json.loads(tools_config) if tools_config else agent_config.tools_config
@@ -182,9 +179,10 @@ def task(
     model: str = typer.Option(DEFAULT_MODEL, help="The litellm model to use"),
     max_iterations: int = typer.Option(5, help="Maximum reasoning steps"),
     success_criteria: str = typer.Option(None, help="Optional criteria to determine task completion"),
-    personality: str = typer.Option(None, help="Agent personality (e.g., 'witty')"),
-    backstory: str = typer.Option(None, help="Agent backstory"),
-    sop: str = typer.Option(None, help="Standard operating procedure"),
+    system: str = typer.Option(None, help="System prompt for personality behavior"),
+    adjectives: str = typer.Option(None, help="Comma-separated list of personality adjectives"),
+    bio: str = typer.Option(None, help="Backstory/biography for the agent"),
+    sop: str = typer.Option(None, help="Standard Operating Procedure that must be strictly followed"),
     debug: bool = typer.Option(False, help="Enable debug logging to stderr"),
     streaming: bool = typer.Option(False, help="Enable streaming output for real-time token generation"),
     reasoner: str = typer.Option(None, help="Name of the reasoner to use"),
@@ -201,9 +199,20 @@ def task(
         updated_config.model = model
         updated_config.max_iterations = max_iterations
         updated_config.temperature = temperature
+        
+        # Create PersonalityConfig from CLI arguments if any are provided
+        personality_config = None
+        if system or adjectives or bio or sop:
+            personality_config = PersonalityConfig(
+                system=system or "",
+                adjectives=adjectives.split(",") if adjectives else [],
+                bio=[bio] if bio else [],
+                sop=sop or ""
+            )
+            
         asyncio.run(run_react_agent(
             task, updated_config, success_criteria,
-            personality=personality, backstory=backstory, sop=sop, debug=debug,
+            personality_config=personality_config, debug=debug,
             streaming=streaming, reasoner_name=reasoner, executor_name=executor,
             tools_config=tools_config
         ))
