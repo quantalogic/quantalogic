@@ -48,7 +48,7 @@ Quantalogic CodeAct is a framework within the Quantalogic ecosystem that enables
 - **executor.py**: Executes Python code and tool calls safely.
 - **tools_manager.py**: Registers and loads tools and toolboxes.
 - **tools/**: Built-in tools (e.g., `AgentTool`, `RetrieveStepTool`).
-- **conversation_history_manager.py** & **history_manager.py**: Manage message and execution history.
+- **conversation_manager.py** & **working_memory.py**: Manage message and execution history.
 - **completion_evaluator.py**: Evaluates task completion via LLM verification.
 - **events.py**: Event and result data models (Pydantic).
 - **constants.py**: Project constants (models, token limits, paths).
@@ -61,7 +61,39 @@ Each component follows single-responsibility design, making it easy to extend or
 
 ### CodeAct Principle, ReAct, and the CodeAct Paper
 
-CodeAct is inspired by the *["ReAct: Synergizing Reasoning and Acting in Language Models"](https://arxiv.org/abs/2210.03629)* paper (Yao et al., 2022), and further formalized and empirically validated in the recent work *"Executable Code Actions Elicit Better LLM Agents"* ([Yang et al., 2024](https://arxiv.org/html/2402.01030v4)).
+CodeAct is inspired by the *["ReAct: Synergizing Reasoning and Acting in Language Models"](https://arxiv.org/abs/2210.03629)* paper (Yao et al., 2022), and further formalized and empirically validated in the recent work *"Executable Code Actions Elicit Better LLM Agents"* ([Yang et al., 2024](https://arxiv.org/abs/2402.01030)).
+
+**About the ReAct Paper**
+
+The ReAct paper, ["ReAct: Synergizing Reasoning and Acting in Language Models"](https://arxiv.org/abs/2210.03629), presents a novel approach for large language models (LLMs) that interleaves reasoning (thoughts, plans) and acting (task-specific actions) in a single, iterative loop.
+
+**Key points from the paper:**
+- **Synergy of Reasoning and Acting:** Unlike traditional approaches that treat reasoning (e.g., chain-of-thought) and acting (e.g., tool use, API calls) separately, ReAct enables LLMs to generate both reasoning traces and actions together. This allows the model to update its plans, handle exceptions, and gather new information as needed.
+- **Improved Performance:** On both language tasks (like HotpotQA, Fever) and interactive decision-making benchmarks (ALFWorld, WebShop), ReAct outperforms state-of-the-art baselines, including imitation and reinforcement learning methods. Notably, it reduces hallucination and error propagation by allowing the agent to interact with external sources (e.g., Wikipedia API).
+- **Interpretability:** By generating explicit reasoning traces alongside actions, ReAct provides more interpretable and trustworthy task-solving trajectories than models that only act or only reason.
+- **Minimal Prompting:** ReAct achieves strong results with only one or two in-context examples, making it practical for real-world deployment.
+- **Open-Source Project:** The authors provide a project site with code and further resources: [https://react-lm.github.io](https://react-lm.github.io)
+
+**Why this matters:**
+ReAct is a foundational paradigm for agentic LLMs, inspiring subsequent work (including CodeAct) by showing that tightly coupling reasoning and acting leads to more robust, flexible, and transparent AI agents.
+
+For more details, see the full paper on [arXiv:2210.03629](https://arxiv.org/abs/2210.03629).
+
+**About the CodeAct Paper**
+
+The CodeAct paper, ["Executable Code Actions Elicit Better LLM Agents"](https://arxiv.org/abs/2402.01030), introduces a new paradigm for large language model (LLM) agents: instead of producing actions as JSON or text, agents generate executable Python code as their primary means of acting in the world.
+
+**Key points from the paper:**
+- **Unified Action Space:** By using Python code as the action language, LLM agents are no longer limited by pre-defined tool schemas or rigid action formats. This enables flexible composition of tools, dynamic control flow, and the ability to self-correct or chain multiple operations.
+- **Integrated Python Interpreter:** The agent interacts with its environment by executing the generated code, observing results, and revising its actions in a multi-turn loop.
+- **Empirical Results:** CodeAct was tested on 17 LLMs across established and new benchmarks. Agents using CodeAct achieved up to 20% higher success rates than those using traditional action formats.
+- **Open-Source Ecosystem:** The authors released CodeActAgent, an open-source LLM agent fine-tuned for code-based actions, along with the CodeActInstruct dataset (7k+ multi-turn interactions) to further advance research and practical applications.
+- **Sophisticated Capabilities:** CodeActAgent can perform complex tasks such as model training, use existing Python libraries, and autonomously debug its own code.
+
+**Why this matters:**
+This approach leverages LLMs' strong code understanding and generation abilities, making agents more robust, interpretable, and adaptable for real-world tool use and automation.
+
+For more details, see the full paper on [arXiv:2402.01030](https://arxiv.org/abs/2402.01030).
 
 The ReAct paradigm combines reasoning (generating plans or thoughts) with acting (executing actions) in an iterative loop. CodeAct extends this concept by making **executable code**—specifically Python—the primary action and communication format between agent and environment. This approach leverages language models' extensive code pre-training, allowing agents to:
 
@@ -87,7 +119,7 @@ print("Hello, World!")
 
 The agent receives the result of this execution (output or errors) and uses it for further reasoning and actions. This loop continues until the agent determines the task is complete.
 
-For more details and example prompts, see Appendix E of the [CodeAct paper](https://arxiv.org/html/2402.01030v4).
+For more details and example prompts, see Appendix E of the [CodeAct paper](https://arxiv.org/abs/2402.01030).
 
 ### ReAct Agent
 
@@ -435,7 +467,7 @@ quantalogic_codeact install-toolbox math_tools
 quantalogic_codeact uninstall-toolbox math_tools
 ```
 
-For a detailed guide on agent configuration, see [examples/README.md](examples/README.md). A sample configuration is provided in [examples/agent_sample.yaml](examples/agent_sample.yaml):
+For a detailed guide on agent configuration, see [examples/README.md](quantalogic_codeact/examples/README.md). A sample configuration is provided in [examples/agent_sample.yaml](quantalogic_codeact/examples/agent_sample.yaml):
 
 ```yaml
 model: "deepseek/deepseek-chat"
@@ -489,7 +521,7 @@ Use `/config save` or `/config load` in the shell to manage configurations, or m
 
 ## Toolbox System Documentation
 
-For a comprehensive guide on creating, configuring, and managing toolboxes in Quantalogic, see the [Toolbox Documentation](docs/01-quantalogic-toolbox.md).
+For a comprehensive guide on creating, configuring, and managing toolboxes in Quantalogic, see the [Toolbox Documentation](quantalogic_codeact/docs/01-quantalogic-toolbox.md).
 
 This document covers:
 - The motivation and benefits of using toolboxes
@@ -504,7 +536,7 @@ This document covers:
 
 ---
 
-Refer to the [Toolbox Documentation](docs/01-quantalogic-toolbox.md) for details and hands-on examples.
+Refer to the [Toolbox Documentation](quantalogic_codeact/docs/01-quantalogic-toolbox.md) for details and hands-on examples.
   - [Configuration](#configuration)
 - [Contributing](#contributing)
 - [License](#license)
@@ -513,7 +545,7 @@ Refer to the [Toolbox Documentation](docs/01-quantalogic-toolbox.md) for details
 
 ## Memory Systems Documentation
 
-For a detailed explanation of how agent memory works in Quantalogic CodeAct, see the [Memory Systems Documentation](docs/02-quantalogic-codeagent-memory.md).
+For a detailed explanation of how agent memory works in Quantalogic CodeAct, see the [Memory Systems Documentation](quantalogic_codeact/docs/02-quantalogic-codeagent-memory.md).
 
 This document covers:
 - The purpose and necessity of memory in CodeAct agents
@@ -524,14 +556,14 @@ This document covers:
 - Implementation details, including class structure, data flow, and example scenarios
 - Analysis of memory roles and a sequence diagram of agent-memory-user interactions
 
-Refer to [Memory Systems Documentation](docs/02-quantalogic-codeagent-memory.md) for in-depth technical details and practical examples.
+Refer to [Memory Systems Documentation](quantalogic_codeact/docs/02-quantalogic-codeagent-memory.md) for in-depth technical details and practical examples.
 
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for code style, testing, and workflow guidelines.
+Contributions are welcome! Please see [CONTRIBUTING.md](../../CONTRIBUTING.md) for code style, testing, and workflow guidelines.
 
 ## References
 
@@ -540,4 +572,4 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for cod
 
 ## License
 
-Quantalogic CodeAct is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for more information.
+Quantalogic CodeAct is licensed under the Apache License, Version 2.0. See [LICENSE](../../LICENSE) for more information.
