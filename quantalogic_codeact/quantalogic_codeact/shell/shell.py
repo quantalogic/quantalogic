@@ -1,5 +1,4 @@
 import sys
-from dataclasses import fields  # for filtering config keys
 from difflib import get_close_matches  # Added for command suggestions
 from importlib.metadata import entry_points
 from pathlib import Path
