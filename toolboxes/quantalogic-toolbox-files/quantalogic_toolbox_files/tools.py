@@ -85,6 +85,6 @@ async def list_files_markdown_table(path: str) -> str:
     return "\n".join(lines)
 
 
-def get_tools() -> list:
+def get_tools():
     """Return a list of tool functions defined in this module."""
     return [list_files_tool, create_directory_tool, write_file_tool, read_file_tool, read_file_block_tool, list_files_markdown_table]

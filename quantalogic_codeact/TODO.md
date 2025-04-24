@@ -1,7 +1,7 @@
 # TODO
 
 ## Improvements
-- [ ] shell command /set max_iterations
+- [X] shell command /set max_iterations
 - [ ] 2 modes CodeAct and direct response
 - [ ] Better personnality configuration
     - [ ] Better Model for configuration

@@ -9,11 +9,15 @@ GLOBAL_DEFAULTS = {"installed_toolboxes": [], "enabled_toolboxes": [], "log_leve
 PROJECT_CONFIG_PATH = GLOBAL_CONFIG_PATH
 
 def load_global_config() -> dict:
-    """Load or initialize global config."""
+    """Load or initialize global config, using defaults when loaded values are None."""
     if GLOBAL_CONFIG_PATH.exists():
         try:
             data = yaml.safe_load(GLOBAL_CONFIG_PATH.read_text()) or {}
-            return {**GLOBAL_DEFAULTS, **data}
+            config = GLOBAL_DEFAULTS.copy()
+            for key, value in data.items():
+                if value is not None:
+                    config[key] = value
+            return config
         except Exception:
             return GLOBAL_DEFAULTS.copy()
     return GLOBAL_DEFAULTS.copy()
