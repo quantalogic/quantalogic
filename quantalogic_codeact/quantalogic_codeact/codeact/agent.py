@@ -155,7 +155,15 @@ class Agent:
                     tool = next((t for t in base_tools if t.name == tc.name or t.toolbox_name == tc.name), None)
                     if tool and tool.name not in processed:
                         for key, value in tc.config.items():
+                            # Apply the configuration value to the tool
                             setattr(tool, key, value)
+                            
+                        # Apply confirmation settings if specified in the configuration
+                        if hasattr(tc, 'requires_confirmation'):
+                            tool.requires_confirmation = tc.requires_confirmation
+                            
+                        if hasattr(tc, 'confirmation_message'):
+                            tool.confirmation_message = tc.confirmation_message
                         filtered_tools.append(tool)
                         processed.add(tool.name)
             # Append remaining

@@ -50,7 +50,17 @@ def create_toolbox(
             output_file = toolbox_dir / template_name.replace(".j2", "")
         output_file.write_text(content.strip())
 
-    # Inform user of toolbox path
+    # Inform user of toolbox path and features
     toolbox_path = toolbox_dir.resolve()
     logger.info(f"Created starter toolbox project '{name}' at: {toolbox_path}")
     typer.echo(f"Toolbox created at: {toolbox_path}")
+    
+    # Inform about the confirmation system examples
+    console.print("\n[bold green]Toolbox Features:[/bold green]")
+    console.print("- Basic echo tool example")
+    console.print("- [bold yellow]Confirmation system examples:[/bold yellow]")
+    console.print("  - Static confirmation message example: [italic]delete_item[/italic]")
+    console.print("  - Dynamic confirmation message example: [italic]modify_item[/italic]")
+    console.print("\n[bold]Usage:[/bold]")
+    console.print(f"1. Install your toolbox: [blue]pip install -e {toolbox_path}[/blue]")
+    console.print(f"2. Enable it in your config: [blue]quantalogic_codeact toolbox install {package_name}[/blue]")

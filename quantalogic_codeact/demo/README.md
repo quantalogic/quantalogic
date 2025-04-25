@@ -1,4 +1,4 @@
-# {{ name }} v{{ version }}
+# demo v0.1.0
 
 A custom toolbox for Quantalogic.
 
@@ -57,7 +57,7 @@ To use this toolbox with Quantalogic CodeAct:
 2. Enable it in your Quantalogic configuration:
 
 ```bash
-quantalogic_codeact toolbox install {{ package_name }}
+quantalogic_codeact toolbox install demo
 ```
 
 3. Run Quantalogic CodeAct with the `deepseek/deepseek-chat` model for best performance:

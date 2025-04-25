@@ -1,8 +1,9 @@
 import sys
+import time
 from difflib import get_close_matches  # Added for command suggestions
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 from prompt_toolkit import PromptSession
@@ -18,6 +19,7 @@ from rich.panel import Panel
 import quantalogic_codeact.cli_commands.config_manager as config_manager
 from quantalogic_codeact.codeact.agent import Agent, AgentConfig
 from quantalogic_codeact.codeact.conversation_manager import ConversationManager
+from quantalogic_codeact.codeact.events import ToolConfirmationRequestEvent
 from quantalogic_codeact.commands.toolbox.disable_toolbox import disable_toolbox
 from quantalogic_codeact.commands.toolbox.enable_toolbox import enable_toolbox
 from quantalogic_codeact.commands.toolbox.get_tool_doc import get_tool_doc
@@ -99,10 +101,16 @@ class Shell:
         # Initialize the default agent with the loaded config
         default_agent = Agent(config=self.agent_config)
         default_agent.add_observer(self._stream_token_observer, ["StreamToken"])
+        # Subscribe to tool confirmation events - this is critical for proper confirmation handling
+        default_agent.add_observer(self._handle_tool_confirmation, ["ToolConfirmationRequest"])
         self.agents: Dict[str, AgentState] = {
             "default": AgentState(agent=default_agent)
         }
         self.current_agent_name: str = "default"
+        
+        # Initialize confirmation state tracking
+        self._current_confirmation: Dict[str, Any] = None
+        self.next_confirmation_response: bool = False
         
         # Initialize command registry
         self.command_registry = CommandRegistry()
@@ -187,6 +195,161 @@ class Shell:
     async def _stream_token_observer(self, event: object) -> None:
         """Observer for streaming tokens (handled in commands)."""
         pass
+        
+    async def _handle_tool_confirmation(self, event: ToolConfirmationRequestEvent) -> None:
+        """Handle tool confirmation requests by interacting with the user.
+        
+        This method is called when a tool requires confirmation before execution.
+        It displays a prompt to the user and processes the confirmation response directly
+        rather than relying on the normal shell input processing loop.
+        """
+        if event.event_type != "ToolConfirmationRequest":
+            return
+        
+        # Add debug logging    
+        logger.debug(f"Received tool confirmation request for: {event.tool_name}")
+        logger.debug(f"Confirmation ID: {event.confirmation_id}")
+        logger.debug(f"Confirmation message: {event.confirmation_message}")
+            
+        # Store confirmation details
+        self._current_confirmation = {
+            "tool_name": event.tool_name,
+            "step_number": event.step_number,
+            "message": event.confirmation_message,
+            "parameters": event.parameters_summary,
+            "confirmation_id": event.confirmation_id,
+            "time_received": time.time()  # Track when we received this confirmation request
+        }
+        
+        # Format parameter display nicely
+        formatted_params = '\n'.join(f"  - {k}: {v}" for k, v in event.parameters_summary.items())
+        
+        # Display confirmation panel with message and parameters
+        panel = Panel(
+            f"Tool: {event.tool_name}\n\nParameters:\n{formatted_params}\n\n{event.confirmation_message}",
+            title="Confirmation Required", 
+            border_style="yellow"
+        )
+        console.print(panel)
+        console.print("[bold yellow]Type [bold white]'yes'[/bold white] or [bold white]'no'[/bold white] to confirm or cancel this operation.[/bold yellow]")
+        
+        # Log that we're waiting for confirmation
+        logger.debug("Shell is now getting confirmation input directly")
+        
+        # DIRECT HANDLING: Instead of waiting for the next shell input cycle,
+        # we'll immediately get and process input - this bypasses potential issues
+        # in the main shell input loop
+        try:
+            # Use direct Python input() instead of prompt_toolkit
+            response = input("Confirm (yes/no): ").strip().lower()
+            console.print(f"[italic]Received response: '{response}'[/italic]")
+            
+            # Process the response directly
+            if response not in ['yes', 'no']:
+                console.print("[bold red]Invalid response. Please enter exactly 'yes' or 'no'.[/bold red]")
+                # Try again once more
+                response = input("Confirm (yes/no): ").strip().lower()
+                if response not in ['yes', 'no']:
+                    console.print("[bold red]Invalid response again. Treating as 'no'.[/bold red]")
+                    response = 'no'
+            
+            # Process confirmation
+            confirmed = (response == 'yes')
+            logger.debug(f"Confirmation response: {confirmed}")
+            
+            # Call the executor directly with the confirmation
+            try:
+                # Local imports will be handled further down when needed
+                
+                # Get agent and executor references more safely
+                agent_instance = None
+                executor = None
+                
+                # Access the current agent safely
+                if hasattr(self, 'current_agent') and callable(self.current_agent):
+                    agent_instance = self.current_agent()
+                    
+                # Access the executor safely
+                if agent_instance and hasattr(agent_instance, 'react_agent'):
+                    if hasattr(agent_instance.react_agent, 'executor'):
+                        executor = agent_instance.react_agent.executor
+                
+                # Detailed logging for debugging
+                logger.debug(f"Agent instance: {agent_instance}")
+                logger.debug(f"Executor: {executor}")
+                
+                # Use the global executor registry to directly resolve the confirmation
+                from quantalogic_codeact.codeact.executor import _active_executor_registry
+                
+                # Get confirmation info
+                confirmation_id = self._current_confirmation.get("confirmation_id")
+                step_number = self._current_confirmation["step_number"]
+                tool_name = self._current_confirmation["tool_name"]
+                
+                logger.debug(f"Active executor registry has {len(_active_executor_registry)} executors")
+                logger.debug(f"Looking for confirmation ID: {confirmation_id}")
+                
+                # Try each executor in the registry
+                result = False
+                for executor_id, executor in _active_executor_registry.items():
+                    logger.debug(f"Checking executor {executor_id}")
+                    
+                    # Check if this executor has our pending confirmation
+                    if hasattr(executor, '_pending_confirmations'):
+                        pending_ids = list(executor._pending_confirmations.keys())
+                        logger.debug(f"Executor {executor_id} has {len(pending_ids)} pending confirmations: {pending_ids}")
+                        
+                        # Check for our confirmation ID
+                        if confirmation_id in executor._pending_confirmations:
+                            future = executor._pending_confirmations[confirmation_id]
+                            logger.debug(f"Found matching confirmation with ID {confirmation_id}")
+                            
+                            # Set the result directly on the future
+                            if not future.done():
+                                logger.debug(f"Setting future result to {confirmed}")
+                                future.set_result(confirmed)
+                                logger.debug("Successfully set confirmation result")
+                                result = True
+                                break
+                
+                # If we couldn't find the executor, try using the handle_confirmation_response method directly
+                if not result and agent_instance and hasattr(agent_instance, 'react_agent') and hasattr(agent_instance.react_agent, 'executor'):
+                    executor = agent_instance.react_agent.executor
+                    logger.debug(f"Trying executor from agent: {executor}")
+                    
+                    # Try using the handle_confirmation_response method
+                    try:
+                        await executor.handle_confirmation_response(
+                            confirmed=confirmed,
+                            step_number=step_number,
+                            tool_name=tool_name,
+                            confirmation_id=confirmation_id
+                        )
+                        result = True
+                        logger.debug("Successfully handled confirmation response via executor method")
+                    except Exception as e:
+                        logger.error(f"Error calling handle_confirmation_response: {e}")
+                        result = False
+                
+                # Show result to user with clearer feedback
+                if result:
+                    if confirmed:
+                        console.print("[bold green]Confirmation accepted - proceeding with operation[/bold green]")
+                    else:
+                        console.print("[bold red]Confirmation declined - ENTIRE TASK ABORTED[/bold red]")
+                        console.print("[italic]The entire task execution has been stopped because you answered 'no'[/italic]")
+                        console.print("[dim]This is the behavior you requested - to stop the solve task on confirmation decline[/dim]")
+                else:
+                    console.print("[bold orange3]Confirmation response processed, but no matching request was found.[/bold orange3]")
+            except Exception as e:
+                logger.error(f"Error processing confirmation: {e}")
+                console.print(f"[bold red]Error processing confirmation: {e}[/bold red]")
+        except Exception as e:
+            logger.error(f"Error getting confirmation input: {e}")
+            console.print(f"[bold red]Error getting confirmation input: {e}[/bold red]")
+        
+        # Clear the confirmation state
+        self._current_confirmation = None
 
     def bottom_toolbar(self):
         """Render a bottom toolbar with mode, agent, model, temperature, and version information as prompt_toolkit HTML."""
@@ -276,6 +439,10 @@ class Shell:
                 user_input = user_input.strip()
                 if not user_input:
                     continue
+                
+                # Note: We no longer handle confirmations in the main input loop
+                # They are now handled directly in the _handle_tool_confirmation method
+                # This is to avoid issues with the main shell input loop
 
                 # Display user input with label and color
                 color = "bright_blue" if self.high_contrast else "blue"

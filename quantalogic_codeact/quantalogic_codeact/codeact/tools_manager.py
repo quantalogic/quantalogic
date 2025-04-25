@@ -54,6 +54,16 @@ class ToolRegistry:
                         # Handle async functions
                         tool = create_tool(item)
                         tool.toolbox_name = toolbox_name
+                        
+                        # Preserve confirmation attributes from original function
+                        if hasattr(item, 'requires_confirmation'):
+                            tool.requires_confirmation = item.requires_confirmation
+                            loguru.logger.debug(f"Preserved requires_confirmation={item.requires_confirmation} for tool {tool.name}")
+                        
+                        if hasattr(item, 'confirmation_message'):
+                            tool.confirmation_message = item.confirmation_message
+                            loguru.logger.debug(f"Preserved confirmation_message for tool {tool.name}")
+                        
                         self.register(tool)
                         loguru.logger.debug(f"Registered tool from get_tools: {tool.name} in toolbox {toolbox_name}")
                         tools_found = True
@@ -77,6 +87,26 @@ class ToolRegistry:
             for name, obj in inspect.getmembers(module):
                 if isinstance(obj, Tool) and hasattr(obj, '_func'):
                     obj.toolbox_name = toolbox_name
+                    
+                    # Check if the original function has confirmation attributes and preserve them
+                    if hasattr(obj._func, 'requires_confirmation'):
+                        obj.requires_confirmation = obj._func.requires_confirmation
+                        loguru.logger.debug(f"Preserved requires_confirmation={obj.requires_confirmation} for tool {obj.name}")
+                    
+                    if hasattr(obj._func, 'confirmation_message'):
+                        obj.confirmation_message = obj._func.confirmation_message
+                        loguru.logger.debug(f"Preserved confirmation_message for tool {obj.name}")
+                        
+                    # Add get_confirmation_message method if it doesn't exist
+                    if not hasattr(obj, 'get_confirmation_message'):
+                        def get_confirmation_message(self=obj):
+                            if hasattr(self, 'confirmation_message'):
+                                if callable(self.confirmation_message):
+                                    return self.confirmation_message()
+                                return self.confirmation_message
+                            return None
+                        obj.get_confirmation_message = get_confirmation_message
+                    
                     self.register(obj)
                     loguru.logger.debug(f"Registered @create_tool tool: {obj.name} from {getattr(module, '__name__', str(module))} in toolbox {toolbox_name}")
                     tools_found = True

@@ -22,6 +22,8 @@ from quantalogic_codeact.codeact.events import (
     TaskCompletedEvent,
     TaskStartedEvent,
     ThoughtGeneratedEvent,
+    ToolConfirmationRequestEvent,
+    ToolConfirmationResponseEvent,
     ToolExecutionCompletedEvent,
     ToolExecutionErrorEvent,
     ToolExecutionStartedEvent,
@@ -36,6 +38,7 @@ class ProgressMonitor:
     """Handles progress monitoring for agent events."""
     def __init__(self):
         self._token_buffer = ""
+        self.agent = None
 
     async def on_task_started(self, event: TaskStartedEvent):
         console.print(f"[bold green]Task Started: {event.task_description}[/bold green]")
@@ -94,14 +97,46 @@ class ProgressMonitor:
         console.print(f"Result: {event.result_summary}")
 
     async def on_tool_execution_error(self, event: ToolExecutionErrorEvent):
-        console.print(f"[red]Tool {event.tool_name} encountered an error at step {event.step_number}[/red]")
+        console.print(f"[bold red]Tool {event.tool_name} execution error at step {event.step_number}[/bold red]")
         console.print(f"Error: {event.error}")
 
+    async def on_tool_confirmation_request(self, event: ToolConfirmationRequestEvent):
+        # Format parameter display nicely
+        param_display = "\n".join([f"  - {k}: {v}" for k, v in event.parameters_summary.items()])
+        
+        # Show confirmation prompt with rich formatting
+        console.print(Panel(
+            f"Tool: {event.tool_name}\nParameters:\n{param_display}\n\n{event.confirmation_message}",
+            title="[bold yellow]Confirmation Required[/bold yellow]",
+            border_style="yellow"
+        ))
+        
+        # Ask for explicit confirmation in CLI mode
+        if hasattr(self, 'agent') and self.agent and hasattr(self.agent, 'react_agent'):
+            console.print("[bold yellow]This tool requires confirmation.[/bold yellow]")
+            confirm = typer.confirm("Proceed with this operation?", default=False)
+            
+            # Send the confirmation response to the executor
+            asyncio.create_task(
+                self.agent.react_agent.executor.handle_confirmation_response(
+                    confirmed=confirm,  # Use the user's response
+                    step_number=event.step_number,
+                    tool_name=event.tool_name
+                )
+            )
+
+    async def on_tool_confirmation_response(self, event: ToolConfirmationResponseEvent):
+        if event.confirmed:
+            console.print(f"[green]Confirmed execution of {event.tool_name}[/green]")
+        else:
+            console.print(f"[red]Cancelled execution of {event.tool_name}[/red]")
+
     async def on_stream_token(self, event: StreamTokenEvent):
-        console.print(event.token, end="")
+        self._token_buffer += event.token
 
     async def flush_buffer(self):
-        pass
+        console.print(self._token_buffer, end="")
+        self._token_buffer = ""
 
     async def __call__(self, event):
         if isinstance(event, TaskStartedEvent):
@@ -128,6 +163,10 @@ class ProgressMonitor:
             await self.on_tool_execution_completed(event)
         elif isinstance(event, ToolExecutionErrorEvent):
             await self.on_tool_execution_error(event)
+        elif isinstance(event, ToolConfirmationRequestEvent):
+            await self.on_tool_confirmation_request(event)
+        elif isinstance(event, ToolConfirmationResponseEvent):
+            await self.on_tool_confirmation_response(event)
         elif isinstance(event, StreamTokenEvent):
             await self.on_stream_token(event)
 
@@ -161,11 +200,13 @@ async def run_react_agent(
     agent = Agent(config=agent_config)
     
     progress_monitor = ProgressMonitor()
+    progress_monitor.agent = agent  # Set the agent reference for confirmation handling
     solve_agent = agent
     solve_agent.add_observer(progress_monitor, [
         "TaskStarted", "ThoughtGenerated", "ActionGenerated", "ActionExecuted",
         "StepCompleted", "ErrorOccurred", "TaskCompleted", "StepStarted",
         "ToolExecutionStarted", "ToolExecutionCompleted", "ToolExecutionError",
+        "ToolConfirmationRequest", "ToolConfirmationResponse",
         "StreamToken"
     ])
     

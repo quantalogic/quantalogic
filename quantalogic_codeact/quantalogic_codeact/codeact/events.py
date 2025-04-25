@@ -97,3 +97,16 @@ class StreamTokenEvent(Event):
 class PromptGeneratedEvent(Event):
     step_number: int
     prompt: str
+    
+class ToolConfirmationRequestEvent(Event):
+    step_number: int
+    tool_name: str
+    confirmation_message: str
+    parameters_summary: Dict[str, Any]
+    confirmation_id: str
+
+class ToolConfirmationResponseEvent(Event):
+    step_number: int
+    tool_name: str
+    confirmed: bool
+    confirmation_id: str
