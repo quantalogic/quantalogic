@@ -21,6 +21,7 @@ async def litellm_completion(
     notify_event: Optional[Callable] = None,
     agent_id: Optional[str] = None,
     agent_name: Optional[str] = None,
+    task_id: Optional[str] = None,
     **kwargs
 ) -> str:
     """A wrapper for litellm.acompletion with streaming support and fallback to non-streaming."""
@@ -46,7 +47,8 @@ async def litellm_completion(
                         agent_id=agent_id,
                         agent_name=agent_name,
                         token=token,
-                        step_number=step
+                        step_number=step,
+                        task_id=task_id
                     ))
             return full_response
         except Exception as e:
@@ -59,7 +61,8 @@ async def litellm_completion(
                     agent_id=agent_id,
                     agent_name=agent_name,
                     token=fallback_message,
-                    step_number=step
+                    step_number=step,
+                    task_id=task_id
                 ))
             stream = False  # Proceed with non-streaming mode
 

@@ -12,6 +12,7 @@ class Event(BaseModel):
     agent_name: str  # New: Name of the agent firing the event
     event_id: str = Field(default_factory=lambda: generate(size=21))  # New: Unique ID for each event
     timestamp: datetime = Field(default_factory=datetime.now)
+    task_id: Optional[str] = None  # Optional ID to group related events
 
 
 class ExecutionResult(BaseModel):

@@ -1,5 +1,6 @@
-from typing import List
+from typing import List, Optional
 
+from nanoid import generate
 from rich.console import Console
 from rich.panel import Panel
 
@@ -9,12 +10,15 @@ from ..utils import display_response
 console = Console()
 
 
-async def chat_command(shell, args: List[str]) -> str:
+async def chat_command(shell, args: List[str], task_id: Optional[str] = None) -> str:
     """Handle the /chat command with streaming and history support."""
     if not args:
         return "Please provide a message to chat. For example: /chat Hello, how are you?"
     
     message = " ".join(args)
+    # Generate a default task_id if none is provided
+    if task_id is None:
+        task_id = generate(size=21)
     try:
         if shell.agent_config.streaming:
             token_buffer = ""
@@ -39,7 +43,8 @@ async def chat_command(shell, args: List[str]) -> str:
             response = await shell.current_agent.chat(
                 message,
                 history=shell.conversation_manager.get_history(),
-                streaming=True
+                streaming=True,
+                task_id=task_id
             )
             status.stop()
             shell.current_agent._observers = [obs for obs in shell.current_agent._observers if obs[0] != stream_observer]
@@ -56,7 +61,8 @@ async def chat_command(shell, args: List[str]) -> str:
             response = await shell.current_agent.chat(
                 message,
                 history=shell.conversation_manager.get_history(),
-                streaming=False
+                streaming=False,
+                task_id=task_id
             )
             status.stop()
             display_response(response, title="Chat Response", border_style="cyan")

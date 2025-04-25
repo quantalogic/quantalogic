@@ -232,7 +232,8 @@ class Agent:
         temperature: float = None,  # Allow override
         streaming: bool = False,
         reasoner_name: Optional[str] = None,
-        executor_name: Optional[str] = None
+        executor_name: Optional[str] = None,
+        task_id: Optional[str] = None
     ) -> str:
         """Single-step interaction with optional custom tools, history, and streaming."""
         try:
@@ -245,7 +246,8 @@ class Agent:
                 message,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                streaming=streaming
+                streaming=streaming,
+                task_id=task_id
             )
             logger.info(f"Chat response (no tools): {response}")
             # Update conversation history
@@ -276,7 +278,8 @@ class Agent:
         timeout: int = 300,
         streaming: bool = False,
         reasoner_name: Optional[str] = None,
-        executor_name: Optional[str] = None
+        executor_name: Optional[str] = None,
+        task_id: Optional[str] = None
     ) -> List[Dict]:
         """Multi-step task solving with optional custom tools, history, max_iterations, and streaming."""
         try:
@@ -316,7 +319,8 @@ class Agent:
                 task_goal=task_goal,
                 system_prompt=system_prompt,
                 max_iterations=max_iterations,
-                streaming=streaming
+                streaming=streaming,
+                task_id=task_id
             )
             self.last_solve_context_vars = solve_agent.context_vars.copy()
             return history_result

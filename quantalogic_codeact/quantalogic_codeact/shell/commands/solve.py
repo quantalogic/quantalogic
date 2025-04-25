@@ -1,6 +1,7 @@
 import json
-from typing import List
+from typing import List, Optional
 
+from nanoid import generate
 from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
@@ -11,12 +12,15 @@ from ..utils import display_response  # New import
 
 console = Console()
 
-async def solve_command(shell, args: List[str]) -> str:
+async def solve_command(shell, args: List[str], task_id: Optional[str] = None) -> str:
     """Handle the /solve command with streaming and intermediate steps display."""
     if not args:
         return "Please provide a task to solve. For example: /solve Calculate the integral of x^2 from 0 to 1."
     
     task = " ".join(args)
+    # Generate a default task_id if none is provided
+    if task_id is None:
+        task_id = generate(size=21)
     try:
         if shell.agent_config.streaming:
             step_buffers = {}

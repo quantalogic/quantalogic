@@ -4,6 +4,7 @@ from pathlib import Path
 
 import typer
 from loguru import logger
+from nanoid import generate
 from rich.box import DOUBLE
 from rich.console import Console
 from rich.panel import Panel
@@ -197,8 +198,23 @@ async def run_react_agent(
     reasoner_name=None,
     executor_name=None,
     tools_config=None,
+    task_id: str = None,
 ) -> None:
-    """Run the Agent with detailed event monitoring."""
+    """Run the Agent with detailed event monitoring.
+    
+    Args:
+        task: The task to solve.
+        agent_config: Configuration for the agent.
+        success_criteria: Optional criteria to determine task completion.
+        tools: Optional list of custom tools.
+        personality_config: Optional personality configuration.
+        debug: Enable debug logging.
+        streaming: Enable streaming output for real-time token generation.
+        reasoner_name: Optional name of the reasoner to use.
+        executor_name: Optional name of the executor to use.
+        tools_config: Optional tools configuration.
+        task_id: Unique ID to group related events. If None, a default ID will be generated.
+    """
     # Use log_level from agent_config by default, but override with DEBUG if debug flag is True
     log_level = "DEBUG" if debug else agent_config.log_level
     
@@ -228,9 +244,15 @@ async def run_react_agent(
         "StreamToken"
     ])
     
+    # Generate a default task_id if none is provided
+    if task_id is None:
+        task_id = generate(size=21)
+        
     console.print(f"[bold green]Starting task: {task}[/bold green]")
+    console.print(f"[dim]Task ID: {task_id}[/dim]")
     _history = await agent.solve(task, success_criteria, streaming=streaming,
-                                reasoner_name=reasoner_name, executor_name=executor_name)
+                                reasoner_name=reasoner_name, executor_name=executor_name,
+                                task_id=task_id)
 
 def task(
     ctx: typer.Context,
@@ -247,7 +269,8 @@ def task(
     reasoner: str = typer.Option(None, help="Name of the reasoner to use"),
     executor: str = typer.Option(None, help="Name of the executor to use"),
     tools_config: str = typer.Option(None, help="JSON/YAML string for tools_config"),
-    temperature: float = typer.Option(0.7, help="Temperature for the language model (0 to 1)")
+    temperature: float = typer.Option(0.7, help="Temperature for the language model (0 to 1)"),
+    task_id: str = typer.Option(None, help="Optional unique ID to group related events")
 ) -> None:
     """CLI command to run the Agent with detailed event monitoring."""
     try:
@@ -286,7 +309,7 @@ def task(
             task, updated_config, success_criteria,
             personality_config=personality_config, debug=debug,
             streaming=streaming, reasoner_name=reasoner, executor_name=executor,
-            tools_config=tools_config
+            tools_config=tools_config, task_id=task_id
         ))
     except Exception as e:
         logger.error(f"Agent failed: {e}")

@@ -263,6 +263,7 @@ class CodeActAgent:
                     step_number=step,
                     system_prompt=self.working_memory.system_prompt,
                     task_description=self.working_memory.task_description,
+                    task_id=task_context.get("task_id")
                 )
             )
             for attempt in range(3):
@@ -292,7 +293,8 @@ class CodeActAgent:
                             agent_id=self.agent_id,
                             agent_name=self.agent_name,
                             error_message=str(e),
-                            step_number=step
+                            step_number=step,
+                            task_id=task_context.get("task_id")
                         )
                     )
                     raise
@@ -313,7 +315,7 @@ class CodeActAgent:
                 logger.error(f"Error running step {step}: {e}")
             raise
 
-    async def _finalize_step(self, task: str, step_data: Dict, success_criteria: Optional[str]) -> Tuple[bool, Dict]:
+    async def _finalize_step(self, task: str, step_data: Dict, success_criteria: Optional[str], task_id: Optional[str] = None) -> Tuple[bool, Dict]:
         """
         Check completion and notify observers for a step.
 
@@ -321,6 +323,7 @@ class CodeActAgent:
             task (str): The task being solved.
             step_data (Dict): Current step data.
             success_criteria (Optional[str]): Optional success criteria.
+            task_id (Optional[str]): Unique ID to group related events.
 
         Returns:
             Tuple[bool, Dict]: (is_complete, updated_step_data).
@@ -349,6 +352,7 @@ class CodeActAgent:
                     result=step_data["result"],
                     is_complete=is_complete,
                     final_answer=final_answer if is_complete else None,
+                    task_id=task_id
                 )
             )
             return is_complete, step_data
@@ -364,6 +368,7 @@ class CodeActAgent:
         system_prompt: Optional[str] = None,
         max_iterations: Optional[int] = None,
         streaming: bool = False,
+        task_id: Optional[str] = None,
     ) -> List[Dict]:
         """
         Solve a task using the ReAct framework with persistent memory and explicit goal.
@@ -375,17 +380,23 @@ class CodeActAgent:
             system_prompt (Optional[str]): System prompt override.
             max_iterations (Optional[int]): Override for max steps.
             streaming (bool): Whether to stream responses.
+            task_id (Optional[str]): Unique ID to group related events. If None, a default ID will be generated.
 
         Returns:
             List[Dict]: History of steps taken.
         """
         try:
+            # Generate a default task_id if none is provided
+            if task_id is None:
+                task_id = generate(size=21)
+                
             # Create a task-specific context dictionary to track this specific task's state
             # This avoids using instance variables that could interfere with other concurrent tasks
             task_context = {
                 "aborted": False,
                 "abort_message": "",
-                "abort_step": None
+                "abort_step": None,
+                "task_id": task_id  # Store the task_id in the context
             }
             
             max_iters: int = max_iterations if max_iterations is not None else self.max_iterations
@@ -410,7 +421,8 @@ class CodeActAgent:
                     agent_id=self.agent_id,  # New
                     agent_name=self.agent_name,  # New
                     task_description=task,
-                    system_prompt=self.working_memory.system_prompt
+                    system_prompt=self.working_memory.system_prompt,
+                    task_id=task_id
                 )
             )
 
@@ -423,7 +435,7 @@ class CodeActAgent:
                     
                 try:
                     step_data: Dict = await self._run_step(task, step, max_iters, system_prompt, streaming, task_context)
-                    is_complete, step_data = await self._finalize_step(task, step_data, success_criteria)
+                    is_complete, step_data = await self._finalize_step(task, step_data, success_criteria, task_id=task_id)
                     if is_complete:
                         await self._notify_observers(
                             TaskCompletedEvent(
@@ -432,6 +444,7 @@ class CodeActAgent:
                                 agent_name=self.agent_name,  # New
                                 final_answer=step_data["result"].get("result"),
                                 reason="success",
+                                task_id=task_id
                             )
                         )
                         break
@@ -454,7 +467,8 @@ class CodeActAgent:
                             agent_id=self.agent_id,  # New
                             agent_name=self.agent_name,  # New
                             error_message=str(e),
-                            step_number=step
+                            step_number=step,
+                            task_id=task_id
                         )
                     )
                     raise
@@ -465,7 +479,8 @@ class CodeActAgent:
                             agent_id=self.agent_id,  # New
                             agent_name=self.agent_name,  # New
                             error_message=str(e),
-                            step_number=step
+                            step_number=step,
+                            task_id=task_id
                         )
                     )
                     break
@@ -491,6 +506,7 @@ class CodeActAgent:
                         agent_name=self.agent_name,  # New
                         final_answer=None,
                         reason="max_iterations_reached" if len(self.working_memory.store) == max_iters else "error",
+                        task_id=task_id
                     )
                 )
             return [
@@ -520,6 +536,7 @@ class CodeActAgent:
         max_tokens: int = MAX_TOKENS,
         temperature: Optional[float] = None,  # Allow override
         streaming: bool = True,
+        task_id: Optional[str] = None,
     ) -> str:
         """
         Handle a single chat interaction using conversation history.
@@ -529,11 +546,16 @@ class CodeActAgent:
             max_tokens (int): Maximum number of tokens to generate.
             temperature (Optional[float]): Sampling temperature for LLM response (defaults to instance temperature).
             streaming (bool): Whether to stream the response.
+            task_id (Optional[str]): Unique ID to group related events. If None, a default ID will be generated.
 
         Returns:
             str: The assistant's response.
         """
         try:
+            # Generate a default task_id if none is provided
+            if task_id is None:
+                task_id = generate(size=21)
+                
             # Construct messages including conversation history
             messages = [
                 {"role": "system", "content": self.working_memory.system_prompt or "You are a helpful AI assistant."}
@@ -554,6 +576,7 @@ class CodeActAgent:
                 notify_event=self._notify_observers if streaming else None,
                 agent_id=self.agent_id,
                 agent_name=self.agent_name,
+                task_id=task_id
             )
             return response.strip()
         except LLMCompletionError as e:
@@ -564,7 +587,8 @@ class CodeActAgent:
                     agent_id=self.agent_id,  # New
                     agent_name=self.agent_name,  # New
                     error_message=str(e),
-                    step_number=1
+                    step_number=1,
+                    task_id=task_id
                 )
             )
             raise
