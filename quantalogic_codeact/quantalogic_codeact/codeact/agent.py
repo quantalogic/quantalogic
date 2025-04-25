@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from loguru import logger
+from nanoid import generate  # Added for agent ID generation
 
 from quantalogic.tools import Tool
 
@@ -43,6 +44,7 @@ class Agent:
             logger.error(f"Failed to initialize config: {e}. Using default configuration.")
             config = AgentConfig()
 
+        self.id = generate(size=21)  # New: Unique ID for the agent
         self.config = config
         self.plugin_manager = PluginManager()
         try:
@@ -53,7 +55,7 @@ class Agent:
         self.temperature: float = config.temperature  # Added temperature
         self.max_iterations: int = config.max_iterations
         self.personality = config.personality
-        self.name: Optional[str] = config.name
+        self.name: Optional[str] = config.name if config.name else f"agent_{self.id[:8]}"  # Use config name or default
         self.max_history_tokens: int = config.max_history_tokens
         # Initialize conversation manager before getting tools to ensure it's available
         self.conversation_manager = ConversationManager(max_tokens=self.max_history_tokens)
@@ -83,10 +85,24 @@ class Agent:
             max_iterations=self.max_iterations,
             max_history_tokens=self.max_history_tokens,
             system_prompt=self._build_system_prompt(),
-            reasoner=Reasoner(self.model, self.default_tools, temperature=self.temperature),
-            executor=Executor(self.default_tools, self._notify_observers, self.conversation_manager),
+            reasoner=Reasoner(
+                self.model,
+                self.default_tools,
+                temperature=self.temperature,
+                agent_id=self.id,
+                agent_name=self.name
+            ),
+            executor=Executor(
+                self.default_tools,
+                self._notify_observers,
+                self.conversation_manager,
+                agent_id=self.id,  # New: Pass agent ID
+                agent_name=self.name  # New: Pass agent name
+            ),
             conversation_manager=self.conversation_manager,
-            temperature=self.temperature  # Pass temperature
+            temperature=self.temperature,
+            agent_id=self.id,  # New: Pass agent ID
+            agent_name=self.name  # New: Pass agent name
         )
 
     @property
@@ -280,9 +296,11 @@ class Agent:
                 max_history_tokens=self.max_history_tokens,
                 system_prompt=system_prompt,
                 reasoner=reasoner_cls(self.model, solve_tools, temperature=self.temperature, **reasoner_config),
-                executor=executor_cls(solve_tools, self._notify_observers, self.conversation_manager, **executor_config),
+                executor=executor_cls(solve_tools, self._notify_observers, self.conversation_manager, agent_id=self.id, agent_name=self.name, **executor_config),
                 conversation_manager=self.conversation_manager,
-                temperature=self.temperature
+                temperature=self.temperature,
+                agent_id=self.id,  # New: Pass agent ID
+                agent_name=self.name  # New: Pass agent name
             )
             solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.working_memory.store))
             solve_agent.executor.register_tool(RetrieveMessageTool(conversation_manager=self.conversation_manager))

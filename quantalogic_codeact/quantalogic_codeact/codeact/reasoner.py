@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from loguru import logger
 from lxml import etree
+from nanoid import generate
 
 from quantalogic.tools import Tool
 
@@ -86,6 +87,8 @@ class Reasoner(BaseReasoner):
         temperature: float = 0.3,
         config: Optional[Dict[str, Any]] = None,
         prompt_strategy: Optional[PromptStrategy] = None,
+        agent_id: Optional[str] = None,
+        agent_name: Optional[str] = None,
     ):
         self.model = model
         self.tools = tools
@@ -93,6 +96,9 @@ class Reasoner(BaseReasoner):
         self.config = config or {}
         self.prompt_strategy = prompt_strategy or DefaultPromptStrategy()
         self.prompt_strategy.tools = tools  # Inject tools into strategy
+        # Ensure agent_id and agent_name are always valid strings
+        self.agent_id = agent_id or generate()
+        self.agent_name = agent_name or f"agent_{self.agent_id[:8]}"
 
     async def generate_action(
         self,
@@ -142,7 +148,13 @@ class Reasoner(BaseReasoner):
                 available_vars,
                 allowed_modules,
             )
-            await notify_event(PromptGeneratedEvent(event_type="PromptGenerated", step_number=step, prompt=task_prompt))
+            await notify_event(PromptGeneratedEvent(
+                event_type="PromptGenerated",
+                agent_id=self.agent_id,
+                agent_name=self.agent_name,
+                step_number=step,
+                prompt=task_prompt
+            ))
             logger.debug(f"Generated prompt for step {step}:\n{task_prompt}")
 
             # Construct messages with conversation history
@@ -160,11 +172,12 @@ class Reasoner(BaseReasoner):
                     response = await litellm_completion(
                         model=self.model,
                         messages=messages,
-                     #   max_tokens=self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS),
                         temperature=self.temperature,
                         stream=streaming,
                         step=step,
                         notify_event=notify_event,
+                        agent_id=self.agent_id,
+                        agent_name=self.agent_name,
                     )
                     program = self._clean_code(response)
                     response = jinja_env.get_template("response_format.j2").render(

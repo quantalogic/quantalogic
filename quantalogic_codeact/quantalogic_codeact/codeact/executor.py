@@ -58,10 +58,14 @@ class BaseExecutor(ABC):
 class Executor(BaseExecutor):
     """Manages action execution and context updates with dynamic tool registration."""
 
-    def __init__(self, tools: List[Tool], notify_event: Callable, conversation_manager: ConversationManager, config: Optional[Dict[str, Any]] = None, verbose: bool = True, allowed_modules: Optional[List[str]] = ALLOWED_MODULES):
+    def __init__(self, tools: List[Tool], notify_event: Callable, conversation_manager: ConversationManager,
+                 agent_id: str, agent_name: str, config: Optional[Dict[str, Any]] = None, verbose: bool = True,
+                 allowed_modules: Optional[List[str]] = ALLOWED_MODULES):
         # Register self in global registry for easier access from shell and other components
         import uuid
         self.executor_id = str(uuid.uuid4())
+        self.agent_id = agent_id  # New: Store agent ID
+        self.agent_name = agent_name  # New: Store agent name
         self.registry = ToolRegistry()
         for tool in tools:
             self.registry.register(tool)
@@ -149,6 +153,8 @@ class Executor(BaseExecutor):
                     await self.notify_event(
                         ToolExecutionStartedEvent(
                             event_type="ToolExecutionStarted",
+                            agent_id=self.agent_id,  # New
+                            agent_name=self.agent_name,  # New
                             step_number=current_step,
                             tool_name=f"{tool.toolbox_name or 'default'}.{tool.name}",
                             parameters_summary=parameters_summary,
@@ -165,6 +171,8 @@ class Executor(BaseExecutor):
                         await self.notify_event(
                             ToolExecutionCompletedEvent(
                                 event_type="ToolExecutionCompleted",
+                                agent_id=self.agent_id,  # New
+                                agent_name=self.agent_name,  # New
                                 step_number=current_step,
                                 tool_name=f"{tool.toolbox_name or 'default'}.{tool.name}",
                                 result_summary=result_summary,
@@ -177,6 +185,8 @@ class Executor(BaseExecutor):
                         await self.notify_event(
                             ToolExecutionErrorEvent(
                                 event_type="ToolExecutionError",
+                                agent_id=self.agent_id,  # New
+                                agent_name=self.agent_name,  # New
                                 step_number=current_step,
                                 tool_name=f"{tool.toolbox_name or 'default'}.{tool.name}",
                                 error=str(e)
@@ -295,6 +305,8 @@ class Executor(BaseExecutor):
                     await self.notify_event(
                         ToolExecutionErrorEvent(
                             event_type="ToolExecutionError",
+                            agent_id=self.agent_id,  # New
+                            agent_name=self.agent_name,  # New
                             step_number=current_step,
                             tool_name=f"{tool.toolbox_name or 'default'}.{tool.name}",
                             error="Operation cancelled by user"
@@ -306,6 +318,8 @@ class Executor(BaseExecutor):
             await self.notify_event(
                 ToolExecutionStartedEvent(
                     event_type="ToolExecutionStarted",
+                    agent_id=self.agent_id,  # New
+                    agent_name=self.agent_name,  # New
                     step_number=current_step,
                     tool_name=f"{tool.toolbox_name or 'default'}.{tool.name}",
                     parameters_summary=parameters_summary,
@@ -317,6 +331,8 @@ class Executor(BaseExecutor):
                 await self.notify_event(
                     ToolExecutionCompletedEvent(
                         event_type="ToolExecutionCompleted",
+                        agent_id=self.agent_id,  # New
+                        agent_name=self.agent_name,  # New
                         step_number=current_step,
                         tool_name=f"{tool.toolbox_name or 'default'}.{tool.name}",
                         result_summary=result_summary,
@@ -327,12 +343,16 @@ class Executor(BaseExecutor):
                 await self.notify_event(
                     ToolExecutionErrorEvent(
                         event_type="ToolExecutionError",
+                        agent_id=self.agent_id,  # New
+                        agent_name=self.agent_name,  # New
                         step_number=current_step,
                         tool_name=f"{tool.toolbox_name or 'default'}.{tool.name}",
                         error=str(e)
                     )
                 )
                 raise
+
+        return wrapped_tool
 
     async def request_confirmation(self, step_number: int, tool_name: str, confirmation_message: str, tool_parameters: Dict[str, Any]) -> bool:
         """Request user confirmation for a tool execution.
@@ -358,6 +378,8 @@ class Executor(BaseExecutor):
         # Create and emit a confirmation request event
         event = ToolConfirmationRequestEvent(
             event_type="ToolConfirmationRequest",
+            agent_id=self.agent_id,  # New
+            agent_name=self.agent_name,  # New
             step_number=step_number,
             tool_name=tool_name,
             confirmation_message=confirmation_message,

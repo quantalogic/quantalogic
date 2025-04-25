@@ -2,12 +2,17 @@ import asyncio  # Added for Future type
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from nanoid import generate  # Added for event_id generation
 from pydantic import BaseModel, Field
 
 
 class Event(BaseModel):
     event_type: str
+    agent_id: str  # New: Unique ID of the agent firing the event
+    agent_name: str  # New: Name of the agent firing the event
+    event_id: str = Field(default_factory=lambda: generate(size=21))  # New: Unique ID for each event
     timestamp: datetime = Field(default_factory=datetime.now)
+
 
 class ExecutionResult(BaseModel):
     execution_status: str  # 'success' or 'error'
@@ -36,24 +41,29 @@ class ExecutionResult(BaseModel):
                 lines.append(f"  - {k}: {var_str}")
         return "\n".join(lines)
 
+
 class TaskStartedEvent(Event):
     task_description: str
     system_prompt: str = ""  # Added for persistent context
+
 
 class ThoughtGeneratedEvent(Event):
     step_number: int
     thought: str
     generation_time: float
 
+
 class ActionGeneratedEvent(Event):
     step_number: int
     action_code: str
     generation_time: float
 
+
 class ActionExecutedEvent(Event):
     step_number: int
     result: ExecutionResult
     execution_time: float
+
 
 class StepCompletedEvent(Event):
     step_number: int
@@ -63,42 +73,51 @@ class StepCompletedEvent(Event):
     is_complete: bool
     final_answer: Optional[str] = None
 
+
 class ErrorOccurredEvent(Event):
     error_message: str
     step_number: Optional[int] = None
 
+
 class TaskCompletedEvent(Event):
     final_answer: Optional[str]
     reason: str
+
 
 class StepStartedEvent(Event):
     step_number: int
     system_prompt: str = ""  # Added for persistent context
     task_description: str = ""  # Added for persistent context
 
+
 class ToolExecutionStartedEvent(Event):
     step_number: int
     tool_name: str
     parameters_summary: Dict[str, Any]
+
 
 class ToolExecutionCompletedEvent(Event):
     step_number: int
     tool_name: str
     result_summary: str
 
+
 class ToolExecutionErrorEvent(Event):
     step_number: int
     tool_name: str
     error: str
 
+
 class StreamTokenEvent(Event):
     token: str
     step_number: Optional[int] = None
 
+
 class PromptGeneratedEvent(Event):
     step_number: int
     prompt: str
-    
+
+
 class ToolConfirmationRequestEvent(Event):
     step_number: int
     tool_name: str

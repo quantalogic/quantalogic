@@ -6,6 +6,7 @@ import time
 from typing import Callable, Dict, List, Optional, Tuple
 
 from loguru import logger
+from nanoid import generate
 
 from quantalogic.tools import Tool
 
@@ -53,6 +54,8 @@ class CodeActAgent:
         conversation_manager: Optional[ConversationManager] = None,
         error_handler: Optional[Callable[[Exception, int], bool]] = None,
         temperature: float = 0.7,  # Added temperature parameter
+        agent_id: str = None,  # New: Agent's unique ID
+        agent_name: str = None  # New: Agent's name
     ) -> None:
         """
         Initialize the CodeActAgent with tools, reasoning, execution, and memory components.
@@ -71,16 +74,25 @@ class CodeActAgent:
             conversation_manager (Optional[ConversationManager]): Custom conversation manager.
             error_handler (Optional[Callable[[Exception, int], bool]]): Error handler callback.
             temperature (float): Temperature for language model generation (default: 0.7).
+            agent_id (str): Unique identifier for the agent.
+            agent_name (str): Name of the agent.
         """
+        # Ensure agent_id and agent_name are always valid strings
+        self.agent_id = agent_id or generate()
+        self.agent_name = agent_name or f"agent_{self.agent_id[:8]}"
         self.temperature = temperature  # Store temperature
         self.tool_registry = tool_registry or ToolRegistry()
         for tool in tools:
             self.tool_registry.register(tool)
         self.reasoner: BaseReasoner = reasoner or Reasoner(
-            model, self.tool_registry.get_tools(), temperature=self.temperature
+            model,
+            self.tool_registry.get_tools(),
+            temperature=self.temperature,
+            agent_id=self.agent_id,
+            agent_name=self.agent_name
         )
         self.executor: BaseExecutor = executor or Executor(
-            self.tool_registry.get_tools(), self._notify_observers, conversation_manager
+            self.tool_registry.get_tools(), self._notify_observers, conversation_manager, agent_id=self.agent_id, agent_name=self.agent_name
         )
         self.max_iterations: int = max_iterations
         self.max_history_tokens: int = max_history_tokens
@@ -167,12 +179,22 @@ class CodeActAgent:
             gen_time: float = time.perf_counter() - start
             await self._notify_observers(
                 ThoughtGeneratedEvent(
-                    event_type="ThoughtGenerated", step_number=step, thought=thought, generation_time=gen_time
+                    event_type="ThoughtGenerated",
+                    agent_id=self.agent_id,  # New
+                    agent_name=self.agent_name,  # New
+                    step_number=step,
+                    thought=thought,
+                    generation_time=gen_time
                 )
             )
             await self._notify_observers(
                 ActionGeneratedEvent(
-                    event_type="ActionGenerated", step_number=step, action_code=code, generation_time=gen_time
+                    event_type="ActionGenerated",
+                    agent_id=self.agent_id,  # New
+                    agent_name=self.agent_name,  # New
+                    step_number=step,
+                    action_code=code,
+                    generation_time=gen_time
                 )
             )
             if not response.endswith("</Code>"):
@@ -201,7 +223,12 @@ class CodeActAgent:
             result.execution_time = execution_time  # Ensure accurate timing
             await self._notify_observers(
                 ActionExecutedEvent(
-                    event_type="ActionExecuted", step_number=step, result=result, execution_time=execution_time
+                    event_type="ActionExecuted",
+                    agent_id=self.agent_id,  # New
+                    agent_name=self.agent_name,  # New
+                    step_number=step,
+                    result=result,
+                    execution_time=execution_time
                 )
             )
             return result
@@ -231,6 +258,8 @@ class CodeActAgent:
             await self._notify_observers(
                 StepStartedEvent(
                     event_type="StepStarted",
+                    agent_id=self.agent_id,  # New
+                    agent_name=self.agent_name,  # New
                     step_number=step,
                     system_prompt=self.working_memory.system_prompt,
                     task_description=self.working_memory.task_description,
@@ -258,18 +287,20 @@ class CodeActAgent:
                     return step_data
                 except LLMCompletionError as e:
                     await self._notify_observers(
-                        ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=step)
+                        ErrorOccurredEvent(
+                            event_type="ErrorOccurred",
+                            agent_id=self.agent_id,
+                            agent_name=self.agent_name,
+                            error_message=str(e),
+                            step_number=step
+                        )
                     )
-                    raise
-                except TaskAbortedError:
-                    # propagate user-abort without logging
                     raise
                 except Exception as e:
                     logger.error(f"Error running step {step}: {e}")
                     raise
         except Exception as e:
             err_str = str(e)
-            # suppress error log when TaskAbortedError is wrapped inside exception
             if 'TaskAbortedError' not in err_str:
                 logger.error(f"Error running step {step}: {e}")
             raise
@@ -302,6 +333,8 @@ class CodeActAgent:
             await self._notify_observers(
                 StepCompletedEvent(
                     event_type="StepCompleted",
+                    agent_id=self.agent_id,  # New
+                    agent_name=self.agent_name,  # New
                     step_number=step_data["step_number"],
                     thought=step_data["thought"],
                     action=step_data["action"],
@@ -365,7 +398,11 @@ class CodeActAgent:
             logger.debug(f"Starting task with context_vars: {previous_vars}")
             await self._notify_observers(
                 TaskStartedEvent(
-                    event_type="TaskStarted", task_description=task, system_prompt=self.working_memory.system_prompt
+                    event_type="TaskStarted",
+                    agent_id=self.agent_id,  # New
+                    agent_name=self.agent_name,  # New
+                    task_description=task,
+                    system_prompt=self.working_memory.system_prompt
                 )
             )
 
@@ -383,6 +420,8 @@ class CodeActAgent:
                         await self._notify_observers(
                             TaskCompletedEvent(
                                 event_type="TaskCompleted",
+                                agent_id=self.agent_id,  # New
+                                agent_name=self.agent_name,  # New
                                 final_answer=step_data["result"].get("result"),
                                 reason="success",
                             )
@@ -402,12 +441,24 @@ class CodeActAgent:
                     break
                 except LLMCompletionError as e:
                     await self._notify_observers(
-                        ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=step)
+                        ErrorOccurredEvent(
+                            event_type="ErrorOccurred",
+                            agent_id=self.agent_id,  # New
+                            agent_name=self.agent_name,  # New
+                            error_message=str(e),
+                            step_number=step
+                        )
                     )
                     raise
                 except Exception as e:
                     await self._notify_observers(
-                        ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=step)
+                        ErrorOccurredEvent(
+                            event_type="ErrorOccurred",
+                            agent_id=self.agent_id,  # New
+                            agent_name=self.agent_name,  # New
+                            error_message=str(e),
+                            step_number=step
+                        )
                     )
                     break
 
@@ -428,6 +479,8 @@ class CodeActAgent:
                 await self._notify_observers(
                     TaskCompletedEvent(
                         event_type="TaskCompleted",
+                        agent_id=self.agent_id,  # New
+                        agent_name=self.agent_name,  # New
                         final_answer=None,
                         reason="max_iterations_reached" if len(self.working_memory.store) == max_iters else "error",
                     )
@@ -491,12 +544,20 @@ class CodeActAgent:
                 temperature=temperature if temperature is not None else self.temperature,
                 stream=streaming,
                 notify_event=self._notify_observers if streaming else None,
+                agent_id=self.agent_id,
+                agent_name=self.agent_name,
             )
             return response.strip()
         except LLMCompletionError as e:
             logger.error(f"Chat failed: {e}")
             await self._notify_observers(
-                ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=1)
+                ErrorOccurredEvent(
+                    event_type="ErrorOccurred",
+                    agent_id=self.agent_id,  # New
+                    agent_name=self.agent_name,  # New
+                    error_message=str(e),
+                    step_number=1
+                )
             )
             raise
         except Exception as e:

@@ -19,6 +19,8 @@ async def litellm_completion(
     max_tokens: Optional[int] = None,
     step: Optional[int] = None,
     notify_event: Optional[Callable] = None,
+    agent_id: Optional[str] = None,
+    agent_name: Optional[str] = None,
     **kwargs
 ) -> str:
     """A wrapper for litellm.acompletion with streaming support and fallback to non-streaming."""
@@ -41,6 +43,8 @@ async def litellm_completion(
                     full_response += token
                     await notify_event(StreamTokenEvent(
                         event_type="StreamToken",
+                        agent_id=agent_id,
+                        agent_name=agent_name,
                         token=token,
                         step_number=step
                     ))
@@ -52,6 +56,8 @@ async def litellm_completion(
             if notify_event:
                 await notify_event(StreamTokenEvent(
                     event_type="StreamToken",
+                    agent_id=agent_id,
+                    agent_name=agent_name,
                     token=fallback_message,
                     step_number=step
                 ))
