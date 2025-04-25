@@ -297,11 +297,19 @@ class CodeActAgent:
                     )
                     raise
                 except Exception as e:
-                    logger.error(f"Error running step {step}: {e}")
+                    err_str = str(e)
+                    if 'TaskAbortedError' in err_str and 'User declined to execute tool' in err_str:
+                        # Don't log as error for normal confirmation declines
+                        logger.debug(f"User declined confirmation at step {step}")
+                    elif 'TaskAbortedError' not in err_str:
+                        logger.error(f"Error running step {step}: {e}")
                     raise
         except Exception as e:
             err_str = str(e)
-            if 'TaskAbortedError' not in err_str:
+            if 'TaskAbortedError' in err_str and 'User declined to execute tool' in err_str:
+                # Don't log as error for normal confirmation declines
+                logger.debug(f"User declined confirmation at step {step}")
+            elif 'TaskAbortedError' not in err_str:
                 logger.error(f"Error running step {step}: {e}")
             raise
 

@@ -128,3 +128,11 @@ class ToolConfirmationRequestEvent(Event):
     class Config:
         """Pydantic model configuration."""
         arbitrary_types_allowed = True  # Allow asyncio.Future
+
+
+class ToolConfirmationResponseEvent(Event):
+    """Event for tool confirmation response."""
+    name: str = "tool_confirmation_response"
+    tool_response: str
+    tool_name: str
+    request_id: str

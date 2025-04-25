@@ -1,5 +1,4 @@
 import asyncio
-import json
 import sys
 
 import typer
@@ -188,14 +187,13 @@ async def run_react_agent(
     logger.add(LOG_FILE, level="DEBUG" if debug else "INFO")
 
     # Get default tools if none provided
-    tools = tools if tools is not None else get_default_tools(agent_config.model, tools_config=tools_config)
+    tools = tools if tools is not None else get_default_tools(agent_config.model)
 
     # Update AgentConfig with CLI-provided values
     if personality_config:
         agent_config.personality = personality_config
     agent_config.reasoner_name = reasoner_name or agent_config.reasoner_name
     agent_config.executor_name = executor_name or agent_config.executor_name
-    agent_config.tools_config = json.loads(tools_config) if tools_config else agent_config.tools_config
     
     agent = Agent(config=agent_config)
     
