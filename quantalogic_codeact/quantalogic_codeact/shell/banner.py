@@ -1,8 +1,19 @@
+from rich.box import ROUNDED
 from rich.console import Console
 from rich.panel import Panel
+from rich.style import Style
+from rich.text import Text
 
 from quantalogic_codeact.version import get_version
 
+QUANTA_LOGO = """
+  ██████  ██    ██  █████  ███    ██ ████████  █████     ██       ███████   ██████  ██  ██████ 
+ ██    ██ ██    ██ ██   ██ ████   ██    ██    ██   ██    ██      ██     ██ ██       ██ ██      
+ ██    ██ ██    ██ ███████ ██ ██  ██    ██    ███████    ██      ██     ██ ██   ███ ██ ██      
+ ██ ▄▄ ██ ██    ██ ██   ██ ██  ██ ██    ██    ██   ██    ██      ██     ██ ██    ██ ██ ██      
+  ██████   ██████  ██   ██ ██   ████    ██    ██   ██    ███████  ███████   ██████  ██  ██████ 
+                                                                                                
+"""
 
 def get_welcome_message(agent_name: str, mode: str) -> str:
     """Generate the welcome message for the shell.
@@ -15,11 +26,13 @@ def get_welcome_message(agent_name: str, mode: str) -> str:
         Formatted welcome message string
     """
     return (
-        f"Welcome to Quantalogic Shell (v{get_version()}).\n\n"
-        f"Interacting with agent: {agent_name or 'Agent'}\n"
-        f"Mode: {mode} - plain messages are "
-        f"{'tasks to solve' if mode == 'codeact' else 'chat messages'}.\n\n"
-        f"Type /help for commands. Press Enter to send, Ctrl+J for new lines."
+        f"[bright_cyan]{QUANTA_LOGO}[/]\n"
+        f"[bright_cyan]v{get_version()}[/]\n\n"
+        f"[bright_green]» QUANTUM AGENT:[/] [bright_yellow]{agent_name or 'QUANTA'}[/]\n"
+        f"[bright_green]» QUANTUM MODE:[/] [bright_yellow]{mode.upper()}[/] - "
+        f"{'[bright_white]QUANTUM CODE SYNTHESIS[/]' if mode == 'codeact' else '[bright_white]QUANTUM CHAT PROTOCOL[/]'}\n\n"
+        f"[bright_cyan]»»[/] TYPE [bright_white]/help[/] FOR QUANTUM COMMANDS\n"
+        f"[bright_cyan]»»[/] PRESS [bright_white]ENTER[/] TO EXECUTE"
     )
 
 
@@ -32,6 +45,19 @@ def print_welcome_banner(agent_name: str, mode: str, high_contrast: bool = False
         high_contrast: Whether to use high contrast colors
     """
     console = Console()
-    welcome_message = get_welcome_message(agent_name, mode)
-    border_style = "bright_blue" if high_contrast else "blue"
-    console.print(Panel(welcome_message, title="Quantalogic Shell", border_style=border_style))
+    welcome_message = Text.from_markup(get_welcome_message(agent_name, mode))
+    
+    border_style = Style(color="bright_blue" if high_contrast else "blue", bold=True)
+    
+    console.print(
+        Panel(
+            welcome_message,
+            title="[bright_white]»»—— QUANTALOGIC QUANTUM SYSTEM ——««[/]",
+            title_align="center",
+            border_style=border_style,
+            box=ROUNDED,
+            style="dim",
+            padding=(1, 4),
+            subtitle="[bright_cyan]QUANTUM INTELLIGENCE READY[/]"
+        )
+    )
