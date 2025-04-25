@@ -30,6 +30,7 @@ from quantalogic_codeact.commands.toolbox.uninstall_toolbox import uninstall_too
 from quantalogic_codeact.version import get_version
 
 from .agent_state import AgentState
+from .banner import get_welcome_message, print_welcome_banner
 from .command_registry import CommandRegistry
 from .commands.agent import agent_command
 from .commands.chat import chat_command
@@ -56,7 +57,6 @@ from .commands.solve import solve_command
 from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
 from .commands.version import version_command
-from .banner import get_welcome_message
 
 console = Console()
 
@@ -165,16 +165,26 @@ class Shell:
             {"name": "toolbox doc", "func": get_tool_doc, "help": "Show tool documentation: /toolbox doc <toolbox_name> <tool_name>", "args": None},
             {"name": "listmodels", "func": listmodels_command, "help": "List models using LLM util: /listmodels", "args": []},
             {"name": "version", "func": version_command, "help": "Show package version: /version", "args": []},
+            {"name": "banner", "func": lambda args: self.banner_command(args), "help": "Display the welcome banner again", "args": []},
         ]
         for cmd in builtin_commands:
             self.command_registry.register(
                 cmd["name"],
-                lambda args, f=cmd["func"]: f(self, args),
+                lambda args, f=cmd["func"]: f(args),
                 cmd["help"],
                 cmd["args"]
             )
         # Set args for /help to include all command names for autocompletion
         self.command_registry.commands["help"]["args"] = list(self.command_registry.commands.keys())
+
+    async def banner_command(self, args: List[str]) -> None:
+        """Display the welcome banner with consistent colors."""
+        agent_name = getattr(self.agent_config, 'agent_name', 'QUANTA') or 'QUANTA'
+        print_welcome_banner(
+            agent_name,
+            self.agent_config.mode,
+            self.high_contrast
+        )
 
     def _load_plugin_commands(self) -> None:
         """Load plugin commands from entry points."""

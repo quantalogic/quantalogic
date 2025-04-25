@@ -43,36 +43,23 @@ def get_welcome_message(agent_name: str, mode: str) -> str:
 
 
 def print_welcome_banner(agent_name: str, mode: str, high_contrast: bool = False) -> None:
-    """Print the welcome banner to the console.
-    
-    Args:
-        agent_name: Name of the current agent
-        mode: Current agent mode ('codeact' or 'chat')
-        high_contrast: Whether to use high contrast colors
-    """
+    """Print the welcome banner to the console with consistent colors."""
     console = Console()
+    
+    # Use high contrast colors if enabled
+    border_color = "bright_blue" if high_contrast else "blue"
+    _text_color = "bright_white" if high_contrast else "white"
+    
     welcome_message = Text.from_markup(get_welcome_message(agent_name, mode))
     
-    border_style = Style(color="bright_blue" if high_contrast else "blue", bold=True)
-    quantum_style = Style(color="bright_cyan", bold=True)
-    
-    # Create a smaller panel for the quantum symbol
-    quantum_panel = Panel(
-        Text.from_markup(f"[bright_cyan]{QUANTUM_SYMBOL}[/]"),
-        box=box.SIMPLE,
-        style=quantum_style,
-        padding=(0, 1)
-    )
-    
-    # Main panel with nested quantum symbol panel
+    # Main panel with consistent colors
     console.print(
         Panel(
             welcome_message,
             title="[bright_white]»»—— QUANTALOGIC QUANTUM SYSTEM ——««[/]",
             title_align="center",
-            border_style=border_style,
+            border_style=Style(color=border_color, bold=True),
             box=box.DOUBLE,
-            style="dim",
             padding=(1, 4),
             subtitle=f"[bright_cyan]QUANTUM INTELLIGENCE READY | {get_version()}[/]"
         )
@@ -81,11 +68,13 @@ def print_welcome_banner(agent_name: str, mode: str, high_contrast: bool = False
     # Print quantum equations panel at the bottom
     console.print(
         Panel(
-            quantum_panel,
+            Text.from_markup(f"[bright_cyan]{QUANTUM_SYMBOL}[/]"),
             box=box.SIMPLE,
-            style=quantum_style,
+            style=Style(color="bright_cyan", bold=True),
             padding=(0, 2),
             title="[bright_white]QUANTUM STATE[/]",
             title_align="center"
         )
     )
+
+# Removed banner_command as it was moved to shell.py
