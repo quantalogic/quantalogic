@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from pathlib import Path
 
 import typer
 from loguru import logger
@@ -9,7 +10,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from quantalogic_codeact.codeact.agent import Agent
-from quantalogic_codeact.codeact.agent_config import AgentConfig
+from quantalogic_codeact.codeact.agent_config import GLOBAL_CONFIG_PATH, AgentConfig
 from quantalogic_codeact.codeact.constants import DEFAULT_MODEL, LOG_FILE
 from quantalogic_codeact.codeact.events import (
     ActionExecutedEvent,
@@ -231,8 +232,21 @@ def task(
 ) -> None:
     """CLI command to run the Agent with detailed event monitoring."""
     try:
-        # Get AgentConfig from context
-        agent_config = ctx.obj["agent_config"]
+        # Get AgentConfig from context or load from file (same as shell.py)
+        agent_config = ctx.obj.get("agent_config") or AgentConfig.load_from_file(GLOBAL_CONFIG_PATH)
+        
+        # Ensure config is properly initialized with required fields
+        agent_config = AgentConfig.ensure_initialized(agent_config)
+            
+        # Create default config file if it doesn't exist
+        config_path = Path(GLOBAL_CONFIG_PATH)
+        if not config_path.exists():
+            try:
+                logger.info(f"Creating default configuration file at {config_path}")
+                agent_config.save_to_file(str(config_path))
+            except Exception as e:
+                logger.error(f"Failed to create default config file: {e}")
+        
         # Update with CLI-provided values
         updated_config = agent_config.copy(deep=True)
         updated_config.model = model

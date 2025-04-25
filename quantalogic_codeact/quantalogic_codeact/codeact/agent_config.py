@@ -1,7 +1,7 @@
 """High-level interface for the Quantalogic Agent with modular configuration."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 import yaml
 from loguru import logger
@@ -53,8 +53,19 @@ class ToolConfig(BaseModel):
 Toolbox.update_forward_refs()
 
 
+# Module-level constants
+GLOBAL_CONFIG_PATH = Path.home() / ".quantalogic" / "config.json"
+GLOBAL_DEFAULTS = {
+    "log_level": "ERROR",
+    "model": "gemini/gemini-2.0-flash",
+    "version": "1.0.0"
+}
+
 class AgentConfig(BaseModel):
     """Comprehensive configuration for the Agent, loadable from a YAML file or direct arguments."""
+    GLOBAL_CONFIG_PATH: ClassVar[Path] = GLOBAL_CONFIG_PATH
+    GLOBAL_DEFAULTS: ClassVar[dict] = GLOBAL_DEFAULTS
+
     version: str = Field(default="1.0", description="Configuration schema version")
     model: str = Field(default="gemini/gemini-2.0-flash", description="The LLM model to use")
     max_iterations: int = Field(default=5, ge=1, le=100, description="Maximum reasoning steps")
@@ -73,6 +84,24 @@ class AgentConfig(BaseModel):
     mode: str = Field(default="codeact", description="Operating mode: 'codeact' or 'chat'")
     streaming: bool = Field(default=True, description="Enable streaming output for real-time token generation")
     log_level: str = Field(default="ERROR", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
+
+    @classmethod
+    def ensure_initialized(cls, config):
+        """Ensure all required fields exist in the config."""
+        for key, value in cls.GLOBAL_DEFAULTS.items():
+            if not hasattr(config, key):
+                setattr(config, key, value)
+        return config
+
+    @classmethod
+    def create_default_if_missing(cls):
+        """Create default config file if it doesn't exist."""
+        path = Path(cls.GLOBAL_CONFIG_PATH)
+        if not path.exists():
+            config = cls()
+            for key, value in cls.GLOBAL_DEFAULTS.items():
+                setattr(config, key, value)
+            config.save_to_file(str(path))
 
     @root_validator(pre=True)
     def migrate_enabled_toolboxes(cls, values):

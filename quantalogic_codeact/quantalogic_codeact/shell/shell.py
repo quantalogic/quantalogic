@@ -1,5 +1,5 @@
 import sys
-from difflib import get_close_matches  # Added for command suggestions
+from difflib import get_close_matches
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -16,15 +16,16 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 import quantalogic_codeact.cli_commands.config_manager as config_manager
-from quantalogic_codeact.codeact.agent import Agent, AgentConfig
+from quantalogic_codeact.codeact.agent import Agent
+from quantalogic_codeact.codeact.agent_config import GLOBAL_CONFIG_PATH, GLOBAL_DEFAULTS, AgentConfig
 from quantalogic_codeact.codeact.conversation_manager import ConversationManager
 from quantalogic_codeact.codeact.events import ToolConfirmationRequestEvent
+from quantalogic_codeact.commands.toolbox import list_toolbox_tools
 from quantalogic_codeact.commands.toolbox.disable_toolbox import disable_toolbox
 from quantalogic_codeact.commands.toolbox.enable_toolbox import enable_toolbox
 from quantalogic_codeact.commands.toolbox.get_tool_doc import get_tool_doc
 from quantalogic_codeact.commands.toolbox.install_toolbox import install_toolbox
 from quantalogic_codeact.commands.toolbox.installed_toolbox import installed_toolbox
-from quantalogic_codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
 from quantalogic_codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
 from quantalogic_codeact.version import get_version
 
@@ -62,13 +63,13 @@ class Shell:
     """Interactive CLI shell for dialog with Quantalogic agents."""
     def __init__(self, agent_config: Optional[AgentConfig] = None, cli_log_level: Optional[str] = None):
         # Configure logger based on config file (default ERROR)
-        self.agent_config = agent_config or AgentConfig.load_from_file(config_manager.GLOBAL_CONFIG_PATH)
+        self.agent_config = agent_config or AgentConfig.load_from_file(GLOBAL_CONFIG_PATH)
         # Ensure config is properly initialized with required fields
         if hasattr(config_manager, 'ensure_config_initialized'):
             self.agent_config = config_manager.ensure_config_initialized(self.agent_config)
             
         # Create default config file if it doesn't exist
-        config_path = Path(config_manager.GLOBAL_CONFIG_PATH)
+        config_path = Path(GLOBAL_CONFIG_PATH)
         if not config_path.exists():
             try:
                 logger.info(f"Creating default configuration file at {config_path}")
@@ -78,7 +79,7 @@ class Shell:
         if cli_log_level:
             level = cli_log_level.upper()
         else:
-            level = self.agent_config.log_level.upper() if hasattr(self.agent_config, 'log_level') else config_manager.GLOBAL_DEFAULTS.get("log_level", "ERROR").upper()
+            level = self.agent_config.log_level.upper() if hasattr(self.agent_config, 'log_level') else GLOBAL_DEFAULTS.get("log_level", "ERROR").upper()
         logger.remove()
         self.logger_sink_id = logger.add(
             sys.stderr,
@@ -314,7 +315,7 @@ class Shell:
         })
         session = PromptSession(
             message=lambda: HTML(
-                f'<ansigreen>[cfg:{config_manager.GLOBAL_CONFIG_PATH.name}]</ansigreen> '
+                f'<ansigreen>[cfg:{GLOBAL_CONFIG_PATH.name}]</ansigreen> '
                 f'<ansicyan>[{self.current_agent.name or "Agent"}]</ansicyan> '
                 f'<ansiyellow>[{self.agent_config.mode}]></ansiyellow> '
             ),
