@@ -12,6 +12,7 @@ Code Rules:
 - ≤3 parameters
 - Descriptive names
 - Type hints
+- Prefer named arguments
 
 3. Project Structure
 - Group by feature
