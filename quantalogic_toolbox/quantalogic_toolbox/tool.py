@@ -192,6 +192,8 @@ class ToolDefinition(BaseModel):
         need_validation: Flag to indicate if tool requires validation.
         is_async: Flag to indicate if the tool is asynchronous (for documentation purposes).
         toolbox_name: Optional name of the toolbox this tool belongs to.
+        requires_confirmation: Whether the tool requires user confirmation before execution.
+        confirmation_message: The confirmation message to display to the user.
     """
 
     model_config = ConfigDict(extra="allow", validate_assignment=True)
@@ -229,6 +231,14 @@ class ToolDefinition(BaseModel):
         default=None,
         description="The name of the toolbox this tool belongs to, set during registration if applicable."
     )
+    requires_confirmation: bool = Field(
+        default=False,
+        description="Whether the tool requires user confirmation before execution."
+    )
+    confirmation_message: str | None = Field(
+        default=None,
+        description="The confirmation message to display to the user."
+    )
 
     def get_properties(self, exclude: list[str] | None = None) -> dict[str, Any]:
         """Return a dictionary of all non-None properties, excluding Tool class fields and specified fields.
@@ -256,6 +266,8 @@ class ToolDefinition(BaseModel):
             "need_caller_context_memory",
             "is_async",
             "toolbox_name",
+            "requires_confirmation",
+            "confirmation_message",
         }
         properties = {}
 
@@ -286,6 +298,11 @@ class ToolDefinition(BaseModel):
         if any(properties_injectable.get(arg.name) is not None for arg in self.arguments):
             markdown += "- **Note**: Some arguments are injected from the tool's configuration and may not need to be provided explicitly.\n\n"
 
+        if self.requires_confirmation:
+            markdown += "- **Requires Confirmation**: Yes\n"
+            if self.confirmation_message:
+                markdown += f"- **Confirmation Message**: {self.confirmation_message}\n\n"
+
         if self.arguments:
             markdown += "- **Parameters**:\n"
             parameters = ""
@@ -313,7 +330,7 @@ class ToolDefinition(BaseModel):
         standard_fields = {
             "name", "description", "arguments", "return_type", "return_description", "return_type_details",
             "return_example", "return_structure", "original_docstring", "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
-            "toolbox_name"
+            "toolbox_name", "requires_confirmation", "confirmation_message"
         }
         additional_fields = [f for f in self.model_fields if f not in standard_fields]
         if additional_fields:
@@ -395,6 +412,11 @@ class ToolDefinition(BaseModel):
             if properties_injectable:
                 docstring += "\n    Note: Some arguments may be injected from the tool's configuration.\n"
 
+            if self.requires_confirmation:
+                docstring += "\n    Requires Confirmation: Yes\n"
+                if self.confirmation_message:
+                    docstring += f"    Confirmation Message: {self.confirmation_message}\n"
+
             if self.arguments:
                 docstring += "\nArgs:\n"
                 for arg in self.arguments:
@@ -441,6 +463,17 @@ class Tool(ToolDefinition):
 
     Inherits from ToolDefinition and adds execution functionality.
     """
+
+    def __init__(self, *args, confirmation_message_callable=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.confirmation_message_callable = confirmation_message_callable
+
+    def get_confirmation_message(self) -> str:
+        """Return the confirmation message, invoking callable if present."""
+        if hasattr(self, 'confirmation_message_callable') and self.confirmation_message_callable:
+            return self.confirmation_message_callable()
+        return self.confirmation_message or f"Tool '{self.name}' requires confirmation: Proceed? (yes/no)"
+
     def validate_arguments(cls, v: Any):
         """Validate and convert arguments to ToolArgument instances.
 
@@ -549,6 +582,8 @@ def create_tool(func: F) -> Tool:
     return_type_str = type_hint_to_str(return_type)
     return_type_details = get_type_description(return_type)
     return_structure = get_type_schema(return_type)
+    requires_confirmation = getattr(func, 'requires_confirmation', False)
+    confirmation_message = getattr(func, 'confirmation_message', None)
 
     class GeneratedTool(Tool):
         def __init__(self, *args: Any, **kwargs: Any):
@@ -561,9 +596,12 @@ def create_tool(func: F) -> Tool:
                 return_description=return_description,
                 return_type_details=return_type_details,
                 return_structure=return_structure,
-                original_docstring=docstring,  # Preserve full original docstring
+                original_docstring=docstring,
                 is_async=is_async,
                 toolbox_name=None,
+                requires_confirmation=requires_confirmation,
+                confirmation_message=confirmation_message if not callable(confirmation_message) else None,
+                confirmation_message_callable=confirmation_message if callable(confirmation_message) else None,
                 **kwargs
             )
             self._func = func
@@ -601,3 +639,20 @@ def create_tool(func: F) -> Tool:
                 return await asyncio.to_thread(self._func, **full_kwargs)
 
     return GeneratedTool()
+
+if __name__ == "__main__":
+    def main():
+        # Example usage of create_tool and Tool classes
+        def example_fn(x: int, y: str = "hello") -> bool:
+            """Example tool function."""
+            return True
+
+        tool = create_tool(example_fn)
+        print("JSON representation:")
+        print(tool.to_json())
+        print("\nMarkdown representation:")
+        print(tool.to_markdown())
+        print("\nDocstring representation:")
+        print(tool.to_docstring())
+
+    main()

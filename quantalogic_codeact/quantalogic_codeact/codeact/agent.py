@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from loguru import logger
+from nanoid import generate  # Added for agent ID generation
 
 from quantalogic.tools import Tool
 
@@ -18,7 +19,6 @@ from .message import Message
 from .plugin_manager import PluginManager
 from .reasoner import BaseReasoner, Reasoner
 from .templates import jinja_env as default_jinja_env
-from .tools import RetrieveStepTool
 from .tools.retrieve_message_tool import RetrieveMessageTool
 from .tools_manager import get_default_tools
 from .utils import process_tools
@@ -43,6 +43,7 @@ class Agent:
             logger.error(f"Failed to initialize config: {e}. Using default configuration.")
             config = AgentConfig()
 
+        self.id = generate(size=21)  # New: Unique ID for the agent
         self.config = config
         self.plugin_manager = PluginManager()
         try:
@@ -51,16 +52,17 @@ class Agent:
             logger.error(f"Failed to load plugins: {e}")
         self.model: str = config.model
         self.temperature: float = config.temperature  # Added temperature
-        self.default_tools: List[Tool] = self._get_tools()
+        self.max_iterations: int = config.max_iterations
+        self.personality = config.personality
+        self.name: Optional[str] = config.name if config.name else f"agent_{self.id[:8]}"  # Use config name or default
+        self.max_history_tokens: int = config.max_history_tokens
+        # Initialize conversation manager before getting tools to ensure it's available
+        self.conversation_manager = ConversationManager(max_tokens=self.max_history_tokens)
+        # Now get tools with conversation_manager initialized
+        self.default_tools: List[Tool] = self._load_and_configure_tools()
         # If no tools are loaded, do not fall back to all registered tools
         if not self.default_tools and (not config.enabled_toolboxes or not config.tools):
             logger.info("No tools loaded from configuration; no toolboxes specified.")
-        self.max_iterations: int = config.max_iterations
-        self.personality = config.personality
-        self.backstory = config.backstory
-        self.sop: Optional[str] = config.sop
-        self.name: Optional[str] = config.name
-        self.max_history_tokens: int = config.max_history_tokens
         # Configure Jinja environment: support TemplateConfig or raw dict
         tpl = config.template
         td = None
@@ -76,46 +78,112 @@ class Agent:
         self.last_solve_context_vars: Dict = {}
         self.default_reasoner_name: str = config.reasoner.name
         self.default_executor_name: str = config.executor.name
-        self.conversation_manager = ConversationManager(max_tokens=self.max_history_tokens)
-        self.system_prompt_template: Optional[str] = config.system_prompt_template
         self.react_agent = CodeActAgent(
             model=self.model,
             tools=self.default_tools,
             max_iterations=self.max_iterations,
             max_history_tokens=self.max_history_tokens,
             system_prompt=self._build_system_prompt(),
-            reasoner=Reasoner(self.model, self.default_tools, temperature=self.temperature),
-            executor=Executor(self.default_tools, self._notify_observers, self.conversation_manager),
+            reasoner=Reasoner(
+                self.model,
+                self.default_tools,
+                temperature=self.temperature,
+                agent_id=self.id,
+                agent_name=self.name
+            ),
+            executor=Executor(
+                self.default_tools,
+                self._notify_observers,
+                self.conversation_manager,
+                agent_id=self.id,  # New: Pass agent ID
+                agent_name=self.name  # New: Pass agent name
+            ),
             conversation_manager=self.conversation_manager,
-            temperature=self.temperature  # Pass temperature
+            temperature=self.temperature,
+            agent_id=self.id,  # New: Pass agent ID
+            agent_name=self.name  # New: Pass agent name
         )
 
-    def _get_tools(self) -> List[Tool]:
-        """Load tools, applying tools_config if provided."""
+    @property
+    def tools(self) -> List[Tool]:
+        """Get the configured tools based on current toolbox settings.
+        
+        This property provides access to the agent's tools, loading and configuring them
+        based on the current toolbox settings and configurations.
+        
+        Returns:
+            List[Tool]: The list of configured tools
+        """
+        return self._load_and_configure_tools()
+    
+    def refresh_tools(self) -> None:
+        """Explicitly refresh the tools after configuration changes.
+        
+        This method should be called when toolbox configurations change and
+        the tools need to be reloaded with the new settings.
+        """
+        self.default_tools = self._load_and_configure_tools()
+    
+    def _load_and_configure_tools(self) -> List[Tool]:
+        """Load and configure tools based on current settings.
+        
+        This is an internal method that handles the loading and configuration of tools
+        based on the current toolbox settings.
+        
+        Returns:
+            List[Tool]: The list of configured tools
+        """
         try:
-            base_tools = (
-                process_tools(self.config.tools)
-                if self.config.tools is not None
-                else get_default_tools(self.model, enabled_toolboxes=self.config.enabled_toolboxes)
-            )
-            if not self.config.tools_config:
-                return base_tools
+            # Log what enabled_toolboxes is before we use it
+            logger.debug(f"Initializing agent tools with enabled_toolboxes: {self.config.enabled_toolboxes}")
             
-            self._resolve_secrets(self.config.tools_config)
+            # Ensure enabled_toolboxes is a list (fallback to empty list if None)
+            if self.config.enabled_toolboxes is None:
+                self.config.enabled_toolboxes = []
+                logger.warning("Enabled toolboxes was None, defaulting to empty list")
+            
+            # Load default tools from configured toolboxes
+            base_tools = get_default_tools(
+                self.model,
+                history_store=self.conversation_manager.messages if hasattr(self, 'conversation_manager') else None,
+                enabled_toolboxes=self.config.enabled_toolboxes
+            )
+            # Gather per-tool configs from enabled toolboxes
+            tool_confs = []
+            for tb in self.config.installed_toolboxes or []:
+                if tb.enabled:
+                    tool_confs.extend(tb.tool_configs or [])
+            # If no overrides, return base
+            if not tool_confs:
+                return base_tools
+            # Resolve env vars in each config dict
+            for tc in tool_confs:
+                for k, v in getattr(tc, 'config', {}).items():
+                    if isinstance(v, str) and '{{ env.' in v:
+                        env_key = v.strip('{} ').split('.')[-1]
+                        setattr(tc, k, os.getenv(env_key, v))
+            # Apply overrides
             filtered_tools = []
-            processed_names = set()
-            for tool_conf in self.config.tools_config:
-                tool_name = tool_conf.get("name")
-                if tool_conf.get("enabled", True):
-                    tool = next((t for t in base_tools if t.name == tool_name or t.toolbox_name == tool_name), None)
-                    if tool and tool.name not in processed_names:
-                        for key, value in tool_conf.items():
-                            if key not in ["name", "enabled"]:
-                                setattr(tool, key, value)
+            processed = set()
+            for tc in tool_confs:
+                if tc.enabled:
+                    tool = next((t for t in base_tools if t.name == tc.name or t.toolbox_name == tc.name), None)
+                    if tool and tool.name not in processed:
+                        for key, value in tc.config.items():
+                            # Apply the configuration value to the tool
+                            setattr(tool, key, value)
+                            
+                        # Apply confirmation settings if specified in the configuration
+                        if hasattr(tc, 'requires_confirmation'):
+                            tool.requires_confirmation = tc.requires_confirmation
+                            
+                        if hasattr(tc, 'confirmation_message'):
+                            tool.confirmation_message = tc.confirmation_message
                         filtered_tools.append(tool)
-                        processed_names.add(tool.name)
+                        processed.add(tool.name)
+            # Append remaining
             for tool in base_tools:
-                if tool.name not in processed_names:
+                if tool.name not in processed:
                     filtered_tools.append(tool)
             logger.info(f"Loaded {len(filtered_tools)} tools successfully.")
             return filtered_tools
@@ -138,14 +206,12 @@ class Agent:
 
     def _build_system_prompt(self) -> str:
         """Render system prompt via Jinja2 template only."""
-        template_name = self.system_prompt_template or "system_prompt.j2"
+        template_name = "system_prompt.j2"
         try:
             tpl = self.jinja_env.get_template(template_name)
             context = {
                 'name': self.name,
-                'personality': self.personality,
-                'backstory': self.backstory,
-                'sop': self.sop
+                'personality': self.personality
             }
             return tpl.render(**context)
         except TemplateNotFound:
@@ -165,7 +231,8 @@ class Agent:
         temperature: float = None,  # Allow override
         streaming: bool = False,
         reasoner_name: Optional[str] = None,
-        executor_name: Optional[str] = None
+        executor_name: Optional[str] = None,
+        task_id: Optional[str] = None
     ) -> str:
         """Single-step interaction with optional custom tools, history, and streaming."""
         try:
@@ -178,7 +245,8 @@ class Agent:
                 message,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                streaming=streaming
+                streaming=streaming,
+                task_id=task_id
             )
             logger.info(f"Chat response (no tools): {response}")
             # Update conversation history
@@ -209,7 +277,8 @@ class Agent:
         timeout: int = 300,
         streaming: bool = False,
         reasoner_name: Optional[str] = None,
-        executor_name: Optional[str] = None
+        executor_name: Optional[str] = None,
+        task_id: Optional[str] = None
     ) -> List[Dict]:
         """Multi-step task solving with optional custom tools, history, max_iterations, and streaming."""
         try:
@@ -229,11 +298,12 @@ class Agent:
                 max_history_tokens=self.max_history_tokens,
                 system_prompt=system_prompt,
                 reasoner=reasoner_cls(self.model, solve_tools, temperature=self.temperature, **reasoner_config),
-                executor=executor_cls(solve_tools, self._notify_observers, self.conversation_manager, **executor_config),
+                executor=executor_cls(solve_tools, self._notify_observers, self.conversation_manager, agent_id=self.id, agent_name=self.name, **executor_config),
                 conversation_manager=self.conversation_manager,
-                temperature=self.temperature
+                temperature=self.temperature,
+                agent_id=self.id,  # New: Pass agent ID
+                agent_name=self.name  # New: Pass agent name
             )
-            solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.working_memory.store))
             solve_agent.executor.register_tool(RetrieveMessageTool(conversation_manager=self.conversation_manager))
             for observer, event_types in self._observers:
                 solve_agent.add_observer(observer, event_types)
@@ -247,7 +317,8 @@ class Agent:
                 task_goal=task_goal,
                 system_prompt=system_prompt,
                 max_iterations=max_iterations,
-                streaming=streaming
+                streaming=streaming,
+                task_id=task_id
             )
             self.last_solve_context_vars = solve_agent.context_vars.copy()
             return history_result

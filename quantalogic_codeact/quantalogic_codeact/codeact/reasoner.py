@@ -4,11 +4,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from loguru import logger
 from lxml import etree
+from nanoid import generate
 
 from quantalogic.tools import Tool
 
-from .constants import MAX_GENERATE_PROGRAM_TOKENS
 from .events import PromptGeneratedEvent
+from .executor import ALLOWED_MODULES as DEFAULT_ALLOWED_MODULES
 from .llm_util import LLMCompletionError, litellm_completion
 from .message import Message
 from .templates import jinja_env
@@ -20,7 +21,8 @@ class PromptStrategy(ABC):
 
     @abstractmethod
     async def generate_prompt(
-        self, task: str, step_history_str: str, step: int, max_iterations: int, available_vars: List[str]
+        self, task: str, step_history_str: str, step: int, max_iterations: int,
+        available_vars: List[str], allowed_modules: List[str]
     ) -> str:
         pass
 
@@ -29,7 +31,8 @@ class DefaultPromptStrategy(PromptStrategy):
     """Default strategy using Jinja2 templates."""
 
     async def generate_prompt(
-        self, task: str, step_history_str: str, step: int, max_iterations: int, available_vars: List[str]
+        self, task: str, step_history_str: str, step: int, max_iterations: int,
+        available_vars: List[str], allowed_modules: List[str]
     ) -> str:
         tools_by_toolbox = {}
         for tool in self.tools:
@@ -49,6 +52,7 @@ class DefaultPromptStrategy(PromptStrategy):
             max_iterations=max_iterations,
             tools_by_toolbox=tools_by_toolbox,
             available_vars=available_vars,
+            allowed_modules=allowed_modules,
         )
 
 
@@ -66,8 +70,10 @@ class BaseReasoner(ABC):
         notify_event: Callable,
         streaming: bool,
         available_vars: List[str],
+        allowed_modules: List[str],
         conversation_history: List[Message],
     ) -> str:
+        """Generate an action with dynamic allowed modules for import."""
         pass
 
 
@@ -81,6 +87,8 @@ class Reasoner(BaseReasoner):
         temperature: float = 0.3,
         config: Optional[Dict[str, Any]] = None,
         prompt_strategy: Optional[PromptStrategy] = None,
+        agent_id: Optional[str] = None,
+        agent_name: Optional[str] = None,
     ):
         self.model = model
         self.tools = tools
@@ -88,6 +96,9 @@ class Reasoner(BaseReasoner):
         self.config = config or {}
         self.prompt_strategy = prompt_strategy or DefaultPromptStrategy()
         self.prompt_strategy.tools = tools  # Inject tools into strategy
+        # Ensure agent_id and agent_name are always valid strings
+        self.agent_id = agent_id or generate()
+        self.agent_name = agent_name or f"agent_{self.agent_id[:8]}"
 
     async def generate_action(
         self,
@@ -99,9 +110,12 @@ class Reasoner(BaseReasoner):
         notify_event: Callable = None,
         streaming: bool = False,
         available_vars: List[str] = None,
+        allowed_modules: List[str] = None,
         conversation_history: List[Message] = None,
     ) -> str:
         """Generate an action based on task and history with streaming support."""
+        # Determine modules to allow in the prompt
+        allowed_modules = allowed_modules or DEFAULT_ALLOWED_MODULES
         # Normalize and convert history items to dicts
         conv_items = conversation_history or []
         if not isinstance(conv_items, list):
@@ -132,8 +146,15 @@ class Reasoner(BaseReasoner):
                 step,
                 max_iterations,
                 available_vars,
+                allowed_modules,
             )
-            await notify_event(PromptGeneratedEvent(event_type="PromptGenerated", step_number=step, prompt=task_prompt))
+            await notify_event(PromptGeneratedEvent(
+                event_type="PromptGenerated",
+                agent_id=self.agent_id,
+                agent_name=self.agent_name,
+                step_number=step,
+                prompt=task_prompt
+            ))
             logger.debug(f"Generated prompt for step {step}:\n{task_prompt}")
 
             # Construct messages with conversation history
@@ -151,11 +172,12 @@ class Reasoner(BaseReasoner):
                     response = await litellm_completion(
                         model=self.model,
                         messages=messages,
-                     #   max_tokens=self.config.get("max_tokens", MAX_GENERATE_PROGRAM_TOKENS),
                         temperature=self.temperature,
                         stream=streaming,
                         step=step,
                         notify_event=notify_event,
+                        agent_id=self.agent_id,
+                        agent_name=self.agent_name,
                     )
                     program = self._clean_code(response)
                     response = jinja_env.get_template("response_format.j2").render(

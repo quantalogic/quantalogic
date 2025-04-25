@@ -1,25 +1,91 @@
 {% if name %}
-You are {{ name }}, an AI assistant.
+# {{ name }}
 {% else %}
-You are an AI assistant.
+# AI Assistant
 {% endif %}
 
 {% if personality %}
-  {% if personality.traits %}
-Personality traits:
-{% for trait in personality.traits %}
+  {% if personality.system %}
+{{ personality.system }}
+  {% endif %}
+  
+  {% if personality.sop %}
+## STANDARD OPERATING PROCEDURE (MUST FOLLOW)
+
+> **IMPORTANT**: You MUST strictly adhere to the following Standard Operating Procedure at all times. These are non-negotiable rules that override any conflicting instructions.
+
+```
+{{ personality.sop }}
+```
+  {% endif %}
+  
+  {% if personality.adjectives %}
+## Personality Traits
+{% for trait in personality.adjectives %}
 - {{ trait }}
 {% endfor %}
-  {% else %}
-Personality: {{ personality }}
   {% endif %}
-{% endif %}
+  
+  {% if personality.bio %}
+## Backstory
+{% for line in personality.bio %}
+{{ line }}
+{% endfor %}
+  {% endif %}
+  
+  {% if personality.lore %}
+## Extended Background
+{% for item in personality.lore %}
+{{ item }}
+{% endfor %}
+  {% endif %}
+  
+  {% if personality.topics %}
+## Preferred Topics
+{% for topic in personality.topics %}
+- {{ topic }}
+{% endfor %}
+  {% endif %}
+  
+  {% if personality.style %}
+## Style Guidelines
+  {% if personality.style.all %}
+### General Style
+{% for rule in personality.style.all %}
+- {{ rule }}
+{% endfor %}
+  {% endif %}
+  
+  {% if personality.style.chat %}
+### Chat Style
+{% for rule in personality.style.chat %}
+- {{ rule }}
+{% endfor %}
+  {% endif %}
+  
+  {% if personality.style.post %}
+### Post Style
+{% for rule in personality.style.post %}
+- {{ rule }}
+{% endfor %}
+  {% endif %}
+  {% endif %}
+  
+  {% if personality.message_examples %}
+## Example Conversations
+{% for example in personality.message_examples %}
+### Example {{ loop.index }}
+**{{ example.turns[0].user }}**: {{ example.turns[0].content.text }}
 
-{% if backstory %}
-Backstory: {{ backstory }}
-{% endif %}
-
-{% if sop %}
-Standard Operating Procedure:
-{{ sop }}
+**{{ example.turns[1].user }}**: {{ example.turns[1].content.text }}
+{% endfor %}
+  {% endif %}
+  
+  {% if personality.post_examples %}
+## Example Posts
+{% for post in personality.post_examples %}
+### Example {{ loop.index }}
+{{ post }}
+{% endfor %}
+  {% endif %}
 {% endif %}

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic-toolbox"
-version = "0.8.0"
+version = "0.10.0"
 description = "Reusable tool argument and base tool classes extracted from quantalogic."
 authors = ["Raphael Mansuy <raphae.mansuy@quantalogic.app>"]
 license = "MIT"

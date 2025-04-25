@@ -3,13 +3,14 @@
 import importlib
 import importlib.metadata
 import inspect
-from typing import Any, List, Optional
+from typing import List, Optional
 
 import loguru
 
+from quantalogic_codeact.codeact.agent_config import Toolbox
 from quantalogic_toolbox import Tool, create_tool
 
-from .tools import AgentTool, RetrieveMessageTool, RetrieveStepTool
+from .tools import AgentTool, RetrieveMessageTool
 
 
 class ToolRegistry:
@@ -53,6 +54,16 @@ class ToolRegistry:
                         # Handle async functions
                         tool = create_tool(item)
                         tool.toolbox_name = toolbox_name
+                        
+                        # Preserve confirmation attributes from original function
+                        if hasattr(item, 'requires_confirmation'):
+                            tool.requires_confirmation = item.requires_confirmation
+                            loguru.logger.debug(f"Preserved requires_confirmation={item.requires_confirmation} for tool {tool.name}")
+                        
+                        if hasattr(item, 'confirmation_message'):
+                            tool.confirmation_message = item.confirmation_message
+                            loguru.logger.debug(f"Preserved confirmation_message for tool {tool.name}")
+                        
                         self.register(tool)
                         loguru.logger.debug(f"Registered tool from get_tools: {tool.name} in toolbox {toolbox_name}")
                         tools_found = True
@@ -76,6 +87,26 @@ class ToolRegistry:
             for name, obj in inspect.getmembers(module):
                 if isinstance(obj, Tool) and hasattr(obj, '_func'):
                     obj.toolbox_name = toolbox_name
+                    
+                    # Check if the original function has confirmation attributes and preserve them
+                    if hasattr(obj._func, 'requires_confirmation'):
+                        obj.requires_confirmation = obj._func.requires_confirmation
+                        loguru.logger.debug(f"Preserved requires_confirmation={obj.requires_confirmation} for tool {obj.name}")
+                    
+                    if hasattr(obj._func, 'confirmation_message'):
+                        obj.confirmation_message = obj._func.confirmation_message
+                        loguru.logger.debug(f"Preserved confirmation_message for tool {obj.name}")
+                        
+                    # Add get_confirmation_message method if it doesn't exist
+                    if not hasattr(obj, 'get_confirmation_message'):
+                        def get_confirmation_message(self=obj):
+                            if hasattr(self, 'confirmation_message'):
+                                if callable(self.confirmation_message):
+                                    return self.confirmation_message()
+                                return self.confirmation_message
+                            return None
+                        obj.get_confirmation_message = get_confirmation_message
+                    
                     self.register(obj)
                     loguru.logger.debug(f"Registered @create_tool tool: {obj.name} from {getattr(module, '__name__', str(module))} in toolbox {toolbox_name}")
                     tools_found = True
@@ -119,10 +150,10 @@ def get_default_tools(
     model: str,
     history_store: Optional[List[dict]] = None,
     enabled_toolboxes: Optional[List[str]] = None,
-    tools_config: Optional[List[dict[str, Any]]] = None
+    installed_toolboxes: Optional[List[Toolbox]]=None
 ) -> List[Tool]:
     """Dynamically load default tools using the pre-loaded registry from PluginManager."""
-    from .cli import plugin_manager
+    from quantalogic_codeact.cli import plugin_manager
 
     try:
         plugin_manager.load_plugins()
@@ -130,7 +161,6 @@ def get_default_tools(
         
         static_tools: List[Tool] = [
             AgentTool(model=model),
-            RetrieveStepTool(history_store or []),
             RetrieveMessageTool(history_store or []),
         ]
 
@@ -158,24 +188,27 @@ def get_default_tools(
         loguru.logger.info(f"Static tools loaded: {[(t.toolbox_name or 'default', t.name) for t in static_tools]}")
         loguru.logger.info(f"Plugin tools loaded: {[(t.toolbox_name or 'default', t.name) for t in plugin_tools]}")
 
-        # Apply tools_config filtering to plugin tools
-        if tools_config:
+        # Apply per-toolbox configurations
+        # Flatten tool_configs from enabled toolboxes
+        tool_confs = []
+        if installed_toolboxes:
+            for tb in installed_toolboxes:
+                if tb.enabled:
+                    tool_confs.extend(tb.tool_configs or [])
+        if tool_confs:
             filtered_plugin_tools: List[Tool] = []
-            processed_names = set()
-            for tool_conf in tools_config:
-                if tool_conf.get("enabled", True):
-                    tool = next(
-                        (t for t in plugin_tools if t.name == tool_conf["name"] or t.toolbox_name == tool_conf["name"]),
-                        None
-                    )
-                    if tool and tool.name not in processed_names:
-                        for key, value in tool_conf.items():
-                            if key not in ["name", "enabled"]:
-                                setattr(tool, key, value)
+            processed = set()
+            for tc in tool_confs:
+                if tc.enabled:
+                    tool = next((t for t in plugin_tools if t.name == tc.name or t.toolbox_name == tc.name), None)
+                    if tool and tool.name not in processed:
+                        for key, value in tc.config.items():
+                            setattr(tool, key, value)
                         filtered_plugin_tools.append(tool)
-                        processed_names.add(tool.name)
+                        processed.add(tool.name)
+            # Add remaining
             for tool in plugin_tools:
-                if tool.name not in processed_names:
+                if tool.name not in processed:
                     filtered_plugin_tools.append(tool)
             plugin_tools = filtered_plugin_tools
 

@@ -1,6 +1,6 @@
-from dataclasses import fields, is_dataclass
 from typing import List, Union, get_args, get_origin
 
+from pydantic import BaseModel
 from yaml import safe_load
 
 from ...codeact.agent import Agent
@@ -22,52 +22,53 @@ async def set_command(shell, args: List[str]) -> str:
 
     field_name = args[0]
     value_str = " ".join(args[1:])
-    current_config = shell.current_agent.config
 
-    # Get valid fields from AgentConfig
-    field_dict = {f.name: f for f in fields(current_config)}
+    # Get valid fields from AgentConfig using Pydantic model_fields
+    if not isinstance(shell.agent_config, BaseModel):
+        return "Error: Configuration is not a valid Pydantic model."
+    
+    field_dict = shell.agent_config.model_fields
     if field_name not in field_dict:
         return f"Invalid field: {field_name}. Use /config show to see available fields."
 
-    field = field_dict[field_name]
-    field_type = field.type
+    field_info = field_dict[field_name]
+    field_type = field_info.annotation
 
     # Generic support for complex types via YAML or literal mapping/list
     try:
-        # Handle quoted YAML literals (e.g. "/set personality '{traits: a,b}'")
+        # Handle quoted YAML literals (e.g. "/set personality '{traits: [witty]}'")
         val_to_parse = value_str
         if len(val_to_parse) > 1 and ((val_to_parse[0] == val_to_parse[-1] == '"') or (val_to_parse[0] == val_to_parse[-1] == "'")):
             val_to_parse = val_to_parse[1:-1]
         parsed = safe_load(val_to_parse) if val_to_parse else None
     except Exception:
         parsed = None
-    if isinstance(parsed, (dict, list)) or (is_dataclass(field_type) and isinstance(parsed, dict)):
-        # Instantiate dataclass or assign list/dict directly
-        if is_dataclass(field_type):
-            # Special-case personality comma-separated traits
-            if field_name == 'personality' and isinstance(parsed, dict):
-                traits = parsed.get('traits')
-                if isinstance(traits, str):
-                    parsed['traits'] = [t.strip() for t in traits.split(',') if t.strip()]
-            try:
+    
+    if isinstance(parsed, (dict, list)):
+        # Handle complex types (e.g., lists, dicts, Pydantic models)
+        try:
+            # For lists, assign directly if field_type is a list
+            if get_origin(field_type) is list:
+                value = parsed
+            elif isinstance(field_type, type) and issubclass(field_type, BaseModel):
+                # For Pydantic models, instantiate with parsed dict
                 value = field_type(**parsed)
-            except Exception:
-                return f"Invalid mapping for {field_name}; expected keys for {field_type.__name__}."
-        else:
-            value = parsed
-        # Create new config and agent
-        new_conf = {f.name: getattr(current_config, f.name) for f in field_dict.values()}
-        new_conf[field_name] = value
-        new_cfg = type(current_config)(**new_conf)
-        new_agent = Agent(config=new_cfg)
-        new_agent.add_observer(shell._stream_token_observer, ["StreamToken"])
-        i = 1
-        while f"agent_{i}" in shell.agents:
-            i += 1
-        name = f"agent_{i}"
-        shell.agents[name] = AgentState(agent=new_agent)
-        shell.current_agent_name = name
-        return f"Created and switched to new agent: {name} with {field_name} set to {value}"
+            else:
+                return f"Invalid mapping for {field_name}; expected format for {field_type.__name__}."
+            
+            # Update agent_config and recreate agent
+            setattr(shell.agent_config, field_name, value)
+            new_agent = Agent(config=shell.agent_config)
+            new_agent.add_observer(shell._stream_token_observer, ["StreamToken"])
+            i = 1
+            while f"agent_{i}" in shell.agents:
+                i += 1
+            name = f"agent_{i}"
+            shell.agents[name] = AgentState(agent=new_agent)
+            shell.current_agent_name = name
+            return f"Created and switched to new agent: {name} with {field_name} set to {value}"
+        except Exception as e:
+            return f"Invalid mapping for {field_name}: {e}"
 
     try:
         # Convert value based on field type, supporting Optional
@@ -90,6 +91,13 @@ async def set_command(shell, args: List[str]) -> str:
                     value = value_str.lower() in ["true", "1", "yes"]
                 elif t is list:
                     value = value_str.split()
+                elif issubclass(t, BaseModel):
+                    # Handle Pydantic models with YAML parsing
+                    try:
+                        parsed = safe_load(value_str)
+                        value = t(**parsed)
+                    except Exception as e:
+                        return f"Invalid value for {field_name}: {e}"
                 else:
                     return f"Setting field '{field_name}' of type {field_type} is not supported via /set. Use /config save and edit the file."
         else:
@@ -103,16 +111,19 @@ async def set_command(shell, args: List[str]) -> str:
                 value = value_str.lower() in ["true", "1", "yes"]
             elif field_type is list:
                 value = value_str.split()
+            elif issubclass(field_type, BaseModel):
+                # Handle Pydantic models with YAML parsing
+                try:
+                    parsed = safe_load(value_str)
+                    value = field_type(**parsed)
+                except Exception as e:
+                    return f"Invalid value for {field_name}: {e}"
             else:
                 return f"Setting field '{field_name}' of type {field_type} is not supported via /set. Use /config save and edit the file."
 
-        # Create a new config with the updated field
-        new_config_dict = {f.name: getattr(current_config, f.name) for f in field_dict.values()}
-        new_config_dict[field_name] = value
-        new_config = type(current_config)(**new_config_dict)
-
-        # Create and register a new agent
-        new_agent = Agent(config=new_config)
+        # Update agent_config and recreate agent
+        setattr(shell.agent_config, field_name, value)
+        new_agent = Agent(config=shell.agent_config)
         new_agent.add_observer(shell._stream_token_observer, ["StreamToken"])
         
         # Generate a unique name

@@ -1,219 +1,240 @@
 """High-level interface for the Quantalogic Agent with modular configuration."""
 
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, ClassVar, Dict, List, Optional
 
 import yaml
 from loguru import logger
-
-from quantalogic.tools import Tool
+from pydantic import BaseModel, Field, root_validator, validator
 
 from .constants import MAX_HISTORY_TOKENS
+from .personality_config import PersonalityConfig
 
 
-# Structured config dataclasses
-@dataclass
-class ReasonerConfig:
-    name: str = "default"
-    config: Dict[str, Any] = field(default_factory=dict)
+# Structured config models (replaced dataclasses with Pydantic BaseModel)
+class ReasonerConfig(BaseModel):
+    """Configuration for the reasoner component."""
+    name: str = Field(default="default", description="Name of the reasoner")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Additional reasoner configuration")
 
-@dataclass
-class ExecutorConfig:
-    name: str = "default"
-    config: Dict[str, Any] = field(default_factory=dict)
 
-@dataclass
-class PersonalityConfig:
-    traits: List[str] = field(default_factory=list)
+class ExecutorConfig(BaseModel):
+    """Configuration for the executor component."""
+    name: str = Field(default="default", description="Name of the executor")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Additional executor configuration")
 
-@dataclass
-class ToolConfig:
-    name: str
-    enabled: bool = True
-    config: Dict[str, Any] = field(default_factory=dict)
 
-@dataclass
-class TemplateConfig:
+# PersonalityConfig is now imported from personality_config.py
+
+
+class TemplateConfig(BaseModel):
     """Configuration for templating engine: directory for templates."""
-    template_dir: Optional[Path] = None
+    template_dir: Optional[Path] = Field(None, description="Directory for Jinja2 templates")
 
-@dataclass
-class AgentConfig:
+
+class Toolbox(BaseModel):
+    """Represents a single installed toolbox."""
+    name: str = Field(..., description="Name of the toolbox")
+    package: str = Field(..., description="Package name in PyPI or local path")
+    version: str = Field(..., description="Version of the toolbox")
+    path: Optional[str] = Field(None, description="Filesystem path to the toolbox module")
+    enabled: bool = Field(default=True, description="Whether the toolbox is enabled")
+    tool_configs: List["ToolConfig"] = Field(default_factory=list, description="Per-tool configuration for this toolbox")
+
+
+class ToolConfig(BaseModel):
+    """Represents configuration for a specific tool within a toolbox."""
+    name: str = Field(..., description="Name of the tool")
+    enabled: bool = Field(True, description="Whether the tool is enabled")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Additional tool configuration")
+
+
+# Resolve forward references for Toolbox
+Toolbox.update_forward_refs()
+
+
+# Module-level constants
+GLOBAL_CONFIG_PATH = Path.home() / ".quantalogic" / "config.json"
+GLOBAL_DEFAULTS = {
+    "log_level": "ERROR",
+    "model": "gemini/gemini-2.0-flash",
+    "version": "1.0.0"
+}
+
+class AgentConfig(BaseModel):
     """Comprehensive configuration for the Agent, loadable from a YAML file or direct arguments."""
-    model: str = "gemini/gemini-2.0-flash"
-    max_iterations: int = 5
-    tools: Optional[List[Union[Tool, Callable]]] = None
-    max_history_tokens: int = MAX_HISTORY_TOKENS
-    toolbox_directory: str = "toolboxes"
-    enabled_toolboxes: Optional[List[str]] = None
-    installed_toolboxes: Optional[List[Dict[str, Any]]] = None
-    reasoner_name: str = "default"
-    executor_name: str = "default"
-    personality: Optional[str] = None
-    backstory: Optional[str] = None
-    sop: Optional[str] = None
-    template: TemplateConfig = field(default_factory=TemplateConfig)
-    name: Optional[str] = None
-    tools_config: Optional[List[Dict[str, Any]]] = None
-    reasoner: Optional[Dict[str, Any]] = field(default_factory=lambda: {"name": "default"})
-    executor: Optional[Dict[str, Any]] = field(default_factory=lambda: {"name": "default"})
-    agent_tool_model: str = "gemini/gemini-2.0-flash"
-    agent_tool_timeout: int = 30
-    temperature: float = 0.7  # Added temperature field
-    system_prompt_template: Optional[str] = None
+    GLOBAL_CONFIG_PATH: ClassVar[Path] = GLOBAL_CONFIG_PATH
+    GLOBAL_DEFAULTS: ClassVar[dict] = GLOBAL_DEFAULTS
 
-    def __init__(
-        self,
-        model: str = "gemini/gemini-2.0-flash",
-        max_iterations: int = 5,
-        tools: Optional[List[Union[Tool, Callable]]] = None,
-        max_history_tokens: int = MAX_HISTORY_TOKENS,
-        toolbox_directory: str = "toolboxes",
-        enabled_toolboxes: Optional[List[str]] = None,
-        installed_toolboxes: Optional[List[Dict[str, Any]]] = None,
-        reasoner_name: str = "default",
-        executor_name: str = "default",
-        personality: Optional[str] = None,
-        backstory: Optional[str] = None,
-        sop: Optional[str] = None,
-        template: Optional[TemplateConfig] = None,
-        config_file: Optional[str] = None,
-        name: Optional[str] = None,
-        tools_config: Optional[List[Dict[str, Any]]] = None,
-        reasoner: Optional[Dict[str, Any]] = None,
-        executor: Optional[Dict[str, Any]] = None,
-        agent_tool_model: str = "gemini/gemini-2.0-flash",
-        agent_tool_timeout: int = 30,
-        temperature: float = 0.7,  # Added temperature parameter
-        system_prompt_template: Optional[str] = None
-    ) -> None:
-        """Initialize configuration from arguments or a YAML file."""
+    version: str = Field(default="1.0", description="Configuration schema version")
+    model: str = Field(default="gemini/gemini-2.0-flash", description="The LLM model to use")
+    max_iterations: int = Field(default=5, ge=1, le=100, description="Maximum reasoning steps")
+    max_history_tokens: int = Field(default=MAX_HISTORY_TOKENS, ge=1000, description="Max tokens for history")
+    installed_toolboxes: List[Toolbox] = Field(default_factory=list, description="List of installed toolboxes")
+    reasoner_name: str = Field(default="default", description="Name of the reasoner")
+    executor_name: str = Field(default="default", description="Name of the executor")
+    personality: PersonalityConfig = Field(default_factory=PersonalityConfig, description="Comprehensive agent personality configuration")
+    template: TemplateConfig = Field(default_factory=TemplateConfig)
+    name: Optional[str] = Field(None, description="Agent name")
+    reasoner: ReasonerConfig = Field(default_factory=lambda: ReasonerConfig(name="default"))
+    executor: ExecutorConfig = Field(default_factory=lambda: ExecutorConfig(name="default"))
+    agent_tool_model: str = Field(default="gemini/gemini-2.0-flash", description="Model for agent tool")
+    agent_tool_timeout: int = Field(default=30, ge=1, description="Timeout for agent tool")
+    temperature: float = Field(default=0.7, ge=0.0, le=1.0, description="Temperature for LLM generation")
+    mode: str = Field(default="codeact", description="Operating mode: 'codeact' or 'chat'")
+    streaming: bool = Field(default=True, description="Enable streaming output for real-time token generation")
+    log_level: str = Field(default="ERROR", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
+
+    @classmethod
+    def ensure_initialized(cls, config):
+        """Ensure all required fields exist in the config."""
+        for key, value in cls.GLOBAL_DEFAULTS.items():
+            if not hasattr(config, key):
+                setattr(config, key, value)
+        return config
+
+    @classmethod
+    def create_default_if_missing(cls):
+        """Create default config file if it doesn't exist."""
+        path = Path(cls.GLOBAL_CONFIG_PATH)
+        if not path.exists():
+            config = cls()
+            for key, value in cls.GLOBAL_DEFAULTS.items():
+                setattr(config, key, value)
+            config.save_to_file(str(path))
+
+    @root_validator(pre=True)
+    def migrate_enabled_toolboxes(cls, values):
+        """Migrate legacy enabled_toolboxes to enabled field in installed_toolboxes."""
+        enabled_toolboxes = values.pop("enabled_toolboxes", [])  # Remove legacy field
+        installed_toolboxes = values.get("installed_toolboxes", [])
+        if enabled_toolboxes and installed_toolboxes:
+            for tb in installed_toolboxes:
+                if isinstance(tb, dict):
+                    tb["enabled"] = tb.get("name", "") in enabled_toolboxes
+                elif isinstance(tb, Toolbox):
+                    tb.enabled = tb.name in enabled_toolboxes
+        return values
+
+    @property
+    def enabled_toolboxes(self) -> List[str]:
+        """Return list of enabled toolbox names for compatibility."""
+        return [tb.name for tb in self.installed_toolboxes if tb.enabled]
+
+    @validator("model")
+    def validate_model(cls, v):
+        if not v:
+            raise ValueError("Model must be specified")
+        return v
+
+    @validator("reasoner", pre=True)
+    def validate_reasoner(cls, v):
+        """Convert reasoner dict to ReasonerConfig."""
+        if isinstance(v, dict):
+            return ReasonerConfig(**v)
+        elif isinstance(v, ReasonerConfig):
+            return v
+        raise ValueError("reasoner must be a dict or ReasonerConfig")
+
+    @validator("executor", pre=True)
+    def validate_executor(cls, v):
+        """Convert executor dict to ExecutorConfig."""
+        if isinstance(v, dict):
+            return ExecutorConfig(**v)
+        elif isinstance(v, ExecutorConfig):
+            return v
+        raise ValueError("executor must be a dict or ExecutorConfig")
+
+    @validator("personality", pre=True)
+    def validate_personality(cls, v):
+        """Ensure personality is a PersonalityConfig instance."""
+        if isinstance(v, PersonalityConfig):
+            return v
+        elif isinstance(v, dict):
+            return PersonalityConfig(**v)
+        elif v is None:
+            return PersonalityConfig()
+        else:
+            logger.warning(f"Unexpected personality type {type(v)}: {v}. Falling back to empty PersonalityConfig.")
+            return PersonalityConfig()
+
+    @validator("installed_toolboxes", pre=True)
+    def validate_installed_toolboxes(cls, v):
+        """Convert installed_toolboxes to list of Toolbox."""
+        if v is None:
+            return []
+        return [tb if isinstance(tb, Toolbox) else Toolbox(**tb) for tb in v]
+
+    @validator("template", pre=True)
+    def validate_template(cls, v):
+        """Convert template dict to TemplateConfig."""
+        if isinstance(v, dict):
+            return TemplateConfig(**v)
+        elif isinstance(v, TemplateConfig):
+            return v
+        return TemplateConfig()
+
+    @validator("mode")
+    def validate_mode(cls, v):
+        """Ensure mode is either 'codeact' or 'chat'."""
+        if v not in ["codeact", "chat"]:
+            raise ValueError("mode must be 'codeact' or 'chat'")
+        return v
+
+    @validator("log_level")
+    def validate_log_level(cls, v):
+        """Ensure log_level is valid."""
+        valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        if v.upper() not in valid_levels:
+            raise ValueError(f"log_level must be one of {', '.join(valid_levels)}")
+        return v.upper()
+
+    @classmethod
+    def get_default(cls) -> "AgentConfig":
+        """Return a default AgentConfig instance with all default values."""
+        return cls()
+
+    @classmethod
+    def load_from_file(cls, path: str) -> "AgentConfig":
+        """Load configuration from a YAML file."""
         try:
-            if config_file:
-                config_path = Path(config_file)
-                if not config_path.is_absolute():
-                    config_path = Path.cwd() / config_file  # Resolve relative to current working directory
+            config_path = Path(path).expanduser().resolve()
+            if not config_path.exists():
+                # Create the config file with default settings if it doesn't exist
+                logger.info(f"Config file {path} not found. Creating with default settings.")
+                config = cls()  # Create default config
                 try:
-                    with open(config_path) as f:
-                        config: Dict = yaml.safe_load(f) or {}
-                    self._load_from_config(config, model, max_iterations, max_history_tokens, toolbox_directory,
-                                          tools, enabled_toolboxes, installed_toolboxes, reasoner_name, executor_name, personality,
-                                          backstory, sop, template, name, tools_config, reasoner, executor,
-                                          agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
-                except FileNotFoundError as e:
-                    logger.warning(f"Config file {config_path} not found: {e}. No toolboxes will be loaded.")
-                    self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                      tools, enabled_toolboxes, installed_toolboxes, reasoner_name, executor_name, personality,
-                                      backstory, sop, template, name, tools_config, reasoner, executor,
-                                      agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
-                except yaml.YAMLError as e:
-                    logger.error(f"Error parsing YAML config {config_path}: {e}. No toolboxes will be loaded.")
-                    self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                      tools, enabled_toolboxes, installed_toolboxes, reasoner_name, executor_name, personality,
-                                      backstory, sop, template, name, tools_config, reasoner, executor,
-                                      agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
-            else:
-                self._set_defaults(model, max_iterations, max_history_tokens, toolbox_directory,
-                                  tools, enabled_toolboxes, installed_toolboxes, reasoner_name, executor_name, personality,
-                                  backstory, sop, template, name, tools_config, reasoner, executor,
-                                  agent_tool_model, agent_tool_timeout, temperature, system_prompt_template)
-        except Exception as e:
-            logger.error(f"Failed to initialize AgentConfig: {e}")
-            raise
-
-    def _load_from_config(self, config: Dict, *args) -> None:
-        """Load configuration from a dictionary, overriding with explicit arguments if provided."""
-        try:
-            model, max_iterations, max_history_tokens, toolbox_directory, tools, enabled_toolboxes, installed_toolboxes, \
-            reasoner_name, executor_name, personality, backstory, sop, template, name, tools_config, \
-            reasoner, executor, agent_tool_model, agent_tool_timeout, temperature, system_prompt_template = args
+                    config_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(config_path, "w") as f:
+                        yaml.safe_dump(config.dict(), f, default_flow_style=False)
+                    logger.info(f"Created default config file at {config_path}")
+                    return config
+                except Exception as create_err:
+                    logger.error(f"Failed to create default config file: {create_err}")
+                    return config
             
-            self.model = config.get("model", model)
-            self.max_iterations = config.get("max_iterations", max_iterations)
-            self.max_history_tokens = config.get("max_history_tokens", max_history_tokens)
-            self.toolbox_directory = config.get("toolbox_directory", toolbox_directory)
-            self.tools = tools if tools is not None else config.get("tools")
-            # Treat empty list as no filter (i.e., include all toolboxes)
-            etb = config.get("enabled_toolboxes", enabled_toolboxes)
-            self.enabled_toolboxes = etb if etb else None
-            self.installed_toolboxes = config.get("installed_toolboxes", installed_toolboxes)
-            rd = config.get("reasoner", {})
-            self.reasoner = ReasonerConfig(
-                name=rd.get("name", reasoner_name),
-                config=rd.get("config", {})
-            )
-            ed = config.get("executor", {})
-            self.executor = ExecutorConfig(
-                name=ed.get("name", executor_name),
-                config=ed.get("config", {})
-            )
-            pd = config.get("personality", {}) or {}
-            self.personality = PersonalityConfig(traits=pd.get("traits", []))
-            self.tools_config = [ToolConfig(**tc) for tc in config.get("tools_config", tools_config or [])]
-            # Load template config from YAML if present, else use passed TemplateConfig or default
-            tpl_cfg = config.get("template")
-            if isinstance(tpl_cfg, dict):
-                td = tpl_cfg.get("template_dir")
-                self.template = TemplateConfig(template_dir=Path(td) if td else None)
-            elif template is not None:
-                self.template = template
-            else:
-                self.template = TemplateConfig()
-            self.name = config.get("name", name)
-            self.agent_tool_model = config.get("agent_tool_model", agent_tool_model)
-            self.agent_tool_timeout = config.get("agent_tool_timeout", agent_tool_timeout)
-            self.temperature = config.get("temperature", temperature)  # Added temperature
-            self.system_prompt_template = config.get("system_prompt_template", system_prompt_template)
+            # File exists, load it
+            with open(config_path) as f:
+                data = yaml.safe_load(f) or {}
+            return cls(**data)
+        except yaml.YAMLError as e:
+            logger.error(f"Error parsing YAML config {path}: {e}. Using defaults.")
+            return cls()
         except Exception as e:
-            logger.error(f"Error loading config: {e}")
+            logger.error(f"Failed to load config from {path}: {e}")
+            return cls()
+
+    def save_to_file(self, path: str) -> None:
+        """Save configuration to a YAML file."""
+        try:
+            config_path = Path(path).expanduser().resolve()
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(config_path, "w") as f:
+                yaml.safe_dump(self.dict(), f, default_flow_style=False)
+        except Exception as e:
+            logger.error(f"Failed to save config to {path}: {e}")
             raise
 
-    def _set_defaults(self, model, max_iterations, max_history_tokens, toolbox_directory,
-                     tools, enabled_toolboxes, installed_toolboxes, reasoner_name, executor_name, personality,
-                     backstory, sop, template, name, tools_config, reasoner, executor,
-                     agent_tool_model, agent_tool_timeout, temperature, system_prompt_template) -> None:
-        """Set default values for all configuration fields."""
-        try:
-            self.model = model
-            self.max_iterations = max_iterations
-            self.max_history_tokens = max_history_tokens
-            self.toolbox_directory = toolbox_directory
-            self.tools = tools
-            self.enabled_toolboxes = enabled_toolboxes
-            self.installed_toolboxes = installed_toolboxes
-            if isinstance(reasoner, dict):
-                self.reasoner = ReasonerConfig(
-                    name=reasoner.get("name", reasoner_name),
-                    config=reasoner.get("config", {})
-                )
-            else:
-                self.reasoner = reasoner if isinstance(reasoner, ReasonerConfig) else ReasonerConfig(name=reasoner_name)
-            if isinstance(executor, dict):
-                self.executor = ExecutorConfig(
-                    name=executor.get("name", executor_name),
-                    config=executor.get("config", {})
-                )
-            else:
-                self.executor = executor if isinstance(executor, ExecutorConfig) else ExecutorConfig(name=executor_name)
-            # Support various personality formats
-            if isinstance(personality, PersonalityConfig):
-                self.personality = personality
-            elif isinstance(personality, dict):
-                self.personality = PersonalityConfig(traits=personality.get("traits", []))
-            elif isinstance(personality, list):
-                self.personality = PersonalityConfig(traits=personality)
-            elif isinstance(personality, str):
-                self.personality = personality
-            else:
-                self.personality = PersonalityConfig()
-            self.tools_config = [tc if isinstance(tc, ToolConfig) else ToolConfig(**tc) for tc in (tools_config or [])]
-            self.template = template if template is not None else TemplateConfig()
-            self.name = name
-            self.agent_tool_model = agent_tool_model
-            self.agent_tool_timeout = agent_tool_timeout
-            self.temperature = temperature  # Added temperature
-            self.system_prompt_template = system_prompt_template
-        except Exception as e:
-            logger.error(f"Error setting defaults: {e}")
-            raise
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the AgentConfig instance into a dictionary suitable for saving."""
+        return self.dict()

@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "{{ name }}"
+version = "{{ version }}"
+description = "A custom toolbox for Quantalogic"
+authors = ["Your Name <you@example.com>"]
+packages = [
+  { include = "{{ name | replace('-', '_') }}" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+quantalogic = ">0.60.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.plugins."quantalogic.tools"]
+"{{ name | replace('-', '_') }}" = "{{ name | replace('-', '_') }}"
