@@ -19,7 +19,6 @@ from .message import Message
 from .plugin_manager import PluginManager
 from .reasoner import BaseReasoner, Reasoner
 from .templates import jinja_env as default_jinja_env
-from .tools import RetrieveStepTool
 from .tools.retrieve_message_tool import RetrieveMessageTool
 from .tools_manager import get_default_tools
 from .utils import process_tools
@@ -305,7 +304,6 @@ class Agent:
                 agent_id=self.id,  # New: Pass agent ID
                 agent_name=self.name  # New: Pass agent name
             )
-            solve_agent.executor.register_tool(RetrieveStepTool(solve_agent.working_memory.store))
             solve_agent.executor.register_tool(RetrieveMessageTool(conversation_manager=self.conversation_manager))
             for observer, event_types in self._observers:
                 solve_agent.add_observer(observer, event_types)

@@ -55,7 +55,7 @@ CodeAct’s modular design ensures each component has a clear responsibility, ma
 - **`reasoner.py`**: Generates reasoning steps and code using language models.
 - **`executor.py`**: Safely executes Python code and tool calls using PythonBox.
 - **`tools_manager.py`**: Registers and manages tools and toolboxes.
-- **`tools/`**: Includes built-in tools (e.g., `AgentTool`, `RetrieveStepTool`, `RetrieveMessageTool`).
+- **`tools/`**: Includes built-in tools (e.g., `AgentTool`, `RetrieveMessageTool`).
 - **`conversation_manager.py`**: Tracks conversation history for context-aware interactions.
 - **`working_memory.py`**: Manages task-specific execution history.
 - **`completion_evaluator.py`**: Evaluates task completion using LLM verification.

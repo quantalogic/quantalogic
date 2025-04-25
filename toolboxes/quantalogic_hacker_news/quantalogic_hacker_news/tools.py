@@ -18,7 +18,7 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 # API Configuration
-class HNConfig:
+class HNConfig(dict):
     """API configuration for Hacker News."""
     BASE_URL = "https://hacker-news.firebaseio.com/v0"
     ALGOLIA_URL = "https://hn.algolia.com/api/v1"
@@ -29,7 +29,7 @@ class HNConfig:
 
 # Data Models
 @dataclass
-class HNItem:
+class HNItem(dict):
     """Simple dataclass for Hacker News items."""
     id: int
     time: int
@@ -41,6 +41,22 @@ class HNItem:
     descendants: Optional[int] = None
     kids: Optional[List[int]] = None
     text: Optional[str] = None
+    
+    def __getitem__(self, key):
+        """Support dictionary-style access to dataclass attributes.
+        
+        Args:
+            key: Attribute name to access
+            
+        Returns:
+            The attribute value if it exists
+            
+        Raises:
+            KeyError: If the attribute doesn't exist
+        """
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
     
     @property
     def datetime(self) -> datetime:
@@ -63,7 +79,7 @@ class HNItem:
         return self.datetime.strftime('%Y-%m-%d %H:%M:%S')
 
 @dataclass
-class HNComment:
+class HNComment(dict):
     """Simple dataclass for Hacker News comments."""
     id: int
     time: int
@@ -72,6 +88,22 @@ class HNComment:
     by: Optional[str] = None
     text: Optional[str] = None
     kids: Optional[List[int]] = None
+    
+    def __getitem__(self, key):
+        """Support dictionary-style access to dataclass attributes.
+        
+        Args:
+            key: Attribute name to access
+            
+        Returns:
+            The attribute value if it exists
+            
+        Raises:
+            KeyError: If the attribute doesn't exist
+        """
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
     
     @property
     def datetime(self) -> datetime:
@@ -99,7 +131,7 @@ class HNItemDetails(HNItem):
     comments: Optional[List[Dict]] = None
 
 @dataclass
-class HNUser:
+class HNUser(dict):
     """Simple dataclass for Hacker News user data."""
     id: str
     created: int
@@ -107,6 +139,22 @@ class HNUser:
     about: Optional[str] = None
     submitted: Optional[List[int]] = None
     items: Optional[List[HNItem]] = None
+    
+    def __getitem__(self, key):
+        """Support dictionary-style access to dataclass attributes.
+        
+        Args:
+            key: Attribute name to access
+            
+        Returns:
+            The attribute value if it exists
+            
+        Raises:
+            KeyError: If the attribute doesn't exist
+        """
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
 
 # Helper Functions
 async def fetch_with_retry(
@@ -130,7 +178,7 @@ async def fetch_with_retry(
                     logger.warning(f"Server error {response.status} for {url}, retry {retries + 1}/{max_retries}")
                 else:
                     raise RuntimeError(f"HTTP error {response.status} for {url}")
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except (aiohttp.ClientError, TimeoutError) as e:
             logger.warning(f"Request to {url} failed: {str(e)}. Retry {retries + 1}/{max_retries}")
 
         delay = backoff_factor * (2 ** retries)
@@ -163,6 +211,13 @@ class HackerNewsClient:
         )
 
     async def __aenter__(self):
+        """Asynchronous context manager entry point.
+        
+        Initializes and returns the client session.
+        
+        Returns:
+            self: The initialized HackerNewsClient instance
+        """
         self._session = aiohttp.ClientSession(
             headers=HNConfig.DEFAULT_HEADERS,
             connector=self._connector,
@@ -171,6 +226,15 @@ class HackerNewsClient:
         return self
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Asynchronous context manager exit point.
+        
+        Cleans up the client session.
+        
+        Args:
+            exc_type: Exception type if an exception occurred
+            exc_val: Exception value if an exception occurred
+            exc_tb: Exception traceback if an exception occurred
+        """
         if self._session:
             await self._session.close()
 

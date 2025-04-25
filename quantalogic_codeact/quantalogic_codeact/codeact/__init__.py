@@ -34,7 +34,7 @@ from .llm_util import LLMCompletionError, litellm_completion
 from .plugin_manager import PluginManager
 from .reasoner import BaseReasoner, DefaultPromptStrategy, PromptStrategy, Reasoner
 from .templates import jinja_env
-from .tools import AgentTool, RetrieveStepTool
+from .tools import AgentTool, RetrieveMessageTool
 from .tools_manager import ToolRegistry, get_default_tools
 from .utils import log_async_tool, log_tool_method, process_tools, validate_code
 from .working_memory import WorkingMemory
@@ -80,7 +80,7 @@ __all__ = [
     "DefaultPromptStrategy",
     "jinja_env",
     "AgentTool",
-    "RetrieveStepTool",
+    "RetrieveMessageTool",
     "ToolRegistry",
     "get_default_tools",
     "log_async_tool",

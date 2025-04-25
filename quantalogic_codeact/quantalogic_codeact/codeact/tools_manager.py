@@ -10,7 +10,7 @@ import loguru
 from quantalogic_codeact.codeact.agent_config import Toolbox
 from quantalogic_toolbox import Tool, create_tool
 
-from .tools import AgentTool, RetrieveMessageTool, RetrieveStepTool
+from .tools import AgentTool, RetrieveMessageTool
 
 
 class ToolRegistry:
@@ -161,7 +161,6 @@ def get_default_tools(
         
         static_tools: List[Tool] = [
             AgentTool(model=model),
-            RetrieveStepTool(history_store or []),
             RetrieveMessageTool(history_store or []),
         ]
 
