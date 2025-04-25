@@ -1,3 +1,4 @@
+import asyncio  # Added for Future type
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -103,10 +104,8 @@ class ToolConfirmationRequestEvent(Event):
     tool_name: str
     confirmation_message: str
     parameters_summary: Dict[str, Any]
-    confirmation_id: str
+    confirmation_future: Optional[asyncio.Future] = Field(default=None, exclude=True)  # Exclude from serialization
 
-class ToolConfirmationResponseEvent(Event):
-    step_number: int
-    tool_name: str
-    confirmed: bool
-    confirmation_id: str
+    class Config:
+        """Pydantic model configuration."""
+        arbitrary_types_allowed = True  # Allow asyncio.Future

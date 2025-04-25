@@ -42,6 +42,12 @@ async def solve_command(shell, args: List[str]) -> str:
                         console.print(f"[cyan]Step {step}:[/cyan] {line}")
                     step_buffers[step] = lines[-1]
                 elif isinstance(event, ActionExecutedEvent):
+                    # Skip display if action was aborted by user confirmation decline
+                    try:
+                        if getattr(event.result, 'error', None) and 'User declined to execute tool' in event.result.error:
+                            return
+                    except Exception:
+                        pass
                     # Flush any remaining buffers before showing result panel
                     for s, buf in step_buffers.items():
                         if buf:

@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional
 
 from loguru import logger
-from nanoid import generate
 from quantalogic_pythonbox import AsyncExecutionResult as PythonboxExecutionResult
 from quantalogic_pythonbox import execute_async
 
@@ -15,7 +14,6 @@ from .conversation_manager import ConversationManager
 from .events import (
     ExecutionResult,
     ToolConfirmationRequestEvent,
-    ToolConfirmationResponseEvent,
     ToolExecutionCompletedEvent,
     ToolExecutionErrorEvent,
     ToolExecutionStartedEvent,
@@ -64,7 +62,6 @@ class Executor(BaseExecutor):
         # Register self in global registry for easier access from shell and other components
         import uuid
         self.executor_id = str(uuid.uuid4())
-        _active_executor_registry[self.executor_id] = self
         self.registry = ToolRegistry()
         for tool in tools:
             self.registry.register(tool)
@@ -75,8 +72,6 @@ class Executor(BaseExecutor):
         self.verbose = verbose
         self.tool_namespace = self._build_tool_namespace()
         self._allowed_modules = allowed_modules
-        self._confirmation_future = None
-        self._pending_confirmations = {}
 
     def _build_tool_namespace(self) -> Dict:
         """Build the namespace with tools grouped by toolbox using SimpleNamespace."""
@@ -145,9 +140,7 @@ class Executor(BaseExecutor):
                     )
                     
                     if not confirm_result:
-                        logger.info(f"User declined to execute tool {tool.name}")
-                        # Raise TaskAbortedError instead to signal complete task termination
-                        # This will ensure the entire task workflow is stopped, not just this tool
+                        # user declined; suppress log and abort task
                         raise TaskAbortedError(f"User declined to execute tool {tool.name} - aborting entire task")
                 
                 # Now handle event notification if in verbose mode
@@ -343,8 +336,6 @@ class Executor(BaseExecutor):
                 )
                 raise
 
-        return wrapped_tool
-
     async def request_confirmation(self, step_number: int, tool_name: str, confirmation_message: str, tool_parameters: Dict[str, Any]) -> bool:
         """Request user confirmation for a tool execution.
         
@@ -357,18 +348,14 @@ class Executor(BaseExecutor):
         Returns:
             bool: True if confirmed, False if declined
         """
-        # Generate a unique confirmation ID
-        confirmation_id = generate(size=12)  # Using nanoid for a short, unique ID
-        
         logger.debug("===== CONFIRMATION REQUEST START =====")
-        logger.debug(f"Confirmation ID: {confirmation_id}")
         logger.debug(f"Requesting confirmation for tool: {tool_name}")
         logger.debug(f"Step number: {step_number}")
         logger.debug(f"Confirmation message: {confirmation_message}")
         logger.debug(f"Parameters: {tool_parameters}")
         
-        # Store the confirmation with its ID
-        self._pending_confirmations[confirmation_id] = asyncio.Future()
+        # Create a future for the confirmation response
+        confirmation_future = asyncio.Future()
         
         # Create and emit a confirmation request event
         event = ToolConfirmationRequestEvent(
@@ -377,29 +364,18 @@ class Executor(BaseExecutor):
             tool_name=tool_name,
             confirmation_message=confirmation_message,
             parameters_summary=tool_parameters,
-            confirmation_id=confirmation_id
+            confirmation_future=confirmation_future
         )
         
         # Emit the event and start waiting for a response
         logger.debug("Emitting ToolConfirmationRequestEvent")
         await self.notify_event(event)
-        logger.debug("Event emitted, setting up future for response")
-        
-        # Store the step and tool for confirmation response correlation
-        self._pending_confirmations[(step_number, tool_name)] = asyncio.Future()
+        logger.debug("Event emitted, awaiting future for response")
         
         # Wait for user response
         try:
             logger.debug("Waiting for confirmation response...")
             start_time = time.time()
-            # Check if confirmation_id exists before waiting
-            if confirmation_id not in self._pending_confirmations:
-                logger.error(f"Confirmation ID {confirmation_id} not found in _pending_confirmations before waiting")
-                return False
-            
-            # Get the future we'll wait on
-            future = self._pending_confirmations[confirmation_id]
-            logger.debug(f"Future to wait on: {future}, done={future.done()}")
             
             # Log the current event loop and pending tasks for debugging
             loop = asyncio.get_event_loop()
@@ -411,136 +387,30 @@ class Executor(BaseExecutor):
             
             # Set a reasonable timeout to prevent indefinite hangs
             logger.debug("About to await future with timeout...")
-            # Using a shorter timeout value for better responsiveness
-            confirmation_timeout = 60  # 1 minute is more reasonable than 5 minutes
-            result = await asyncio.wait_for(future, timeout=confirmation_timeout)
+            confirmation_timeout = 60  # 1 minute timeout
+            result = await asyncio.wait_for(confirmation_future, timeout=confirmation_timeout)
             
             # Log state immediately after receiving result
             elapsed = time.time() - start_time
             logger.debug(f"Received confirmation response after {elapsed:.2f}s: {result}")
-            logger.debug(f"Future state after result: done={future.done()}")
+            logger.debug(f"Future state after result: done={confirmation_future.done()}")
             
             logger.debug("===== CONFIRMATION REQUEST END =====")
             return result
-        except TimeoutError:
-            logger.warning(f"Confirmation timed out for ID {confirmation_id} ({tool_name} at step {step_number})")
-            # Clean up the pending confirmation
-            if confirmation_id in self._pending_confirmations:
-                logger.debug(f"Cleaning up timed-out confirmation with ID {confirmation_id}")
-                del self._pending_confirmations[confirmation_id]
-            # Emit an event indicating the timeout for UI feedback
-            logger.debug("Emitting timeout response event")
-            try:
-                await self.notify_event(
-                    ToolConfirmationResponseEvent(
-                        event_type="ToolConfirmationResponse",
-                        step_number=step_number,
-                        tool_name=tool_name,
-                        confirmed=False,  # Timeout is treated as decline
-                        confirmation_id=confirmation_id
-                    )
-                )
-            except Exception as e:
-                logger.error(f"Error emitting timeout response event: {e}")
+        except asyncio.TimeoutError:
+            logger.warning(f"Confirmation timed out for tool {tool_name} at step {step_number}")
+            # Set the future to False to indicate timeout
+            if not confirmation_future.done():
+                confirmation_future.set_result(False)
             logger.debug("===== CONFIRMATION REQUEST END (TIMEOUT) =====")
-            return False
-        except KeyError as e:
-            logger.error(f"KeyError accessing pending confirmation: {e}")
-            logger.debug("===== CONFIRMATION REQUEST END (ERROR) =====")
             return False
         except Exception as e:
             logger.error(f"Unexpected error while waiting for confirmation: {e}")
+            # Set the future to False to indicate error
+            if not confirmation_future.done():
+                confirmation_future.set_result(False)
             logger.debug("===== CONFIRMATION REQUEST END (ERROR) =====")
             return False
-    
-    async def handle_confirmation_response(self, confirmed: bool, step_number: int, tool_name: str, confirmation_id: str = None):
-        """Handle a confirmation response from a user.
-        
-        Args:
-            confirmed: Whether the user confirmed the action
-            step_number: The step number the confirmation belongs to
-            tool_name: The name of the tool being confirmed
-            confirmation_id: The unique ID for this confirmation request (preferred method)
-        """
-        logger.debug("===== CONFIRMATION RESPONSE START =====")
-        logger.debug(f"Handling confirmation response for: {tool_name}")
-        logger.debug(f"Step number: {step_number}")
-        logger.debug(f"Confirmation ID: {confirmation_id}")
-        logger.debug(f"Confirmed: {confirmed}")
-        logger.debug(f"Current pending confirmations: {list(self._pending_confirmations.keys())}")
-        
-        # If we have a confirmation_id (preferred method), use it directly
-        if confirmation_id and confirmation_id in self._pending_confirmations:
-            logger.debug(f"Found pending confirmation with ID: {confirmation_id}, resolving future")
-            # Get the future
-            future = self._pending_confirmations[confirmation_id]
-            logger.debug(f"Got future object: {future}, done={future.done()}")
-            
-            # Resolve the future with the confirmation result
-            logger.debug(f"Setting result to {confirmed}")
-            future.set_result(confirmed)
-            logger.debug(f"Future state after set_result: done={future.done()}")
-            
-            # Remove the pending confirmation
-            del self._pending_confirmations[confirmation_id]
-            logger.debug(f"Removed confirmation from pending confirmations. Remaining keys: {list(self._pending_confirmations.keys())}")
-            
-            success = True
-        else:
-            # For backward compatibility, attempt to find by step number and tool name
-            logger.debug("No confirmation_id provided or not found, falling back to legacy method")
-            all_keys = list(self._pending_confirmations.keys())
-            logger.debug(f"All pending confirmation keys: {all_keys}")
-            
-            # For legacy implementation, we need to find a key that may be composite (step_number, tool_name)
-            # or may be a string ID in our new implementation
-            found_key = None
-            
-            for key in all_keys:
-                # Skip confirmation_id keys (strings) in this legacy path
-                if isinstance(key, str):
-                    continue
-                    
-                if isinstance(key, tuple) and len(key) == 2:
-                    key_step, key_tool = key
-                    if key_step == step_number and key_tool == tool_name:
-                        found_key = key
-                        break
-            
-            if found_key:
-                logger.debug(f"Found pending confirmation with legacy key: {found_key}, resolving future")
-                # Resolve the future with the confirmation result
-                self._pending_confirmations[found_key].set_result(confirmed)
-                
-                # Remove the pending confirmation
-                del self._pending_confirmations[found_key]
-                logger.debug("Removed legacy confirmation from pending confirmations")
-                
-                success = True
-            else:
-                logger.warning(f"No pending confirmation found for {tool_name} at step {step_number}")
-                success = False
-                
-        # Emit confirmation response event - always emit even if we didn't find a matching confirmation
-        # so other components know about the response
-        logger.debug("Emitting ToolConfirmationResponseEvent")
-        response_event = ToolConfirmationResponseEvent(
-            event_type="ToolConfirmationResponse",
-            step_number=step_number,
-            tool_name=tool_name,
-            confirmed=confirmed,
-            confirmation_id=confirmation_id or ""
-        )
-        logger.debug(f"Created response event: {response_event}")
-        
-        try:
-            await self.notify_event(response_event)
-            logger.debug("Successfully emitted ToolConfirmationResponseEvent")
-        except Exception as e:
-            logger.error(f"Error emitting confirmation response event: {e}")
-        
-        logger.debug("===== CONFIRMATION RESPONSE END =====")
-        return success
 
     async def execute_tool(self, tool_name, step_number=None, **kwargs):
         """Execute a tool with the given parameters."""
@@ -589,10 +459,13 @@ class Executor(BaseExecutor):
                 ignore_typing=True
             )
             if result.error:
-                logger.error(f"Execution error at step {step}: {result.error}")
+                err_str = str(result.error)
+                # suppress logging for user-declined aborts
+                if 'User declined to execute tool' not in err_str:
+                    logger.error(f"Execution error at step {step}: {result.error}")
                 return ExecutionResult(
                     execution_status="error",
-                    error=str(result.error),
+                    error=err_str,
                     execution_time=result.execution_time or 0.0
                 )
             task_result = result.result

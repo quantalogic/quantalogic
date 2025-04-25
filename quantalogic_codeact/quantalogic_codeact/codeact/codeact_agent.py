@@ -241,6 +241,9 @@ class CodeActAgent:
                     response: str = await self.generate_action(task, step, max_iters, system_prompt, streaming)
                     thought, code = XMLResultHandler.parse_action_response(response)
                     result: ExecutionResult = await self.execute_action(code, step)
+                    # Check for user-declined confirmation and raise TaskAbortedError
+                    if result.execution_status == "error" and "User declined to execute tool" in result.error:
+                        raise TaskAbortedError(result.error)
                     # Update context variables
                     if result.execution_status == "success" and result.local_variables:
                         new_vars = {
@@ -258,38 +261,17 @@ class CodeActAgent:
                         ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=step)
                     )
                     raise
-                except TaskAbortedError as e:
-                    # Special handler for task abortion - this is a fatal error that should terminate everything
-                    logger.warning(f"TASK ABORTED: {e}")
-                    await self._notify_observers(
-                        ErrorOccurredEvent(
-                            event_type="ErrorOccurred", 
-                            error_message="TASK ABORTED: User declined confirmation - execution stopped", 
-                            step_number=step
-                        )
-                    )
-                    
-                    # Immediately send task completed event with abort reason
-                    await self._notify_observers(
-                        TaskCompletedEvent(
-                            event_type="TaskCompleted",
-                            final_answer="Task execution was aborted because a confirmation was declined.",
-                            reason="user_abort"
-                        )
-                    )
-                    
-                    # Re-raise the TaskAbortedError which will be caught and stop the solve method
-                    # We specifically do NOT catch TaskAbortedError in solve() method
+                except TaskAbortedError:
+                    # propagate user-abort without logging
                     raise
                 except Exception as e:
-                    if not self.error_handler(e, step) or attempt == 2:
-                        await self._notify_observers(
-                            ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=step)
-                        )
-                        raise
-                    await asyncio.sleep(2**attempt)  # Exponential backoff
+                    logger.error(f"Error running step {step}: {e}")
+                    raise
         except Exception as e:
-            logger.error(f"Error running step {step}: {e}")
+            err_str = str(e)
+            # suppress error log when TaskAbortedError is wrapped inside exception
+            if 'TaskAbortedError' not in err_str:
+                logger.error(f"Error running step {step}: {e}")
             raise
 
     async def _finalize_step(self, task: str, step_data: Dict, success_criteria: Optional[str]) -> Tuple[bool, Dict]:
@@ -391,7 +373,7 @@ class CodeActAgent:
             for step in range(1, max_iters + 1):
                 # Check if we should abort all further steps (task was aborted)
                 if task_context["aborted"]:
-                    logger.warning(f"Breaking out of the solve loop due to task abortion at step {task_context['abort_step']}")
+                    logger.debug(f"Breaking out of the solve loop due to task abortion at step {task_context['abort_step']}")
                     break
                     
                 try:
@@ -408,54 +390,20 @@ class CodeActAgent:
                         break
                 except TaskAbortedError as e:
                     # Special handling for TaskAbortedError - complete immediate termination
-                    logger.warning(f"Task aborted at user request: {e}")
-                    
-                    # Emit specific error message that task was deliberately aborted
-                    await self._notify_observers(
-                        ErrorOccurredEvent(
-                            event_type="ErrorOccurred", 
-                            error_message="TASK ABORTED: User declined confirmation - execution stopped", 
-                            step_number=step
-                        )
-                    )
-                    
-                    # Immediately send task completed event with abort reason
-                    await self._notify_observers(
-                        TaskCompletedEvent(
-                            event_type="TaskCompleted",
-                            final_answer="Task execution was aborted because a confirmation was declined.",
-                            reason="user_abort"
-                        )
-                    )
+                    logger.debug(f"Task execution aborted by user: {e}")
                     
                     # Set the task-specific context to mark this task as aborted
-                    if task_context is not None:
-                        task_context["aborted"] = True
-                        task_context["abort_message"] = f"Task aborted by user at step {step} - confirmation declined"
-                        task_context["abort_step"] = step
-                        logger.warning(f"Task context marked as aborted - {task_context['abort_message']}")
+                    task_context["aborted"] = True
+                    task_context["abort_message"] = f"Task aborted by user at step {step} - confirmation declined"
+                    task_context["abort_step"] = step
+                    logger.debug(f"Task context marked as aborted - {task_context['abort_message']}")
                     
-                    # Return immediately from the current step
-                    # The solve method will continue to the next step but will skip it
-                    return {
-                        "step_number": step,
-                        "thought": "Task aborted by user - confirmation declined",
-                        "action": "Task aborted - no further action taken",
-                        "result": {
-                            "execution_status": "aborted",
-                            "aborted_by_user": True,
-                            "error": "User declined confirmation - execution stopped",
-                            "task_status": "aborted"
-                        }
-                    }
+                    # Break the loop immediately to prevent further steps
+                    break
                 except LLMCompletionError as e:
                     await self._notify_observers(
                         ErrorOccurredEvent(event_type="ErrorOccurred", error_message=str(e), step_number=step)
                     )
-                    raise
-                except TaskAbortedError:
-                    # Do not handle TaskAbortedError here - let it propagate to completely abort the task
-                    # This ensures that when confirmation is declined, everything stops
                     raise
                 except Exception as e:
                     await self._notify_observers(
@@ -465,8 +413,7 @@ class CodeActAgent:
 
             # Handle final task status
             if task_context["aborted"]:
-                # We already emitted the TaskCompletedEvent with reason="user_abort"
-                # Just return the history with an explicit abort message
+                # Return the history with an explicit abort message
                 return [
                     {
                         "step_number": step.step_number,
@@ -476,7 +423,7 @@ class CodeActAgent:
                         "aborted": True if task_context["abort_step"] and step.step_number == task_context["abort_step"] else False
                     }
                     for step in self.working_memory.store
-                ] + [{"error": task_context["abort_message"], "aborted": True, "task_status": "aborted"}] if task_context["abort_message"] else []
+                ] + [{"error": task_context["abort_message"], "aborted": True, "task_status": "aborted"}]
             elif not any(step.result.task_status == "completed" for step in self.working_memory.store):
                 await self._notify_observers(
                     TaskCompletedEvent(
@@ -496,7 +443,7 @@ class CodeActAgent:
             ]
         except TaskAbortedError as e:
             # Special handling for a confirmed task abortion
-            logger.warning(f"Task execution aborted by user: {e}")
+            logger.debug(f"Task execution aborted by user: {e}")
             return [{
                 "error": "Task aborted by user - confirmation was declined",
                 "status": "aborted",
