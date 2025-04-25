@@ -43,15 +43,18 @@ No variables available from previous steps.
 
 You have access to the following pre-defined async tool functions, grouped by toolbox:
 
+ALWAYS prefix by the tool namespace to call the tool.
+
 <Tools>
 ### namespace default
 --- Begin tools for namespace default ---
 - retrieve_message(nanoid: str) -> str: Retrieve the content of a message by its nanoid.
 {% for toolbox_name, docstrings in tools_by_toolbox.items() %}
-### namespace {{ toolbox_name }}
+### namespace{{ toolbox_name }}
 
 --- Begin tools for namespace {{ toolbox_name }} ---
 {% for docstring in docstrings %}
+### namespace: {{ toolbox_name }}
 {{ docstring }}
 {% endfor %}
 --- End tools for namespace {{ toolbox_name }} ---
@@ -71,7 +74,7 @@ Ensure the program checks if the task goal is achieved using available variables
 
 Instructions:
 1. Generate a simple Python program, avoiding complex logic, and return it as a single string. Call no more than 3 functions.
-2. Only import from the following allowed modules: `{{ allowed_modules | join('`, `') }}`.
+2. ONLY import from the following allowed modules: `{{ allowed_modules | join('`, `') }}`. Module such as os are not permitted.
 3. Define an async function named main() that solves the task.
 4. Use the pre-defined tool functions by calling them with await and prefixing them with their toolbox name (e.g., `await {{ toolbox_name }}.tool_name(arg1, arg2)`). For core tools, use `default.tool_name` (e.g., `await default.agent_tool(...)`).
 5. Do not redefine the tool functions within the program; assume they are already available in the namespace under their toolbox names (e.g., `default.agent_tool` for core tools).

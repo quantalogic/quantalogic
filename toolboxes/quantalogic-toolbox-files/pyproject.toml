@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic-toolbox-files"
-version = "0.4.1"
+version = "0.5.4"
 description = "A custom toolbox for Quantalogic"
 authors = ["Raphael Mansuy <raphael.mansuy@quantalogic.app>"]
 packages = [

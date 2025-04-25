@@ -20,12 +20,12 @@ from quantalogic_codeact.codeact.agent import Agent
 from quantalogic_codeact.codeact.agent_config import GLOBAL_CONFIG_PATH, GLOBAL_DEFAULTS, AgentConfig
 from quantalogic_codeact.codeact.conversation_manager import ConversationManager
 from quantalogic_codeact.codeact.events import ToolConfirmationRequestEvent
-from quantalogic_codeact.commands.toolbox import list_toolbox_tools
 from quantalogic_codeact.commands.toolbox.disable_toolbox import disable_toolbox
 from quantalogic_codeact.commands.toolbox.enable_toolbox import enable_toolbox
 from quantalogic_codeact.commands.toolbox.get_tool_doc import get_tool_doc
 from quantalogic_codeact.commands.toolbox.install_toolbox import install_toolbox
 from quantalogic_codeact.commands.toolbox.installed_toolbox import installed_toolbox
+from quantalogic_codeact.commands.toolbox.list_toolbox_tools import list_toolbox_tools
 from quantalogic_codeact.commands.toolbox.uninstall_toolbox import uninstall_toolbox
 from quantalogic_codeact.version import get_version
 
@@ -165,15 +165,25 @@ class Shell:
             {"name": "toolbox doc", "func": get_tool_doc, "help": "Show tool documentation: /toolbox doc <toolbox_name> <tool_name>", "args": None},
             {"name": "listmodels", "func": listmodels_command, "help": "List models using LLM util: /listmodels", "args": []},
             {"name": "version", "func": version_command, "help": "Show package version: /version", "args": []},
-            {"name": "banner", "func": lambda args: self.banner_command(args), "help": "Display the welcome banner again", "args": []},
+            {"name": "banner", "func": self.banner_command, "help": "Display the welcome banner again", "args": []},
         ]
         for cmd in builtin_commands:
-            self.command_registry.register(
-                cmd["name"],
-                lambda args, f=cmd["func"]: f(args),
-                cmd["help"],
-                cmd["args"]
-            )
+            if cmd["name"] == "banner":
+                # Directly use the bound method for banner
+                self.command_registry.register(
+                    cmd["name"],
+                    lambda args=None: cmd["func"](args or []),
+                    cmd["help"],
+                    cmd["args"]
+                )
+            else:
+                # Standard registration for other commands
+                self.command_registry.register(
+                    cmd["name"],
+                    lambda args, f=cmd["func"], s=self: f(s, args),
+                    cmd["help"],
+                    cmd["args"]
+                )
         # Set args for /help to include all command names for autocompletion
         self.command_registry.commands["help"]["args"] = list(self.command_registry.commands.keys())
 
