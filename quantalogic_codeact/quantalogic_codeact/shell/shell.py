@@ -56,6 +56,7 @@ from .commands.solve import solve_command
 from .commands.stream import stream_command
 from .commands.tutorial import tutorial_command
 from .commands.version import version_command
+from .banner import get_welcome_message
 
 console = Console()
 
@@ -328,13 +329,7 @@ class Shell:
         self.session = session  # Store for inputmode updates
 
         # Welcome message
-        welcome_message = (
-            f"Welcome to Quantalogic Shell (v{get_version()}).\n\n"
-            f"Interacting with agent: {self.current_agent.name or 'Agent'}\n"
-            f"Mode: {self.agent_config.mode} - plain messages are "
-            f"{'tasks to solve' if self.agent_config.mode == 'codeact' else 'chat messages'}.\n\n"
-            f"Type /help for commands. Press Enter to send, Ctrl+J for new lines."
-        )
+        welcome_message = get_welcome_message(self.current_agent.name, self.agent_config.mode)
         console.print(Panel(welcome_message, title="Quantalogic Shell", border_style="blue"))
 
         while True:
