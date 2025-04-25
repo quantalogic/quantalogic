@@ -39,6 +39,7 @@ class ProgressMonitor:
     def __init__(self):
         self._token_buffer = ""
         self.agent = None
+        self.confirmation_future = None
 
     async def on_task_started(self, event: TaskStartedEvent):
         console.print(f"[bold green]Task Started: {event.task_description}[/bold green]")
@@ -111,25 +112,40 @@ class ProgressMonitor:
             border_style="yellow"
         ))
         
+        # Store the confirmation_future for later use
+        self.confirmation_future = getattr(event, 'confirmation_future', None)
+        
         # Ask for explicit confirmation in CLI mode
         if hasattr(self, 'agent') and self.agent and hasattr(self.agent, 'react_agent'):
-            console.print("[bold yellow]This tool requires confirmation.[/bold yellow]")
-            confirm = typer.confirm("Proceed with this operation?", default=False)
+            while True:
+                response = input("Confirm (yes/no): ").strip().lower()
+                if response in ('y', 'yes'):
+                    confirm = True
+                    break
+                elif response in ('n', 'no'):
+                    confirm = False
+                    break
+                console.print("[red]Please enter 'yes' or 'no'[/red]")
             
-            # Send the confirmation response to the executor
-            asyncio.create_task(
-                self.agent.react_agent.executor.handle_confirmation_response(
-                    confirmed=confirm,  # Use the user's response
-                    step_number=event.step_number,
-                    tool_name=event.tool_name
-                )
-            )
+            # Log the confirmation response
+            if confirm:
+                console.print(f"[green]Confirmed execution of {event.tool_name}[/green]")
+            else:
+                console.print(f"[red]Cancelled execution of {event.tool_name}[/red]")
+                
+            # Directly set the result on the future to unblock execution
+            if self.confirmation_future and not self.confirmation_future.done():
+                self.confirmation_future.set_result(confirm)
+            else:
+                logger.warning("Could not resolve confirmation future properly")
 
     async def on_tool_confirmation_response(self, event: ToolConfirmationResponseEvent):
+        # This event is typically generated after the confirmation is handled
+        # We should only display the message without trying to resolve the future again
         if event.confirmed:
-            console.print(f"[green]Confirmed execution of {event.tool_name}[/green]")
+            console.print(f"[green]Confirmation response received for {event.tool_name}[/green]")
         else:
-            console.print(f"[red]Cancelled execution of {event.tool_name}[/red]")
+            console.print(f"[red]Cancellation response received for {event.tool_name}[/red]")
 
     async def on_stream_token(self, event: StreamTokenEvent):
         self._token_buffer += event.token
