@@ -2,7 +2,6 @@ from typing import List, Optional
 
 from nanoid import generate
 from rich.console import Console
-from rich.panel import Panel
 
 from ...codeact.events import StreamTokenEvent
 from ..utils import display_response
@@ -36,7 +35,9 @@ async def chat_command(shell, args: List[str], task_id: Optional[str] = None) ->
                     # Process buffer for complete lines
                     lines = token_buffer.split('\n')
                     for line in lines[:-1]:
-                        console.print(line)
+                        # Skip lines that start with 'Step X:' to avoid duplicated output
+                        if not line.strip().startswith('Step '):
+                            console.print(line)
                     token_buffer = lines[-1]
             
             shell.current_agent.add_observer(stream_observer, ["StreamToken"])
@@ -68,7 +69,7 @@ async def chat_command(shell, args: List[str], task_id: Optional[str] = None) ->
             display_response(response, title="Chat Response", border_style="cyan")
             shell.conversation_manager.add_message("user", message)
             shell.conversation_manager.add_message("assistant", response)
-            return response
+            return ""  # Return empty string to prevent double display
     except Exception as e:
         display_response(f"Error in chat: {e}", title="Error", border_style="red", is_error=True)
         return f"Error in chat: {e}"
