@@ -119,11 +119,9 @@ class Executor(BaseExecutor):
                     elif hasattr(tool, '_func') and hasattr(tool._func, 'confirmation_message'):
                         if callable(tool._func.confirmation_message):
                             confirmation_message = tool._func.confirmation_message()
-                            tool.confirmation_message = tool._func.confirmation_message
                             logger.debug(f"Got confirmation message via callable _func.confirmation_message for {tool.name}")
                         else:
                             confirmation_message = tool._func.confirmation_message
-                            tool.confirmation_message = tool._func.confirmation_message
                             logger.debug(f"Got confirmation message via static _func.confirmation_message for {tool.name}")
                     
                     # Use default if no message is available
@@ -397,7 +395,7 @@ class Executor(BaseExecutor):
             
             logger.debug("===== CONFIRMATION REQUEST END =====")
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"Confirmation timed out for tool {tool_name} at step {step_number}")
             # Set the future to False to indicate timeout
             if not confirmation_future.done():
