@@ -61,7 +61,9 @@ class ToolRegistry:
                             loguru.logger.debug(f"Preserved requires_confirmation={item.requires_confirmation} for tool {tool.name}")
                         
                         if hasattr(item, 'confirmation_message'):
-                            tool.confirmation_message = item.confirmation_message
+                            orig = item.confirmation_message
+                            msg = orig() if callable(orig) else orig
+                            tool.confirmation_message = msg
                             loguru.logger.debug(f"Preserved confirmation_message for tool {tool.name}")
                         
                         self.register(tool)
@@ -94,7 +96,9 @@ class ToolRegistry:
                         loguru.logger.debug(f"Preserved requires_confirmation={obj.requires_confirmation} for tool {obj.name}")
                     
                     if hasattr(obj._func, 'confirmation_message'):
-                        obj.confirmation_message = obj._func.confirmation_message
+                        orig = obj._func.confirmation_message
+                        msg = orig() if callable(orig) else orig
+                        obj.confirmation_message = msg
                         loguru.logger.debug(f"Preserved confirmation_message for tool {obj.name}")
                         
                     # Add get_confirmation_message method if it doesn't exist
