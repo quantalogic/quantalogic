@@ -391,7 +391,7 @@ class Executor(BaseExecutor):
                     )
                 )
                 return result
-            except Exception as e:
+            except BaseException as e:
                 await self.notify_event(
                     ToolExecutionErrorEvent(
                         event_type="ToolExecutionError",
@@ -402,9 +402,8 @@ class Executor(BaseExecutor):
                         error=str(e),
                     )
                 )
-                raise
-
-        return wrapped_tool
+                # Return error message to agent
+                return str(e)
 
     async def request_confirmation(
         self, step_number: int, tool_name: str, confirmation_message: str, tool_parameters: Dict[str, Any]
@@ -498,8 +497,20 @@ class Executor(BaseExecutor):
         try:
             result = await tool.async_execute(**kwargs)
             return result
-        except Exception:
-            raise
+        except BaseException as e:
+            logger.error(f"Unexpected tool execution error for {tool_name}: {e}")
+            await self.notify_event(
+                ToolExecutionErrorEvent(
+                    event_type="ToolExecutionError",
+                    agent_id=self.agent_id,
+                    agent_name=self.agent_name,
+                    step_number=step_number,
+                    tool_name=tool_name,
+                    error=str(e),
+                )
+            )
+            # Return error message to agent
+            return str(e)
 
     class ToolExecutionResult:
         """Tool execution result."""
@@ -556,6 +567,6 @@ class Executor(BaseExecutor):
                     k: v for k, v in result.local_variables.items() if not k.startswith("__") and not callable(v)
                 },
             )
-        except Exception as e:
+        except BaseException as e:
             logger.error(f"Unexpected execution error at step {step}: {e}")
             return ExecutionResult(execution_status="error", error=f"Execution error: {str(e)}", execution_time=0.0)
