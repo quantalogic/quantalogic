@@ -1,5 +1,28 @@
 {
     "mcpServers": {
+        "playwright": {
+            "command": "npx",
+            "args": [
+                "@playwright/mcp@latest",
+                "--headless"
+            ]
+        },
+        "youtube": {
+            "command": "uvx",
+            "args": [
+                "--from",
+                "git+https://github.com/adhikasp/mcp-youtube",
+                "mcp-youtube"
+            ]
+        },
+        "mcp-git-ingest": {
+            "command": "uvx",
+            "args": [
+                "--from",
+                "git+https://github.com/adhikasp/mcp-git-ingest",
+                "mcp-git-ingest"
+            ]
+        },
         "sqlite": {
             "command": "docker",
             "args": [

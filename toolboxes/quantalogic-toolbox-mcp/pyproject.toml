@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic_toolbox_mcp"
-version = "0.13.0"
+version = "0.15.0"
 description = "A custom MCP Client for Quantalogic"
 license = "MIT"
 readme = "./README.md"

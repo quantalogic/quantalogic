@@ -1,6 +1,509 @@
 {
-  "config_hash": "1693adf9edc8861485f97330cd222c04",
+  "config_hash": "7dfa39baee10fbf4ce2548fa4fc19963",
   "servers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--headless"
+      ],
+      "env": null,
+      "cwd": null,
+      "tools": {
+        "browser_close": {
+          "name": "browser_close",
+          "description": "Close the page",
+          "arguments": [],
+          "return_type": "Any"
+        },
+        "browser_wait": {
+          "name": "browser_wait",
+          "description": "Wait for a specified time in seconds",
+          "arguments": [
+            {
+              "name": "time",
+              "type": "number",
+              "description": "The time to wait in seconds",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_resize": {
+          "name": "browser_resize",
+          "description": "Resize the browser window",
+          "arguments": [
+            {
+              "name": "width",
+              "type": "number",
+              "description": "Width of the browser window",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "height",
+              "type": "number",
+              "description": "Height of the browser window",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_console_messages": {
+          "name": "browser_console_messages",
+          "description": "Returns all console messages",
+          "arguments": [],
+          "return_type": "Any"
+        },
+        "browser_handle_dialog": {
+          "name": "browser_handle_dialog",
+          "description": "Handle a dialog",
+          "arguments": [
+            {
+              "name": "accept",
+              "type": "boolean",
+              "description": "Whether to accept the dialog.",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "promptText",
+              "type": "string",
+              "description": "The text of the prompt in case of a prompt dialog.",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_file_upload": {
+          "name": "browser_file_upload",
+          "description": "Upload one or multiple files",
+          "arguments": [
+            {
+              "name": "paths",
+              "type": "array",
+              "description": "The absolute paths to the files to upload. Can be a single file or multiple files.",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_install": {
+          "name": "browser_install",
+          "description": "Install the browser specified in the config. Call this if you get an error about the browser not being installed.",
+          "arguments": [],
+          "return_type": "Any"
+        },
+        "browser_press_key": {
+          "name": "browser_press_key",
+          "description": "Press a key on the keyboard",
+          "arguments": [
+            {
+              "name": "key",
+              "type": "string",
+              "description": "Name of the key to press or a character to generate, such as `ArrowLeft` or `a`",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_navigate": {
+          "name": "browser_navigate",
+          "description": "Navigate to a URL",
+          "arguments": [
+            {
+              "name": "url",
+              "type": "string",
+              "description": "The URL to navigate to",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_navigate_back": {
+          "name": "browser_navigate_back",
+          "description": "Go back to the previous page",
+          "arguments": [],
+          "return_type": "Any"
+        },
+        "browser_navigate_forward": {
+          "name": "browser_navigate_forward",
+          "description": "Go forward to the next page",
+          "arguments": [],
+          "return_type": "Any"
+        },
+        "browser_network_requests": {
+          "name": "browser_network_requests",
+          "description": "Returns all network requests since loading the page",
+          "arguments": [],
+          "return_type": "Any"
+        },
+        "browser_pdf_save": {
+          "name": "browser_pdf_save",
+          "description": "Save page as PDF",
+          "arguments": [],
+          "return_type": "Any"
+        },
+        "browser_snapshot": {
+          "name": "browser_snapshot",
+          "description": "Capture accessibility snapshot of the current page, this is better than screenshot",
+          "arguments": [],
+          "return_type": "Any"
+        },
+        "browser_click": {
+          "name": "browser_click",
+          "description": "Perform click on a web page",
+          "arguments": [
+            {
+              "name": "element",
+              "type": "string",
+              "description": "Human-readable element description used to obtain permission to interact with the element",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "ref",
+              "type": "string",
+              "description": "Exact target element reference from the page snapshot",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_drag": {
+          "name": "browser_drag",
+          "description": "Perform drag and drop between two elements",
+          "arguments": [
+            {
+              "name": "startElement",
+              "type": "string",
+              "description": "Human-readable source element description used to obtain the permission to interact with the element",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "startRef",
+              "type": "string",
+              "description": "Exact source element reference from the page snapshot",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "endElement",
+              "type": "string",
+              "description": "Human-readable target element description used to obtain the permission to interact with the element",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "endRef",
+              "type": "string",
+              "description": "Exact target element reference from the page snapshot",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_hover": {
+          "name": "browser_hover",
+          "description": "Hover over element on page",
+          "arguments": [
+            {
+              "name": "element",
+              "type": "string",
+              "description": "Human-readable element description used to obtain permission to interact with the element",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "ref",
+              "type": "string",
+              "description": "Exact target element reference from the page snapshot",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_type": {
+          "name": "browser_type",
+          "description": "Type text into editable element",
+          "arguments": [
+            {
+              "name": "element",
+              "type": "string",
+              "description": "Human-readable element description used to obtain permission to interact with the element",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "ref",
+              "type": "string",
+              "description": "Exact target element reference from the page snapshot",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "text",
+              "type": "string",
+              "description": "Text to type into the element",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "submit",
+              "type": "boolean",
+              "description": "Whether to submit entered text (press Enter after)",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "slowly",
+              "type": "boolean",
+              "description": "Whether to type one character at a time. Useful for triggering key handlers in the page. By default entire text is filled in at once.",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_select_option": {
+          "name": "browser_select_option",
+          "description": "Select an option in a dropdown",
+          "arguments": [
+            {
+              "name": "element",
+              "type": "string",
+              "description": "Human-readable element description used to obtain permission to interact with the element",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "ref",
+              "type": "string",
+              "description": "Exact target element reference from the page snapshot",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "values",
+              "type": "array",
+              "description": "Array of values to select in the dropdown. This can be a single value or multiple values.",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_take_screenshot": {
+          "name": "browser_take_screenshot",
+          "description": "Take a screenshot of the current page. You can't perform actions based on the screenshot, use browser_snapshot for actions.",
+          "arguments": [
+            {
+              "name": "raw",
+              "type": "boolean",
+              "description": "Whether to return without compression (in PNG format). Default is false, which returns a JPEG image.",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "element",
+              "type": "string",
+              "description": "Human-readable element description used to obtain permission to screenshot the element. If not provided, the screenshot will be taken of viewport. If element is provided, ref must be provided too.",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "ref",
+              "type": "string",
+              "description": "Exact target element reference from the page snapshot. If not provided, the screenshot will be taken of viewport. If ref is provided, element must be provided too.",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_tab_list": {
+          "name": "browser_tab_list",
+          "description": "List browser tabs",
+          "arguments": [],
+          "return_type": "Any"
+        },
+        "browser_tab_new": {
+          "name": "browser_tab_new",
+          "description": "Open a new tab",
+          "arguments": [
+            {
+              "name": "url",
+              "type": "string",
+              "description": "The URL to navigate to in the new tab. If not provided, the new tab will be blank.",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_tab_select": {
+          "name": "browser_tab_select",
+          "description": "Select a tab by index",
+          "arguments": [
+            {
+              "name": "index",
+              "type": "number",
+              "description": "The index of the tab to select",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "browser_tab_close": {
+          "name": "browser_tab_close",
+          "description": "Close a tab",
+          "arguments": [
+            {
+              "name": "index",
+              "type": "number",
+              "description": "The index of the tab to close. Closes current tab if not provided.",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        }
+      }
+    },
+    "youtube": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/adhikasp/mcp-youtube",
+        "mcp-youtube"
+      ],
+      "env": null,
+      "cwd": null,
+      "tools": {
+        "youtube-transcript": {
+          "name": "youtube-transcript",
+          "description": "Get transcript from YouTube videos",
+          "arguments": [
+            {
+              "name": "video_url",
+              "type": "string",
+              "description": "Argument for youtube-transcript",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "with_timestamps",
+              "type": "boolean",
+              "description": "Argument for youtube-transcript",
+              "required": false,
+              "default": false,
+              "example": null
+            },
+            {
+              "name": "language",
+              "type": "string",
+              "description": "Argument for youtube-transcript",
+              "required": false,
+              "default": "en",
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        }
+      }
+    },
+    "mcp-git-ingest": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/adhikasp/mcp-git-ingest",
+        "mcp-git-ingest"
+      ],
+      "env": null,
+      "cwd": null,
+      "tools": {
+        "git_directory_structure": {
+          "name": "git_directory_structure",
+          "description": "\n    Clone a Git repository and return its directory structure in a tree format.\n    \n    Args:\n        repo_url: The URL of the Git repository\n        \n    Returns:\n        A string representation of the repository's directory structure\n    ",
+          "arguments": [
+            {
+              "name": "repo_url",
+              "type": "string",
+              "description": "Argument for git_directory_structure",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "git_read_important_files": {
+          "name": "git_read_important_files",
+          "description": "\n    Read the contents of specified files in a given git repository.\n    \n    Args:\n        repo_url: The URL of the Git repository\n        file_paths: List of file paths to read (relative to repository root)\n        \n    Returns:\n        A dictionary mapping file paths to their contents\n    ",
+          "arguments": [
+            {
+              "name": "repo_url",
+              "type": "string",
+              "description": "Argument for git_read_important_files",
+              "required": false,
+              "default": null,
+              "example": null
+            },
+            {
+              "name": "file_paths",
+              "type": "array",
+              "description": "Argument for git_read_important_files",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        }
+      }
+    },
     "sqlite": {
       "command": "docker",
       "args": [
@@ -15,7 +518,89 @@
       ],
       "env": null,
       "cwd": null,
-      "tools": {}
+      "tools": {
+        "read_query": {
+          "name": "read_query",
+          "description": "Execute a SELECT query on the SQLite database",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "string",
+              "description": "SELECT SQL query to execute",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "write_query": {
+          "name": "write_query",
+          "description": "Execute an INSERT, UPDATE, or DELETE query on the SQLite database",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "string",
+              "description": "SQL query to execute",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "create_table": {
+          "name": "create_table",
+          "description": "Create a new table in the SQLite database",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "string",
+              "description": "CREATE TABLE SQL statement",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "list_tables": {
+          "name": "list_tables",
+          "description": "List all tables in the SQLite database",
+          "arguments": [],
+          "return_type": "Any"
+        },
+        "describe_table": {
+          "name": "describe_table",
+          "description": "Get the schema information for a specific table",
+          "arguments": [
+            {
+              "name": "table_name",
+              "type": "string",
+              "description": "Name of the table to describe",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        },
+        "append_insight": {
+          "name": "append_insight",
+          "description": "Add a business insight to the memo",
+          "arguments": [
+            {
+              "name": "insight",
+              "type": "string",
+              "description": "Business insight discovered from data analysis",
+              "required": false,
+              "default": null,
+              "example": null
+            }
+          ],
+          "return_type": "Any"
+        }
+      }
     },
     "mcp_hn": {
       "command": "uvx",
