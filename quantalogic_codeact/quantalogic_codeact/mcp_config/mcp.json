@@ -1,0 +1,43 @@
+{
+    "mcpServers": {
+        "sqlite": {
+            "command": "docker",
+            "args": [
+                "run",
+                "--rm",
+                "-i",
+                "-v",
+                "mcp-test:/mcp",
+                "mcp/sqlite",
+                "--db-path",
+                "/mcp/test.db"
+            ]
+        },
+        "mcp_hn": {
+            "command": "uvx",
+            "args": [
+                "mcp-hn"
+            ]
+        },
+        "fetcher": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "fetcher-mcp"
+            ]
+        },
+        "job_search": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "job-searchoor"
+            ]
+        },
+        "edgeone": {
+            "command": "npx",
+            "args": [
+                "edgeone-pages-mcp"
+            ]
+        }
+    }
+}
