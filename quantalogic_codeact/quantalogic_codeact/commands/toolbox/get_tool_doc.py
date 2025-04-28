@@ -1,12 +1,23 @@
 async def get_tool_doc(shell, args: list[str]) -> str:
-    """Get documentation for a specific tool in a toolbox.
+    """Get documentation for tools in toolboxes.
+
+    Usage:
+        /toolbox doc
+            Show docs for all tools.
+        /toolbox doc <filter>
+            Show tools matching substring filter.
+        /toolbox doc <toolbox> <tool>
+            Show documentation for specific tool.
 
     Args:
         shell: The Shell instance, providing access to the agent's plugin_manager.
-        args: List of command arguments (expects toolbox name and tool name).
+        args: List of command arguments.
+            0 args: all tools.
+            1 arg: substring filter.
+            2 args: toolbox name and tool name.
 
     Returns:
-        str: The tool's documentation or an error message.
+        str: The tool documentation or an error message.
     """
     # Use the agent's default_tools (static + enabled plugin tools)
     tools = shell.current_agent.default_tools
@@ -28,13 +39,19 @@ async def get_tool_doc(shell, args: list[str]) -> str:
                 md_lines.append(doc_md)
                 md_lines.append("")
         return "\n".join(md_lines).strip()
-    # Single arg: specific toolbox
+    # Single arg: filter docs by substring across all toolboxes
     if len(args) == 1:
-        toolbox_name = args[0]
-        docs = toolbox_docs.get(toolbox_name, [])
-        if not docs:
-            return f"No tools found in toolbox '{toolbox_name}'."
-        return "\n\n".join(docs)
+        substring = args[0].lower()
+        md_lines: list[str] = []
+        for tb in sorted(toolbox_docs):
+            matching = [doc_md for doc_md in toolbox_docs[tb] if substring in doc_md.lower()]
+            if matching:
+                md_lines.append(f"## {tb}")
+                md_lines.extend(matching)
+                md_lines.append("")
+        if not md_lines:
+            return f"No tools found matching '{args[0]}'."
+        return "\n".join(md_lines).strip()
     # Two args: specific tool in toolbox
     toolbox_name, tool_name = args[0], args[1]
     for tool in tools:
