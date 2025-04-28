@@ -1,658 +1,585 @@
-"""Module for defining tool arguments and base tool classes.
+"""Toolbox for interacting with MCP servers with JSON-based configuration.
 
-This module provides base classes and data models for creating configurable tools
-with type-validated arguments and execution methods.
+This module provides a generic adapter for interacting with multiple MCP servers,
+configured via JSON files in a configurable directory (default: ./mcp_config). Each server has its own tools,
+and core tools are provided to interact with any server by specifying its name.
+Tools are automatically queried from servers during initialization with caching and refresh options.
 """
 
 import ast
 import asyncio
-import inspect
-from typing import Any, Callable, TypeVar, Union, get_args, get_origin
+import hashlib
+import json
+import keyword
+import os
+import re
+import sys
+import time
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Dict, List, Optional
 
-from docstring_parser import parse as parse_docstring
-from pydantic import BaseModel, ConfigDict, Field
+from jsonschema import ValidationError, validate
+from loguru import logger
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
-F = TypeVar('F', bound=Callable[..., Any])
+# **Configure Logging**
+logger.remove()
+logger.add(
+    sink=sys.stderr,
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+    colorize=True,
+    backtrace=True,
+    diagnose=True
+)
 
-def type_hint_to_str(type_hint):
-    """Convert a type hint to a string representation.
+# **Global Variables**
+CONFIG_DIR = os.getenv("MCP_CONFIG_DIR", "./mcp_config")
+CONFIG_FILE = os.getenv("MCP_CONFIG_FILE")
+_tools_cache = None  # Cache for get_tools() results
+
+# **Configuration Schema**
+CONFIG_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "mcpServers": {
+            "type": "object",
+            "patternProperties": {
+                ".*": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "args": {"type": "array", "items": {"type": "string"}},
+                        "env": {"type": "object"},
+                        "cwd": {"type": "string"},
+                        "tools": {"type": "object"}
+                    },
+                    "required": ["command", "args"]
+                }
+            }
+        }
+    },
+    "required": ["mcpServers"]
+}
+
+# **Custom Exceptions**
+class ConfigurationError(Exception):
+    """Raised when there is an error in the configuration."""
+
+class ServerConnectionError(Exception):
+    """Raised when there is an error connecting to the server."""
+
+class ToolExecutionError(Exception):
+    """Raised when there is an error executing a tool."""
+
+# **Utility Functions**
+def parse_string_content(text: str) -> Any:
+    """Parse a string into a Python object, trying JSON first, then AST, with enhanced error handling.
 
     Args:
-        type_hint: The type hint to convert.
+        text: The string to parse.
 
     Returns:
-        A string representation of the type hint, e.g., 'list[int]', 'dict[str, float]'.
+        Parsed content as a Python type (e.g., list, dict, str). Returns original string if parsing fails.
     """
-    origin = get_origin(type_hint)
-    if origin is not None:
-        origin_name = origin.__name__
-        args = get_args(type_hint)
-        args_str = ", ".join(type_hint_to_str(arg) for arg in args)
-        return f"{origin_name}[{args_str}]"
-    elif hasattr(type_hint, "__name__"):
-        return type_hint.__name__
-    else:
-        return str(type_hint)
-
-def get_type_description(type_hint):
-    """Generate a detailed, natural-language description of a type hint.
-
-    Args:
-        type_hint: The type hint to describe.
-
-    Returns:
-        A string with a detailed description of the type, e.g., 'a list of int', or a structured class description.
-    """
-    basic_types = {
-        int: "integer",
-        str: "string",
-        float: "float",
-        bool: "boolean",
-        type(None): "None",
-    }
-
-    if type_hint in basic_types:
-        return basic_types[type_hint]
-
+    if not text.strip():
+        logger.warning("Empty content received, returning None")
+        return None
     try:
-        origin = get_origin(type_hint)
-        if origin is None:
-            if inspect.isclass(type_hint):
-                doc = inspect.getdoc(type_hint)
-                desc_prefix = f"{doc} " if doc else ""
-                if hasattr(type_hint, "__annotations__"):
-                    annotations = type_hint.__annotations__
-                    attrs = ", ".join(f"{name}: {get_type_description(typ)}" for name, typ in annotations.items())
-                    return f"{desc_prefix}an instance of {type_hint.__name__} with attributes: {attrs}"
-                return f"{desc_prefix}{type_hint.__name__}"
-            return str(type_hint)
+        parsed = json.loads(text)
+        if isinstance(parsed, (list, dict)):
+            logger.debug(f"Parsed string as JSON: {parsed}")
+            return parsed
+        logger.debug(f"JSON-parsed content is not a list or dict, returning as-is: {parsed}")
+        return parsed
+    except json.JSONDecodeError as e:
+        logger.debug(f"JSON parsing failed: {e}")
+        try:
+            parsed = ast.literal_eval(text)
+            if isinstance(parsed, (list, dict)):
+                logger.debug(f"Parsed string as Python literal: {parsed}")
+                return parsed
+            logger.debug(f"AST-parsed content is not a list or dict, returning as-is: {parsed}")
+            return parsed
+        except (ValueError, SyntaxError) as e:
+            logger.warning(f"Failed to parse content as JSON or Python literal: {e}. Returning raw text: {text[:50]}...")
+            return text
 
-        args = get_args(type_hint)
-        
-        if origin is list:
-            if args and len(args) >= 1:
-                return f"a list of {get_type_description(args[0])}"
-            return "a list"
-
-        elif origin is dict:
-            if args and len(args) == 2:
-                return f"a dictionary with {get_type_description(args[0])} keys and {get_type_description(args[1])} values"
-            return "a dictionary with any keys and values"
-
-        elif origin is tuple:
-            if args:
-                types_desc = ", ".join(get_type_description(t) for t in args)
-                return f"a tuple containing {types_desc}"
-            return "a tuple"
-
-        elif origin is Union:
-            if args:
-                if len(args) == 2 and type(None) in args:
-                    non_none_type = next(t for t in args if t is not type(None))
-                    return f"an optional {get_type_description(non_none_type)} (can be None)"
-                types_desc = ", ".join(get_type_description(t) for t in args)
-                return f"one of {types_desc}"
-            return "any type"
-
-        return type_hint_to_str(type_hint)
-    except Exception:
-        return str(type_hint)
-
-def get_type_schema(type_hint):
-    """Generate a schema-like string representation of a type hint.
+def parse_text_content(content: Any) -> Any:
+    """Parse MCP tool response content into a usable Python type.
 
     Args:
-        type_hint: The type hint to convert.
+        content: The raw content from the server response.
 
     Returns:
-        A string representing the type's structure, e.g., '[integer, ...]' or "{'x': 'integer', 'y': 'integer'}".
+        Parsed content as a Python type (e.g., list, dict, str).
     """
-    basic_types = {
-        int: "integer",
-        str: "string",
-        float: "float",
-        bool: "boolean",
-        type(None): "null",
-    }
+    logger.debug(f"Parsing content: {str(content)[:50]}...")
+    if isinstance(content, list):
+        return [parse_text_content(item) for item in content]
+    elif hasattr(content, 'text'):
+        text_content = content.text
+        return parse_string_content(text_content)
+    elif isinstance(content, str):
+        return parse_string_content(content)
+    logger.debug(f"Content is already a native type: {content}")
+    return content
 
-    if type_hint in basic_types:
-        return basic_types[type_hint]
+def flatten_singleton_lists(data):
+    """Recursively flatten lists that contain only a single list element.
 
-    origin = get_origin(type_hint)
-    if origin is None:
-        if inspect.isclass(type_hint) and hasattr(type_hint, "__annotations__"):
-            annotations = type_hint.__annotations__
-            fields = {name: get_type_schema(typ) for name, typ in annotations.items()}
-            return "{" + ", ".join(f"'{name}': {schema}" for name, schema in fields.items()) + "}"
-        return type_hint.__name__
+    Args:
+        data: The data to be flattened, which could be a list or any other type.
 
-    elif origin is list:
-        item_type = get_args(type_hint)[0]
-        return f"[{get_type_schema(item_type)}, ...]"
-
-    elif origin is dict:
-        args = get_args(type_hint)
-        if len(args) == 2:
-            key_type, value_type = args
-            if key_type is str:
-                return f"{{{get_type_schema(value_type)}}}"
-            return f"dictionary with keys of type {get_type_schema(key_type)} and values of type {get_type_schema(value_type)}"
-        return "dictionary"
-
-    elif origin is tuple:
-        tuple_types = get_args(type_hint)
-        return f"[{', '.join(get_type_schema(t) for t in tuple_types)}]"
-
-    elif origin is Union:
-        union_types = get_args(type_hint)
-        if len(union_types) == 2 and type(None) in union_types:
-            non_none_type = next(t for t in union_types if t is not type(None))
-            return f"{get_type_schema(non_none_type)} or null"
-        return " or ".join(get_type_schema(t) for t in union_types)
-
-    else:
-        return type_hint_to_str(type_hint)
-
-class ToolArgument(BaseModel):
-    """Represents an argument for a tool with validation and description.
-
-    Attributes:
-        name: The name of the argument.
-        arg_type: The type of the argument, e.g., 'string', 'int', 'list[int]', 'dict[str, float]'.
-        description: Optional description of the argument.
-        required: Indicates if the argument is mandatory.
-        default: Optional default value for the argument.
-        example: Optional example value to illustrate the argument's usage.
-        type_details: Detailed description of the argument's type.
+    Returns:
+        The flattened data, with singleton lists unwrapped.
     """
+    while isinstance(data, list) and len(data) == 1 and isinstance(data[0], list):
+        data = data[0]
+    return data
 
-    name: str = Field(..., description="The name of the argument.")
-    arg_type: str = Field(
-        ..., description="The type of the argument, e.g., 'string', 'int', 'list[int]', 'dict[str, float]', etc."
-    )
-    description: str | None = Field(default=None, description="A brief description of the argument.")
-    required: bool = Field(default=False, description="Indicates if the argument is required.")
-    default: str | None = Field(
-        default=None, description="The default value for the argument. This parameter is required."
-    )
-    example: str | None = Field(default=None, description="An example value to illustrate the argument's usage.")
-    type_details: str | None = Field(default=None, description="Detailed description of the argument's type.")
+def sanitize_name(name: str) -> str:
+    """Sanitize a string to be a valid Python identifier."""
+    sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    if sanitized and sanitized[0].isdigit():
+        sanitized = '_' + sanitized
+    if keyword.iskeyword(sanitized):
+        sanitized += '_'
+    return sanitized
 
-class ToolDefinition(BaseModel):
-    """Base class for defining tool configurations without execution logic.
+# **Configuration Loading Functions**
+def compute_config_hash(config_dir: str) -> str:
+    """Compute a hash based on the contents of all JSON config files in the directory, excluding the cache file."""
+    hashes = []
+    for filename in sorted(os.listdir(config_dir)):
+        if filename.endswith(".json") and filename != "config_cache.json":
+            config_path = os.path.join(config_dir, filename)
+            try:
+                with open(config_path, "rb") as f:
+                    file_hash = hashlib.sha256(f.read()).hexdigest()
+                hashes.append(file_hash)
+            except FileNotFoundError:
+                logger.debug(f"Config file {config_path} not found during hash computation, skipping")
+    return hashlib.sha256("".join(hashes).encode()).hexdigest()
 
-    Attributes:
-        name: Unique name of the tool.
-        description: Brief description of the tool's functionality.
-        arguments: List of arguments the tool accepts.
-        return_type: The return type of the tool's execution method. Defaults to "str".
-        return_description: Optional description of the return value.
-        return_type_details: Detailed description of the return type.
-        original_docstring: The full original docstring of the function, if applicable.
-        need_validation: Flag to indicate if tool requires validation.
-        is_async: Flag to indicate if the tool is asynchronous (for documentation purposes).
-        toolbox_name: Optional name of the toolbox this tool belongs to.
-        requires_confirmation: Whether the tool requires user confirmation before execution.
-        confirmation_message: The confirmation message to display to the user.
-    """
+def load_mcp_config(config_path: str) -> Dict[str, Any]:
+    """Load MCP configuration from a JSON file with secret resolution and schema validation."""
+    logger.debug(f"Loading configuration from {config_path}")
+    try:
+        with open(config_path) as f:
+            config = json.load(f)
+        validate(config, CONFIG_SCHEMA)
+        config = resolve_secrets(config)
+        logger.info(f"Successfully loaded config from {config_path}")
+        return config
+    except FileNotFoundError as e:
+        logger.error(f"Config file not found: {config_path} - {str(e)}")
+        raise ConfigurationError(f"Config file not found: {config_path}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in config file: {config_path} - {str(e)}")
+        raise ConfigurationError(f"Invalid JSON in config file: {config_path}")
+    except ValidationError as e:
+        logger.error(f"Configuration validation error: {e}")
+        raise ConfigurationError(f"Configuration validation error: {e}")
 
-    model_config = ConfigDict(extra="allow", validate_assignment=True)
+def resolve_secrets(config: Dict) -> Dict:
+    """Resolve environment variable placeholders in a config dictionary."""
+    if not isinstance(config, dict):
+        return config
+    result = {}
+    for key, value in config.items():
+        if isinstance(value, str) and "{{ env." in value:
+            env_var = value.split("{{ env.")[1].split("}}")[0].strip()
+            env_value = os.getenv(env_var)
+            if env_value is None:
+                logger.error(f"Environment variable '{env_var}' not found")
+                raise ConfigurationError(f"Missing required environment variable: '{env_var}'")
+            logger.debug(f"Resolved environment variable '{env_var}'")
+            result[key] = env_value
+        elif isinstance(value, dict):
+            result[key] = resolve_secrets(value)
+        elif isinstance(value, list):
+            result[key] = [resolve_secrets(item) if isinstance(item, dict) else item for item in value]
+        else:
+            result[key] = value
+    return result
 
-    name: str = Field(..., description="The unique name of the tool.")
-    description: str = Field(..., description="A brief description of what the tool does.")
-    arguments: list[ToolArgument] = Field(default_factory=list, description="A list of arguments the tool accepts.")
-    return_type: str = Field(default="str", description="The return type of the tool's execution method.")
-    return_description: str | None = Field(default=None, description="Description of the return value.")
-    return_type_details: str | None = Field(default=None, description="Detailed description of the return type.")
-    return_example: str | None = Field(default=None, description="Example of the return value.")
-    return_structure: str | None = Field(default=None, description="Structure of the return value.")
-    original_docstring: str | None = Field(default=None, description="The full original docstring of the function, if applicable.")
-    need_validation: bool = Field(
-        default=False,
-        description="When True, requires user confirmation before execution. Useful for tools that perform potentially destructive operations.",
-    )
-    need_post_process: bool = Field(
-        default=True,
-        description="When True, requires user confirmation before execution. Useful for tools that perform potentially destructive operations.",
-    )
-    need_variables: bool = Field(
-        default=False,
-        description="When True, provides access to the agent's variable store. Required for tools that need to interpolate variables (e.g., Jinja templates).",
-    )
-    need_caller_context_memory: bool = Field(
-        default=False,
-        description="When True, provides access to the agent's conversation history. Useful for tools that need context from previous interactions.",
-    )
-    is_async: bool = Field(
-        default=False,
-        description="Indicates if the tool is asynchronous (used for documentation).",
-    )
-    toolbox_name: str | None = Field(
-        default=None,
-        description="The name of the toolbox this tool belongs to, set during registration if applicable."
-    )
-    requires_confirmation: bool = Field(
-        default=False,
-        description="Whether the tool requires user confirmation before execution."
-    )
-    confirmation_message: str | None = Field(
-        default=None,
-        description="The confirmation message to display to the user."
-    )
+class ServerManager:
+    """Manages server configurations and connections."""
+    def __init__(self, config_dir: str = CONFIG_DIR):
+        self.config_dir = config_dir
+        self.servers = {}
+        self.tools_cache = {}
+        self.load_configs()
 
-    def get_properties(self, exclude: list[str] | None = None) -> dict[str, Any]:
-        """Return a dictionary of all non-None properties, excluding Tool class fields and specified fields.
+    def load_configs(self):
+        """Load all JSON config files from the specified directory into the servers dictionary."""
+        os.makedirs(self.config_dir, exist_ok=True)
+        cache_file = os.path.join(self.config_dir, "config_cache.json")
+        current_hash = compute_config_hash(self.config_dir)
 
-        Args:
-            exclude: Optional list of field names to exclude from the result
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file) as f:
+                    cache_data = json.load(f)
+                if cache_data.get("config_hash") == current_hash:
+                    self.servers.clear()
+                    self.tools_cache.clear()
+                    for server_name, server_data in cache_data["servers"].items():
+                        params = {
+                            "command": server_data["command"],
+                            "args": server_data["args"]
+                        }
+                        if "env" in server_data and server_data["env"] is not None:
+                            params["env"] = server_data["env"]
+                        if "cwd" in server_data and server_data["cwd"] is not None:
+                            params["cwd"] = server_data["cwd"]
+                        server_params = StdioServerParameters(**params)
+                        self.servers[server_name] = server_params
+                        self.tools_cache[server_name] = type('ToolsResult', (), {'tools': [
+                            type('Tool', (), {
+                                'name': name,
+                                'description': details.get('description', f'Tool {name} from {server_name}'),
+                                'inputSchema': {
+                                    'properties': {
+                                        arg['name']: {
+                                            'type': arg.get('type', 'str'),
+                                            'description': arg.get('description', ''),
+                                            'default': arg.get('default', None),
+                                            'example': arg.get('example', None)
+                                        } for arg in details.get('arguments', [])
+                                    },
+                                    'required': [arg['name'] for arg in details.get('arguments', []) if arg.get('required', False)]
+                                },
+                                'return_type': details.get('return_type', 'Any')
+                            })()
+                            for name, details in server_data.get("tools", {}).items()
+                        ]})()
+                    logger.info("Loaded servers and tools from cache")
+                    return
+            except Exception as e:
+                logger.warning(f"Failed to load cache: {str(e)}, reloading configs")
 
-        Returns:
-            Dictionary of property names and values, excluding Tool class fields and specified fields.
-        """
-        exclude = exclude or []
-        tool_fields = {
-            "name",
-            "description",
-            "arguments",
-            "return_type",
-            "return_description",
-            "return_type_details",
-            "return_example",
-            "return_structure",
-            "original_docstring",
-            "need_validation",
-            "need_post_process",
-            "need_variables",
-            "need_caller_context_memory",
-            "is_async",
-            "toolbox_name",
-            "requires_confirmation",
-            "confirmation_message",
+        self.servers.clear()
+        self.tools_cache.clear()
+        cache_tools = {}
+        for filename in os.listdir(self.config_dir):
+            if filename.endswith(".json") and filename != "config_cache.json":
+                config_path = os.path.join(self.config_dir, filename)
+                try:
+                    config = load_mcp_config(config_path)
+                    server_configs = config.get("mcpServers", config.get("mcp_servers", {config.get("server_name", filename[:-5]): config}))
+                    for server_name, server_data in server_configs.items():
+                        params = {
+                            "command": server_data["command"],
+                            "args": server_data["args"]
+                        }
+                        if "env" in server_data:
+                            params["env"] = server_data["env"]
+                        if "cwd" in server_data:
+                            params["cwd"] = server_data["cwd"]
+                        server_params = StdioServerParameters(**params)
+                        self.servers[server_name] = server_params
+                        cache_tools[server_name] = {}
+                        try:
+                            server_tools = asyncio.run(mcp_list_tools(server_name, self))
+                            for tool_name in server_tools:
+                                tool_details = asyncio.run(fetch_tool_details(server_name, tool_name, server_params, self))
+                                if tool_details:
+                                    cache_tools[server_name][tool_name] = tool_details
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch tools for server '{server_name}': {str(e)}")
+                        for tool_name, tool_config in server_data.get("tools", {}).items():
+                            cache_tools[server_name][tool_name] = tool_config
+                except Exception as e:
+                    logger.error(f"Failed to load config {config_path}: {str(e)}")
+
+        cache_data = {
+            "config_hash": current_hash,
+            "servers": {
+                name: {
+                    "command": params.command,
+                    "args": params.args,
+                    "env": params.env if hasattr(params, 'env') and params.env else None,
+                    "cwd": params.cwd if hasattr(params, 'cwd') and params.cwd else None,
+                    "tools": cache_tools.get(name, {})
+                }
+                for name, params in self.servers.items()
+            }
         }
-        properties = {}
+        try:
+            with open(cache_file, "w") as f:
+                json.dump(cache_data, f, indent=2)
+            logger.info("Saved servers and tools to cache")
+        except Exception as e:
+            logger.warning(f"Failed to save cache: {str(e)}")
 
-        for name, value in self.__dict__.items():
-            if name not in tool_fields and name not in exclude and value is not None and not name.startswith("_"):
-                properties[name] = value
+# **MCP Session Management**
+@asynccontextmanager
+async def mcp_session_context(server_params: StdioServerParameters) -> AsyncIterator[ClientSession]:
+    """Async context manager for MCP sessions with separate handling for Docker and direct commands."""
+    logger.debug(f"Starting session with params: {server_params}")
+    try:
+        if server_params.command == "docker":
+            proc = await asyncio.create_subprocess_exec(
+                "docker", "version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                raise ServerConnectionError("Docker is not available or not running")
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write) as session:
+                    for attempt in range(5):
+                        try:
+                            await session.initialize()
+                            logger.debug("Docker session initialized successfully")
+                            yield session
+                            return
+                        except Exception as e:
+                            if attempt < 4:
+                                logger.debug(f"Docker session init failed, retrying in 1s: {str(e)}")
+                                await asyncio.sleep(1)
+                            else:
+                                raise ServerConnectionError(f"Failed to initialize Docker session: {str(e)}")
+        else:
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write) as session:
+                    for attempt in range(5):
+                        try:
+                            await session.initialize()
+                            logger.debug("Direct session initialized successfully")
+                            yield session
+                            return
+                        except Exception as e:
+                            if attempt < 4:
+                                logger.debug(f"Direct session init failed, retrying in 1s: {str(e)}")
+                                await asyncio.sleep(1)
+                            else:
+                                raise ServerConnectionError(f"Failed to initialize direct session: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unhandled error in mcp_session_context: {str(e)}")
+        raise
 
-        return properties
+async def check_docker_ready(server_params: StdioServerParameters, timeout: int = 30) -> bool:
+    """Check if Docker container is ready to accept connections."""
+    logger.debug(f"Checking Docker readiness for params: {server_params}")
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *[server_params.command] + server_params.args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                return True
+            await asyncio.sleep(1)
+        except Exception as e:
+            logger.debug(f"Docker check failed: {str(e)}")
+            await asyncio.sleep(1)
+    logger.warning(f"Docker not ready within {timeout} seconds")
+    return False
 
-    def to_json(self) -> str:
-        """Convert the tool to a JSON string representation.
+# **Core Tools**
+async def mcp_list_resources(server_name: str, manager: ServerManager) -> List[str]:
+    """List available resources on the specified MCP server."""
+    logger.debug(f"Listing resources for server: {server_name}")
+    server_params = manager.servers.get(server_name)
+    if not server_params:
+        raise ValueError(f"Server '{server_name}' not found")
+    async with mcp_session_context(server_params) as session:
+        resources = await session.list_resources()
+        return [str(resource) for resource in resources]
 
-        Returns:
-            A JSON string of the tool's configuration.
-        """
-        return self.model_dump_json()
+async def mcp_list_tools(server_name: str, manager: ServerManager) -> List[str]:
+    """List available tools on the specified MCP server."""
+    logger.debug(f"Listing tools for server: {server_name}")
+    server_params = manager.servers.get(server_name)
+    if not server_params:
+        raise ValueError(f"Server '{server_name}' not found")
+    try:
+        async with mcp_session_context(server_params) as session:
+            tools_result = await session.list_tools()
+            manager.tools_cache[server_name] = tools_result
+            return [tool.name for tool in tools_result.tools]
+    except Exception as e:
+        raise ServerConnectionError(f"Could not connect to server '{server_name}': {str(e)}")
 
-    def to_markdown(self) -> str:
-        """Create a comprehensive Markdown representation of the tool.
+async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict[str, Any], manager: ServerManager) -> Any:
+    """Call a specific tool on the specified MCP server."""
+    logger.debug(f"Calling tool '{tool_name}' on server '{server_name}' with args: {arguments}")
+    server_params = manager.servers.get(server_name)
+    if not server_params:
+        raise ValueError(f"Server '{server_name}' not found")
+    try:
+        async with mcp_session_context(server_params) as session:
+            result = await session.call_tool(tool_name, arguments)
+            if result.isError:
+                raise ToolExecutionError(f"Error calling tool '{tool_name}' on server '{server_name}': {str(result.content)}")
+            processed_content = parse_text_content(result.content)
+            if isinstance(processed_content, list):
+                processed_content = flatten_singleton_lists(processed_content)
+            return processed_content
+    except Exception as e:
+        raise ToolExecutionError(f"Failed to call tool '{tool_name}' on server '{server_name}': {str(e)}")
 
-        Returns:
-            A detailed Markdown string representing the tool's configuration and usage.
-        """
-        markdown = f"`{self.name}`:\n"
-        markdown += f"- **Description**: {self.description}\n\n"
+async def list_servers(manager: ServerManager) -> List[str]:
+    """List all configured MCP servers."""
+    logger.debug("Listing all configured servers")
+    return list(manager.servers.keys())
 
-        properties_injectable = self.get_injectable_properties_in_execution()
-        if any(properties_injectable.get(arg.name) is not None for arg in self.arguments):
-            markdown += "- **Note**: Some arguments are injected from the tool's configuration and may not need to be provided explicitly.\n\n"
+# **Dynamic Tool Class**
+class DynamicTool:
+    """A callable class representing a dynamic tool for MCP servers."""
+    def __init__(self, server_name: str, tool_name: str, tool_config: Dict[str, Any], manager: ServerManager):
+        self.name = f"{server_name}_{sanitize_name(tool_name)}"
+        self.description = tool_config.get('description', f'Execute {tool_name} on {server_name}')
+        self.arguments = tool_config.get("arguments", [])
+        self.return_type = tool_config.get("return_type", "Any")
+        self.server_name = server_name
+        self.tool_name = tool_name
+        self.tool_config = tool_config
+        self.manager = manager
 
-        if self.requires_confirmation:
-            markdown += "- **Requires Confirmation**: Yes\n"
-            if self.confirmation_message:
-                markdown += f"- **Confirmation Message**: {self.confirmation_message}\n\n"
+    async def __call__(self, **kwargs) -> Any:
+        logger.debug(f"Executing dynamic tool '{self.name}' with args: {kwargs}")
+        return await mcp_call_tool(self.server_name, self.tool_name, kwargs, self.manager)
 
-        if self.arguments:
-            markdown += "- **Parameters**:\n"
-            parameters = ""
-            for arg in self.arguments:
-                if properties_injectable.get(arg.name) is not None:
-                    continue
-                type_info = f"{arg.arg_type}"
-                if arg.type_details and arg.type_details != arg.arg_type:
-                    type_info += f" ({arg.type_details})"
-                required_status = "required" if arg.required else "optional"
-                value_info = ""
-                if arg.default is not None:
-                    value_info += f", default: `{arg.default}`"
-                if arg.example is not None:
-                    value_info += f", example: `{arg.example}`"
-                parameters += (
-                    f"  - `{arg.name}`: ({type_info}, {required_status}{value_info})\n"
-                    f"    {arg.description or ''}\n"
-                )
-            if parameters:
-                markdown += parameters + "\n"
-            else:
-                markdown += "  None\n\n"
-
-        standard_fields = {
-            "name", "description", "arguments", "return_type", "return_description", "return_type_details",
-            "return_example", "return_structure", "original_docstring", "need_validation", "need_post_process", "need_variables", "need_caller_context_memory", "is_async",
-            "toolbox_name", "requires_confirmation", "confirmation_message"
-        }
-        additional_fields = [f for f in self.model_fields if f not in standard_fields]
-        if additional_fields:
-            markdown += "- **Configuration**:\n"
-            for field in additional_fields:
-                field_info = self.model_fields[field]
-                field_type = type_hint_to_str(field_info.annotation)
-                field_desc = field_info.description or "No description provided."
-                if field in properties_injectable:
-                    field_desc += f" Injects into '{field}' argument."
-                markdown += f"  - `{field}`: ({field_type}) - {field_desc}\n"
-            markdown += "\n"
-
-        markdown += "- **Usage**: This tool can be invoked using the following XML-like syntax:\n"
-        markdown += "```xml\n"
-        markdown += f"<{self.name}>\n"
-
-        for arg in self.arguments:
-            if properties_injectable.get(arg.name) is not None:
-                continue
-            example_value = arg.example or arg.default or f"Your {arg.name} here"
-            markdown += f"  <{arg.name}>{example_value}</{arg.name}>\n"
-
-        markdown += f"</{self.name}>\n"
-        markdown += "```\n\n"
-
-        markdown += f"- **Returns**: `{self.return_type}` - {self.return_description or 'The result of the tool execution.'}\n"
-        if self.return_type_details and self.return_type_details != self.return_type:
-            markdown += f"        {self.return_type_details}\n"
-        if self.return_example:
-            markdown += f"- **Example Return Value**: `{self.return_example}`\n"
-        if self.return_structure:
-            markdown += f"- **Return Structure**: `{self.return_structure}`\n"
-
-        return markdown
-
-    def get_non_injectable_arguments(self) -> list[ToolArgument]:
-        """Get arguments that cannot be injected from properties.
-
-        Returns:
-            List of ToolArgument instances that cannot be injected by the agent.
-        """
-        properties_injectable = self.get_injectable_properties_in_execution()
-        return [arg for arg in self.arguments if properties_injectable.get(arg.name) is None]
-
-    def get_injectable_properties_in_execution(self) -> dict[str, Any]:
-        """Get injectable properties excluding tool arguments.
-
-        Returns:
-            A dictionary of property names and values, excluding tool arguments and None values.
-        """
-        return {}
+    async def async_execute(self, **kwargs) -> Any:
+        return await self(**kwargs)
 
     def to_docstring(self) -> str:
-        """Convert the tool definition into a Google-style docstring with function signature.
+        args_str = ", ".join(f"{arg['name']}: {arg['type']}" for arg in self.arguments)
+        toolbox_name = "quantalogic_toolbox_mcp"
+        return f"{toolbox_name}.{self.name}({args_str}) -> {self.return_type}\n{self.description}"
 
-        If an original_docstring is provided (e.g., from a function via create_tool), it is used directly.
-        Otherwise, constructs a detailed docstring from the tool's metadata.
+    def __repr__(self) -> str:
+        return f"<DynamicTool {self.name}>"
 
-        Returns:
-            A string formatted as a valid Python docstring representing the tool's configuration,
-            including the function signature, detailed argument types, and return type with descriptions.
-        """
-        signature_parts = []
-        for arg in self.arguments:
-            arg_str = f"{arg.name}: {arg.arg_type}"
-            if arg.default is not None:
-                arg_str += f" = {arg.default}"
-            signature_parts.append(arg_str)
-        signature = f"{'async ' if self.is_async else ''}def {self.name}({', '.join(signature_parts)}) -> {self.return_type}:"
+# **Dynamic Tool Creation**
+async def fetch_tool_details(server_name: str, tool_name: str, server_params: StdioServerParameters, manager: ServerManager) -> Dict[str, Any]:
+    """Fetch detailed tool information from MCP server dynamically."""
+    logger.debug(f"Fetching details for tool '{tool_name}' on server '{server_name}'")
+    if server_name in manager.tools_cache:
+        tools_result = manager.tools_cache[server_name]
+    else:
+        async with mcp_session_context(server_params) as session:
+            tools_result = await session.list_tools()
+            manager.tools_cache[server_name] = tools_result
 
-        if self.original_docstring:
-            # Use the full original docstring if available, ensuring proper indentation
-            docstring = f'"""\n{signature}\n\n{self.original_docstring.rstrip()}\n"""'
-        else:
-            # Fall back to constructing the docstring from metadata
-            docstring = f'"""\n{signature}\n\n{self.description}\n'
-            properties_injectable = self.get_injectable_properties_in_execution()
-            if properties_injectable:
-                docstring += "\n    Note: Some arguments may be injected from the tool's configuration.\n"
+    for tool in tools_result.tools:
+        if tool.name == tool_name:
+            args = normalize_args(tool)
+            return_type = getattr(tool, 'return_type', 'Any') if hasattr(tool, 'return_type') else 'Any'
+            return {
+                'name': tool.name,
+                'description': getattr(tool, 'description', f'Tool {tool_name} from {server_name}'),
+                'arguments': args,
+                'return_type': return_type
+            }
+    logger.warning(f"Tool '{tool_name}' not found in server response")
+    return {}
 
-            if self.requires_confirmation:
-                docstring += "\n    Requires Confirmation: Yes\n"
-                if self.confirmation_message:
-                    docstring += f"    Confirmation Message: {self.confirmation_message}\n"
+def normalize_args(tool: Any) -> List[Dict[str, Any]]:
+    """Normalize tool arguments into a consistent schema."""
+    args = []
+    arg_list = None
+    if hasattr(tool, 'inputSchema') and tool.inputSchema:
+        arg_list = tool.inputSchema.get('properties', {})
+        required_args = getattr(tool.inputSchema, 'required', [])
+    elif hasattr(tool, 'arguments') and tool.arguments:
+        arg_list = tool.arguments
+        required_args = getattr(tool, 'required', [])
+    elif hasattr(tool, 'params') and tool.params:
+        arg_list = tool.params
+        required_args = getattr(tool, 'required', [])
+    elif hasattr(tool, 'input_schema') and tool.input_schema:
+        arg_list = tool.input_schema
+        required_args = getattr(tool, 'required', [])
 
-            if self.arguments:
-                docstring += "\nArgs:\n"
-                for arg in self.arguments:
-                    arg_line = f"    {arg.name} ({arg.arg_type})"
-                    details = []
-                    if not arg.required:
-                        details.append("optional")
-                    if arg.default is not None:
-                        details.append(f"defaults to {arg.default}")
-                    if arg.example is not None:
-                        details.append(f"e.g., {arg.example}")
-                    if details:
-                        arg_line += f" [{', '.join(details)}]"
-                    if arg.description:
-                        arg_line += f": {arg.description}"
-                    if arg.type_details and arg.type_details != arg.arg_type and arg.type_details != arg.description:
-                        arg_line += f"\n        {arg.type_details}"
-                    docstring += f"{arg_line}\n"
-
-            if self.return_description:
-                docstring += f"\nReturns:\n    {self.return_type}: {self.return_description.split(':')[0]}:\n"
-                if ':' in self.return_description:
-                    fields = self.return_description.split(':', 1)[1].strip()
-                    for line in fields.split('\n'):
-                        if line.strip():
-                            docstring += f"        {line.strip()}\n"
+    if arg_list:
+        for arg_name, arg_details in arg_list.items() if isinstance(arg_list, dict) else enumerate(arg_list):
+            if isinstance(arg_list, dict):
+                name = arg_name
+                arg_type = arg_details.get('type', 'str')
+                description = arg_details.get('description', f"Argument for {tool.name}")
+                required = name in required_args
+                default = arg_details.get('default', None)
+                example = arg_details.get('example', None)
             else:
-                return_desc = self.return_type_details or "The result of the tool execution."
-                docstring += f"\nReturns:\n    {self.return_type}: {return_desc}"
-                if self.return_structure:
-                    docstring += f"\n        Structure: {self.return_structure}"
+                name = getattr(arg_details, 'name', f"arg_{len(args) + 1}")
+                arg_type = getattr(arg_details, 'type', 'str')
+                description = getattr(arg_details, 'description', f"Argument for {tool.name}")
+                required = getattr(arg_details, 'required', True)
+                default = getattr(arg_details, 'default', None)
+                example = getattr(arg_details, 'example', None)
+            args.append({
+                'name': name,
+                'type': arg_type,
+                'description': description,
+                'required': required,
+                'default': default,
+                'example': example
+            })
+    return args
 
-            if self.return_example:
-                docstring += f"\n    Example: {self.return_example}"
+# **Tool List Generation**
+def get_tools(manager: ServerManager) -> List:
+    """Return a list of core tools and dynamically created specific tool wrappers."""
+    global _tools_cache
+    if _tools_cache is not None:
+        logger.debug("Returning cached tools")
+        return _tools_cache
 
-            docstring += "\n\nExamples:\n"
-            args_str = ", ".join([f"{arg.name}=\"{arg.example or '...'}\"" for arg in self.arguments if arg.required])
-            prefix = "    result = " if not self.is_async else "    result = await "
-            docstring += f"{prefix}{self.name}({args_str})\n"
-        return docstring
-
-class Tool(ToolDefinition):
-    """Extended class for tools with execution capabilities.
-
-    Inherits from ToolDefinition and adds execution functionality.
-    """
-
-    def __init__(self, *args, confirmation_message_callable=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.confirmation_message_callable = confirmation_message_callable
-
-    def get_confirmation_message(self) -> str:
-        """Return the confirmation message, invoking callable if present."""
-        if hasattr(self, 'confirmation_message_callable') and self.confirmation_message_callable:
-            return self.confirmation_message_callable()
-        return self.confirmation_message or f"Tool '{self.name}' requires confirmation: Proceed? (yes/no)"
-
-    def validate_arguments(cls, v: Any):
-        """Validate and convert arguments to ToolArgument instances.
-
-        Args:
-            v: Input arguments to validate.
-
-        Returns:
-            A list of validated ToolArgument instances.
-        """
-        if isinstance(v, list) and all(isinstance(item, ToolArgument) for item in v):
-            return v
-        raise ValueError("Arguments must be a list of ToolArgument instances.")
-
-    def execute(self, **kwargs: Any) -> Any:
-        """Execute the tool with provided arguments.
-
-        If not implemented by a subclass, falls back to the asynchronous execute_async method.
-
-        Args:
-            **kwargs: Keyword arguments for tool execution.
-
-        Returns:
-            The result of tool execution, preserving the original type returned by the tool's logic.
-        """
-        raise NotImplementedError("Tool execution logic must be implemented in a subclass.")
-
-    async def async_execute(self, **kwargs: Any) -> Any:
-        """Asynchronous version of execute.
-
-        By default, runs the synchronous execute method in a separate thread using asyncio.to_thread.
-        Subclasses can override this method to provide a native asynchronous implementation for
-        asynchronous tools.
-
-        Args:
-            **kwargs: Keyword arguments for tool execution.
-
-        Returns:
-            The result of tool execution, preserving the original type returned by the tool's logic.
-        """
-        return await asyncio.to_thread(self.execute, **kwargs)
-
-def create_tool(func: F) -> Tool:
-    """Create a Tool instance from a Python function using AST analysis with enhanced return type metadata.
-
-    Analyzes the function's source code to extract its name, docstring, and arguments,
-    then constructs a Tool subclass with appropriate execution logic for both
-    synchronous and asynchronous functions.
-
-    Args:
-        func: The Python function (sync or async) to convert into a Tool.
-
-    Returns:
-        A Tool subclass instance configured based on the function.
-
-    Raises:
-        ValueError: If the input is not a valid function or lacks a function definition.
-    """
-    if not callable(func):
-        raise ValueError("Input must be a callable function")
-
-    try:
-        source = inspect.getsource(func).strip()
-        tree = ast.parse(source)
-    except (OSError, TypeError, SyntaxError) as e:
-        raise ValueError(f"Failed to parse function source: {e}")
-
-    if not tree.body or not isinstance(tree.body[0], (ast.FunctionDef, ast.AsyncFunctionDef)):
-        raise ValueError("Source must define a single function")
-    func_def = tree.body[0]
-
-    name = func_def.name
-    docstring = ast.get_docstring(func_def) or ""
-    parsed_doc = parse_docstring(docstring)
-    description = parsed_doc.short_description or f"Tool generated from {name}"
-    param_docs = {p.arg_name: p.description for p in parsed_doc.params}
-    return_description = parsed_doc.returns.description if parsed_doc.returns else None
-    is_async = isinstance(func_def, ast.AsyncFunctionDef)
-
-    from typing import get_type_hints
-    type_hints = get_type_hints(func)
-
-    args = func_def.args
-    defaults = [None] * (len(args.args) - len(args.defaults)) + [
-        ast.unparse(d) if isinstance(d, ast.AST) else str(d) for d in args.defaults
+    tools = [
+        lambda server_name: mcp_list_resources(server_name, manager),
+        lambda server_name: mcp_list_tools(server_name, manager),
+        lambda server_name, tool_name, arguments: mcp_call_tool(server_name, tool_name, arguments, manager),
+        lambda: list_servers(manager),
     ]
-    arguments: list[ToolArgument] = []
 
-    for i, arg in enumerate(args.args):
-        arg_name = arg.arg
-        default = defaults[i]
-        required = default is None
-        hint = type_hints.get(arg_name, str)
-        arg_type = type_hint_to_str(hint)
-        description = param_docs.get(arg_name, f"Argument {arg_name}")
-        arguments.append(ToolArgument(
-            name=arg_name,
-            arg_type=arg_type,
-            description=description,
-            required=required,
-            default=default,
-            example=default if default else None,
-            type_details=get_type_description(hint)
-        ))
+    config_path = CONFIG_FILE if CONFIG_FILE else os.path.join(manager.config_dir, "mcp.json")
+    if os.path.exists(config_path):
+        try:
+            config = load_mcp_config(config_path)
+            server_configs = config.get("mcpServers", {})
+            for server_name, server_data in server_configs.items():
+                for tool_name, tool_config in server_data.get("tools", {}).items():
+                    tool = DynamicTool(server_name, tool_name, tool_config, manager)
+                    tools.append(tool)
+                if server_name in manager.tools_cache:
+                    for tool in manager.tools_cache[server_name].tools:
+                        tool_config = {
+                            'name': tool.name,
+                            'description': getattr(tool, 'description', f'Tool {tool.name} from {server_name}'),
+                            'arguments': normalize_args(tool),
+                            'return_type': getattr(tool, 'return_type', 'Any')
+                        }
+                        tool_instance = DynamicTool(server_name, tool.name, tool_config, manager)
+                        tools.append(tool_instance)
+                else:
+                    server_params = manager.servers.get(server_name)
+                    if server_params:
+                        try:
+                            server_tools = asyncio.run(mcp_list_tools(server_name, manager))
+                            for tool_name in server_tools:
+                                tool_details = asyncio.run(fetch_tool_details(server_name, tool_name, server_params, manager))
+                                if tool_details:
+                                    tool = DynamicTool(server_name, tool_name, tool_details, manager)
+                                    tools.append(tool)
+                        except Exception as e:
+                            logger.warning(f"Failed to query tools for server '{server_name}': {str(e)}")
+        except Exception as e:
+            logger.error(f"Failed to load dynamic tools from {config_path}: {e}")
+    else:
+        logger.warning(f"Configuration file {config_path} not found, using core tools only")
 
-    return_type = type_hints.get("return", str)
-    return_type_str = type_hint_to_str(return_type)
-    return_type_details = get_type_description(return_type)
-    return_structure = get_type_schema(return_type)
-    requires_confirmation = getattr(func, 'requires_confirmation', False)
-    confirmation_message = getattr(func, 'confirmation_message', None)
+    _tools_cache = tools
+    logger.info(f"Returning {len(tools)} tools")
+    return tools
 
-    class GeneratedTool(Tool):
-        def __init__(self, *args: Any, **kwargs: Any):
-            super().__init__(
-                *args,
-                name=name,
-                description=description,
-                arguments=arguments,
-                return_type=return_type_str,
-                return_description=return_description,
-                return_type_details=return_type_details,
-                return_structure=return_structure,
-                original_docstring=docstring,
-                is_async=is_async,
-                toolbox_name=None,
-                requires_confirmation=requires_confirmation,
-                confirmation_message=confirmation_message if not callable(confirmation_message) else None,
-                confirmation_message_callable=confirmation_message if callable(confirmation_message) else None,
-                **kwargs
-            )
-            self._func = func
-
-        def execute(self, **kwargs: Any) -> Any:
-            """Execute the tool synchronously, handling both sync and async functions.
-
-            Args:
-                **kwargs: Keyword arguments for tool execution.
-
-            Returns:
-                The result of the function execution, preserving its original type.
-            """
-            injectable = self.get_injectable_properties_in_execution()
-            full_kwargs = {**injectable, **kwargs}
-            if self.is_async:
-                return asyncio.run(self.async_execute(**full_kwargs))
-            else:
-                return self._func(**full_kwargs)
-
-        async def async_execute(self, **kwargs: Any) -> Any:
-            """Execute the tool asynchronously, handling both sync and async functions.
-
-            Args:
-                **kwargs: Keyword arguments for tool execution.
-
-            Returns:
-                The result of the function execution, preserving its original type.
-            """
-            injectable = self.get_injectable_properties_in_execution()
-            full_kwargs = {**injectable, **kwargs}
-            if self.is_async:
-                return await self._func(**full_kwargs)
-            else:
-                return await asyncio.to_thread(self._func, **full_kwargs)
-
-    return GeneratedTool()
-
-if __name__ == "__main__":
-    def main():
-        # Example usage of create_tool and Tool classes
-        def example_fn(x: int, y: str = "hello") -> bool:
-            """Example tool function."""
-            return True
-
-        tool = create_tool(example_fn)
-        print("JSON representation:")
-        print(tool.to_json())
-        print("\nMarkdown representation:")
-        print(tool.to_markdown())
-        print("\nDocstring representation:")
-        print(tool.to_docstring())
-
-    main()
+# **Module Initialization**
+manager = ServerManager()
