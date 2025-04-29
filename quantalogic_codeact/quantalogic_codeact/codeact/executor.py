@@ -94,7 +94,7 @@ class Executor(BaseExecutor):
         agent_name: str,
         config: Optional[Dict[str, Any]] = None,
         verbose: bool = True,
-        allowed_modules: Optional[List[str]] = ALLOWED_MODULES,
+        allowed_modules: Optional[List[str]] = None,
     ):
         # Register self in global registry for easier access from shell and other components
         import uuid
@@ -110,8 +110,8 @@ class Executor(BaseExecutor):
         self.conversation_manager = conversation_manager
         self.config = config or {}
         self.verbose = verbose
+        self._allowed_modules = allowed_modules or ALLOWED_MODULES  # Ensure _allowed_modules is initialized
         self.tool_namespace = self._build_tool_namespace()
-        self._allowed_modules = allowed_modules
 
     def _build_tool_namespace(self) -> Dict:
         """Build the namespace with tools grouped by toolbox using SimpleNamespace."""
@@ -256,11 +256,24 @@ class Executor(BaseExecutor):
         return {
             "asyncio": asyncio,
             "context_vars": {},
+            "conversation_history_by_id": self._build_conversation_history_dict(),
             **toolboxes,
         }
 
+    def _build_conversation_history_dict(self) -> Dict:
+        """Build a dictionary mapping nanoids to message contents."""
+        history_dict = {}
+        for msg in self.conversation_manager.messages:
+            content = msg.content
+            # Remove 'nanoid:xxx\n' prefix if present, consistent with RetrieveMessageTool behavior
+            if content.startswith(f"nanoid:{msg.nanoid}\n"):
+                content = content[len(f"nanoid:{msg.nanoid}\n"):]
+            history_dict[msg.nanoid] = content
+        return history_dict
+
     @property
     def allowed_modules(self) -> List[str]:
+        """Return the list of allowed modules for code execution."""
         return self._allowed_modules
 
     def register_tool(self, tool: Tool) -> None:
@@ -528,6 +541,8 @@ class Executor(BaseExecutor):
         # Make conversation_history available as a top-level variable
         self.tool_namespace["conversation_history"] = context_vars.get("conversation_history", [])
         self.tool_namespace["current_step"] = step
+        # Refresh conversation_history_by_id to ensure it's up-to-date
+        self.tool_namespace["conversation_history_by_id"] = self._build_conversation_history_dict()
         timeout = self.config.get("timeout", timeout)  # Use config timeout if provided
         if not validate_code(code):
             logger.error(f"Invalid code at step {step}: lacks async main()")

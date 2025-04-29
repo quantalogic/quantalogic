@@ -1,11 +1,10 @@
 {
-  "config_hash": "7dfa39baee10fbf4ce2548fa4fc19963",
+  "config_hash": "c9c088339a5f9c26c4083aa44972e473",
   "servers": {
     "playwright": {
       "command": "npx",
       "args": [
-        "@playwright/mcp@latest",
-        "--headless"
+        "@playwright/mcp@latest"
       ],
       "env": null,
       "cwd": null,

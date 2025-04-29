@@ -19,7 +19,7 @@ from .message import Message
 from .plugin_manager import PluginManager
 from .reasoner import BaseReasoner, Reasoner
 from .templates import jinja_env as default_jinja_env
-from .tools.retrieve_message_tool import RetrieveMessageTool
+from .tools.agent_tool import AgentTool
 from .tools_manager import get_default_tools
 from .utils import process_tools
 
@@ -145,15 +145,17 @@ class Agent:
             # Load default tools from configured toolboxes
             base_tools = get_default_tools(
                 self.model,
-                history_store=self.conversation_manager.messages if hasattr(self, 'conversation_manager') else None,
+                conversation_manager=self.conversation_manager,  # Pass the agent's conversation_manager
                 enabled_toolboxes=self.config.enabled_toolboxes
             )
+            # Filter out RetrieveMessageTool
+            base_tools = [tool for tool in base_tools if tool.name != 'retrieve_message']
             # Gather per-tool configs from enabled toolboxes
             tool_confs = []
             for tb in self.config.installed_toolboxes or []:
                 if tb.enabled:
                     tool_confs.extend(tb.tool_configs or [])
-            # If no overrides, return base
+            # If no overrides, return filtered base tools
             if not tool_confs:
                 return base_tools
             # Resolve env vars in each config dict
@@ -304,7 +306,6 @@ class Agent:
                 agent_id=self.id,  # New: Pass agent ID
                 agent_name=self.name  # New: Pass agent name
             )
-            solve_agent.executor.register_tool(RetrieveMessageTool(conversation_manager=self.conversation_manager))
             for observer, event_types in self._observers:
                 solve_agent.add_observer(observer, event_types)
             

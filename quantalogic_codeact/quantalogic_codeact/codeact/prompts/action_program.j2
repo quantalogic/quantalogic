@@ -86,8 +86,10 @@ Previously defined variables you can access:
 - {{ var }}
 {% endfor %}
 - conversation_history: List of message dictionaries with 'role', 'content', and 'nanoid' keys
+- conversation_history_by_id: A dictionary mapping message nanoids to their contents (use this for quick message retrieval)
 {% else %}
 No variables available from previous steps.
+- conversation_history_by_id: A dictionary mapping message nanoids to their contents (use this for quick message retrieval)
 {% endif %}
 
 ## STRICT MODULE POLICY
@@ -97,8 +99,6 @@ No variables available from previous steps.
 ```
 
 DO NOT ATTEMPT TO IMPORT ANY OTHER MODULE.
-
-VIOLATIONS WILL CAUSE IMMEDIATE FAILURE WITH: "Import Error: Module 'X' is not allowed"
 
 ## Tools
 You can only use these toolbox-namespaced functions:
@@ -154,9 +154,9 @@ Remember: The sandbox environment is restricted. Your solution must work within 
 7. Prefix new variables with 'step{{ current_step }}_'
 8. Use proper async/await syntax
 9. Always check if the task is already completed before proceeding
-10. When retrieving messages, use:
+10. To retrieve a message by its nanoid, use:
     ```python
-    step{{ current_step }}_message = await default.retrieve_message(nanoid='<nanoid>')
+    step{{ current_step }}_message = conversation_history_by_id.get('<nanoid>', 'Message not found')
     ```
 
 11. If previous steps failed, CHANGE YOUR APPROACH - don't repeat the same mistake

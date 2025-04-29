@@ -10,7 +10,8 @@ import loguru
 from quantalogic_codeact.codeact.agent_config import Toolbox
 from quantalogic_toolbox import Tool, create_tool
 
-from .tools import AgentTool, RetrieveMessageTool
+from .conversation_manager import ConversationManager
+from .tools import AgentTool
 
 
 class ToolRegistry:
@@ -152,9 +153,9 @@ class ToolRegistry:
 
 def get_default_tools(
     model: str,
-    history_store: Optional[List[dict]] = None,
+    conversation_manager: Optional[ConversationManager] = None,
     enabled_toolboxes: Optional[List[str]] = None,
-    installed_toolboxes: Optional[List[Toolbox]]=None
+    installed_toolboxes: Optional[List[Toolbox]] = None
 ) -> List[Tool]:
     """Dynamically load default tools using the pre-loaded registry from PluginManager."""
     from quantalogic_codeact.cli import plugin_manager
@@ -163,9 +164,13 @@ def get_default_tools(
         plugin_manager.load_plugins()
         registry = plugin_manager.tools
         
+        # Use conversation_manager if provided, otherwise create a default one
+        if conversation_manager is None:
+            conversation_manager = ConversationManager()
+            loguru.logger.debug("No conversation_manager provided; using default instance.")
+
         static_tools: List[Tool] = [
             AgentTool(model=model),
-            RetrieveMessageTool(history_store or []),
         ]
 
         # Log available tools before filtering
