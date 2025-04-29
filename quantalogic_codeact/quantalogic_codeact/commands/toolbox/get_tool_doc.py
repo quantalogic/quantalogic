@@ -26,7 +26,9 @@ async def get_tool_doc(shell, args: list[str]) -> str:
     for tool in tools:
         tb_name = tool.toolbox_name or "default"
         doc = tool.to_docstring()
-        md = f"### {tool.name}\n```python\n{doc}\n```"
+        # Use namespace.tool_name for headings to support qualified search
+        qualified_name = f"{tb_name}.{tool.name}"
+        md = f"### {qualified_name}\n```python\n{doc}\n```"
         toolbox_docs.setdefault(tb_name, []).append(md)
     if not toolbox_docs:
         return "No tool documentation available."

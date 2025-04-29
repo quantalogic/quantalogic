@@ -104,9 +104,6 @@ VIOLATIONS WILL CAUSE IMMEDIATE FAILURE WITH: "Import Error: Module 'X' is not a
 You can only use these toolbox-namespaced functions:
 
 <Tools>
-### namespace default
-- retrieve_message(nanoid: str) -> str: Get content of a message by its nanoid
-
 {% for toolbox_name, docstrings in tools_by_toolbox.items() %}
 ### namespace {{ toolbox_name }}
 {% for docstring in docstrings %}

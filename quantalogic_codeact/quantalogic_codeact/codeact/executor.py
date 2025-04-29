@@ -525,6 +525,8 @@ class Executor(BaseExecutor):
     async def execute_action(self, code: str, context_vars: Dict, step: int, timeout: int = 300) -> ExecutionResult:
         """Execute the generated code and return the result with local variables, setting the step number."""
         self.tool_namespace["context_vars"] = context_vars
+        # Make conversation_history available as a top-level variable
+        self.tool_namespace["conversation_history"] = context_vars.get("conversation_history", [])
         self.tool_namespace["current_step"] = step
         timeout = self.config.get("timeout", timeout)  # Use config timeout if provided
         if not validate_code(code):
