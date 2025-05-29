@@ -13,6 +13,7 @@ from .executor import ALLOWED_MODULES as DEFAULT_ALLOWED_MODULES
 from .llm_util import LLMCompletionError, litellm_completion
 from .message import Message
 from .templates import jinja_env
+from .working_memory import WorkingMemory
 from .xml_utils import XMLResultHandler, validate_xml
 
 
@@ -21,8 +22,14 @@ class PromptStrategy(ABC):
 
     @abstractmethod
     async def generate_prompt(
-        self, task: str, step_history_str: str, step: int, max_iterations: int,
-        available_vars: List[str], allowed_modules: List[str]
+        self,
+        task: str,
+        step_history_str: str,
+        step: int,
+        max_iterations: int,
+        available_vars: List[str],
+        allowed_modules: List[str],
+        working_memory: WorkingMemory,
     ) -> str:
         pass
 
@@ -31,8 +38,14 @@ class DefaultPromptStrategy(PromptStrategy):
     """Default strategy using Jinja2 templates."""
 
     async def generate_prompt(
-        self, task: str, step_history_str: str, step: int, max_iterations: int,
-        available_vars: List[str], allowed_modules: List[str]
+        self,
+        task: str,
+        step_history_str: str,
+        step: int,
+        max_iterations: int,
+        available_vars: List[str],
+        allowed_modules: List[str],
+        working_memory: WorkingMemory,
     ) -> str:
         tools_by_toolbox = {}
         for tool in self.tools:
@@ -41,8 +54,9 @@ class DefaultPromptStrategy(PromptStrategy):
                 tools_by_toolbox[toolbox_name] = []
             tools_by_toolbox[toolbox_name].append(tool.to_docstring())
 
-        # Ensure available_vars is a list and log its contents
         available_vars = available_vars or []
+        if 'context_vars' not in available_vars:
+            available_vars.append('context_vars')
         logger.debug(f"Rendering prompt with available_vars: {available_vars}")
 
         return jinja_env.get_template("action_program.j2").render(
@@ -53,6 +67,8 @@ class DefaultPromptStrategy(PromptStrategy):
             tools_by_toolbox=tools_by_toolbox,
             available_vars=available_vars,
             allowed_modules=allowed_modules,
+            context_vars={'state': {}},
+            working_memory=working_memory,
         )
 
 
@@ -92,13 +108,13 @@ class Reasoner(BaseReasoner):
     ):
         self.model = model
         self.tools = tools
-        self.temperature = temperature  # Store temperature
+        self.temperature = temperature
         self.config = config or {}
         self.prompt_strategy = prompt_strategy or DefaultPromptStrategy()
-        self.prompt_strategy.tools = tools  # Inject tools into strategy
-        # Ensure agent_id and agent_name are always valid strings
+        self.prompt_strategy.tools = tools
         self.agent_id = agent_id or generate()
         self.agent_name = agent_name or f"agent_{self.agent_id[:8]}"
+        self.working_memory = None  # Will be set by CodeActAgent
 
     async def generate_action(
         self,
@@ -114,9 +130,7 @@ class Reasoner(BaseReasoner):
         conversation_history: List[Message] = None,
     ) -> str:
         """Generate an action based on task and history with streaming support."""
-        # Determine modules to allow in the prompt
         allowed_modules = allowed_modules or DEFAULT_ALLOWED_MODULES
-        # Normalize and convert history items to dicts
         conv_items = conversation_history or []
         if not isinstance(conv_items, list):
             raise ValueError("conversation_history must be a list of Message or dict")
@@ -127,17 +141,15 @@ class Reasoner(BaseReasoner):
                     {"role": msg.role, "content": f"nanoid:{msg.nanoid}\n{msg.content}"}
                 )
             elif isinstance(msg, dict):
-                # Add nanoid if available
                 content = msg.get("content")
                 if "nanoid" in msg:
-                    content = f"nanoid:{msg["nanoid"]}\n{msg["content"]}"
+                    content = f"nanoid:{msg['nanoid']}\n{msg['content']}"
                 conversation_history.append({"role": msg.get("role"), "content": content})
             else:
                 raise ValueError(f"Invalid message type {type(msg)} in conversation_history")
 
         try:
-            # Ensure available_vars is a list and log its contents
-            available_vars = available_vars or []
+            available_vars = available_vars or ['context_vars']
             logger.debug(f"Step {step}: Generating action with available_vars: {available_vars}")
 
             task_prompt = await self.prompt_strategy.generate_prompt(
@@ -147,6 +159,7 @@ class Reasoner(BaseReasoner):
                 max_iterations,
                 available_vars,
                 allowed_modules,
+                working_memory=self.working_memory,
             )
             await notify_event(PromptGeneratedEvent(
                 event_type="PromptGenerated",
@@ -157,14 +170,12 @@ class Reasoner(BaseReasoner):
             ))
             logger.debug(f"Generated prompt for step {step}:\n{task_prompt}")
 
-            # Construct messages with conversation history
             messages = (
                 [{"role": "system", "content": "You are a Python code generator."}]
                 + conversation_history
                 + [{"role": "user", "content": task_prompt}]
             )
 
-            # display conversation history
             logger.debug(f"👨‍🍳 Conversation history for step {step}:\n{conversation_history}")
 
             for attempt in range(3):
@@ -210,17 +221,12 @@ class Reasoner(BaseReasoner):
         import re
         import textwrap
 
-        # Extract code from fenced block if present, otherwise use raw input
         match = re.search(r"```(?:[\w+-]*)\n([\s\S]*?)```", code, re.DOTALL)
         code_content = match.group(1) if match else code
 
-        # Strip extra backticks and whitespace
         code_content = code_content.strip("` \n")
-
-        # Dedent for consistent formatting
         final_code = textwrap.dedent(code_content).strip()
 
-        # Validate syntax; if invalid, warn and return dedented code
         try:
             ast.parse(final_code)
         except SyntaxError as e:
@@ -231,7 +237,6 @@ class Reasoner(BaseReasoner):
         """Parse the XML response to extract thought and code reliably."""
         import re
 
-        # Extract the XML part if surrounded by extra text
         xml_match = re.search(r"<Action>.*?</Action>", response, re.DOTALL)
         if not xml_match:
             logger.error("No <Action> tag found in response")
