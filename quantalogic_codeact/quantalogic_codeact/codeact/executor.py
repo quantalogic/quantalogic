@@ -475,8 +475,7 @@ class Executor(BaseExecutor):
                 timeout=timeout,
                 entry_point="main",
                 allowed_modules=self.allowed_modules,
-                namespace=self.tool_namespace,
-                ignore_typing=True
+                namespace=self.tool_namespace
             )
             if result.error:
                 err_str = str(result.error)

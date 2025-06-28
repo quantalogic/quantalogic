@@ -61,7 +61,7 @@ class Agent:
         # Now get tools with conversation_manager initialized
         self.default_tools: List[Tool] = self._load_and_configure_tools()
         # If no tools are loaded, do not fall back to all registered tools
-        if not self.default_tools and (not config.enabled_toolboxes or not config.tools):
+        if not self.default_tools and not config.enabled_toolboxes:
             logger.info("No tools loaded from configuration; no toolboxes specified.")
         # Configure Jinja environment: support TemplateConfig or raw dict
         tpl = config.template

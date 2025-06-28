@@ -62,7 +62,7 @@ botocore = "^1.29.123"
 psutil = "^7.0.0"
 openai = "^1.68.0"
 aiofiles = "^24.1.0"
-quantalogic-pythonbox = ">=0.9.11"
+quantalogic-pythonbox = ">=0.9.22"
 quantalogic-toolbox = ">=0.8.0"
 
 

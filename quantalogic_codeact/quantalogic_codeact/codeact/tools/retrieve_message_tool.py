@@ -35,6 +35,7 @@ class RetrieveMessageTool(Tool):
             )
             self.config = config or {}
             self.conversation_manager = conversation_manager
+            self.toolbox_name = "default"  # Add toolbox_name attribute
         except Exception as e:
             logger.error(f"Failed to initialize RetrieveMessageTool: {e}")
             raise
