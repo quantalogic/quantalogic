@@ -75,6 +75,9 @@ def configure_cli_logging(log_level: str | None = None) -> None:
         except Exception:
             log_level = "ERROR"
     
+    # Remove any existing handlers to ensure clean configuration
+    logger.remove()
+    
     # Configure loguru with appropriate format
     if log_level.upper() in ["DEBUG"]:
         # Detailed format for debug level only

@@ -218,9 +218,12 @@ async def run_react_agent(
     # Use log_level from agent_config by default, but override with DEBUG if debug flag is True
     log_level = "DEBUG" if debug else agent_config.log_level
     
-    logger.remove()
-    logger.add(sys.stderr, level=log_level)
-    logger.add(LOG_FILE, level=log_level)
+    # Only reconfigure logging if debug is explicitly enabled
+    # Otherwise, respect the CLI's logging configuration for clean output
+    if debug:
+        logger.remove()
+        logger.add(sys.stderr, level=log_level)
+        logger.add(LOG_FILE, level=log_level)
     
     # Get default tools if none provided
     tools = tools if tools is not None else get_default_tools(agent_config.model)

@@ -10,6 +10,7 @@ By default, the CLI uses **ERROR** level logging to provide the cleanest possibl
 
 - Only actual errors are displayed
 - No debug or info messages clutter the output
+- Plugin loading and toolbox initialization messages are suppressed
 - External dependency logging is also suppressed
 
 ## Customizing Log Levels
@@ -82,6 +83,7 @@ The logging configuration is implemented in `quantalogic_codeact/utils/logging_c
 - Intercepts standard library logging
 - Configures loguru with appropriate formatting
 - Silences known verbose external libraries
+- Temporarily suppresses plugin loading messages during CLI startup for clean output
 - Respects user configuration preferences
 
 This ensures a professional, clean user experience while maintaining full debugging capabilities when needed.
