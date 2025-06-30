@@ -470,9 +470,14 @@ class TestWorkflowManagerInstantiation:
         
         # Mock the necessary components to avoid node registration issues
         with patch('quantalogic_flow.flow.flow_manager.Nodes') as mock_nodes:
-            mock_nodes.NODE_REGISTRY = {"main_node": (Mock(), [], "output")}
+            # Mock the NODE_REGISTRY with the expected start node
+            mock_nodes.NODE_REGISTRY = {
+                "main_node": (Mock(), [], "output"),
+                "sub_start": (Mock(), [], "sub_output")  # Add sub_start node
+            }
             with patch('quantalogic_flow.flow.flow_manager.Workflow') as mock_workflow:
                 mock_wf = Mock()
+                mock_wf.start_node = "sub_start"  # Set a proper start_node value
                 mock_workflow.return_value = mock_wf
                 
                 result = self.manager.instantiate_workflow()
