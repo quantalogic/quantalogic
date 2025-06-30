@@ -38,6 +38,7 @@ class WorkflowExtractor(ast.NodeVisitor):
         self.in_loop = False           # Flag indicating if we're inside a loop
         self.loop_nodes = []           # List of nodes within the current loop
         self.loop_entry_node = None    # Node before the loop starts
+        self.current_node = None       # Track current node for chaining
 
     def visit_Module(self, node):
         """Log and explicitly process top-level statements in the module."""
@@ -116,6 +117,16 @@ class WorkflowExtractor(ast.NodeVisitor):
                             logger.debug(f"Unpacked '{var_name}' into kwargs: {self.global_vars[var_name]}")
                     elif isinstance(kw.value, ast.Constant):
                         kwargs[kw.arg] = kw.value.value
+                    elif isinstance(kw.value, ast.Name):
+                        # Handle variable references (e.g., model=MODEL_NAME)  
+                        var_name = kw.value.id
+                        if var_name in self.global_vars:
+                            kwargs[kw.arg] = self.global_vars[var_name]
+                            logger.debug(f"Resolved variable '{var_name}' to value '{self.global_vars[var_name]}' for '{kw.arg}'")
+                        elif kw.arg == "response_model":
+                            kwargs[kw.arg] = ast.unparse(kw.value)
+                        else:
+                            kwargs[kw.arg] = var_name  # Keep as variable name if not in global_vars
                     elif kw.arg == "response_model" and isinstance(kw.value, ast.Name):
                         kwargs[kw.arg] = ast.unparse(kw.value)
                     elif kw.arg == "transformer" and isinstance(kw.value, ast.Lambda):
@@ -262,6 +273,16 @@ class WorkflowExtractor(ast.NodeVisitor):
                             logger.debug(f"Unpacked '{var_name}' into kwargs: {self.global_vars[var_name]}")
                     elif isinstance(kw.value, ast.Constant):
                         kwargs[kw.arg] = kw.value.value
+                    elif isinstance(kw.value, ast.Name):
+                        # Handle variable references (e.g., model=MODEL_NAME)  
+                        var_name = kw.value.id
+                        if var_name in self.global_vars:
+                            kwargs[kw.arg] = self.global_vars[var_name]
+                            logger.debug(f"Resolved variable '{var_name}' to value '{self.global_vars[var_name]}' for '{kw.arg}'")
+                        elif kw.arg == "response_model":
+                            kwargs[kw.arg] = ast.unparse(kw.value)
+                        else:
+                            kwargs[kw.arg] = var_name  # Keep as variable name if not in global_vars
                     elif kw.arg == "response_model" and isinstance(kw.value, ast.Name):
                         kwargs[kw.arg] = ast.unparse(kw.value)
                     elif kw.arg == "transformer" and isinstance(kw.value, ast.Lambda):
@@ -376,6 +397,111 @@ class WorkflowExtractor(ast.NodeVisitor):
 
         self.generic_visit(node)
 
+    def visit_Expr(self, node):
+        """Handle expression statements, particularly workflow method calls."""
+        if isinstance(node.value, ast.Call):
+            # Check if this is a workflow method call
+            if isinstance(node.value.func, ast.Attribute):
+                # Look for calls like workflow.then(), workflow.parallel(), etc.
+                attr_name = node.value.func.attr
+                if attr_name in ["then", "parallel", "branch", "converge", "add_observer", "node"]:
+                    # Find the workflow variable name by checking if the object is a Name node
+                    if isinstance(node.value.func.value, ast.Name):
+                        workflow_var = node.value.func.value.id
+                        logger.debug(f"Processing workflow method call: {workflow_var}.{attr_name}()")
+                        # Process the method call as part of the workflow
+                        self.process_workflow_method_call(node.value, workflow_var)
+        
+        self.generic_visit(node)
+
+    def process_workflow_method_call(self, call_node, workflow_var):
+        """Process individual workflow method calls like workflow.then(), etc."""
+        method_name = call_node.func.attr
+        
+        if method_name == "then":
+            next_node = call_node.args[0].value if call_node.args else None
+            condition = None
+            for keyword in call_node.keywords:
+                if keyword.arg == "condition" and keyword.value:
+                    condition = ast.unparse(keyword.value)
+            
+            # Use current_node if available, otherwise use start_node
+            from_node = self.current_node if self.current_node else self.start_node
+            if from_node and next_node:
+                self.transitions.append(TransitionDefinition(
+                    from_node=from_node, 
+                    to_node=next_node, 
+                    condition=condition
+                ))
+                logger.debug(f"Added transition: {from_node} -> {next_node} (condition: {condition})")
+                # Update the current node for chaining (but keep start_node intact)
+                self.current_node = next_node
+        
+        elif method_name == "parallel":
+            to_nodes = [arg.value for arg in call_node.args]
+            from_node = self.current_node if self.current_node else self.start_node
+            if from_node and to_nodes:
+                self.transitions.append(TransitionDefinition(
+                    from_node=from_node, 
+                    to_node=to_nodes
+                ))
+                logger.debug(f"Added parallel transition: {from_node} -> {to_nodes}")
+        
+        elif method_name == "branch":
+            # Handle branch with conditions
+            if call_node.args and isinstance(call_node.args[0], ast.List):
+                branches = []
+                for branch_tuple in call_node.args[0].elts:
+                    if isinstance(branch_tuple, ast.Tuple) and len(branch_tuple.elts) >= 2:
+                        target_node = branch_tuple.elts[0].value if isinstance(branch_tuple.elts[0], ast.Constant) else None
+                        condition = ast.unparse(branch_tuple.elts[1]) if len(branch_tuple.elts) > 1 else None
+                        if target_node:
+                            branches.append((target_node, condition))
+                
+                if self.current_node and branches:
+                    for target_node, condition in branches:
+                        self.transitions.append(TransitionDefinition(
+                            from_node=self.current_node,
+                            to_node=target_node,
+                            condition=condition
+                        ))
+                        logger.debug(f"Added branch transition: {self.current_node} -> {target_node} (condition: {condition})")
+        
+        elif method_name == "converge":
+            converge_node = call_node.args[0].value if call_node.args else None
+            if converge_node:
+                self.convergence_nodes.append(converge_node)
+                logger.debug(f"Added convergence node: {converge_node}")
+        
+        elif method_name == "add_observer":
+            observer = None
+            if call_node.args:
+                if isinstance(call_node.args[0], ast.Name):
+                    observer = call_node.args[0].id
+                elif isinstance(call_node.args[0], ast.Constant):
+                    observer = call_node.args[0].value
+            
+            if observer:
+                self.observers.append(observer)
+                logger.debug(f"Added observer: {observer}")
+        
+        elif method_name == "node":
+            node_name = call_node.args[0].value if call_node.args else None
+            inputs_mapping = {}
+            
+            for keyword in call_node.keywords:
+                if keyword.arg == "inputs_mapping" and isinstance(keyword.value, ast.Dict):
+                    for k, v in zip(keyword.value.keys, keyword.value.values):
+                        if isinstance(k, ast.Constant) and isinstance(v, ast.Constant):
+                            inputs_mapping[k.value] = v.value
+            
+            if node_name:
+                self.nodes[node_name] = {
+                    "type": "workflow_node",
+                    "inputs_mapping": inputs_mapping
+                }
+                logger.debug(f"Added workflow node: {node_name} with inputs_mapping: {inputs_mapping}")
+
     def process_workflow_expr(self, expr, var_name):
         """
         Recursively process Workflow method chaining to build transitions, structure, and observers.
@@ -396,6 +522,7 @@ class WorkflowExtractor(ast.NodeVisitor):
 
         if isinstance(func, ast.Name) and func.id == "Workflow":
             self.start_node = expr.args[0].value if expr.args else None
+            self.current_node = self.start_node  # Initialize current node
             logger.debug(f"Workflow start node set to '{self.start_node}' for variable '{var_name}'")
             return self.start_node
         elif isinstance(func, ast.Attribute):

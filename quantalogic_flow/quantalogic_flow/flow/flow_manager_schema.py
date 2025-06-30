@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class FunctionDefinition(BaseModel):
@@ -149,6 +149,9 @@ class TemplateConfig(BaseModel):
 
 class NodeDefinition(BaseModel):
     """Definition of a workflow node with template_node and inputs_mapping support."""
+    
+    model_config = ConfigDict(extra="allow")  # Allow extra fields like 'requirements'
+    
     function: Optional[str] = Field(
         None, description="Name of the function to execute (references a FunctionDefinition)."
     )
@@ -268,6 +271,9 @@ class WorkflowStructure(BaseModel):
 
 class WorkflowDefinition(BaseModel):
     """Top-level definition of the workflow."""
+    
+    model_config = ConfigDict(extra="allow")  # Allow extra fields for compatibility
+    
     functions: Dict[str, FunctionDefinition] = Field(
         default_factory=dict, description="Dictionary of function definitions."
     )
