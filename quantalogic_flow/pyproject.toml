@@ -8,13 +8,14 @@ license = "MIT"
 packages = [ { include = "quantalogic_flow" } ]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<4.0"
+python = "<4.0,>=3.10"
 loguru = "^0.7.3"
 litellm = "^1.73.6"
-instructor = "^1.7.9"
+instructor = "^1.7.2"
 pathspec = "^0.12.1"
-pydantic = "^2.11.3"
-jinja2 = "^3.1.6"
+pydantic = "^2.10.4"
+jinja2 = "^3.1.5"
+typing-extensions = "^4.12.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

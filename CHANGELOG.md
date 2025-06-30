@@ -13,7 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - QuantaLogic CodeAct: 1.66.2 → 1.73.6
   - QuantaLogic Flow: 1.67.0 → 1.73.6
   - Planning Toolbox: 1.65.4.post1 → 1.73.6
-- Updated related dependencies to maintain compatibility
+- Updated related dependencies to maintain compatibility across all subprojects
+  - Standardized Python version requirement to `<4.0,>=3.10` across all projects
+  - Updated Pydantic to ^2.10.4 for consistency
+  - Updated Jinja2 to ^3.1.5 across projects
+  - Updated Instructor to ^1.7.2 for alignment
+  - Updated Rich to ^13.9.4 in CodeAct to match main project
+  - Added missing core dependencies (requests, click, prompt-toolkit, tenacity, pathspec, python-dotenv, typing-extensions) to CodeAct
 - Regenerated Poetry lock files across all subprojects
 
 ### Technical Details
