@@ -1,5 +1,10 @@
 """Command-line interface entry point for Quantalogic Agent."""
 
+import os
+
+# Set minimal logging level for CLI usage BEFORE any imports
+os.environ.setdefault("LOGURU_LEVEL", "ERROR")
+
 import importlib
 from pathlib import Path
 
@@ -7,7 +12,13 @@ import typer
 from loguru import logger
 from rich.console import Console
 
-from quantalogic_codeact.codeact.plugin_manager import PluginManager
+# Configure logging BEFORE any other imports that might use loguru
+from quantalogic_codeact.utils.logging_config import configure_cli_logging
+
+configure_cli_logging()
+
+# Import plugin manager after logging configuration
+from quantalogic_codeact.codeact.plugin_manager import PluginManager  # noqa: E402
 
 app = typer.Typer(no_args_is_help=True)
 console = Console()

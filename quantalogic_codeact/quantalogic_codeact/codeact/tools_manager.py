@@ -3,7 +3,7 @@
 import importlib
 import importlib.metadata
 import inspect
-from typing import List, Optional
+from typing import List
 
 import loguru
 
@@ -112,7 +112,12 @@ class ToolRegistry:
                     tools_found = True
 
             if not tools_found:
-                loguru.logger.warning(f"No tools found in {getattr(module, '__name__', str(module))}")
+                # Some toolboxes might be placeholders or may not have tools yet
+                # Use debug level for known empty toolboxes to reduce noise
+                if toolbox_name in ["math_tools"]:  # Known toolboxes that might be empty
+                    loguru.logger.debug(f"No tools found in {getattr(module, '__name__', str(module))} (this may be expected)")
+                else:
+                    loguru.logger.warning(f"No tools found in {getattr(module, '__name__', str(module))}")
         except Exception as e:
             loguru.logger.error(f"Failed to register tools from module {getattr(module, '__name__', str(module))}: {e}")
             # Continue without raising to allow other toolboxes to load
@@ -137,7 +142,7 @@ class ToolRegistry:
                     # normalize toolbox names to valid Python identifiers
                     normalized = ep.name.replace('-', '_')
                     self.register_tools_from_module(module, toolbox_name=normalized)
-                    loguru.logger.info(f"Successfully loaded toolbox: {ep.name}")
+                    loguru.logger.debug(f"Successfully loaded toolbox: {ep.name}")
                 except ImportError as e:
                     loguru.logger.error(f"Failed to import toolbox {ep.name}: {e}")
                 except Exception as e:
@@ -148,9 +153,9 @@ class ToolRegistry:
 
 def get_default_tools(
     model: str,
-    history_store: Optional[List[dict]] = None,
-    enabled_toolboxes: Optional[List[str]] = None,
-    installed_toolboxes: Optional[List[Toolbox]]=None
+    history_store: List[dict] | None = None,
+    enabled_toolboxes: List[str] | None = None,
+    installed_toolboxes: List[Toolbox] | None = None
 ) -> List[Tool]:
     """Dynamically load default tools using the pre-loaded registry from PluginManager."""
     from quantalogic_codeact.cli import plugin_manager

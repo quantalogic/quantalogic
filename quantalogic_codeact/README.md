@@ -467,7 +467,7 @@ These systems enable multi-step reasoning and persistent conversations. See [Mem
 - **Dependency Errors**: Run `poetry install` to ensure all packages are installed.
 - **Timeout Errors**: Increase `--timeout` in CLI or `timeout` in SDK config.
 - **Tool Failures**: Use `/toolbox doc <toolbox> <tool>` to check tool arguments.
-- **Logging**: Enable debug mode with `/loglevel DEBUG` for detailed logs.
+- **Logging**: Enable debug mode with `/loglevel DEBUG` for detailed logs. See [Logging Configuration](docs/logging-configuration.md) for comprehensive logging setup and troubleshooting guidance.
 
 ---
 
