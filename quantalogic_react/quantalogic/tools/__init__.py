@@ -34,6 +34,13 @@ from .utils.generate_database_report import generate_database_report
 from .wikipedia_search_tool import WikipediaSearchTool
 from .write_file_tool import WriteFileTool
 
+# Optional tools that require additional dependencies
+try:
+    from .composio import ComposioTool
+    _COMPOSIO_AVAILABLE = True
+except ImportError:
+    _COMPOSIO_AVAILABLE = False
+
 # Define __all__ to control what gets imported with `from quantalogic.tools import *`
 __all__ = [
     'AgentTool',
@@ -70,3 +77,7 @@ __all__ = [
     'FileTrackerTool',
     "create_tool"
 ]
+
+# Add optional tools to __all__ if available
+if _COMPOSIO_AVAILABLE:
+    __all__.append('ComposioTool')

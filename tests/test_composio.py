@@ -1,19 +1,26 @@
 """Test module for Composio tool integration with QuantaLogic agent."""
 
-
+import pytest
 from dotenv import load_dotenv
 
-from quantalogic.agent import Agent
+from quantalogic import Agent
 from quantalogic.tools import (
     AgentTool,
     TaskCompleteTool,
 )
-from quantalogic.tools.composio import ComposioTool
+
+# Try to import ComposioTool, skip tests if not available
+try:
+    from quantalogic.tools.composio import ComposioTool
+    COMPOSIO_AVAILABLE = True
+except ImportError:
+    COMPOSIO_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
 
 
+@pytest.mark.skipif(not COMPOSIO_AVAILABLE, reason="Composio tool not available")
 def create_basic_composio_agent(
     model_name: str, 
     vision_model_name: str | None = None, 
@@ -51,7 +58,7 @@ def create_basic_composio_agent(
     )
 
 
-
+@pytest.mark.skipif(not COMPOSIO_AVAILABLE, reason="Composio tool not available")
 def test_composio_weather():
     """Test Composio weather integration with the agent."""
     # Create agent with Composio tool

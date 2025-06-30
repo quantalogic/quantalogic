@@ -21,6 +21,51 @@ QuantaLogic React is the original and main implementation of the ReAct (Reasonin
 
 ## 📊 Architecture
 
+### Component Overview
+
+```mermaid
+graph TB
+    subgraph "QuantaLogic React Agent"
+        A[Agent Core] --> B[Tool Manager]
+        A --> C[Memory System]
+        A --> D[Event System]
+        
+        B --> E[Built-in Tools]
+        B --> F[Plugin Tools]
+        
+        A --> G[Generative Model]
+        G --> H[LLM Providers]
+        
+        I[CLI Interface] --> A
+        J[Web Server] --> A
+        
+        A --> K[ReAct Loop]
+        K --> L[Reasoning]
+        K --> M[Action Selection]
+        K --> N[Tool Execution]
+        K --> O[Observation]
+        O --> L
+    end
+    
+    style A fill:#E8F4FD,stroke:#2E86AB,stroke-width:2px,color:#1B4F72
+    style B fill:#FFF2CC,stroke:#D6B656,stroke-width:2px,color:#7D6608
+    style C fill:#F8D7DA,stroke:#D73A49,stroke-width:2px,color:#721C24
+    style D fill:#E1F5FE,stroke:#0277BD,stroke-width:2px,color:#01579B
+    style E fill:#E8F5E8,stroke:#28A745,stroke-width:2px,color:#155724
+    style F fill:#F3E5F5,stroke:#8E24AA,stroke-width:2px,color:#4A148C
+    style G fill:#FFF8E1,stroke:#FF8F00,stroke-width:2px,color:#E65100
+    style H fill:#FFEBEE,stroke:#F44336,stroke-width:2px,color:#B71C1C
+    style I fill:#F0F4C3,stroke:#827717,stroke-width:2px,color:#33691E
+    style J fill:#E0F2F1,stroke:#00695C,stroke-width:2px,color:#004D40
+    style K fill:#FCE4EC,stroke:#AD1457,stroke-width:2px,color:#880E4F
+    style L fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#4A148C
+    style M fill:#E8EAF6,stroke:#3F51B5,stroke-width:2px,color:#1A237E
+    style N fill:#E0F7FA,stroke:#00838F,stroke-width:2px,color:#006064
+    style O fill:#FFF3E0,stroke:#FB8C00,stroke-width:2px,color:#E65100
+```
+
+### Directory Structure
+
 ```
 quantalogic_react/quantalogic/
 ├── agent.py                 # Core ReAct agent implementation
@@ -41,6 +86,34 @@ quantalogic_react/quantalogic/
 ```
 
 ## 🚀 Usage
+
+### ReAct Loop Process
+
+```mermaid
+flowchart TD
+    Start([Task Input]) --> Think{Reasoning Phase}
+    Think --> |Analyze Task| Plan[Generate Action Plan]
+    Plan --> Act[Select Tool & Execute]
+    Act --> Observe[Collect Results]
+    Observe --> Check{Goal Achieved?}
+    Check --> |No| Think
+    Check --> |Yes| Success([Task Complete])
+    
+    Act --> |Error| Error[Handle Error]
+    Error --> Think
+    
+    Think --> |Max Iterations| Timeout([Iteration Limit])
+    
+    style Start fill:#E8F5E8,stroke:#28A745,stroke-width:2px,color:#155724
+    style Think fill:#E8F4FD,stroke:#2E86AB,stroke-width:2px,color:#1B4F72
+    style Plan fill:#FFF2CC,stroke:#D6B656,stroke-width:2px,color:#7D6608
+    style Act fill:#FCE4EC,stroke:#AD1457,stroke-width:2px,color:#880E4F
+    style Observe fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#4A148C
+    style Check fill:#E0F2F1,stroke:#00695C,stroke-width:2px,color:#004D40
+    style Success fill:#E8F5E8,stroke:#28A745,stroke-width:2px,color:#155724
+    style Error fill:#FFEBEE,stroke:#F44336,stroke-width:2px,color:#B71C1C
+    style Timeout fill:#FFF8E1,stroke:#FF8F00,stroke-width:2px,color:#E65100
+```
 
 ### Basic Agent Usage
 
@@ -93,6 +166,37 @@ quantalogic --model gpt-4 run "Analyze this codebase"
 ```
 
 ## 🛠 Tool Ecosystem
+
+### Tool Categories
+
+```mermaid
+mindmap
+  root((Tools))
+    File Operations
+      ReadFileTool
+      WriteFileTool
+      EditWholeContentTool
+      ReplaceInFileTool
+      ListDirectoryTool
+    Code Execution
+      PythonTool
+      ExecuteBashCommandTool
+      NodeJsTool
+      ElixirTool
+    Search & Info
+      DuckDuckGoSearchTool
+      WikipediaSearchTool
+      RipgrepTool
+      SearchDefinitionNamesTool
+    Data Processing
+      SQLQueryTool
+      MarkitdownTool
+      JinjaTool
+    Development
+      SequenceTool
+      AgentTool
+      LLMTool
+```
 
 The React agent includes a comprehensive set of tools:
 
@@ -217,6 +321,63 @@ quantalogic --help
 ```
 
 ## 🔄 Integration with Other Components
+
+### QuantaLogic Ecosystem Integration
+
+```mermaid
+graph TB
+    subgraph "QuantaLogic Ecosystem"
+        QR[QuantaLogic React]
+        QC[QuantaLogic CodeAct]
+        QF[QuantaLogic Flow]
+        QT[QuantaLogic Toolbox]
+        PT[Plugin Toolboxes]
+    end
+    
+    subgraph "Integration Points"
+        TI[Tool Interface]
+        FI[Flow Integration]
+        API[Shared APIs]
+    end
+    
+    QR --> TI
+    QC --> TI
+    QT --> TI
+    PT --> TI
+    
+    QR --> FI
+    QC --> FI
+    QF --> FI
+    
+    QR --> API
+    QC --> API
+    QF --> API
+    
+    subgraph "External Systems"
+        LLM[LLM Providers]
+        DB[(Databases)]
+        WEB[Web APIs]
+        FS[File System]
+    end
+    
+    QR --> LLM
+    QR --> DB
+    QR --> WEB
+    QR --> FS
+    
+    style QR fill:#E8F4FD,stroke:#2E86AB,stroke-width:3px,color:#1B4F72
+    style QC fill:#FFF2CC,stroke:#D6B656,stroke-width:2px,color:#7D6608
+    style QF fill:#E8F5E8,stroke:#28A745,stroke-width:2px,color:#155724
+    style QT fill:#F8D7DA,stroke:#D73A49,stroke-width:2px,color:#721C24
+    style PT fill:#F3E5F5,stroke:#8E24AA,stroke-width:2px,color:#4A148C
+    style TI fill:#E0F2F1,stroke:#00695C,stroke-width:2px,color:#004D40
+    style FI fill:#FCE4EC,stroke:#AD1457,stroke-width:2px,color:#880E4F
+    style API fill:#E8EAF6,stroke:#3F51B5,stroke-width:2px,color:#1A237E
+    style LLM fill:#FFF8E1,stroke:#FF8F00,stroke-width:2px,color:#E65100
+    style DB fill:#FFEBEE,stroke:#F44336,stroke-width:2px,color:#B71C1C
+    style WEB fill:#E0F7FA,stroke:#00838F,stroke-width:2px,color:#006064
+    style FS fill:#F0F4C3,stroke:#827717,stroke-width:2px,color:#33691E
+```
 
 ### Flow Integration
 ```python
