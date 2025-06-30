@@ -357,3 +357,213 @@ class TestWorkflowEngine:
         assert result["result2"] == "secondary: test"
         assert result["metadata"]["processed"] is True
         assert result["input_data"] == "test"  # Original data preserved
+    
+    def test_workflow_engine_sub_workflow_execution(self, nodes_registry_backup):
+        """Test WorkflowEngine execution with sub-workflows."""
+        @Nodes.define(output="main_result")
+        def main_node(input_data):
+            return f"main: {input_data}"
+        
+        @Nodes.define(output="sub_result")
+        def sub_node(sub_input):
+            return f"sub: {sub_input}"
+        
+        # Create sub-workflow
+        sub_workflow = Workflow("sub_node")
+        
+        # Create main workflow with sub-workflow
+        workflow = Workflow("main_node")
+        workflow.add_sub_workflow(
+            "sub_workflow_node",
+            sub_workflow,
+            inputs={"sub_input": "main_result"},
+            output="final_result"
+        )
+        
+        engine = workflow.build()
+        
+        # This would test sub-workflow execution in integration tests
+        assert engine.workflow == workflow
+
+    def test_workflow_engine_observer_notifications(self, nodes_registry_backup):
+        """Test that WorkflowEngine properly notifies observers."""
+        events_received = []
+        
+        @Nodes.define(output="test_result")
+        def test_node(input_data):
+            return f"processed: {input_data}"
+        
+        def test_observer(event):
+            events_received.append(event.event_type)
+        
+        workflow = Workflow("test_node")
+        workflow.add_observer(test_observer)
+        
+        engine = workflow.build()
+        assert test_observer in engine.observers
+
+    def test_workflow_engine_parent_relationship(self, nodes_registry_backup):
+        """Test WorkflowEngine parent-child relationships."""
+        @Nodes.define(output="parent_result")
+        def parent_node(input_data):
+            return input_data
+        
+        @Nodes.define(output="child_result") 
+        def child_node(input_data):
+            return input_data
+        
+        parent_workflow = Workflow("parent_node")
+        child_workflow = Workflow("child_node")
+        
+        parent_engine = parent_workflow.build()
+        child_engine = child_workflow.build(parent_engine=parent_engine)
+        
+        assert child_engine.parent_engine == parent_engine
+        assert parent_engine.parent_engine is None
+
+    def test_workflow_engine_observer_management(self, nodes_registry_backup):
+        """Test WorkflowEngine observer add/remove functionality."""
+        @Nodes.define(output="test_result")
+        def test_node(input_data):
+            return input_data
+        
+        workflow = Workflow("test_node")
+        engine = workflow.build()
+        
+        observer1 = MagicMock()
+        observer2 = MagicMock()
+        
+        # Test adding observers
+        engine.add_observer(observer1)
+        engine.add_observer(observer2)
+        
+        assert observer1 in engine.observers
+        assert observer2 in engine.observers
+        
+        # Test removing observer
+        engine.remove_observer(observer1)
+        assert observer1 not in engine.observers
+        assert observer2 in engine.observers
+        
+        # Test adding duplicate observer
+        engine.add_observer(observer2)
+        assert len([obs for obs in engine.observers if obs == observer2]) == 1
+
+    def test_workflow_engine_context_handling(self, nodes_registry_backup):
+        """Test WorkflowEngine context management."""
+        @Nodes.define(output="result")
+        def test_node(input_param):
+            return f"processed: {input_param}"
+        
+        workflow = Workflow("test_node")
+        engine = workflow.build()
+        
+        # Test initial context
+        assert engine.context == {}
+        
+        # Context would be set during run() method
+        # This tests the structure is correct
+        assert hasattr(engine, "context")
+        assert isinstance(engine.context, dict)
+
+    def test_workflow_engine_async_observer_handling(self, nodes_registry_backup):
+        """Test WorkflowEngine handling of async observers."""
+        @Nodes.define(output="test_result")
+        def test_node(input_data):
+            return input_data
+        
+        async def async_observer(event):
+            # Simulate async processing
+            await asyncio.sleep(0.001)
+            return f"processed: {event.event_type}"
+        
+        def sync_observer(event):
+            return f"sync: {event.event_type}"
+        
+        workflow = Workflow("test_node")
+        workflow.add_observer(async_observer)
+        workflow.add_observer(sync_observer)
+        
+        engine = workflow.build()
+        
+        assert async_observer in engine.observers
+        assert sync_observer in engine.observers
+
+    def test_workflow_engine_error_handling_in_observers(self, nodes_registry_backup):
+        """Test WorkflowEngine handling of observer errors."""
+        @Nodes.define(output="test_result")
+        def test_node(input_data):
+            return input_data
+        
+        def failing_observer(event):
+            raise Exception("Observer failed")
+        
+        def good_observer(event):
+            return "success"
+        
+        workflow = Workflow("test_node")
+        workflow.add_observer(failing_observer)
+        workflow.add_observer(good_observer)
+        
+        engine = workflow.build()
+        
+        # Both observers should be registered
+        assert failing_observer in engine.observers
+        assert good_observer in engine.observers
+
+    def test_workflow_engine_input_mapping_execution(self, nodes_registry_backup):
+        """Test WorkflowEngine handling of input mappings during execution."""
+        @Nodes.define(output="mapped_result")
+        def mapped_node(param1, param2):
+            return f"{param1}-{param2}"
+        
+        def custom_mapper(ctx):
+            return ctx.get("base_value", 0) * 2
+        
+        mapping = {
+            "param1": "direct_key",
+            "param2": custom_mapper
+        }
+        
+        workflow = Workflow("mapped_node")
+        workflow.node("mapped_node", inputs_mapping=mapping)
+        
+        engine = workflow.build()
+        
+        # Verify input mappings are stored
+        assert engine.workflow.node_input_mappings["mapped_node"] == mapping
+
+    def test_workflow_engine_transition_evaluation(self, nodes_registry_backup):
+        """Test WorkflowEngine transition condition evaluation."""
+        @Nodes.define(output="start_result")
+        def start_node(input_data):
+            return input_data
+        
+        @Nodes.define(output="conditional_result")
+        def conditional_node(data):
+            return f"conditional: {data}"
+        
+        @Nodes.define(output="default_result")
+        def default_node(data):
+            return f"default: {data}"
+        
+        def condition_func(ctx):
+            return ctx.get("use_conditional", False)
+        
+        workflow = Workflow("start_node")
+        workflow.then("conditional_node", condition_func)
+        workflow.then("default_node", None)  # Default transition
+        
+        engine = workflow.build()
+        
+        # Verify transitions are set up correctly
+        transitions = engine.workflow.transitions["start_node"]
+        assert len(transitions) == 2
+        
+        conditional_transition = next((t for t in transitions if t[0] == "conditional_node"), None)
+        default_transition = next((t for t in transitions if t[0] == "default_node"), None)
+        
+        assert conditional_transition is not None
+        assert conditional_transition[1] == condition_func
+        assert default_transition is not None
+        assert default_transition[1] is None

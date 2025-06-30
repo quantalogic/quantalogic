@@ -1,3 +1,29 @@
+def parse_mermaid_flowchart(mermaid_text: str) -> dict:
+    """
+    Minimal parser for Mermaid flowchart syntax. Extracts nodes and edges.
+    Returns a dict with 'nodes' and 'edges' keys.
+    Handles basic syntax and ignores advanced features.
+    """
+    import re
+    nodes = set()
+    edges = []
+    if not isinstance(mermaid_text, str) or not mermaid_text.strip():
+        return {}
+    lines = mermaid_text.strip().splitlines()
+    for line in lines:
+        line = line.strip()
+        # Match edges: A --> B, optionally with labels
+        edge_match = re.match(r'([A-Za-z0-9_\-]+)[\[(]?.*?[\])]?(?:\s*-->|\s*--\|.*?\|-->)\s*([A-Za-z0-9_\-]+)', line)
+        if edge_match:
+            src, dst = edge_match.groups()
+            nodes.add(src)
+            nodes.add(dst)
+            edges.append((src, dst))
+        # Match node definitions: A[Label], B((Label)), etc.
+        node_match = re.match(r'([A-Za-z0-9_\-]+)\s*([\[(])', line)
+        if node_match:
+            nodes.add(node_match.group(1))
+    return {"nodes": list(nodes), "edges": edges}
 import re
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -105,33 +131,43 @@ def generate_mermaid_diagram(
 
     # Validate node names for Mermaid compatibility (alphanumeric, underscore, hyphen)
     invalid_chars = r'[^a-zA-Z0-9_-]'
+    # Collect all nodes from the workflow structure and the nodes dict
     all_nodes: Set[str] = set()
-    if workflow_def.workflow.start:
-        if re.search(invalid_chars, workflow_def.workflow.start):
-            raise ValueError(f"Invalid node name '{workflow_def.workflow.start}' for Mermaid")
-        all_nodes.add(workflow_def.workflow.start)
-    for trans in workflow_def.workflow.transitions:
-        if re.search(invalid_chars, trans.from_node):
-            raise ValueError(f"Invalid node name '{trans.from_node}' for Mermaid")
+    # Add all nodes from the workflow structure (dict keys)
+    if hasattr(workflow_def.workflow, "nodes"):
+        if isinstance(workflow_def.workflow.nodes, dict):
+            all_nodes.update(workflow_def.workflow.nodes.keys())
+        elif isinstance(workflow_def.workflow.nodes, list):
+            all_nodes.update(workflow_def.workflow.nodes)
+    # Add all nodes from the nodes dict (for legacy/test compatibility)
+    if hasattr(workflow_def, "nodes") and isinstance(workflow_def.nodes, dict):
+        all_nodes.update(workflow_def.nodes.keys())
+    # Add all nodes from transitions
+    all_transitions = []
+    if hasattr(workflow_def.workflow, "transitions") and workflow_def.workflow.transitions:
+        all_transitions.extend(workflow_def.workflow.transitions)
+    if hasattr(workflow_def, "transitions") and workflow_def.transitions:
+        all_transitions.extend(workflow_def.transitions)
+    
+    for trans in all_transitions:
         all_nodes.add(trans.from_node)
         if isinstance(trans.to_node, str):
-            if re.search(invalid_chars, trans.to_node):
-                raise ValueError(f"Invalid node name '{trans.to_node}' for Mermaid")
             all_nodes.add(trans.to_node)
         else:
             for tn in trans.to_node:
                 target = tn if isinstance(tn, str) else tn.to_node
-                if re.search(invalid_chars, target):
-                    raise ValueError(f"Invalid node name '{target}' for Mermaid")
                 all_nodes.add(target)
-    for conv_node in workflow_def.workflow.convergence_nodes:
-        if re.search(invalid_chars, conv_node):
-            raise ValueError(f"Invalid node name '{conv_node}' for Mermaid")
+    # Add all convergence nodes
+    for conv_node in getattr(workflow_def.workflow, "convergence_nodes", []):
         all_nodes.add(conv_node)
+    # Validate node names for Mermaid compatibility
+    for node in all_nodes:
+        if re.search(invalid_chars, node):
+            raise ValueError(f"Invalid node name '{node}' for Mermaid")
 
     # Determine nodes with conditional transitions (branching)
     conditional_nodes: Set[str] = set()
-    for trans in workflow_def.workflow.transitions:
+    for trans in all_transitions:
         if (trans.condition and isinstance(trans.to_node, str)) or \
            (isinstance(trans.to_node, list) and any(isinstance(tn, BranchCondition) and tn.condition for tn in trans.to_node)):
             conditional_nodes.add(trans.from_node)
@@ -146,7 +182,7 @@ def generate_mermaid_diagram(
     # Assemble the Mermaid syntax
     mermaid_code = "```mermaid\n"
     if diagram_type == "flowchart":
-        mermaid_code += "graph TD\n"  # Top-down layout
+        mermaid_code += "flowchart TD\n"  # Top-down layout (use 'flowchart' for compatibility)
     else:  # stateDiagram
         mermaid_code += "stateDiagram-v2\n"
 
@@ -165,8 +201,14 @@ def generate_mermaid_diagram(
     if diagram_type == "flowchart":
         # Flowchart-specific: Generate node definitions with shapes
         node_defs: List[str] = []
-        for node in all_nodes:
-            node_def_flow: Optional[NodeDefinition] = workflow_def.nodes.get(node)
+        for node in sorted(all_nodes):
+            # Try to get node definition from workflow_def.nodes, fallback to workflow_def.workflow.nodes
+            node_def_flow = None
+            if hasattr(workflow_def, "nodes") and isinstance(workflow_def.nodes, dict):
+                node_def_flow = workflow_def.nodes.get(node)
+            if not node_def_flow and hasattr(workflow_def.workflow, "nodes"):
+                if isinstance(workflow_def.workflow.nodes, dict):
+                    node_def_flow = workflow_def.workflow.nodes.get(node)
             has_conditions = node in conditional_nodes
             label, node_type, shape = get_node_label_and_type(node, node_def_flow, has_conditions)
             start_shape, end_shape = shape_syntax[shape]
@@ -175,30 +217,53 @@ def generate_mermaid_diagram(
             node_shapes[node] = shape
 
         # Add node definitions
-        for node_def_str in sorted(node_defs):  # Sort for consistent output
+        for node_def_str in node_defs:  # Already sorted
             mermaid_code += f"    {node_def_str}\n"
 
-        # Generate arrows for transitions
-        for trans in workflow_def.workflow.transitions:
+        # Generate arrows for transitions (ensure all are output, including conditions)
+        transitions = []
+        # Try to get transitions from workflow_def.workflow first, then fallback to workflow_def
+        if hasattr(workflow_def.workflow, "transitions") and workflow_def.workflow.transitions:
+            transitions = workflow_def.workflow.transitions
+        elif hasattr(workflow_def, "transitions") and workflow_def.transitions:
+            transitions = workflow_def.transitions
+        for trans in transitions:
             from_node = trans.from_node
             if isinstance(trans.to_node, str):
                 to_node = trans.to_node
                 condition = trans.condition
                 if condition:
-                    cond = condition.replace('"', '\\"')[:30] + ("..." if len(condition) > 30 else "")
+                    # Try to extract a user-friendly label from the condition string
+                    # e.g., lambda ctx: ctx.get('use_branch1', False) -> use_branch1
+                    label = None
+                    match = re.search(r"ctx\\.get\(['\"]([a-zA-Z0-9_]+)['\"]", condition)
+                    if match:
+                        label = match.group(1)
+                    if not label:
+                        match = re.search(r"['\"]([a-zA-Z0-9_]+)['\"]", condition)
+                        if match:
+                            label = match.group(1)
+                    cond = label if label else (condition.replace('"', '\\"')[:30] + ("..." if len(condition) > 30 else ""))
                     mermaid_code += f'    {from_node} -->|"{cond}"| {to_node}\n'
                 else:
                     mermaid_code += f'    {from_node} --> {to_node}\n'
             else:
                 for tn in trans.to_node:
                     if isinstance(tn, str):
-                        # Parallel transition (no condition)
                         mermaid_code += f'    {from_node} --> {tn}\n'
                     else:  # BranchCondition
                         to_node = tn.to_node
                         condition = tn.condition
                         if condition:
-                            cond = condition.replace('"', '\\"')[:30] + ("..." if len(condition) > 30 else "")
+                            label = None
+                            match = re.search(r"ctx\\.get\(['\"]([a-zA-Z0-9_]+)['\"]", condition)
+                            if match:
+                                label = match.group(1)
+                            if not label:
+                                match = re.search(r"['\"]([a-zA-Z0-9_]+)['\"]", condition)
+                                if match:
+                                    label = match.group(1)
+                            cond = label if label else (condition.replace('"', '\\"')[:30] + ("..." if len(condition) > 30 else ""))
                             mermaid_code += f'    {from_node} -->|"{cond}"| {to_node}\n'
                         else:
                             mermaid_code += f'    {from_node} --> {to_node}\n'
