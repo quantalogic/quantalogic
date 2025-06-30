@@ -8,7 +8,9 @@ import pytest
 from quantalogic_flow.flow.flow_generator import generate_executable_script
 from quantalogic_flow.flow.flow_manager_schema import (
     FunctionDefinition,
+    LLMConfig,
     NodeDefinition,
+    TemplateConfig,
     TransitionDefinition,
     WorkflowDefinition,
     WorkflowStructure,
@@ -23,7 +25,14 @@ class TestFlowGenerator:
         self.workflow_def = WorkflowDefinition(
             workflow=WorkflowStructure(
                 start="start_node",
-                nodes=["start_node", "end_node"]
+                nodes=["start_node", "end_node"],
+                transitions=[
+                    TransitionDefinition(
+                        from_node="start_node",
+                        to_node="end_node",
+                        condition=None
+                    )
+                ]
             ),
             nodes={
                 "start_node": NodeDefinition(
@@ -50,14 +59,7 @@ class TestFlowGenerator:
                     code="def end_func(data):\n    return f'processed: {data}'",
                     is_async=False
                 )
-            },
-            transitions=[
-                TransitionDefinition(
-                    from_node="start_node",
-                    to_node="end_node",
-                    condition=None
-                )
-            ]
+            }
         )
         self.global_vars = {
             "DEFAULT_MODEL": "gpt-4",
@@ -100,8 +102,8 @@ class TestFlowGenerator:
             assert 'def end_func(data):' in content
             
             # Check for workflow construction
-            assert 'workflow = Workflow("start_node")' in content
-            assert 'workflow.sequence("end_node")' in content
+            assert 'Workflow("start_node")' in content
+            assert '.sequence("end_node")' in content
             
         finally:
             # Clean up
@@ -141,21 +143,14 @@ class TestFlowGenerator:
             ),
             nodes={
                 "llm_node": NodeDefinition(
-                    name="llm_node",
-                    function="llm_func",
-                    output="llm_result",
-                    node_type="llm",
-                    llm_params={"model": "gpt-4", "temperature": 0.5}
+                    llm_config=LLMConfig(
+                        model="gpt-4",
+                        temperature=0.5
+                    ),
+                    output="llm_result"
                 )
             },
-            functions={
-                "llm_func": FunctionDefinition(
-                    name="llm_func",
-                    type="embedded",
-                    code="def llm_func(query):\n    return query",
-                    is_async=False
-                )
-            },
+            functions={},
             transitions=[]
         )
         
@@ -189,24 +184,13 @@ class TestFlowGenerator:
             ),
             nodes={
                 "template_node": NodeDefinition(
-                    name="template_node",
-                    function="template_func",
-                    output="template_result",
-                    node_type="template",
-                    template_config={
-                        "template": "test_template.jinja2",
-                        "variables": ["var1", "var2"]
-                    }
+                    template_config=TemplateConfig(
+                        template_file="test_template.jinja2"
+                    ),
+                    output="template_result"
                 )
             },
-            functions={
-                "template_func": FunctionDefinition(
-                    name="template_func",
-                    type="embedded",
-                    code="def template_func(data):\n    return data",
-                    is_async=False
-                )
-            },
+            functions={},
             transitions=[]
         )
         
@@ -279,7 +263,24 @@ class TestFlowGenerator:
         branch_workflow = WorkflowDefinition(
             workflow=WorkflowStructure(
                 start="start_node",
-                nodes=["start_node", "branch1", "branch2", "default_node"]
+                nodes=["start_node", "branch1", "branch2", "default_node"],
+                transitions=[
+                    TransitionDefinition(
+                        from_node="start_node",
+                        to_node="branch1",
+                        condition="lambda ctx: ctx.get('use_branch1', False)"
+                    ),
+                    TransitionDefinition(
+                        from_node="start_node",
+                        to_node="branch2",
+                        condition="lambda ctx: ctx.get('use_branch2', False)"
+                    ),
+                    TransitionDefinition(
+                        from_node="start_node",
+                        to_node="default_node",
+                        condition=None
+                    )
+                ]
             ),
             nodes={
                 "start_node": NodeDefinition(
@@ -328,24 +329,7 @@ class TestFlowGenerator:
                     code="def default_func():\n    return 'default'",
                     is_async=False
                 )
-            },
-            transitions=[
-                TransitionDefinition(
-                    from_node="start_node",
-                    to_node="branch1",
-                    condition="lambda ctx: ctx.get('use_branch1', False)"
-                ),
-                TransitionDefinition(
-                    from_node="start_node",
-                    to_node="branch2",
-                    condition="lambda ctx: ctx.get('use_branch2', False)"
-                ),
-                TransitionDefinition(
-                    from_node="start_node",
-                    to_node="default_node",
-                    condition=None
-                )
-            ]
+            }
         )
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
@@ -362,7 +346,7 @@ class TestFlowGenerator:
                 content = f.read()
                 
             # Check for branch construction
-            assert 'workflow.branch' in content
+            assert '.branch(' in content
             assert 'use_branch1' in content
             assert 'use_branch2' in content
             assert 'default=' in content

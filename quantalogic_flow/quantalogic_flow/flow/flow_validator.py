@@ -301,6 +301,10 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
         if not required_inputs:
             continue
 
+        # Skip input validation for start nodes
+        if full_node_name == workflow_def.workflow.start:
+            continue
+
         ancestors = get_ancestors(full_node_name)
         for input_name in required_inputs:
             # Check if input is mapped

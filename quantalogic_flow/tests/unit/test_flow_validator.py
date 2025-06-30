@@ -2,7 +2,9 @@
 
 from quantalogic_flow.flow.flow_manager_schema import (
     FunctionDefinition,
+    LLMConfig,
     NodeDefinition,
+    TemplateConfig,
     TransitionDefinition,
     WorkflowDefinition,
     WorkflowStructure,
@@ -234,22 +236,22 @@ class TestWorkflowValidator:
         invalid_transition_workflow = WorkflowDefinition(
             workflow=WorkflowStructure(
                 start="start_node",
-                nodes=["start_node", "end_node"]
+                nodes=["start_node", "end_node"],
+                transitions=[
+                    TransitionDefinition(
+                        from_node="start_node",
+                        to_node="nonexistent_node"  # Invalid target
+                    )
+                ]
             ),
             nodes={
-                "start_node": NodeDefinition(name="start_node", function="start_func"),
-                "end_node": NodeDefinition(name="end_node", function="end_func")
+                "start_node": NodeDefinition(function="start_func"),
+                "end_node": NodeDefinition(function="end_func")
             },
             functions={
                 "start_func": FunctionDefinition(name="start_func", type="embedded", code="def start_func(): pass"),
                 "end_func": FunctionDefinition(name="end_func", type="embedded", code="def end_func(): pass")
-            },
-            transitions=[
-                TransitionDefinition(
-                    from_node="start_node",
-                    to_node="nonexistent_node"  # Invalid target
-                )
-            ]
+            }
         )
         
         result = validate_workflow(invalid_transition_workflow)
@@ -266,19 +268,13 @@ class TestWorkflowValidator:
             ),
             nodes={
                 "llm_node": NodeDefinition(
-                    name="llm_node",
-                    function="llm_func",
-                    node_type="llm",
-                    llm_params={"model": "gpt-4", "temperature": 0.7}
+                    llm_config=LLMConfig(
+                        model="gpt-4",
+                        temperature=0.7
+                    )
                 )
             },
-            functions={
-                "llm_func": FunctionDefinition(
-                    name="llm_func",
-                    type="embedded",
-                    code="def llm_func(query): return query"
-                )
-            },
+            functions={},
             transitions=[]
         )
         
@@ -297,22 +293,12 @@ class TestWorkflowValidator:
             ),
             nodes={
                 "template_node": NodeDefinition(
-                    name="template_node",
-                    function="template_func",
-                    node_type="template",
-                    template_config={
-                        "template": "test_template.jinja2",
-                        "variables": ["var1", "var2"]
-                    }
+                    template_config=TemplateConfig(
+                        template_file="test_template.jinja2"
+                    )
                 )
             },
-            functions={
-                "template_func": FunctionDefinition(
-                    name="template_func",
-                    type="embedded",
-                    code="def template_func(**kwargs): return kwargs"
-                )
-            },
+            functions={},
             transitions=[]
         )
         

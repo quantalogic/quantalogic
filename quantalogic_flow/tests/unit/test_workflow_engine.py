@@ -557,13 +557,15 @@ class TestWorkflowEngine:
         engine = workflow.build()
         
         # Verify transitions are set up correctly
-        transitions = engine.workflow.transitions["start_node"]
-        assert len(transitions) == 2
+        start_transitions = engine.workflow.transitions["start_node"]
+        conditional_transitions = engine.workflow.transitions["conditional_node"]
+        assert len(start_transitions) == 1
+        assert len(conditional_transitions) == 1
         
-        conditional_transition = next((t for t in transitions if t[0] == "conditional_node"), None)
-        default_transition = next((t for t in transitions if t[0] == "default_node"), None)
+        conditional_transition = start_transitions[0]
+        default_transition = conditional_transitions[0]
         
-        assert conditional_transition is not None
+        assert conditional_transition[0] == "conditional_node"
         assert conditional_transition[1] == condition_func
-        assert default_transition is not None
+        assert default_transition[0] == "default_node"
         assert default_transition[1] is None

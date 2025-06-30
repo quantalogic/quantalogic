@@ -253,10 +253,23 @@ class Workflow:
         self._observers: List[WorkflowObserver] = []
         self._register_node(start_node)
         self.current_node = start_node
-        # Loop-specific attributes
-        self.in_loop = False
-        self.loop_nodes = []
-        self.loop_entry_node = None
+        # Loop-specific attributes (support for nested loops)
+        self.loop_stack = []  # Stack of loop states: (entry_node, loop_nodes)
+    
+    @property
+    def in_loop(self) -> bool:
+        """Check if currently in a loop."""
+        return len(self.loop_stack) > 0
+    
+    @property
+    def loop_nodes(self) -> List[str]:
+        """Get the current loop's nodes."""
+        return self.loop_stack[-1][1] if self.loop_stack else []
+    
+    @property
+    def loop_entry_node(self) -> str:
+        """Get the current loop's entry node."""
+        return self.loop_stack[-1][0] if self.loop_stack else None
 
     def _register_node(self, name: str):
         """Register a node without modifying the current node."""
@@ -279,7 +292,7 @@ class Workflow:
         """
         self._register_node(name)
         if self.in_loop:
-            self.loop_nodes.append(name)
+            self.loop_stack[-1][1].append(name)  # Add to current loop's nodes
         if inputs_mapping:
             self.node_input_mappings[name] = inputs_mapping
             logger.debug(f"Added inputs mapping for node {name}: {inputs_mapping}")
@@ -399,6 +412,7 @@ class Workflow:
         """
         if self.current_node:
             for node in nodes:
+                self._register_node(node)  # Register each parallel node
                 self.transitions.setdefault(self.current_node, []).append((node, None))
         self.current_node = None
         return self
@@ -448,9 +462,8 @@ class Workflow:
         """
         if self.current_node is None:
             raise ValueError("Cannot start loop without a current node")
-        self.loop_entry_node = self.current_node
-        self.in_loop = True
-        self.loop_nodes = []
+        # Push new loop state onto stack
+        self.loop_stack.append((self.current_node, []))
         return self
 
     def end_loop(self, condition: Callable[[Dict[str, Any]], bool], next_node: str):
@@ -466,18 +479,24 @@ class Workflow:
         Returns:
             Self for method chaining.
         """
-        if not self.in_loop or not self.loop_nodes:
+        if not self.in_loop:
             raise ValueError("No loop nodes defined")
         
-        first_node = self.loop_nodes[0]
-        last_node = self.loop_nodes[-1]
+        # Pop current loop state
+        entry_node, loop_nodes = self.loop_stack.pop()
+        
+        if not loop_nodes:
+            raise ValueError("No loop nodes defined")
+        
+        first_node = loop_nodes[0]
+        last_node = loop_nodes[-1]
         
         # Transition from the node before the loop to the first loop node
-        self.transitions.setdefault(self.loop_entry_node, []).append((first_node, None))
+        self.transitions.setdefault(entry_node, []).append((first_node, None))
         
         # Transitions within the loop
-        for i in range(len(self.loop_nodes) - 1):
-            self.transitions.setdefault(self.loop_nodes[i], []).append((self.loop_nodes[i + 1], None))
+        for i in range(len(loop_nodes) - 1):
+            self.transitions.setdefault(loop_nodes[i], []).append((loop_nodes[i + 1], None))
         
         # Conditional transitions from the last loop node
         # If condition is False, loop back to the first node
@@ -491,9 +510,6 @@ class Workflow:
         
         # Update state
         self.current_node = next_node
-        self.in_loop = False
-        self.loop_nodes = []
-        self.loop_entry_node = None
         
         return self
 
