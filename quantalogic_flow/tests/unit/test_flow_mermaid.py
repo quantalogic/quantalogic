@@ -9,7 +9,6 @@ from quantalogic_flow.flow.flow_manager_schema import (
 )
 from quantalogic_flow.flow.flow_mermaid import (
     generate_mermaid_diagram,
-    get_node_label_and_type,
     parse_mermaid_flowchart,
 )
 

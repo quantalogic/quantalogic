@@ -92,18 +92,12 @@ def generate_executable_script(
 
     # Detect loops
     loop_nodes = []
-    loop_condition = None
-    loop_exit_node = None
     for trans in workflow_def.workflow.transitions:
         if isinstance(trans.to_node, str) and trans.condition:
             # Check for loop-back transition
             if any(t.from_node == trans.to_node and t.to_node == trans.from_node for t in workflow_def.workflow.transitions):
                 loop_nodes.append(trans.from_node)
                 loop_nodes.append(trans.to_node)
-                loop_condition = trans.condition
-            # Check for exit transition
-            elif loop_nodes and trans.from_node == loop_nodes[-1] and f"not ({loop_condition})" in trans.condition:
-                loop_exit_node = trans.to_node
     loop_nodes = list(dict.fromkeys(loop_nodes))  # Remove duplicates, preserve order
 
     with open(output_file, "w") as f:
