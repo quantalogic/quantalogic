@@ -82,6 +82,115 @@ def get_function_params(code: str, func_name: str) -> List[str]:
         raise ValueError(f"Invalid syntax in code: {e}")
 
 
+def validate_loops(workflow_def: WorkflowDefinition) -> List[NodeError]:
+    """Validate loop structures including nested loops."""
+    issues: List[NodeError] = []
+    
+    # Check if workflow has explicit loop definitions
+    if not hasattr(workflow_def.workflow, 'loops') or not workflow_def.workflow.loops:
+        return issues
+    
+    all_nodes = set(workflow_def.nodes.keys())
+    
+    for i, loop_def in enumerate(workflow_def.workflow.loops):
+        loop_id = f"loop_{i}"
+        
+        # Validate all nodes in loop exist
+        for node in loop_def.nodes:
+            if node not in all_nodes:
+                issues.append(NodeError(
+                    node_name=None,
+                    description=f"Loop {loop_id} references undefined node '{node}'"
+                ))
+        
+        # Validate exit node exists
+        if loop_def.exit_node not in all_nodes:
+            issues.append(NodeError(
+                node_name=None,
+                description=f"Loop {loop_id} exit_node '{loop_def.exit_node}' is not defined"
+            ))
+        
+        # Validate loop condition syntax
+        try:
+            # Test if condition can be compiled as a lambda
+            test_condition = f"lambda ctx: {loop_def.condition}"
+            compile(test_condition, "<string>", "eval")
+        except SyntaxError:
+            issues.append(NodeError(
+                node_name=None,
+                description=f"Loop {loop_id} has invalid condition syntax: '{loop_def.condition}'"
+            ))
+        
+        # Check for empty loops
+        if not loop_def.nodes:
+            issues.append(NodeError(
+                node_name=None,
+                description=f"Loop {loop_id} has no nodes defined"
+            ))
+    
+    # Validate nested loop structure (check for overlapping but not nested loops)
+    for i, loop1 in enumerate(workflow_def.workflow.loops):
+        for j, loop2 in enumerate(workflow_def.workflow.loops):
+            if i >= j:
+                continue
+            
+            set1 = set(loop1.nodes)
+            set2 = set(loop2.nodes)
+            
+            # Check for partial overlap (indicates potential structure issues)
+            if set1 & set2 and not (set1.issubset(set2) or set2.issubset(set1)):
+                issues.append(NodeError(
+                    node_name=None,
+                    description=f"Loops loop_{i} and loop_{j} have overlapping nodes but neither is fully nested: {set1 & set2}"
+                ))
+    
+    return issues
+
+
+def detect_circular_dependencies(workflow_def: WorkflowDefinition) -> List[NodeError]:
+    """Detect circular dependencies in workflow structure."""
+    issues: List[NodeError] = []
+    
+    # Build adjacency list from transitions
+    graph = defaultdict(list)
+    for trans in workflow_def.workflow.transitions:
+        if isinstance(trans.to_node, str):
+            graph[trans.from_node].append(trans.to_node)
+        elif isinstance(trans.to_node, list):
+            for target in trans.to_node:
+                if isinstance(target, str):
+                    graph[trans.from_node].append(target)
+                elif hasattr(target, 'to_node'):  # BranchCondition
+                    graph[trans.from_node].append(target.to_node)
+    
+    def has_cycle_dfs(node: str, visited: Set[str], rec_stack: Set[str]) -> bool:
+        """DFS to detect cycles."""
+        visited.add(node)
+        rec_stack.add(node)
+        
+        for neighbor in graph[node]:
+            if neighbor not in visited:
+                if has_cycle_dfs(neighbor, visited, rec_stack):
+                    return True
+            elif neighbor in rec_stack:
+                return True
+        
+        rec_stack.remove(node)
+        return False
+    
+    visited = set()
+    for node in workflow_def.nodes.keys():
+        if node not in visited:
+            if has_cycle_dfs(node, visited, set()):
+                issues.append(NodeError(
+                    node_name=node,
+                    description=f"Circular dependency detected starting from node '{node}'"
+                ))
+                break  # One circular dependency report is enough
+    
+    return issues
+
+
 def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeError]:
     """Validate a workflow definition and return a list of NodeError objects."""
     issues: List[NodeError] = []
@@ -428,6 +537,14 @@ def check_circular_transitions(workflow_def: WorkflowDefinition) -> List[NodeErr
     for node_name, node_def in workflow_def.nodes.items():
         if node_def.sub_workflow and node_def.sub_workflow.start:
             dfs(node_def.sub_workflow.start, set(), set(), node_def.sub_workflow.transitions, [])
+
+    # Validate loop structures
+    loop_issues = validate_loops(workflow_def)
+    issues.extend(loop_issues)
+    
+    # Validate for circular dependencies
+    circular_issues = detect_circular_dependencies(workflow_def)
+    issues.extend(circular_issues)
 
     return issues
 

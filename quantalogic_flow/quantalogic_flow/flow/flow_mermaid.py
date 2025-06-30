@@ -283,6 +283,21 @@ def generate_mermaid_diagram(
                         else:
                             mermaid_code += f"    {from_node} --> {to_node}\n"
 
+        # Add loop visualization for flowchart
+        if hasattr(workflow_def.workflow, 'loops') and workflow_def.workflow.loops:
+            for i, loop_def in enumerate(workflow_def.workflow.loops):
+                if loop_def.nodes:
+                    # Create a subgraph for the loop
+                    mermaid_code += f"    subgraph Loop{i+1}[Loop {i+1}]\n"
+                    for node in loop_def.nodes:
+                        mermaid_code += f"        {node}\n"
+                    mermaid_code += "    end\n"
+                    # Add loop back edge
+                    last_node = loop_def.nodes[-1]
+                    first_node = loop_def.nodes[0]
+                    mermaid_code += f'    {last_node} -->|"loop"| {first_node}\n'
+                    mermaid_code += f'    {last_node} -->|"exit"| {loop_def.exit_node}\n'
+
         # Add styles for node types
         for node, node_type in node_types.items():
             if node_type in node_styles:
@@ -356,6 +371,17 @@ def generate_mermaid_diagram(
                             mermaid_code += f"    {from_node} --> {to_node} : {cond}\n"
                         else:
                             mermaid_code += f"    {from_node} --> {to_node}\n"
+
+        # Add loop visualization for stateDiagram
+        if hasattr(workflow_def.workflow, 'loops') and workflow_def.workflow.loops:
+            for i, loop_def in enumerate(workflow_def.workflow.loops):
+                if loop_def.nodes:
+                    # Add note about loop structure
+                    first_node = loop_def.nodes[0]
+                    last_node = loop_def.nodes[-1]
+                    mermaid_code += f"    note right of {first_node} : Loop {i+1}\n"
+                    mermaid_code += f"    {last_node} --> {first_node} : loop condition\n"
+                    mermaid_code += f"    {last_node} --> {loop_def.exit_node} : exit condition\n"
 
         # Add styles for node types
         for node, node_type in node_types.items():

@@ -90,15 +90,33 @@ def generate_executable_script(
                     if not value.startswith("lambda ctx:"):  # Static mappings only
                         initial_context[value] = ""
 
-    # Detect loops
-    loop_nodes = []
-    for trans in workflow_def.workflow.transitions:
-        if isinstance(trans.to_node, str) and trans.condition:
-            # Check for loop-back transition
-            if any(t.from_node == trans.to_node and t.to_node == trans.from_node for t in workflow_def.workflow.transitions):
-                loop_nodes.append(trans.from_node)
-                loop_nodes.append(trans.to_node)
-    loop_nodes = list(dict.fromkeys(loop_nodes))  # Remove duplicates, preserve order
+    # Detect loops and nested loops from schema
+    loops = []
+    if hasattr(workflow_def.workflow, 'loops') and workflow_def.workflow.loops:
+        # Use explicit loop definitions from schema
+        for loop_def in workflow_def.workflow.loops:
+            loops.append({
+                'nodes': loop_def.nodes,
+                'condition': loop_def.condition,
+                'exit_node': loop_def.exit_node
+            })
+    else:
+        # Legacy: detect simple loops from transitions
+        loop_nodes = []
+        for trans in workflow_def.workflow.transitions:
+            if isinstance(trans.to_node, str) and trans.condition:
+                # Check for loop-back transition
+                if any(t.from_node == trans.to_node and t.to_node == trans.from_node for t in workflow_def.workflow.transitions):
+                    loop_nodes.append(trans.from_node)
+                    loop_nodes.append(trans.to_node)
+        loop_nodes = list(dict.fromkeys(loop_nodes))  # Remove duplicates, preserve order
+        if loop_nodes:
+            # Create simple loop structure
+            loops.append({
+                'nodes': loop_nodes,
+                'condition': 'True',  # Placeholder
+                'exit_node': 'end'
+            })
 
     with open(output_file, "w") as f:
         # Shebang and metadata
@@ -277,6 +295,22 @@ def generate_executable_script(
                         cond = f"lambda ctx: {branch.condition}" if branch.condition else "None"
                         branches.append(f'("{branch.to_node}", {cond})')
                     f.write(f'    .branch([{", ".join(branches)}])\n')
+
+        # Generate loops (including nested loops)
+        for loop in loops:
+            if loop['nodes']:
+                f.write('    .start_loop()\n')
+                # Add nodes in loop sequence
+                for i, node in enumerate(loop['nodes']):
+                    if i == 0:
+                        f.write(f'    .node("{node}")\n')
+                    else:
+                        f.write(f'    .then("{node}")\n')
+                # End loop with condition
+                condition = loop['condition']
+                if not condition.startswith('lambda ctx:'):
+                    condition = f"lambda ctx: {condition}"
+                f.write(f'    .end_loop({condition}, "{loop["exit_node"]}")\n')
 
         for conv_node in workflow_def.workflow.convergence_nodes:
             # Always use node names for workflow construction

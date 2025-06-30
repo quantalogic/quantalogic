@@ -227,10 +227,15 @@ class TransitionDefinition(BaseModel):
 
 
 class LoopDefinition(BaseModel):
-    """Definition of a loop within the workflow."""
+    """Definition of a loop within the workflow, supports nesting."""
     nodes: List[str] = Field(..., description="List of node names in the loop.")
-    condition: str = Field(..., description="Python expression using 'ctx' for the loop condition.")
+    condition: str = Field(..., description="Python expression using 'ctx' for the loop condition (when to exit).")
     exit_node: str = Field(..., description="Node to transition to when the loop ends.")
+    entry_node: Optional[str] = Field(None, description="Node that enters the loop (defaults to first node).")
+    nested_loops: List["LoopDefinition"] = Field(
+        default_factory=list, description="List of nested loops within this loop."
+    )
+    loop_id: Optional[str] = Field(None, description="Unique identifier for the loop (auto-generated if not provided).")
 
 
 class WorkflowStructure(BaseModel):
@@ -291,3 +296,4 @@ class WorkflowDefinition(BaseModel):
 
 
 NodeDefinition.model_rebuild()
+LoopDefinition.model_rebuild()
