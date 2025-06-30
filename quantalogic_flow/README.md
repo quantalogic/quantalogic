@@ -14,32 +14,33 @@ This README is your guide to mastering Quantalogic Flow. Packed with examples, v
 
 1. [Why Quantalogic Flow?](#why-quantalogic-flow)
 2. [Installation](#installation)
-3. [Quickstart](#quickstart)
-4. [Core Concepts](#core-concepts)
+3. [Using Quantalogic Flow with LLM Providers](#using-quantalogic-flow-with-llm-providers)
+4. [Quickstart](#quickstart)
+5. [Core Concepts](#core-concepts)
    - [Nodes: The Building Blocks](#nodes-the-building-blocks)
    - [Workflows: The Roadmap](#workflows-the-roadmap)
    - [Context: The Glue](#context-the-glue)
-5. [Approaches: YAML vs. Fluent API](#approaches-yaml-vs-fluent-api)
+6. [Approaches: YAML vs. Fluent API](#approaches-yaml-vs-fluent-api)
    - [YAML Approach](#yaml-approach)
    - [Fluent API Approach](#fluent-api-approach)
-6. [Fluent API Examples](#fluent-api-examples)
-7. [Advanced Features](#advanced-features)
+7. [Fluent API Examples](#fluent-api-examples)
+8. [Advanced Features](#advanced-features)
    - [Input Mapping](#input-mapping)
    - [Dynamic Model Selection](#dynamic-model-selection)
    - [Sub-Workflows](#sub-workflows)
    - [Observers](#observers)
    - [Looping](#looping)
-8. [Validation and Debugging](#validation-and-debugging)
-9. [Troubleshooting](#troubleshooting)
-10. [Conversion Tools](#conversion-tools)
-11. [Case Study: AI-Powered Story Generator](#case-study-ai-powered-story-generator)
-12. [Best Practices and Insider Tips](#best-practices-and-insider-tips)
-13. [Flow Manager API](#flow-manager-api)
-14. [Integration with QuantaLogic](#integration-with-quantalogic)
-15. [Examples](#examples)
-16. [Resources and Community](#resources-and-community)
-17. [API Reference](#api-reference)
-18. [Flow YAML Reference](#flow-yaml-reference)
+9. [Validation and Debugging](#validation-and-debugging)
+10. [Troubleshooting](#troubleshooting)
+11. [Conversion Tools](#conversion-tools)
+12. [Case Study: AI-Powered Story Generator](#case-study-ai-powered-story-generator)
+13. [Best Practices and Insider Tips](#best-practices-and-insider-tips)
+14. [Flow Manager API](#flow-manager-api)
+15. [Integration with QuantaLogic](#integration-with-quantalogic)
+16. [Examples](#examples)
+17. [Resources and Community](#resources-and-community)
+18. [API Reference](#api-reference)
+19. [Flow YAML Reference](#flow-yaml-reference)
 
 ---
 
@@ -107,7 +108,52 @@ export OPENAI_API_KEY="sk-your-openai-key"
 export DEEPSEEK_API_KEY="ds-your-deepseek-key"
 ```
 
-> **Tip**: Use a `.env` file for security and load it with `source .env`. See [API Keys and Environment Configuration](#api-keys-and-environment-configuration) for details.
+> **Tip**: Use a `.env` file for security and load it with `source .env`. See [Using Quantalogic Flow with LLM Providers](#using-quantalogic-flow-with-llm-providers) for comprehensive setup details.
+
+---
+
+## Using Quantalogic Flow with LLM Providers
+
+Quantalogic Flow leverages **LiteLLM** for seamless integration with 100+ LLM providers. Whether you're using cloud providers like OpenAI and Gemini, local models with Ollama, or enterprise solutions like Azure and AWS Bedrock, Quantalogic Flow makes it simple with a unified API.
+
+### Quick Setup
+
+**Most Popular Providers:**
+```bash
+# OpenAI
+export OPENAI_API_KEY="sk-your-openai-key"
+
+# Google Gemini  
+export GEMINI_API_KEY="your-gemini-api-key"
+
+# Local with Ollama (no API key needed)
+ollama serve
+```
+
+**Example Usage:**
+```python
+from quantalogic_flow import Workflow, Nodes
+
+@Nodes.llm(model="gpt-4o", output="response")
+async def analyze_text(text: str):
+    return f"Analyze this text: {text}"
+
+workflow = Workflow().add(analyze_text, text="Hello World")
+result = await workflow.build().run({})
+```
+
+### 📖 **Complete Provider Setup Guide**
+
+For detailed setup instructions, model recommendations, and configuration examples for all supported providers (OpenAI, Gemini, Ollama, Azure, Bedrock, LM Studio, VertexAI, and more), see our comprehensive guide:
+
+**➡️ [LLM Provider Configuration Guide](./LLM_PROVIDERS.md)**
+
+This guide includes:
+- Step-by-step setup for each provider
+- Popular model recommendations
+- Cost and performance comparisons
+- Pro tips for development and production
+- Troubleshooting common issues
 
 ---
 
@@ -1126,28 +1172,7 @@ The [Flow YAML Reference](./flow_yaml.md) provides a detailed guide to the decla
 
 ---
 
-## API Keys and Environment Configuration
 
-Quantalogic Flow supports multiple LLM providers via LiteLLM. Configure API keys securely:
-
-```bash
-echo "OPENAI_API_KEY=sk-your-openai-key" > .env
-echo "DEEPSEEK_API_KEY=ds-your-deepseek-key" >> .env
-source .env
-```
-
-### Supported Models
-| **Model Name**                          | **Key Variable**         | **Use Case**                         |
-|-----------------------------------------|--------------------------|---------------------------------------|
-| `openai/gpt-4o-mini`                   | `OPENAI_API_KEY`         | Fast, cost-effective tasks           |
-| `openai/gpt-4o`                        | `OPENAI_API_KEY`         | Advanced reasoning                   |
-| `anthropic/claude-3.5-sonnet`          | `ANTHROPIC_API_KEY`      | Balanced performance                 |
-| `deepseek/deepseek-chat`               | `DEEPSEEK_API_KEY`       | Conversational tasks                 |
-| `gemini/gemini-2.0-flash`              | `GEMINI_API_KEY`         | Speedy creative tasks                |
-
-**Pro Tip**: Use [LiteLLM Docs](https://docs.litellm.ai/docs/) for advanced configuration.
-
----
 
 ## Final Boost
 
