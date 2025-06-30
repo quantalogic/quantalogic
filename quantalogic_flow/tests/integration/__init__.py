@@ -1,0 +1,1 @@
+"""Integration tests init file."""

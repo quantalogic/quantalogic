@@ -304,9 +304,18 @@ class Workflow:
             self.nodes[node] = func
             self.node_inputs[node] = inputs
             self.node_outputs[node] = output
+        
+        # Add transition from current node to first node in sequence
+        if self.current_node and nodes:
+            self.transitions.setdefault(self.current_node, []).append((nodes[0], None))
+            logger.debug(f"Added transition from {self.current_node} to {nodes[0]}")
+        
+        # Add transitions between sequential nodes
         for i in range(len(nodes) - 1):
             self.transitions.setdefault(nodes[i], []).append((nodes[i + 1], None))
-        self.current_node = nodes[-1]
+            logger.debug(f"Added transition from {nodes[i]} to {nodes[i + 1]}")
+        
+        self.current_node = nodes[-1] if nodes else self.current_node
         return self
 
     def then(self, next_node: str, condition: Optional[Callable] = None):
