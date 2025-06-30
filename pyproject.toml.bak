@@ -184,7 +184,7 @@ ollama = "^0.5.1"
 
 # Scripts for CLI and documentation
 [tool.poetry.scripts]
-quantalogic = "quantalogic_react.quantalogic.main:cli"
+quantalogic = "quantalogic.main:cli"
 
 # Build system configuration
 [build-system]

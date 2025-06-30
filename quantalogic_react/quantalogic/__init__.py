@@ -1,4 +1,4 @@
-"""QuantaLogic package initialization - Re-export from quantalogic_react."""
+"""QuantaLogic package initialization."""
 
 import warnings
 from importlib.metadata import version as get_version
@@ -17,13 +17,13 @@ except Exception as e:
     __version__ = "unknown"
     print(f"Unable to retrieve version: {e}")
 
-# Re-export public API from quantalogic_react
-from quantalogic_react.quantalogic.agent import Agent  # noqa: E402
-from quantalogic_react.quantalogic.console_print_events import console_print_events  # noqa: E402
-from quantalogic_react.quantalogic.console_print_token import console_print_token  # noqa: E402
-from quantalogic_react.quantalogic.create_custom_agent import create_custom_agent  # noqa: E402
-from quantalogic_react.quantalogic.event_emitter import EventEmitter  # noqa: E402
-from quantalogic_react.quantalogic.memory import AgentMemory, VariableMemory  # noqa: E402
+# Import public API
+from .agent import Agent  # noqa: E402
+from .console_print_events import console_print_events  # noqa: E402
+from .console_print_token import console_print_token  # noqa: E402
+from .create_custom_agent import create_custom_agent  # noqa: E402
+from .event_emitter import EventEmitter  # noqa: E402
+from .memory import AgentMemory, VariableMemory  # noqa: E402
 
 __all__ = [
     "Agent",
