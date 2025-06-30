@@ -82,14 +82,19 @@ def generate_mermaid_diagram(
     if diagram_type not in ("flowchart", "stateDiagram"):
         raise ValueError(f"Invalid diagram_type '{diagram_type}'; must be 'flowchart' or 'stateDiagram'")
 
-    # Pastel color scheme for a soft, user-friendly look
+    # Professional pastel color scheme with high contrast for text readability
+    # Color Palette Guidelines:
+    # - Light backgrounds (#E3F2FD family) for excellent readability
+    # - Dark stroke and text colors for strong contrast 
+    # - Each node type has distinct colors following Material Design principles
+    # - Colors are accessible and print-friendly
     node_styles: Dict[str, str] = {
-        "function": "fill:#90CAF9,stroke:#42A5F5,stroke-width:2px",           # Pastel Blue
-        "structured_llm": "fill:#A5D6A7,stroke:#66BB6A,stroke-width:2px",    # Pastel Green
-        "llm": "fill:#CE93D8,stroke:#AB47BC,stroke-width:2px",               # Pastel Purple
-        "template": "fill:#FCE4EC,stroke:#F06292,stroke-width:2px",          # Pastel Pink
-        "sub_workflow": "fill:#FFCCBC,stroke:#FF7043,stroke-width:2px",      # Pastel Orange
-        "unknown": "fill:#CFD8DC,stroke:#B0BEC5,stroke-width:2px"            # Pastel Grey
+        "function": "fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0",           # Light Blue with dark blue text
+        "structured_llm": "fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32",    # Light Green with dark green text
+        "llm": "fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A",               # Light Purple with dark purple text
+        "template": "fill:#FFF0F5,stroke:#C2185B,stroke-width:2px,color:#AD1457",          # Light Pink with dark pink text
+        "sub_workflow": "fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00",      # Light Orange with dark orange text
+        "unknown": "fill:#F5F5F5,stroke:#616161,stroke-width:2px,color:#424242"            # Light Grey with dark grey text
     }
 
     # Shape mappings for flowchart syntax

@@ -69,8 +69,12 @@ graph TD
     C -->|Conditional| E[Node: Sub-Workflow]
     D --> F[Output: Report]
     E --> F
-    style A fill:#90CAF9
-    style F fill:#90CAF9
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style B fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style C fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style D fill:#FFF0F5,stroke:#C2185B,stroke-width:2px,color:#AD1457
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00
+    style F fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
 ```
 
 ---
@@ -230,12 +234,12 @@ graph TD
     C --> E[Convergence Node]
     D --> E
     E --> F[End Node]
-    style A fill:#90CAF9
-    style B fill:#90CAF9
-    style C fill:#90CAF9
-    style D fill:#90CAF9
-    style E fill:#90CAF9,stroke-dasharray:5 5
-    style F fill:#90CAF9
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style B fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style C fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style D fill:#FFF0F5,stroke:#C2185B,stroke-width:2px,color:#AD1457
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00,stroke-dasharray:5 5
+    style F fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
 ```
 
 ---
@@ -346,9 +350,9 @@ asyncio.run(main())
 graph TD
     A[read_data] --> B[process_data]
     B --> C[write_data]
-    style A fill:#90CAF9
-    style B fill:#90CAF9
-    style C fill:#90CAF9
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style B fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style C fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
 ```
 
 **Insider Tip**: Use YAML for team collaboration or quick prototyping, and switch to Fluent API when you need runtime decisions or integration with existing Python code.
@@ -592,11 +596,11 @@ graph TD
     A --> E[Observer]
     B --> E
     C --> E
-    style A fill:#90CAF9
-    style B fill:#90CAF9
-    style C fill:#90CAF9
-    style D fill:#90CAF9
-    style E fill:#FFCCBC
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style B fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style C fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style D fill:#FFF0F5,stroke:#C2185B,stroke-width:2px,color:#AD1457
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00
 ```
 
 ---
@@ -618,6 +622,30 @@ graph TD
   ```
 
 **Insider Tip**: Validate early to catch circular transitions or missing inputs, and use observers to monitor LLM token usage.
+
+### Visual Reference: Node Types in Diagrams
+
+Quantalogic Flow uses a professional color scheme to differentiate node types in Mermaid diagrams:
+
+```mermaid
+graph LR
+    A[Function Node] --> B[LLM Node]
+    B --> C[Structured LLM Node]
+    C --> D[Template Node]
+    D --> E[Sub-Workflow Node]
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style B fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style C fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style D fill:#FFF0F5,stroke:#C2185B,stroke-width:2px,color:#AD1457
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00
+```
+
+**Color Legend:**
+- 🔵 **Blue**: Function Nodes (custom Python code)
+- 🟣 **Purple**: LLM Nodes (text generation)
+- 🟢 **Green**: Structured LLM Nodes (JSON/Pydantic output)
+- 🩷 **Pink**: Template Nodes (Jinja2 formatting)
+- 🟠 **Orange**: Sub-Workflow Nodes (nested workflows)
 
 ---
 
@@ -907,13 +935,13 @@ graph TD
     F -->|yes| C
     F --> G["finalize_story<br>(Function)"]
     E --> G
-    style A fill:#CE93D8
-    style B fill:#A5D6A7
-    style C fill:#CE93D8
-    style D fill:#FCE4EC
-    style E fill:#90CAF9
-    style F fill:#90CAF9
-    style G fill:#90CAF9,stroke-dasharray:5 5
+    style A fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style B fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style C fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style D fill:#FFF0F5,stroke:#C2185B,stroke-width:2px,color:#AD1457
+    style E fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style F fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style G fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00,stroke-dasharray:5 5
 ```
 
 **Sample Output**:
