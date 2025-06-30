@@ -8,7 +8,7 @@ authors = ["Your Name <you@example.com>"]
 python = "^3.10"
 nanoid = "^2.0.0"
 instructor = "^1.7.9"
-litellm = "^1.65.4.post1"
+litellm = "^1.73.6"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
