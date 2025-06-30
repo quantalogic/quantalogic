@@ -22,8 +22,7 @@ class TestWorkflowValidator:
         """Set up test data."""
         self.valid_workflow = WorkflowDefinition(
             workflow=WorkflowStructure(
-                start="start_node",
-                nodes=["start_node", "middle_node", "end_node"]
+                start="start_node"
             ),
             nodes={
                 "start_node": NodeDefinition(

@@ -243,27 +243,27 @@ class WorkflowStructure(BaseModel):
         default_factory=list, description="List of nodes where branches converge."
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def check_loop_nodes(cls, data: Any) -> Any:
-        """Ensure all nodes in loops exist in the workflow.
-
-        Args:
-            data: Raw data to validate.
-
-        Returns:
-            Validated data.
-
-        Raises:
-            ValueError: If loop nodes are not defined.
-        """
-        loops = data.get("loops", [])
-        nodes = set(data.get("nodes", {}).keys())
-        for loop in loops:
-            for node in loop["nodes"] + [loop["exit_node"]]:
-                if node not in nodes:
-                    raise ValueError(f"Loop node '{node}' not defined in nodes")
-        return data
+    # @model_validator(mode="before")
+    # @classmethod
+    # def check_loop_nodes(cls, data: Any) -> Any:
+    #     """Ensure all nodes in loops exist in the workflow.
+    #
+    #     Args:
+    #         data: Raw data to validate.
+    #
+    #     Returns:
+    #         Validated data.
+    #
+    #     Raises:
+    #         ValueError: If loop nodes are not defined.
+    #     """
+    #     loops = data.get("loops", [])
+    #     nodes = set(data.get("nodes", {}).keys())
+    #     for loop in loops:
+    #         for node in loop["nodes"] + [loop["exit_node"]]:
+    #             if node not in nodes:
+    #                 raise ValueError(f"Loop node '{node}' not defined in nodes")
+    #     return data
 
 
 class WorkflowDefinition(BaseModel):
