@@ -13,8 +13,9 @@ This README is your guide to mastering Quantalogic Flow. Packed with examples, v
 ## Table of Contents
 
 1. [Why Quantalogic Flow?](#why-quantalogic-flow)
-2. [Installation](#installation)
-3. [Using Quantalogic Flow with LLM Providers](#using-quantalogic-flow-with-llm-providers)
+2. [Architecture Overview](#architecture-overview)
+3. [Installation](#installation)
+4. [Using Quantalogic Flow with LLM Providers](#using-quantalogic-flow-with-llm-providers)
 4. [Quickstart](#quickstart)
 5. [Core Concepts](#core-concepts)
    - [Nodes: The Building Blocks](#nodes-the-building-blocks)
@@ -77,6 +78,23 @@ graph TD
     style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00
     style F fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
 ```
+
+---
+
+## Architecture Overview
+
+Quantalogic Flow is built on a revolutionary **three-way duality architecture** that bridges the gap between declarative workflows, fluent programming, and visual workflow building. This unique design eliminates the traditional "configuration vs. code" debate by offering **seamless bidirectional conversion** between all three approaches.
+
+**🔗 [Deep Dive: The Quantalogic Flow Duality Architecture](./DUALITY_ARCHITECTURE.md)**
+
+This comprehensive guide explores:
+- **The Collaboration Crisis**: How different teams (business analysts, developers, DevOps) need different representations of the same workflow
+- **Three-API System**: YAML Declarative DSL, Fluent Python API, and Workflow Builder API - same power, different paradigms
+- **Lossless Transformation**: Mathematical proof of information preservation across all representations
+- **Real-World Examples**: Enterprise use cases showing the same workflow expressed in all three approaches
+- **Universal Workflow Execution**: Vision for multi-runtime portability (Temporal, Airflow, AWS Step Functions, etc.)
+
+Whether you're a business analyst who prefers YAML configuration, a Python developer who loves method chaining, or building visual workflow tools, the duality architecture ensures you never have to compromise on expressiveness or lose information during format conversions.
 
 ---
 
