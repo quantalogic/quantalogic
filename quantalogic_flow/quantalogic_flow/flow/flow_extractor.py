@@ -145,6 +145,13 @@ class WorkflowExtractor(ast.NodeVisitor):
                         kwargs[kw.arg] = ast.unparse(kw.value)
                     elif kw.arg == "transformer" and isinstance(kw.value, ast.Lambda):
                         kwargs[kw.arg] = ast.unparse(kw.value)
+                    elif kw.arg == "response_model":
+                        # Handle complex response model expressions (e.g., List[str], custom types)
+                        kwargs[kw.arg] = ast.unparse(kw.value)
+                    else:
+                        # Handle any other complex expressions by unparsing them
+                        if not isinstance(kw.value, (ast.Constant, ast.Name)):
+                            kwargs[kw.arg] = ast.unparse(kw.value)
 
             if decorator_name:
                 func_name = node.name
@@ -301,6 +308,13 @@ class WorkflowExtractor(ast.NodeVisitor):
                         kwargs[kw.arg] = ast.unparse(kw.value)
                     elif kw.arg == "transformer" and isinstance(kw.value, ast.Lambda):
                         kwargs[kw.arg] = ast.unparse(kw.value)
+                    elif kw.arg == "response_model":
+                        # Handle complex response model expressions (e.g., List[str], custom types)
+                        kwargs[kw.arg] = ast.unparse(kw.value)
+                    else:
+                        # Handle any other complex expressions by unparsing them
+                        if not isinstance(kw.value, (ast.Constant, ast.Name)):
+                            kwargs[kw.arg] = ast.unparse(kw.value)
 
             if decorator_name:
                 func_name = node.name
@@ -418,7 +432,7 @@ class WorkflowExtractor(ast.NodeVisitor):
             if isinstance(node.value.func, ast.Attribute):
                 # Look for calls like workflow.then(), workflow.parallel(), etc.
                 attr_name = node.value.func.attr
-                if attr_name in ["then", "parallel", "branch", "converge", "add_observer", "node", "start_loop", "end_loop"]:
+                if attr_name in ["start", "then", "parallel", "branch", "converge", "add_observer", "node", "start_loop", "end_loop"]:
                     # Find the workflow variable name by checking if the object is a Name node
                     if isinstance(node.value.func.value, ast.Name):
                         workflow_var = node.value.func.value.id
@@ -432,7 +446,14 @@ class WorkflowExtractor(ast.NodeVisitor):
         """Process individual workflow method calls like workflow.then(), etc."""
         method_name = call_node.func.attr
         
-        if method_name == "then":
+        if method_name == "start":
+            start_node = call_node.args[0].value if call_node.args else None
+            if start_node:
+                self.start_node = start_node
+                self.current_node = start_node  # Initialize current node for chaining
+                logger.debug(f"Workflow start node set to '{start_node}' for workflow variable '{workflow_var}'")
+        
+        elif method_name == "then":
             next_node = call_node.args[0].value if call_node.args else None
             condition = None
             for keyword in call_node.keywords:
@@ -622,7 +643,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                     )
                 )
                 
-                logger.debug(f"Added loop transitions for '{current_loop['loop_id']}': "
+                logger.debug(f"Added loop transitions for '{current_loop['loop_id']}' to '{next_node}': "
                            f"'{last_loop_node}' -> '{first_loop_node}' (not {cond}), "
                            f"'{last_loop_node}' -> '{next_node}' ({cond})")
             
@@ -642,6 +663,9 @@ class WorkflowExtractor(ast.NodeVisitor):
                 "definition": loop_def,
                 "nested_loop_ids": current_loop["nested_loops"]
             }
+            
+            # Also add to completed loops list for immediate access
+            self.loops.append(loop_def)
             
             logger.debug(f"Created LoopDefinition for '{current_loop['loop_id']}' with {len(loop_nodes)} nodes")
             
@@ -682,7 +706,15 @@ class WorkflowExtractor(ast.NodeVisitor):
             obj = func.value
             previous_node = self.process_workflow_expr(obj, var_name)
 
-            if method_name == "then":
+            if method_name == "start":
+                start_node = expr.args[0].value if expr.args else None
+                if start_node:
+                    self.start_node = start_node
+                    self.current_node = start_node  # Initialize current node for chaining
+                    logger.debug(f"Workflow start node set to '{start_node}' for variable '{var_name}'")
+                return start_node
+
+            elif method_name == "then":
                 next_node = expr.args[0].value if expr.args else None
                 condition = None
                 for keyword in expr.keywords:
@@ -882,11 +914,19 @@ class WorkflowExtractor(ast.NodeVisitor):
                     logger.warning(f"end_loop called but no active loop in '{var_name}'")
                     return None
                 
-                # Get condition and next_node from arguments
+                # Get condition and next_node from arguments and keywords
                 cond = None
                 next_node = None
+                
+                # Check if first argument is the next_node
+                if expr.args:
+                    if isinstance(expr.args[0], ast.Constant):
+                        next_node = expr.args[0].value
+                    else:
+                        next_node = ast.unparse(expr.args[0])
+                
                 for keyword in expr.keywords:
-                    if keyword.arg == "condition":
+                    if keyword.arg in ["condition", "exit_condition"]:
                         # If condition is a string literal, extract the string value
                         if isinstance(keyword.value, ast.Constant) and isinstance(keyword.value.value, str):
                             cond = keyword.value.value
@@ -897,8 +937,12 @@ class WorkflowExtractor(ast.NodeVisitor):
                                    if isinstance(keyword.value, ast.Constant) 
                                    else ast.unparse(keyword.value))
                 
-                if not cond or not next_node:
-                    logger.warning(f"end_loop in '{var_name}' missing condition or next_node")
+                # If no explicit condition, use a default condition to end the loop
+                if not cond and next_node:
+                    cond = "True"  # Default exit condition
+                
+                if not next_node:
+                    logger.warning(f"end_loop in '{var_name}' missing next_node")
                     return None
                 
                 # Pop the current loop from stack
@@ -932,7 +976,7 @@ class WorkflowExtractor(ast.NodeVisitor):
                         )
                     )
                     
-                    logger.debug(f"Added loop transitions for '{current_loop['loop_id']}': "
+                    logger.debug(f"Added loop transitions for '{current_loop['loop_id']}' to '{next_node}': "
                                f"'{last_loop_node}' -> '{first_loop_node}' (not {cond}), "
                                f"'{last_loop_node}' -> '{next_node}' ({cond})")
                 
@@ -952,6 +996,9 @@ class WorkflowExtractor(ast.NodeVisitor):
                     "definition": loop_def,
                     "nested_loop_ids": current_loop["nested_loops"]
                 }
+                
+                # Also add to completed loops list for immediate access
+                self.loops.append(loop_def)
                 
                 logger.debug(f"Created LoopDefinition for '{current_loop['loop_id']}' with {len(loop_nodes)} nodes")
                 
