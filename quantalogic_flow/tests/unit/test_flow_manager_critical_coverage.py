@@ -43,11 +43,11 @@ class TestFlowManagerCriticalPaths:
             functions={
                 "start_func": FunctionDefinition(
                     type="embedded", 
-                    code="def start_func(): return 'start'"
+                    code="def start_func(**kwargs): return 'start'"
                 ),
                 "end_func": FunctionDefinition(
                     type="embedded", 
-                    code="def end_func(): return 'end'"
+                    code="def end_func(**kwargs): return 'end'"
                 )
             }
         )
@@ -275,8 +275,8 @@ class TestFlowManagerCriticalPaths:
         try:
             # Should load but validation should fail
             self.manager.load_from_yaml(temp_file)
-            result = self.manager.validate_workflow(self.manager.workflow)
-            assert not result.is_valid
+            with pytest.raises(ValueError):
+                self.manager.validate_workflow(self.manager.workflow)
         finally:
             Path(temp_file).unlink(missing_ok=True)
 
@@ -307,17 +307,39 @@ class TestFlowManagerCriticalPaths:
             result = mock_execute(self.sample_workflow, None)
             assert result is not None
 
-    def test_execute_workflow_with_asyncio_error(self):
-        """Test executing workflow with asyncio error."""
-        # Test workflow execution in a context where asyncio might fail
-        # This is more about testing the error handling paths
+    def test_execute_workflow_with_function_signature_error(self):
+        """Test executing workflow with function signature mismatch."""
+        # Create a workflow with function that doesn't accept the expected arguments
+        bad_workflow = WorkflowDefinition(
+            workflow=WorkflowStructure(
+                start="start_node",
+                transitions=[
+                    TransitionDefinition(from_node="start_node", to_node="end_node")
+                ]
+            ),
+            nodes={
+                "start_node": NodeDefinition(function="start_func", output="start_result"),
+                "end_node": NodeDefinition(function="end_func", output="end_result")
+            },
+            functions={
+                "start_func": FunctionDefinition(
+                    type="embedded", 
+                    code="def start_func(): return 'start'"  # No **kwargs
+                ),
+                "end_func": FunctionDefinition(
+                    type="embedded", 
+                    code="def end_func(**kwargs): return 'end'"
+                )
+            }
+        )
+        
+        # Test workflow execution should handle function signature errors
         try:
-            result = self.manager.execute_workflow(self.sample_workflow, {})
-            assert result is not None
-        except Exception as e:
-            # Should handle various asyncio-related errors gracefully
-            # Updated to match actual error message
-            assert "reuse" in str(e).lower() or "coroutine" in str(e).lower() or "async" in str(e).lower() or "event" in str(e).lower() or "loop" in str(e).lower()
+            self.manager.execute_workflow(bad_workflow, {"user_name": "test"})
+            pytest.fail("Expected TypeError for function signature mismatch")
+        except TypeError as e:
+            # Should get a function signature error
+            assert "unexpected keyword argument" in str(e)
 
     # Validation Error Handling
     def test_validate_workflow_with_invalid_structure(self):
@@ -328,9 +350,8 @@ class TestFlowManagerCriticalPaths:
             functions={}
         )
         
-        result = self.manager.validate_workflow(invalid_workflow)
-        # Validator should return ValidationResult, not raise exception
-        assert isinstance(result.is_valid, bool)
+        with pytest.raises(ValueError, match="Workflow validation failed"):
+            self.manager.validate_workflow(invalid_workflow)
 
     def test_validate_workflow_missing_start_node(self):
         """Test validating workflow with missing start node."""
@@ -340,11 +361,8 @@ class TestFlowManagerCriticalPaths:
             functions={"func": FunctionDefinition(type="embedded", code="def func(): pass")}
         )
 
-        result = self.manager.validate_workflow(invalid_workflow)
-        # Should detect missing start node
-        assert not result.is_valid
-        # Updated to match actual error message from validator
-        assert any("Start node is not defined in nodes" in error.message for error in result.errors)
+        with pytest.raises(ValueError, match="Workflow validation failed"):
+            self.manager.validate_workflow(invalid_workflow)
 
     def test_validate_workflow_orphaned_nodes(self):
         """Test validating workflow with orphaned nodes."""
@@ -418,8 +436,8 @@ class TestFlowManagerCriticalPaths:
         try:
             # Should import but validation should fail
             workflow = self.manager.import_workflow_json(temp_file)
-            result = self.manager.validate_workflow(workflow)
-            assert not result.is_valid
+            with pytest.raises(ValueError, match="Workflow validation failed"):
+                self.manager.validate_workflow(workflow)
         finally:
             Path(temp_file).unlink(missing_ok=True)
 
@@ -482,10 +500,8 @@ class TestFlowManagerCriticalPaths:
             }
         )
         
-        result = self.manager.validate_workflow(circular_workflow)
-        # Should detect circular dependencies
-        assert not result.is_valid
-        assert any("circular" in error.message.lower() for error in result.errors)
+        with pytest.raises(ValueError, match=".*[Cc]ircular.*"):
+            self.manager.validate_workflow(circular_workflow)
 
     def test_complex_branch_validation(self):
         """Test validation of complex branching scenarios."""
@@ -499,7 +515,9 @@ class TestFlowManagerCriticalPaths:
                             BranchCondition(to_node="branch_a", condition="ctx.get('value') > 10"),
                             BranchCondition(to_node="branch_b", condition="ctx.get('value') <= 10")
                         ]
-                    )
+                    ),
+                    TransitionDefinition(from_node="branch_a", to_node="merge_node"),
+                    TransitionDefinition(from_node="branch_b", to_node="merge_node")
                 ],
                 convergence_nodes=["merge_node"]
             ),
@@ -510,10 +528,10 @@ class TestFlowManagerCriticalPaths:
                 "merge_node": NodeDefinition(function="merge_func")
             },
             functions={
-                "decision_func": FunctionDefinition(type="embedded", code="def decision_func(): return {'value': 15}"),
-                "branch_a_func": FunctionDefinition(type="embedded", code="def branch_a_func(): return 'branch_a'"),
-                "branch_b_func": FunctionDefinition(type="embedded", code="def branch_b_func(): return 'branch_b'"),
-                "merge_func": FunctionDefinition(type="embedded", code="def merge_func(): return 'merged'")
+                "decision_func": FunctionDefinition(type="embedded", code="def decision_func(**kwargs): return {'value': 15}"),
+                "branch_a_func": FunctionDefinition(type="embedded", code="def branch_a_func(**kwargs): return 'branch_a'"),
+                "branch_b_func": FunctionDefinition(type="embedded", code="def branch_b_func(**kwargs): return 'branch_b'"),
+                "merge_func": FunctionDefinition(type="embedded", code="def merge_func(**kwargs): return 'merged'")
             }
         )
         
@@ -592,10 +610,8 @@ class TestFlowManagerCriticalPaths:
             }
         )
         
-        result = self.manager.validate_workflow(invalid_workflow)
-        # Should detect missing convergence node
-        assert not result.is_valid
-        assert any("convergence" in error.message.lower() for error in result.errors)
+        with pytest.raises(ValueError, match="Workflow validation failed"):
+            self.manager.validate_workflow(invalid_workflow)
 
 
 class TestWorkflowEngineErrorHandling:
@@ -659,9 +675,8 @@ class TestEdgeCasesAndComplexScenarios:
         
         manager = WorkflowManager(empty_workflow)
         
-        result = manager.validate_workflow(empty_workflow)
-        # Should detect issues with empty workflow
-        assert not result.is_valid
+        with pytest.raises(ValueError, match="Workflow validation failed"):
+            manager.validate_workflow(empty_workflow)
 
     def test_workflow_with_circular_transitions(self):
         """Test workflow with circular transitions."""
@@ -688,9 +703,8 @@ class TestEdgeCasesAndComplexScenarios:
         
         manager = WorkflowManager(circular_workflow)
         
-        result = manager.validate_workflow(circular_workflow)
-        # Should detect circular dependencies
-        assert not result.is_valid
+        with pytest.raises(ValueError, match=".*[Cc]ircular.*"):
+            manager.validate_workflow(circular_workflow)
 
     def test_workflow_optimization_with_unreachable_nodes(self):
         """Test workflow optimization with unreachable nodes."""

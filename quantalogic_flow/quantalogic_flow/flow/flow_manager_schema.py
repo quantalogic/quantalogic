@@ -142,6 +142,8 @@ class TemplateConfig(BaseModel):
         template = data.get("template")
         if not template and not template_file:
             raise ValueError("Either 'template' or 'template_file' must be provided")
+        if template and template_file:
+            raise ValueError("Cannot provide both 'template' and 'template_file' - they are mutually exclusive")
         if template_file and not isinstance(template_file, str):
             raise ValueError("template_file must be a string path to a Jinja2 template file")
         return data

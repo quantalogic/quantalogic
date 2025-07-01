@@ -30,24 +30,261 @@ class ValidationResult(BaseModel):
 
 
 class WorkflowValidator:
-    """Validator for workflows."""
+    """Validator for workflows with comprehensive validation features."""
     
     def validate(self, workflow_def: WorkflowDefinition) -> ValidationResult:
         """Validate a workflow definition."""
+        errors = []
+        warnings = []
+        
+        # Run existing validation
         node_errors = validate_workflow_definition(workflow_def)
-        errors = [
+        errors.extend([
             ValidationError(
                 message=error.description,
                 node_name=error.node_name,
                 error_type="validation_error"
             )
             for error in node_errors
-        ]
+        ])
+        
+        # Run advanced validation features
+        self._validate_unreachable_nodes(workflow_def, warnings)
+        self._validate_circular_dependencies(workflow_def, errors, warnings)
+        self._validate_transition_references(workflow_def, errors)
+        self._validate_branch_conditions(workflow_def, errors)
+        self._validate_convergence_nodes(workflow_def, errors)
+        self._validate_condition_syntax(workflow_def, warnings)
+        
         return ValidationResult(
             is_valid=len(errors) == 0,
             errors=errors,
-            warnings=[]
+            warnings=warnings
         )
+    
+    def _validate_unreachable_nodes(self, workflow_def: WorkflowDefinition, warnings: List[ValidationError]):
+        """Detect unreachable nodes and add warnings."""
+        if not workflow_def.workflow.start:
+            return
+            
+        # Build graph of all transitions
+        reachable = set()
+        to_visit = [workflow_def.workflow.start]
+        
+        while to_visit:
+            current = to_visit.pop()
+            if current in reachable:
+                continue
+            reachable.add(current)
+            
+            # Find all transitions from current node
+            for trans in workflow_def.workflow.transitions:
+                if trans.from_node == current:
+                    if isinstance(trans.to_node, str):
+                        if trans.to_node not in reachable:
+                            to_visit.append(trans.to_node)
+                    elif isinstance(trans.to_node, list):
+                        for target in trans.to_node:
+                            target_node = target if isinstance(target, str) else target.to_node
+                            if target_node not in reachable:
+                                to_visit.append(target_node)
+        
+        # Check for unreachable nodes
+        all_nodes = set(workflow_def.nodes.keys())
+        unreachable = all_nodes - reachable
+        
+        for node in unreachable:
+            warnings.append(ValidationError(
+                message=f"Node '{node}' is unreachable from the start node",
+                node_name=node,
+                error_type="unreachable_node"
+            ))
+    
+    def _validate_circular_dependencies(self, workflow_def: WorkflowDefinition, errors: List[ValidationError], warnings: List[ValidationError]):
+        """Validate circular dependencies - warn for conditional cycles, error for unconditional."""
+        # Build adjacency list
+        graph = defaultdict(list)
+        edge_conditions = {}
+        
+        for trans in workflow_def.workflow.transitions:
+            from_node = trans.from_node
+            
+            if isinstance(trans.to_node, str):
+                graph[from_node].append(trans.to_node)
+                edge_conditions[(from_node, trans.to_node)] = trans.condition is not None
+            elif isinstance(trans.to_node, list):
+                for target in trans.to_node:
+                    if isinstance(target, str):
+                        graph[from_node].append(target)
+                        edge_conditions[(from_node, target)] = trans.condition is not None
+                    elif hasattr(target, 'to_node'):  # BranchCondition
+                        graph[from_node].append(target.to_node)
+                        edge_conditions[(from_node, target.to_node)] = True  # Branch conditions are conditional
+        
+        def detect_cycle_dfs(node: str, path: List[str], visited: Set[str]) -> tuple[bool, List[str], bool]:
+            """Returns (has_cycle, cycle_path, has_conditions)"""
+            if node in path:
+                cycle_start = path.index(node)
+                cycle = path[cycle_start:] + [node]
+                
+                # Check if cycle has conditions
+                has_conditions = False
+                for i in range(len(cycle) - 1):
+                    if edge_conditions.get((cycle[i], cycle[i+1]), False):
+                        has_conditions = True
+                        break
+                
+                return True, cycle, has_conditions
+            
+            if node in visited:
+                return False, [], False
+                
+            visited.add(node)
+            path.append(node)
+            
+            for neighbor in graph[node]:
+                has_cycle, cycle, has_conditions = detect_cycle_dfs(neighbor, path, visited)
+                if has_cycle:
+                    return has_cycle, cycle, has_conditions
+            
+            path.pop()
+            return False, [], False
+        
+        visited = set()
+        for node in workflow_def.nodes.keys():
+            if node not in visited:
+                has_cycle, cycle, has_conditions = detect_cycle_dfs(node, [], visited)
+                if has_cycle:
+                    cycle_str = " -> ".join(cycle)
+                    if has_conditions:
+                        warnings.append(ValidationError(
+                            message=f"Circular dependency detected (might be valid for loops): {cycle_str}",
+                            node_name=cycle[0],
+                            error_type="circular_dependency"
+                        ))
+                    else:
+                        errors.append(ValidationError(
+                            message=f"Circular transition detected without conditions: {cycle_str}",
+                            node_name=cycle[0],
+                            error_type="circular_dependency"
+                        ))
+                    break  # Only report first cycle found
+    
+    def _validate_transition_references(self, workflow_def: WorkflowDefinition, errors: List[ValidationError]):
+        """Validate that all transition references point to existing nodes."""
+        all_nodes = set(workflow_def.nodes.keys())
+        
+        for trans in workflow_def.workflow.transitions:
+            # Check from_node
+            if trans.from_node not in all_nodes:
+                errors.append(ValidationError(
+                    message=f"Transition references nonexistent from_node '{trans.from_node}'",
+                    node_name=trans.from_node,
+                    error_type="invalid_transition"
+                ))
+            
+            # Check to_node(s)
+            if isinstance(trans.to_node, str):
+                if trans.to_node not in all_nodes:
+                    errors.append(ValidationError(
+                        message=f"Transition references nonexistent to_node '{trans.to_node}'",
+                        node_name=trans.to_node,
+                        error_type="invalid_transition"
+                    ))
+            elif isinstance(trans.to_node, list):
+                for target in trans.to_node:
+                    target_node = target if isinstance(target, str) else target.to_node
+                    if target_node not in all_nodes:
+                        errors.append(ValidationError(
+                            message=f"Transition references nonexistent target_node '{target_node}'",
+                            node_name=target_node,
+                            error_type="invalid_transition"
+                        ))
+    
+    def _validate_branch_conditions(self, workflow_def: WorkflowDefinition, errors: List[ValidationError]):
+        """Validate branch conditions and their referenced nodes."""
+        all_nodes = set(workflow_def.nodes.keys())
+        
+        for trans in workflow_def.workflow.transitions:
+            if isinstance(trans.to_node, list):
+                for target in trans.to_node:
+                    if hasattr(target, 'to_node') and hasattr(target, 'condition'):  # BranchCondition
+                        # Check if target node exists
+                        if target.to_node not in all_nodes:
+                            errors.append(ValidationError(
+                                message=f"Branch condition references nonexistent node '{target.to_node}'",
+                                node_name=target.to_node,
+                                error_type="invalid_branch_condition"
+                            ))
+                        
+                        # Validate condition syntax
+                        if target.condition:
+                            try:
+                                compile(target.condition, "<string>", "eval")
+                            except SyntaxError as e:
+                                errors.append(ValidationError(
+                                    message=f"Invalid branch condition syntax: '{target.condition}' - {e}",
+                                    node_name=trans.from_node,
+                                    error_type="invalid_branch_condition"
+                                ))
+    
+    def _validate_convergence_nodes(self, workflow_def: WorkflowDefinition, errors: List[ValidationError]):
+        """Validate convergence nodes exist and have multiple incoming transitions."""
+        all_nodes = set(workflow_def.nodes.keys())
+        
+        for conv_node in workflow_def.workflow.convergence_nodes:
+            # Check if convergence node exists
+            if conv_node not in all_nodes:
+                errors.append(ValidationError(
+                    message=f"Convergence node '{conv_node}' is not defined in nodes",
+                    node_name=conv_node,
+                    error_type="invalid_convergence_node"
+                ))
+            
+            # Count incoming transitions
+            incoming_count = 0
+            for trans in workflow_def.workflow.transitions:
+                if isinstance(trans.to_node, str) and trans.to_node == conv_node:
+                    incoming_count += 1
+                elif isinstance(trans.to_node, list):
+                    for target in trans.to_node:
+                        target_node = target if isinstance(target, str) else target.to_node
+                        if target_node == conv_node:
+                            incoming_count += 1
+            
+            if incoming_count < 2:
+                errors.append(ValidationError(
+                    message=f"Convergence node '{conv_node}' has fewer than 2 incoming transitions",
+                    node_name=conv_node,
+                    error_type="invalid_convergence_node"
+                ))
+    
+    def _validate_condition_syntax(self, workflow_def: WorkflowDefinition, warnings: List[ValidationError]):
+        """Validate syntax of all conditions in the workflow."""
+        for trans in workflow_def.workflow.transitions:
+            # Check transition condition
+            if trans.condition:
+                try:
+                    compile(trans.condition, "<string>", "eval")
+                except SyntaxError as e:
+                    warnings.append(ValidationError(
+                        message=f"Invalid condition syntax in transition: '{trans.condition}' - {e}",
+                        node_name=trans.from_node,
+                        error_type="malformed_condition"
+                    ))
+            
+            # Check branch conditions
+            if isinstance(trans.to_node, list):
+                for target in trans.to_node:
+                    if hasattr(target, 'condition') and target.condition:
+                        try:
+                            compile(target.condition, "<string>", "eval")
+                        except SyntaxError as e:
+                            warnings.append(ValidationError(
+                                message=f"Invalid branch condition syntax: '{target.condition}' - {e}",
+                                node_name=trans.from_node,
+                                error_type="malformed_condition"
+                            ))
     
     def validate_nodes(self, workflow_def: WorkflowDefinition) -> List[ValidationError]:
         """Validate nodes in the workflow."""

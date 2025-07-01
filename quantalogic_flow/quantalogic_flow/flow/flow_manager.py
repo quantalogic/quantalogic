@@ -127,6 +127,7 @@ class WorkflowManager:
         self,
         name: str,
         function: str | None = None,
+        llm_config: Dict[str, Any] | None = None,
         template_config: Dict[str, Any] | None = None,
         inputs_mapping: Dict[str, Union[str, Callable]] | None = None,
         output: str | None = None,
@@ -141,6 +142,14 @@ class WorkflowManager:
         node = self.workflow.nodes[name]
         if function is not None:
             node.function = function
+        if llm_config is not None:
+            # Validate LLM config first
+            if isinstance(llm_config, dict):
+                model = llm_config.get("model", "")
+                prompt_template = llm_config.get("prompt_template", "")
+                if not model or not prompt_template:
+                    raise ValueError("LLM config must have non-empty model and prompt_template")
+            node.llm_config = LLMConfig(**llm_config)
         if template_config is not None:
             node.template_config = TemplateConfig(**template_config)
         if inputs_mapping is not None:
@@ -609,7 +618,14 @@ class WorkflowManager:
     def validate_workflow(self, workflow: WorkflowDefinition):
         """Validate a workflow definition."""
         from quantalogic_flow.flow.flow_validator import validate_workflow
-        return validate_workflow(workflow)
+        result = validate_workflow(workflow)
+        
+        # Raise exception if validation fails
+        if not result.is_valid:
+            error_messages = [error.message for error in result.errors]
+            raise ValueError(f"Workflow validation failed: {'; '.join(error_messages)}")
+        
+        return result
 
     def execute_workflow(self, workflow_def: WorkflowDefinition, initial_context: Dict[str, Any]) -> Any:
         """Execute a workflow with initial context."""
@@ -630,11 +646,16 @@ class WorkflowManager:
             try:
                 return loop.run_until_complete(result)
             except Exception:
-                # If loop is already running, we can't use run_until_complete
-                # This is likely in a test environment
+                # If loop is already running or coroutine is exhausted, 
+                # create a new engine and run in a separate thread
                 import concurrent.futures
+                
+                async def run_workflow():
+                    new_engine = WorkflowEngine(workflow_def)
+                    return await new_engine.run(initial_context)
+                
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, result)
+                    future = executor.submit(asyncio.run, run_workflow())
                     return future.result()
         else:
             # If it's a direct return value (like from a mock), return it directly
