@@ -937,7 +937,6 @@ gantt
 
 #### Real-World Example: DevOps Pipeline Visualization
 
-```python
 # Complex enterprise workflow visualization
 devops_workflow = """
 ```mermaid
@@ -987,7 +986,6 @@ graph TD
 yaml_pipeline = WorkflowManager().load_from_yaml("devops_pipeline.yaml")
 generated_diagram = generate_mermaid_diagram(yaml_pipeline.workflow)
 assert devops_workflow.strip() == generated_diagram.strip()
-```
 
 ---
 
