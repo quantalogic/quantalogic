@@ -1,11 +1,11 @@
-# Quantalogic Flow v0.6.4 Release Summary
+# Quantalogic Flow v0.6.5 Release Summary
 
 ## ✅ Completed Tasks
 
 ### 1. Version Update
-- Incremented version from `0.6.2` to `0.6.4` in `pyproject.toml` (0.6.3 already existed on PyPI)
+- Incremented version from `0.6.4` to `0.6.5` in `pyproject.toml`
 - Updated fallback version in `quantalogic_flow/__init__.py`
-- Following semantic versioning (patch version increment)
+- Following semantic versioning (patch version increment for compatibility fix)
 
 ### 2. Test Validation
 - **Test Results**: 423 passed, 2 skipped ✅
@@ -39,10 +39,10 @@
 ## 📦 Release Package Details
 
 - **Package Name**: quantalogic-flow
-- **Version**: 0.6.4
+- **Version**: 0.6.5
 - **Build Files**: 
-  - `quantalogic_flow-0.6.4.tar.gz` (source distribution)
-  - `quantalogic_flow-0.6.4-py3-none-any.whl` (wheel)
+  - `quantalogic_flow-0.6.5.tar.gz` (source distribution)
+  - `quantalogic_flow-0.6.5-py3-none-any.whl` (wheel)
 
 ## 🚀 Ready for Release
 
