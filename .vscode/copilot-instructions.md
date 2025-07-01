@@ -65,11 +65,31 @@ Follow this systematic process:
 ### Python
 - Use type hints for all function signatures
 - Prefer f-strings for string formatting
+- **Avoid nested f-strings** - Use separate variable assignments for Python 3.10/3.11 compatibility
 - Use list/dict comprehensions when they improve readability
 - Import only what you need
 - Follow PEP 8 naming conventions
 - Use loguru instead of standard logging
 - Use pydantic for data models, validation, and serialization
+
+#### F-String Compatibility Rule
+❌ **Don't use nested f-strings** (causes SyntaxError in Python 3.10/3.11):
+```python
+# Bad - nested f-strings
+f'result: {", ".join(f"{item}" for item in items)}'
+f'output: {some_func(f"{var}_suffix")}'
+```
+
+✅ **Use separate variable assignments instead**:
+```python
+# Good - separate assignments
+quoted_items = [f"{item}" for item in items]
+result = f'result: {", ".join(quoted_items)}'
+
+# Good - separate assignments
+suffix_var = f"{var}_suffix"
+output = f'output: {some_func(suffix_var)}'
+```
 
 ### Error Handling
 - Be explicit about expected exceptions
