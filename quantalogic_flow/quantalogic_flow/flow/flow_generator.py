@@ -168,7 +168,8 @@ def generate_executable_script(
                     params.append(f"prompt_template={repr(node_def.llm_config.prompt_template)}")
                 if node_def.llm_config.prompt_file:
                     params.append(f"prompt_file={repr(node_def.llm_config.prompt_file)}")
-                params.append(f"output={repr(node_def.output or f'{node_name}_result')}")
+                default_output = f'{node_name}_result'
+                params.append(f"output={repr(node_def.output or default_output)}")
                 for param in ["temperature", "max_tokens", "top_p", "presence_penalty", "frequency_penalty"]:
                     value = getattr(node_def.llm_config, param, None)
                     if value is not None:
@@ -178,7 +179,8 @@ def generate_executable_script(
                 
             # Handle template nodes
             elif node_def.template_config:
-                params = [f"output={repr(node_def.output or f'{node_name}_result')}"]
+                default_output = f'{node_name}_result'
+                params = [f"output={repr(node_def.output or default_output)}"]
                 if node_def.template_config.template:
                     params.append(f"template={repr(node_def.template_config.template)}")
                 if node_def.template_config.template_file:
@@ -196,7 +198,8 @@ def generate_executable_script(
                     ).rstrip("\n")
                     
                     # Build decorator parameters
-                    params = [f"output={repr(node_def.output or f'{node_name}_result')}"]
+                    default_output = f'{node_name}_result'
+                    params = [f"output={repr(node_def.output or default_output)}"]
                     
                     # Add input mappings if present
                     if node_def.inputs_mapping:
@@ -245,7 +248,8 @@ def generate_executable_script(
         # If we found a sequence, use .sequence()
         if sequence_nodes:
             # Use node names directly
-            f.write(f'    .sequence({", ".join(f'"{node_name}"' for node_name in sequence_nodes)})\n')
+            node_names_quoted = [f'"{node_name}"' for node_name in sequence_nodes]
+            f.write(f'    .sequence({", ".join(node_names_quoted)})\n')
         
         # Group remaining transitions by from_node to detect branches
         remaining_transitions = [trans for trans in workflow_def.workflow.transitions 
@@ -288,7 +292,8 @@ def generate_executable_script(
                     condition = f"lambda ctx: {trans.condition}" if trans.condition else "None"
                     f.write(f'    .then("{trans.to_node}", condition={condition})\n')
                 elif all(isinstance(tn, str) for tn in trans.to_node):
-                    f.write(f'    .parallel({", ".join(f'"{tn}"' for tn in trans.to_node)})\n')
+                    to_nodes_quoted = [f'"{tn}"' for tn in trans.to_node]
+                    f.write(f'    .parallel({", ".join(to_nodes_quoted)})\n')
                 else:  # BranchCondition list
                     branches = []
                     for branch in trans.to_node:
