@@ -6,7 +6,7 @@
 #     "py-zerox",
 #     "pdf2image",
 #     "pillow",
-#     "quantalogic-flow>=0.6.2",
+#     "quantalogic-flow>=0.6.5",
 #     "typer>=0.9.0",
 #     "rich>=13.0.0",
 #     "pyperclip>=1.8.2",
@@ -50,9 +50,9 @@ def check_poppler():
 app = typer.Typer(help="Convert a file (PDF, text, or Markdown) to a LinkedIn post using LLMs")
 console = Console()
 
-# Default models for different phases
-DEFAULT_TEXT_EXTRACTION_MODEL = "gemini/gemini-2.0-flash"
-DEFAULT_CLEANING_MODEL = "gemini/gemini-2.0-flash"
+# Default models for different phases (updated to Gemini 2.5)
+DEFAULT_TEXT_EXTRACTION_MODEL = "gemini/gemini-2.5-flash"
+DEFAULT_CLEANING_MODEL = "gemini/gemini-2.5-flash"
 #DEFAULT_WRITING_MODEL = "deepseek/deepseek-reasoner"
 #DEFAULT_WRITING_MODEL = "openrouter/openai/gpt-4o-mini"
 DEFAULT_WRITING_MODEL = "openrouter/deepseek/deepseek-r1"
