@@ -1,0 +1,213 @@
+[tool.poetry]
+name = "quantalogic"
+version = "0.93"
+description = "QuantaLogic ReAct Agents"
+authors = ["Raphaël MANSUY <raphael.mansuy@gmail.com>"]
+readme = "README.md"
+packages = [
+    { include = "quantalogic" },
+]
+
+# PyPI metadata
+license = "MIT"
+
+
+[tool.poetry.urls]
+Homepage = "https://github.com/quantalogic/quantalogic"
+Repository = "https://github.com/quantalogic/quantalogic"
+Documentation = "https://github.com/quantalogic/quantalogic#readme"
+
+# Core dependencies required for the base Agent and ToolManager
+[tool.poetry.dependencies]
+python = "<4.0,>=3.10"
+pydantic = "^2.10.4"
+litellm = "^1.73.6"
+rich = "^14.0.0"
+loguru = "^0.7.3"
+tenacity = "^9.0.0"
+prompt-toolkit = "^3.0.48"
+click = "^8.1.8"
+jinja2 = "^3.1.5"
+instructor = "^1.7.2"
+requests = "^2.32.3"
+pathspec = "^0.12.1"
+faker = "^37.4.0"
+sqlalchemy = "^2.0.25"
+networkx = "^3.2.1"
+duckduckgo-search = "^8.0.4"
+beautifulsoup4 = "^4.12.3"
+markdownify = "^1.1.0"
+python-dotenv = "^1.0.1"
+markitdown = "^0.1.2"
+html2text = "^2025.4.15"
+google-search-results = "^2.4.2"
+serpapi = "^0.1.5"
+quantalogic-flow = "^0.6.2"
+tree-sitter = "^0.24.0"
+tree-sitter-python = "^0.23.6"
+tree-sitter-c = "^0.24.1"
+tree-sitter-cpp = "^0.23.4"
+tree-sitter-java = "^0.23.5"
+tree-sitter-javascript = "^0.23.1"
+tree-sitter-typescript = "^0.23.2"
+tree-sitter-scala = "^0.24.0"
+tree-sitter-go = "^0.23.4"
+tree-sitter-rust = "^0.24.0"
+fuzzywuzzy = "^0.18.0"
+types-pyyaml = "^6.0.12.20241230"
+typing-extensions = "^4.12.2"
+pytest-asyncio = "^1.0.0"
+boto3 = "^1.38.27"
+botocore = "^1.38.27"
+psutil = "^7.0.0"
+openai = "^1.68.0"
+aiofiles = "^24.1.0"
+quantalogic-pythonbox = ">=0.9.22"
+quantalogic-toolbox = ">=0.8.0"
+
+
+
+[tool.poetry.group.file-tools]
+optional = false
+
+[tool.poetry.group.file-tools.dependencies]
+# No additional dependencies needed
+
+[tool.poetry.group.git-tools]
+optional = true
+
+[tool.poetry.group.git-tools.dependencies]
+gitpython = "^3.1.44"
+
+[tool.poetry.group.search-tools]
+optional = false
+
+[tool.poetry.group.search-tools.dependencies]
+# No additional dependencies needed
+
+[tool.poetry.group.document-tools]
+optional = true
+
+[tool.poetry.group.document-tools.dependencies]
+weasyprint = "^64.0"
+python-docx = "^1.1.2"
+python-pptx = "^1.0.2"
+pypdf = "^5.3.0"
+ebooklib = "^0.18"
+markdown = "^3.7"
+pygments = "^2.19.1"
+mermaid-py = "^0.7.0"
+pillow = ">=10.2,<11.0"
+
+[tool.poetry.group.database-tools]
+optional = true
+
+[tool.poetry.group.database-tools.dependencies]
+chromadb = "^0.6.3"
+faiss-cpu = "^1.10.0"
+pinecone-client = "^6.0.0"
+
+[tool.poetry.group.llm-tools]
+optional = true
+
+[tool.poetry.group.llm-tools.dependencies]
+transformers = "^4.49.0"
+torch = "^2.6.0"
+llama-index = "^0.12.19"
+llama-index-embeddings-openai = "^0.3.1"
+llama-index-embeddings-huggingface = "^0.5.1"
+llama-index-embeddings-instructor = "^0.3.0"
+llama-index-embeddings-bedrock = "^0.5.0"
+llama-index-vector-stores-chroma = "^0.4.1"
+llama-index-vector-stores-faiss = "^0.3.0"
+llmlingua = "^0.2.2"
+
+[tool.poetry.group.web-tools]
+optional = true
+
+[tool.poetry.group.web-tools.dependencies]
+uvicorn = "^0.34.0"
+fastapi = "^0.115.6"
+websocket = "^0.2.1"
+python-multipart = "^0.0.20"
+
+[tool.poetry.group.code-parsing]
+optional = false
+
+[tool.poetry.group.code-parsing.dependencies]
+# No additional dependencies needed
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+mkdocs-material = {extras = ["imaging"], version = "^9.5.49"}
+mkdocs-mermaid2-plugin = "^1.1.1"
+mkdocs-minify-plugin = "^0.7.1"
+mkdocs-git-revision-date-localized-plugin = "^1.2.0"
+mkdocs-macros-plugin = "^1.0.4"
+mkdocstrings = "^0.24.0"
+mkdocstrings-python = "^1.7.0"
+pymdown-extensions = "^10.3.1"
+mkdocs = "^1.6.0"
+
+[tool.poetry.group.composio-tools]
+optional = true
+
+[tool.poetry.group.composio-tools.dependencies]
+composio = "^0.1.1"
+
+[tool.poetry.group.utilities]
+optional = false
+
+[tool.poetry.group.utilities.dependencies]
+google-auth = "^2.20.0"
+toml = "^0.10.2"
+types-requests = "^2.32.0.20241016"
+numpy = "^2.2.3"
+pandas = "^2.3.0"
+ta = "^0.11.0"
+nbformat = "^5.10.4"
+bibtexparser = "^1.4.3"
+python-Levenshtein = "^0.27.1"
+
+# Development dependencies
+[tool.poetry.group.dev]
+optional = false
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.12.1"
+pytest = "^8.2.0"
+pytest-mock = "^3.14.0"
+litellm = "^1.73.6"
+ollama = "^0.5.1"
+
+# Scripts for CLI and documentation
+[tool.poetry.scripts]
+quantalogic = "quantalogic.main:cli"
+
+# Build system configuration
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+# Ruff linting configuration
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+extend-select = ["F", "E", "W", "I", "N", "UP", "ASYNC", "B", "A", "C4", "DTZ", "T10", "ISC", "ICN", "G", "PIE", "T20", "PYI", "PT"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+preview = true
+
+# Pytest configuration
+[tool.pytest.ini_options]
+addopts = "-v"
+markers = [
+"integration: marks integration tests that require external services",
+"unit: marks unit tests"
+]
+testpaths = ["tests"]

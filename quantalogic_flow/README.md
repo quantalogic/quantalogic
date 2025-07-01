@@ -13,32 +13,35 @@ This README is your guide to mastering Quantalogic Flow. Packed with examples, v
 ## Table of Contents
 
 1. [Why Quantalogic Flow?](#why-quantalogic-flow)
-2. [Installation](#installation)
-3. [Quickstart](#quickstart)
-4. [Core Concepts](#core-concepts)
+2. [Architecture Overview](#architecture-overview)
+3. [Installation](#installation)
+4. [Using Quantalogic Flow with LLM Providers](#using-quantalogic-flow-with-llm-providers)
+4. [Quickstart](#quickstart)
+5. [Core Concepts](#core-concepts)
    - [Nodes: The Building Blocks](#nodes-the-building-blocks)
    - [Workflows: The Roadmap](#workflows-the-roadmap)
    - [Context: The Glue](#context-the-glue)
-5. [Approaches: YAML vs. Fluent API](#approaches-yaml-vs-fluent-api)
+6. [Approaches: YAML vs. Fluent API](#approaches-yaml-vs-fluent-api)
    - [YAML Approach](#yaml-approach)
    - [Fluent API Approach](#fluent-api-approach)
-6. [Fluent API Examples](#fluent-api-examples)
-7. [Advanced Features](#advanced-features)
+7. [Fluent API Examples](#fluent-api-examples)
+8. [Advanced Features](#advanced-features)
    - [Input Mapping](#input-mapping)
    - [Dynamic Model Selection](#dynamic-model-selection)
    - [Sub-Workflows](#sub-workflows)
    - [Observers](#observers)
    - [Looping](#looping)
-8. [Validation and Debugging](#validation-and-debugging)
-9. [Conversion Tools](#conversion-tools)
-10. [Case Study: AI-Powered Story Generator](#case-study-ai-powered-story-generator)
-11. [Best Practices and Insider Tips](#best-practices-and-insider-tips)
-12. [Flow Manager API](#flow-manager-api)
-13. [Integration with QuantaLogic](#integration-with-quantalogic)
-14. [Examples](#examples)
-15. [Resources and Community](#resources-and-community)
-16. [API Reference](#api-reference)
-17. [Flow YAML Reference](#flow-yaml-reference)
+9. [Validation and Debugging](#validation-and-debugging)
+10. [Troubleshooting](#troubleshooting)
+11. [Conversion Tools](#conversion-tools)
+12. [Case Study: AI-Powered Story Generator](#case-study-ai-powered-story-generator)
+13. [Best Practices and Insider Tips](#best-practices-and-insider-tips)
+14. [Flow Manager API](#flow-manager-api)
+15. [Integration with QuantaLogic](#integration-with-quantalogic)
+16. [Examples](#examples)
+17. [Resources and Community](#resources-and-community)
+18. [API Reference](#api-reference)
+19. [Flow YAML Reference](#flow-yaml-reference)
 
 ---
 
@@ -68,9 +71,30 @@ graph TD
     C -->|Conditional| E[Node: Sub-Workflow]
     D --> F[Output: Report]
     E --> F
-    style A fill:#90CAF9
-    style F fill:#90CAF9
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style B fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style C fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style D fill:#FFF0F5,stroke:#C2185B,stroke-width:2px,color:#AD1457
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00
+    style F fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
 ```
+
+---
+
+## Architecture Overview
+
+Quantalogic Flow is built on a revolutionary **three-way duality architecture** that bridges the gap between declarative workflows, fluent programming, and visual workflow building. This unique design eliminates the traditional "configuration vs. code" debate by offering **seamless bidirectional conversion** between all three approaches.
+
+**🔗 [Deep Dive: The Quantalogic Flow Duality Architecture](./DUALITY_ARCHITECTURE.md)**
+
+This comprehensive guide explores:
+- **The Collaboration Crisis**: How different teams (business analysts, developers, DevOps) need different representations of the same workflow
+- **Three-API System**: YAML Declarative DSL, Fluent Python API, and Workflow Builder API - same power, different paradigms
+- **Lossless Transformation**: Mathematical proof of information preservation across all representations
+- **Real-World Examples**: Enterprise use cases showing the same workflow expressed in all three approaches
+- **Universal Workflow Execution**: Vision for multi-runtime portability (Temporal, Airflow, AWS Step Functions, etc.)
+
+Whether you're a business analyst who prefers YAML configuration, a Python developer who loves method chaining, or building visual workflow tools, the duality architecture ensures you never have to compromise on expressiveness or lose information during format conversions.
 
 ---
 
@@ -87,6 +111,8 @@ Install Quantalogic Flow via pip:
 pip install quantalogic-flow
 ```
 
+> **Version Compatibility**: This documentation covers Quantalogic Flow v0.6.2+ with Python 3.10+ support. For older versions, check the [release notes](https://github.com/quantalogic/quantalogic-flow/releases).
+
 For isolated environments, use pipx:
 ```bash
 pipx install quantalogic-flow
@@ -100,7 +126,52 @@ export OPENAI_API_KEY="sk-your-openai-key"
 export DEEPSEEK_API_KEY="ds-your-deepseek-key"
 ```
 
-> **Tip**: Use a `.env` file for security and load it with `source .env`. See [API Keys and Environment Configuration](#api-keys-and-environment-configuration) for details.
+> **Tip**: Use a `.env` file for security and load it with `source .env`. See [Using Quantalogic Flow with LLM Providers](#using-quantalogic-flow-with-llm-providers) for comprehensive setup details.
+
+---
+
+## Using Quantalogic Flow with LLM Providers
+
+Quantalogic Flow leverages **LiteLLM** for seamless integration with 100+ LLM providers. Whether you're using cloud providers like OpenAI and Gemini, local models with Ollama, or enterprise solutions like Azure and AWS Bedrock, Quantalogic Flow makes it simple with a unified API.
+
+### Quick Setup
+
+**Most Popular Providers:**
+```bash
+# OpenAI
+export OPENAI_API_KEY="sk-your-openai-key"
+
+# Google Gemini  
+export GEMINI_API_KEY="your-gemini-api-key"
+
+# Local with Ollama (no API key needed)
+ollama serve
+```
+
+**Example Usage:**
+```python
+from quantalogic_flow import Workflow, Nodes
+
+@Nodes.llm(model="gpt-4o", output="response")
+async def analyze_text(text: str):
+    return f"Analyze this text: {text}"
+
+workflow = Workflow().add(analyze_text, text="Hello World")
+result = await workflow.build().run({})
+```
+
+### 📖 **Complete Provider Setup Guide**
+
+For detailed setup instructions, model recommendations, and configuration examples for all supported providers (OpenAI, Gemini, Ollama, Azure, Bedrock, LM Studio, VertexAI, and more), see our comprehensive guide:
+
+**➡️ [LLM Provider Configuration Guide](./LLM_PROVIDERS.md)**
+
+This guide includes:
+- Step-by-step setup for each provider
+- Popular model recommendations
+- Cost and performance comparisons
+- Pro tips for development and production
+- Troubleshooting common issues
 
 ---
 
@@ -108,9 +179,17 @@ export DEEPSEEK_API_KEY="ds-your-deepseek-key"
 
 Get started with a simple workflow that reads a string, processes it, and prints the result.
 
+### Quick Start Checklist
+1. ✅ **Install**: `pip install quantalogic-flow`
+2. ✅ **Import**: `from quantalogic_flow import Workflow, Nodes`
+3. ✅ **Define nodes**: Use `@Nodes.define()` decorator
+4. ✅ **Create workflow**: Chain nodes with `.then()`
+5. ✅ **Run**: `asyncio.run(workflow.build().run({}))`
+
 ### Fluent API Example
 ```python
 from quantalogic_flow import Workflow, Nodes
+import asyncio
 
 @Nodes.define(output="data")
 def read_data():
@@ -134,7 +213,6 @@ async def main():
     result = await workflow.build().run({})
     print(result)  # Outputs: HELLO WORLD
 
-import asyncio
 asyncio.run(main())
 ```
 
@@ -220,12 +298,12 @@ graph TD
     C --> E[Convergence Node]
     D --> E
     E --> F[End Node]
-    style A fill:#90CAF9
-    style B fill:#90CAF9
-    style C fill:#90CAF9
-    style D fill:#90CAF9
-    style E fill:#90CAF9,stroke-dasharray:5 5
-    style F fill:#90CAF9
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style B fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style C fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style D fill:#FFF0F5,stroke:#C2185B,stroke-width:2px,color:#AD1457
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00,stroke-dasharray:5 5
+    style F fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
 ```
 
 ---
@@ -295,6 +373,7 @@ print(result)  # Outputs: HELLO WORLD
 **How**:
 ```python
 from quantalogic_flow.flow import Nodes, Workflow
+import asyncio
 
 @Nodes.define(output="data")
 def read_data():
@@ -310,7 +389,6 @@ def write_data(processed_data):
 
 workflow = (
     Workflow("read_data")
-    .node("read_data")
     .then("process_data")
     .then("write_data")
 )
@@ -319,7 +397,6 @@ async def main():
     result = await workflow.build().run({})
     print(result)  # Outputs: HELLO WORLD
 
-import asyncio
 asyncio.run(main())
 ```
 
@@ -337,9 +414,9 @@ asyncio.run(main())
 graph TD
     A[read_data] --> B[process_data]
     B --> C[write_data]
-    style A fill:#90CAF9
-    style B fill:#90CAF9
-    style C fill:#90CAF9
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style B fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style C fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
 ```
 
 **Insider Tip**: Use YAML for team collaboration or quick prototyping, and switch to Fluent API when you need runtime decisions or integration with existing Python code.
@@ -353,6 +430,7 @@ Below are practical examples demonstrating the Fluent API’s capabilities.
 ### 1. Basic Workflow
 ```python
 from quantalogic_flow import Workflow, Nodes
+import asyncio
 
 @Nodes.define(output="data")
 def read_data():
@@ -374,6 +452,7 @@ print(result)  # {'data': [1, 2, 3], 'processed': [2, 4, 6]}
 ### 2. Conditional Branching
 ```python
 from quantalogic_flow import Workflow, Nodes
+import asyncio
 
 @Nodes.define(output="x")
 def start_node():
@@ -385,7 +464,7 @@ def high_path(x):
 
 @Nodes.define(output="result")
 def low_path(x):
-    return f"Low: {x"
+    return f"Low: {x}"
 
 workflow = (
     Workflow("start_node")
@@ -404,6 +483,7 @@ print(result)  # {'x': 12, 'result': 'High: 12'}
 ### 3. Looping
 ```python
 from quantalogic_flow import Workflow, Nodes
+import asyncio
 
 @Nodes.define(output="count")
 def init():
@@ -428,6 +508,7 @@ print(result)  # {'count': 3}
 ```python
 from quantalogic_flow.flow import Nodes, Workflow
 from pydantic import BaseModel
+import asyncio
 
 class Person(BaseModel):
     name: str
@@ -459,6 +540,7 @@ result = asyncio.run(workflow.build().run({"input_text": input_text}))
 ### 5. Template Node for Formatting
 ```python
 from quantalogic_flow.flow import Nodes, Workflow
+import asyncio
 
 @Nodes.define(output="data")
 def fetch_data():
@@ -554,10 +636,16 @@ workflow.add_observer(lambda event: print(f"{event.node_name} - {event.event_typ
 ### Looping
 Execute nodes iteratively until a condition is met:
 ```python
+# First define the node functions
+@Nodes.define(output="count")
+def increment(count):
+    return count + 1
+
+# Then create the workflow
 workflow = (
     Workflow("init")
     .start_loop()
-    .node("increment", function=lambda ctx: ctx.update({"count": ctx["count"] + 1}))
+    .node("increment")
     .end_loop(lambda ctx: ctx["count"] >= 3, "end")
 )
 ```
@@ -572,11 +660,11 @@ graph TD
     A --> E[Observer]
     B --> E
     C --> E
-    style A fill:#90CAF9
-    style B fill:#90CAF9
-    style C fill:#90CAF9
-    style D fill:#90CAF9
-    style E fill:#FFCCBC
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style B fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style C fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style D fill:#FFF0F5,stroke:#C2185B,stroke-width:2px,color:#AD1457
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00
 ```
 
 ---
@@ -598,6 +686,144 @@ graph TD
   ```
 
 **Insider Tip**: Validate early to catch circular transitions or missing inputs, and use observers to monitor LLM token usage.
+
+### Visual Reference: Node Types in Diagrams
+
+Quantalogic Flow uses a professional color scheme to differentiate node types in Mermaid diagrams:
+
+```mermaid
+graph LR
+    A[Function Node] --> B[LLM Node]
+    B --> C[Structured LLM Node]
+    C --> D[Template Node]
+    D --> E[Sub-Workflow Node]
+    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style B fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style C fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style D fill:#FFF0F5,stroke:#C2185B,stroke-width:2px,color:#AD1457
+    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00
+```
+
+**Color Legend:**
+- 🔵 **Blue**: Function Nodes (custom Python code)
+- 🟣 **Purple**: LLM Nodes (text generation)
+- 🟢 **Green**: Structured LLM Nodes (JSON/Pydantic output)
+- 🩷 **Pink**: Template Nodes (Jinja2 formatting)
+- 🟠 **Orange**: Sub-Workflow Nodes (nested workflows)
+
+---
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### 1. Import Errors
+**Problem**: `ModuleNotFoundError: No module named 'quantalogic_flow'`
+**Solution**: 
+```bash
+pip install quantalogic-flow
+# or upgrade if already installed
+pip install --upgrade quantalogic-flow
+```
+
+#### 2. Node Not Found Errors
+**Problem**: `ValueError: Node 'my_node' not found`
+**Solutions**:
+- Ensure the node function is decorated with `@Nodes.define()` before workflow creation
+- Check that the node name matches exactly (case-sensitive)
+- Verify the node is registered in the correct order
+
+```python
+# ✅ Correct order
+@Nodes.define(output="data")
+def my_node():
+    return "data"
+
+workflow = Workflow("my_node")  # Node is already registered
+
+# ❌ Wrong order
+workflow = Workflow("my_node")  # Error: Node not registered yet
+
+@Nodes.define(output="data")
+def my_node():
+    return "data"
+```
+
+#### 3. LLM API Key Issues
+**Problem**: API calls failing or authentication errors
+**Solutions**:
+- Verify API keys are correctly set in environment variables
+- Check API key format (different providers have different formats)
+- Test API key directly with the provider's CLI/API
+
+```bash
+# Test environment variables
+echo $OPENAI_API_KEY
+echo $GEMINI_API_KEY
+
+# Set keys properly
+export OPENAI_API_KEY="sk-your-key-here"
+export GEMINI_API_KEY="your-gemini-key"
+```
+
+#### 4. Context Data Not Flowing
+**Problem**: Node inputs are `None` or missing expected data
+**Solutions**:
+- Check `output` parameter in node decorators
+- Verify `inputs_mapping` configuration
+- Use observers to trace context changes
+
+```python
+# ✅ Correct output specification
+@Nodes.define(output="processed_data")  # Saves to context["processed_data"]
+def process(raw_data):
+    return raw_data.upper()
+
+# ✅ Correct input mapping
+.node("process", inputs_mapping={"raw_data": "input_data"})
+
+# Debug with observer
+workflow.add_observer(lambda event: print(f"Context: {event.context}"))
+```
+
+#### 5. Async/Await Issues
+**Problem**: `RuntimeError: asyncio.run() cannot be called from a running event loop`
+**Solutions**:
+- Use `await` instead of `asyncio.run()` when already in async context
+- For Jupyter notebooks, use `await` directly
+
+```python
+# ✅ In async context (Jupyter, async function)
+result = await workflow.build().run({})
+
+# ✅ In sync context (script, main)
+result = asyncio.run(workflow.build().run({}))
+```
+
+#### 6. Memory Issues with Large Workflows
+**Problem**: High memory usage or slow execution
+**Solutions**:
+- Use streaming for large data
+- Implement cleanup in node functions
+- Consider sub-workflows for modularity
+- Monitor LLM token usage
+
+```python
+# ✅ Cleanup resources
+@Nodes.define(output="result")
+def process_large_data(data):
+    result = expensive_operation(data)
+    del data  # Free memory
+    return result
+```
+
+### Performance Tips
+
+1. **Optimize LLM Calls**: Use appropriate temperature and token limits
+2. **Cache Results**: Store expensive computations in context
+3. **Batch Operations**: Group similar operations together
+4. **Monitor Usage**: Use observers to track execution time and costs
+5. **Validate Early**: Catch errors before expensive operations
 
 ---
 
@@ -773,13 +999,13 @@ graph TD
     F -->|yes| C
     F --> G["finalize_story<br>(Function)"]
     E --> G
-    style A fill:#CE93D8
-    style B fill:#A5D6A7
-    style C fill:#CE93D8
-    style D fill:#FCE4EC
-    style E fill:#90CAF9
-    style F fill:#90CAF9
-    style G fill:#90CAF9,stroke-dasharray:5 5
+    style A fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style B fill:#E8F5E8,stroke:#388E3C,stroke-width:2px,color:#2E7D32
+    style C fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#6A1B9A
+    style D fill:#FFF0F5,stroke:#C2185B,stroke-width:2px,color:#AD1457
+    style E fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style F fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#1565C0
+    style G fill:#FFF3E0,stroke:#F57C00,stroke-width:2px,color:#EF6C00,stroke-dasharray:5 5
 ```
 
 **Sample Output**:
@@ -826,6 +1052,9 @@ from quantalogic_flow.flow.flow_manager import WorkflowManager
 
 ### Example: Manual Workflow Construction
 ```python
+from quantalogic_flow.flow.flow_manager import WorkflowManager
+import asyncio
+
 manager = WorkflowManager()
 manager.add_function('read', 'embedded', code='def read(): return "data"')
 manager.add_node('start', function='read', output='raw')
@@ -852,8 +1081,9 @@ Quantalogic Flow is a cornerstone of the **QuantaLogic** framework, complementin
 
 **Example: Combining Flow with ReAct**:
 ```python
-from quantalogic import Agent
+from quantalogic import Agent  # Note: Requires quantalogic package
 from quantalogic_flow.flow import Workflow, Nodes
+import asyncio
 
 @Nodes.llm_node(model="gpt-4o", output="code")
 async def generate_code(task: str) -> str:
@@ -897,22 +1127,53 @@ Explore practical examples included with Quantalogic Flow:
 ## API Reference
 
 ### Workflow Class
-- `Workflow(start_node: str)`: Initialize a workflow.
-- `.node(name: str, inputs_mapping: Optional[dict] = None)`: Add a task node.
-- `.sequence(*nodes: str)`: Add multiple nodes in order.
-- `.then(next_node: str, condition: Optional[Callable] = None)`: Transition to another node.
-- `.branch(conditions: List[Tuple[str, Callable]], next_node: str)`: Conditional branching.
+
+The core class for building and executing workflows.
+
+#### Constructor
+- `Workflow(start_node: str)`: Initialize a workflow with a starting node.
+
+#### Chain Building Methods
+- `.node(name: str, inputs_mapping: Optional[dict] = None)`: Add a node to the workflow.
+- `.then(next_node: str, condition: Optional[Callable] = None)`: Add sequential transition.
+- `.sequence(*nodes: str)`: Add multiple nodes in sequence.
+- `.branch(conditions: List[Tuple[str, Callable]])`: Add conditional branching.
 - `.converge(node: str)`: Merge parallel branches.
-- `.start_loop() / .end_loop(condition: Callable, next_node: str)`: Define iterative loops.
-- `.add_sub_workflow(name: str, workflow: Workflow, inputs: dict, output: str)`: Nest workflows.
-- `.build(parent_engine: Optional[WorkflowEngine] = None)`: Compile to engine.
-- `.run(initial_context: dict)`: Execute workflow.
+
+#### Loop Methods
+- `.start_loop()`: Begin a loop definition.
+- `.end_loop(condition: Callable, next_node: str)`: End loop with exit condition.
+
+#### Advanced Methods
+- `.add_sub_workflow(name: str, workflow: Workflow, inputs: dict, output: str)`: Embed workflows.
+- `.add_observer(observer: Callable)`: Add execution monitoring.
+- `.build(parent_engine: Optional[WorkflowEngine] = None)`: Compile to executable engine.
 
 ### Node Decorators
-- `@Nodes.define(output: str)`: Define a Python function node.
-- `@Nodes.llm_node(...)`: Define an LLM-powered node with text output.
-- `@Nodes.structured_llm_node(...)`: Define an LLM node with structured output.
-- `@Nodes.validate_node(output: str)`: Define a validation node.
+
+#### Basic Decorators
+- `@Nodes.define(output: Optional[str] = None)`: Define a basic function node.
+- `@Nodes.validate_node(output: str)`: Define a validation node (must return string).
+
+#### LLM Decorators
+- `@Nodes.llm_node(model: str, system_prompt: str, prompt_template: str, output: str, **kwargs)`: Text generation node.
+- `@Nodes.structured_llm_node(model: str, system_prompt: str, prompt_template: str, response_model: Type, output: str, **kwargs)`: Structured output node.
+
+#### Template Decorator
+- `@Nodes.template_node(output: str, template: str, template_file: Optional[str] = None)`: Jinja2 rendering node.
+
+### Common Parameters
+
+#### LLM Parameters
+- `model`: Model identifier (e.g., "gpt-4o", "gemini/gemini-2.0-flash")
+- `temperature`: Randomness (0.0-1.0)
+- `max_tokens`: Maximum response length
+- `system_prompt`: Behavior instructions
+- `prompt_template`: Jinja2 template for user input
+
+#### Node Parameters
+- `output`: Context key to store node result
+- `inputs_mapping`: Map node inputs to context keys or callables
 - `@Nodes.template_node(output: str, template: str or template_file)`: Define a Jinja2 template node.
 
 ### Utilities
@@ -929,28 +1190,7 @@ The [Flow YAML Reference](./flow_yaml.md) provides a detailed guide to the decla
 
 ---
 
-## API Keys and Environment Configuration
 
-Quantalogic Flow supports multiple LLM providers via LiteLLM. Configure API keys securely:
-
-```bash
-echo "OPENAI_API_KEY=sk-your-openai-key" > .env
-echo "DEEPSEEK_API_KEY=ds-your-deepseek-key" >> .env
-source .env
-```
-
-### Supported Models
-| **Model Name**                          | **Key Variable**         | **Use Case**                         |
-|-----------------------------------------|--------------------------|---------------------------------------|
-| `openai/gpt-4o-mini`                   | `OPENAI_API_KEY`         | Fast, cost-effective tasks           |
-| `openai/gpt-4o`                        | `OPENAI_API_KEY`         | Advanced reasoning                   |
-| `anthropic/claude-3.5-sonnet`          | `ANTHROPIC_API_KEY`      | Balanced performance                 |
-| `deepseek/deepseek-chat`               | `DEEPSEEK_API_KEY`       | Conversational tasks                 |
-| `gemini/gemini-2.0-flash`              | `GEMINI_API_KEY`         | Speedy creative tasks                |
-
-**Pro Tip**: Use [LiteLLM Docs](https://docs.litellm.ai/docs/) for advanced configuration.
-
----
 
 ## Final Boost
 

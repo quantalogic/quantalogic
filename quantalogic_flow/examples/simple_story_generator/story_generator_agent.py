@@ -78,26 +78,32 @@ async def quality_check(manuscript: str):
     pass
 
 # Define the workflow
-workflow = (
-    Workflow("validate_input")
-    .then("generate_title")
-    .then("generate_outline")
-    .start_loop()
-    .node("generate_chapter")
-    .node("update_progress")
-    .end_loop(
-        condition=lambda ctx: ctx["completed_chapters"] >= ctx["num_chapters"],
-        next_node="compile_book"
+def create_story_workflow():
+    """Create and return the story generation workflow for testing purposes."""
+    workflow = (
+        Workflow("validate_input")
+        .then("generate_title")
+        .then("generate_outline")
+        .start_loop()
+        .node("generate_chapter")
+        .node("update_progress")
+        .end_loop(
+            condition=lambda ctx: ctx["completed_chapters"] >= ctx["num_chapters"],
+            next_node="compile_book"
+        )
+        .then("quality_check")
     )
-    .then("quality_check")
-)
+    
+    def story_observer(event_type, data=None):
+        """Observer function to log workflow events."""
+        print(f"Event: {event_type} - Data: {data}")
+    
+    # Add an observer to the workflow
+    workflow.add_observer(story_observer)
+    return workflow
 
-def story_observer(event_type, data=None):
-    """Observer function to log workflow events."""
-    print(f"Event: {event_type} - Data: {data}")
-
-# Add an observer to the workflow
-workflow.add_observer(story_observer)
+# Default workflow for direct execution
+workflow = create_story_workflow()
 
 if __name__ == "__main__":
     async def main():

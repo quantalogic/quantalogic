@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic-flow"
-version = "0.6.2"
+version = "0.6.5"
 description = "Quantalogic Flow"
 readme = "README.md"
 authors = ["QuantaLogic Team <raphael.mansuy@quantalogic.app>"]
@@ -8,13 +8,21 @@ license = "MIT"
 packages = [ { include = "quantalogic_flow" } ]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<4.0"
+python = "<4.0,>=3.10"
 loguru = "^0.7.3"
-litellm = "^1.67.0"
-instructor = "^1.7.9"
+litellm = "^1.73.6"
+instructor = "^1.7.2"
 pathspec = "^0.12.1"
-pydantic = "^2.11.3"
-jinja2 = "^3.1.6"
+pydantic = "^2.10.4"
+jinja2 = "^3.1.5"
+typing-extensions = "^4.12.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.23.0"
+pytest-cov = "^5.0.0"
+pytest-mock = "^3.12.0"
+coverage = "^7.4.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

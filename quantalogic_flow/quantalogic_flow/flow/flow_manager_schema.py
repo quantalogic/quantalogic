@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class FunctionDefinition(BaseModel):
@@ -142,6 +142,8 @@ class TemplateConfig(BaseModel):
         template = data.get("template")
         if not template and not template_file:
             raise ValueError("Either 'template' or 'template_file' must be provided")
+        if template and template_file:
+            raise ValueError("Cannot provide both 'template' and 'template_file' - they are mutually exclusive")
         if template_file and not isinstance(template_file, str):
             raise ValueError("template_file must be a string path to a Jinja2 template file")
         return data
@@ -149,6 +151,9 @@ class TemplateConfig(BaseModel):
 
 class NodeDefinition(BaseModel):
     """Definition of a workflow node with template_node and inputs_mapping support."""
+    
+    model_config = ConfigDict(extra="allow")  # Allow extra fields like 'requirements'
+    
     function: Optional[str] = Field(
         None, description="Name of the function to execute (references a FunctionDefinition)."
     )
@@ -224,10 +229,15 @@ class TransitionDefinition(BaseModel):
 
 
 class LoopDefinition(BaseModel):
-    """Definition of a loop within the workflow."""
+    """Definition of a loop within the workflow, supports nesting."""
     nodes: List[str] = Field(..., description="List of node names in the loop.")
-    condition: str = Field(..., description="Python expression using 'ctx' for the loop condition.")
+    condition: str = Field(..., description="Python expression using 'ctx' for the loop condition (when to exit).")
     exit_node: str = Field(..., description="Node to transition to when the loop ends.")
+    entry_node: Optional[str] = Field(None, description="Node that enters the loop (defaults to first node).")
+    nested_loops: List["LoopDefinition"] = Field(
+        default_factory=list, description="List of nested loops within this loop."
+    )
+    loop_id: Optional[str] = Field(None, description="Unique identifier for the loop (auto-generated if not provided).")
 
 
 class WorkflowStructure(BaseModel):
@@ -243,31 +253,34 @@ class WorkflowStructure(BaseModel):
         default_factory=list, description="List of nodes where branches converge."
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def check_loop_nodes(cls, data: Any) -> Any:
-        """Ensure all nodes in loops exist in the workflow.
-
-        Args:
-            data: Raw data to validate.
-
-        Returns:
-            Validated data.
-
-        Raises:
-            ValueError: If loop nodes are not defined.
-        """
-        loops = data.get("loops", [])
-        nodes = set(data.get("nodes", {}).keys())
-        for loop in loops:
-            for node in loop["nodes"] + [loop["exit_node"]]:
-                if node not in nodes:
-                    raise ValueError(f"Loop node '{node}' not defined in nodes")
-        return data
+    # @model_validator(mode="before")
+    # @classmethod
+    # def check_loop_nodes(cls, data: Any) -> Any:
+    #     """Ensure all nodes in loops exist in the workflow.
+    #
+    #     Args:
+    #         data: Raw data to validate.
+    #
+    #     Returns:
+    #         Validated data.
+    #
+    #     Raises:
+    #         ValueError: If loop nodes are not defined.
+    #     """
+    #     loops = data.get("loops", [])
+    #     nodes = set(data.get("nodes", {}).keys())
+    #     for loop in loops:
+    #         for node in loop["nodes"] + [loop["exit_node"]]:
+    #             if node not in nodes:
+    #                 raise ValueError(f"Loop node '{node}' not defined in nodes")
+    #     return data
 
 
 class WorkflowDefinition(BaseModel):
     """Top-level definition of the workflow."""
+    
+    model_config = ConfigDict(extra="allow")  # Allow extra fields for compatibility
+    
     functions: Dict[str, FunctionDefinition] = Field(
         default_factory=dict, description="Dictionary of function definitions."
     )
@@ -285,3 +298,4 @@ class WorkflowDefinition(BaseModel):
 
 
 NodeDefinition.model_rebuild()
+LoopDefinition.model_rebuild()

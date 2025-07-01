@@ -27,13 +27,13 @@ class AgentTool(Tool):
                     ToolArgument(name="temperature", arg_type="float", description="Temperature for generation (0 to 1)", required=True),
                     ToolArgument(
                         name="history",
-                        arg_type="list",
-                        description="Optional list of previous messages, each with 'role' and 'content' to gives context to the model (e.g., [{'role': 'user', 'content': 'Hi'}])",
+                        arg_type="string",
+                        description="Optional JSON string of previous messages, each with 'role' and 'content' to gives context to the model (e.g., '[{\"role\": \"user\", \"content\": \"Hi\"}]')",
                         required=False
                     ),
                     ToolArgument(
                         name="max_tokens",
-                        arg_type="integer",
+                        arg_type="int",
                         description="Maximum number of tokens to generate (default 2000)",
                         required=False
                     )
@@ -43,6 +43,7 @@ class AgentTool(Tool):
             self.config = config or {}
             self.model: str = self._resolve_model(model)
             self.timeout: int = self._resolve_timeout(timeout)
+            self.toolbox_name = "default"  # Add toolbox_name attribute
         except Exception as e:
             logger.error(f"Failed to initialize AgentTool: {e}")
             raise

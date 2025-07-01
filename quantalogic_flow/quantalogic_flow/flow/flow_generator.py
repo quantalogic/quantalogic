@@ -90,21 +90,33 @@ def generate_executable_script(
                     if not value.startswith("lambda ctx:"):  # Static mappings only
                         initial_context[value] = ""
 
-    # Detect loops
-    loop_nodes = []
-    loop_condition = None
-    loop_exit_node = None
-    for trans in workflow_def.workflow.transitions:
-        if isinstance(trans.to_node, str) and trans.condition:
-            # Check for loop-back transition
-            if any(t.from_node == trans.to_node and t.to_node == trans.from_node for t in workflow_def.workflow.transitions):
-                loop_nodes.append(trans.from_node)
-                loop_nodes.append(trans.to_node)
-                loop_condition = trans.condition
-            # Check for exit transition
-            elif loop_nodes and trans.from_node == loop_nodes[-1] and f"not ({loop_condition})" in trans.condition:
-                loop_exit_node = trans.to_node
-    loop_nodes = list(dict.fromkeys(loop_nodes))  # Remove duplicates, preserve order
+    # Detect loops and nested loops from schema
+    loops = []
+    if hasattr(workflow_def.workflow, 'loops') and workflow_def.workflow.loops:
+        # Use explicit loop definitions from schema
+        for loop_def in workflow_def.workflow.loops:
+            loops.append({
+                'nodes': loop_def.nodes,
+                'condition': loop_def.condition,
+                'exit_node': loop_def.exit_node
+            })
+    else:
+        # Legacy: detect simple loops from transitions
+        loop_nodes = []
+        for trans in workflow_def.workflow.transitions:
+            if isinstance(trans.to_node, str) and trans.condition:
+                # Check for loop-back transition
+                if any(t.from_node == trans.to_node and t.to_node == trans.from_node for t in workflow_def.workflow.transitions):
+                    loop_nodes.append(trans.from_node)
+                    loop_nodes.append(trans.to_node)
+        loop_nodes = list(dict.fromkeys(loop_nodes))  # Remove duplicates, preserve order
+        if loop_nodes:
+            # Create simple loop structure
+            loops.append({
+                'nodes': loop_nodes,
+                'condition': 'True',  # Placeholder
+                'exit_node': 'end'
+            })
 
     with open(output_file, "w") as f:
         # Shebang and metadata
@@ -130,135 +142,184 @@ def generate_executable_script(
 
         # Global variables
         for var_name, value in global_vars.items():
-            f.write(f"{var_name} = {repr(value)}\n")
+            if isinstance(value, str):
+                f.write(f'{var_name} = "{value}"\n')
+            else:
+                f.write(f"{var_name} = {repr(value)}\n")
         f.write("\n")
 
         # Define functions with decorators
         for node_name, node_def in workflow_def.nodes.items():
-            if node_def.function and node_def.function in workflow_def.functions:
+            decorator = ""
+            func_body = ""
+            
+            # Handle LLM nodes
+            if node_def.llm_config:
+                params = []
+                if node_def.llm_config.model.startswith("lambda ctx:"):
+                    params.append(f"model={node_def.llm_config.model}")
+                else:
+                    params.append(f"model={repr(node_def.llm_config.model)}")
+                if node_def.llm_config.system_prompt_file:
+                    params.append(f"system_prompt_file={repr(node_def.llm_config.system_prompt_file)}")
+                elif node_def.llm_config.system_prompt:
+                    params.append(f"system_prompt={repr(node_def.llm_config.system_prompt)}")
+                if node_def.llm_config.prompt_template:
+                    params.append(f"prompt_template={repr(node_def.llm_config.prompt_template)}")
+                if node_def.llm_config.prompt_file:
+                    params.append(f"prompt_file={repr(node_def.llm_config.prompt_file)}")
+                default_output = f'{node_name}_result'
+                params.append(f"output={repr(node_def.output or default_output)}")
+                for param in ["temperature", "max_tokens", "top_p", "presence_penalty", "frequency_penalty"]:
+                    value = getattr(node_def.llm_config, param, None)
+                    if value is not None:
+                        params.append(f"{param}={repr(value)}")
+                decorator = f"@Nodes.llm_node({', '.join(params)})\n"
+                func_body = f"def {node_name}(input):\n    pass\n"
+                
+            # Handle template nodes
+            elif node_def.template_config:
+                default_output = f'{node_name}_result'
+                params = [f"output={repr(node_def.output or default_output)}"]
+                if node_def.template_config.template:
+                    params.append(f"template={repr(node_def.template_config.template)}")
+                if node_def.template_config.template_file:
+                    params.append(f"template_file={repr(node_def.template_config.template_file)}")
+                decorator = f"@Nodes.template_node({', '.join(params)})\n"
+                func_body = f"def {node_name}(input):\n    pass\n"
+                
+            # Handle function-based nodes
+            elif node_def.function and node_def.function in workflow_def.functions:
                 func_def = workflow_def.functions[node_def.function]
                 if func_def.type == "embedded" and func_def.code:
                     code_lines = func_def.code.split('\n')
                     func_body = "".join(
                         line + "\n" for line in code_lines if not line.strip().startswith('@Nodes.')
                     ).rstrip("\n")
-                    decorator = ""
-                    if node_def.llm_config:
-                        params = []
-                        if node_def.llm_config.model.startswith("lambda ctx:"):
-                            params.append(f"model={node_def.llm_config.model}")
-                        else:
-                            params.append(f"model={repr(node_def.llm_config.model)}")
-                        if node_def.llm_config.system_prompt_file:
-                            params.append(f"system_prompt_file={repr(node_def.llm_config.system_prompt_file)}")
-                        elif node_def.llm_config.system_prompt:
-                            params.append(f"system_prompt={repr(node_def.llm_config.system_prompt)}")
-                        if node_def.llm_config.prompt_template:
-                            params.append(f"prompt_template={repr(node_def.llm_config.prompt_template)}")
-                        if node_def.llm_config.prompt_file:
-                            params.append(f"prompt_file={repr(node_def.llm_config.prompt_file)}")
-                        params.append(f"output={repr(node_def.output or f'{node_name}_result')}")
-                        for param in ["temperature", "max_tokens", "top_p", "presence_penalty", "frequency_penalty"]:
-                            value = getattr(node_def.llm_config, param, None)
-                            if value is not None:
-                                params.append(f"{param}={repr(value)}")
-                        decorator = f"@Nodes.llm_node({', '.join(params)})\n"
-                    elif node_def.template_config:
-                        params = [f"output={repr(node_def.output or f'{node_name}_result')}"]
-                        if node_def.template_config.template:
-                            params.append(f"template={repr(node_def.template_config.template)}")
-                        if node_def.template_config.template_file:
-                            params.append(f"template_file={repr(node_def.template_config.template_file)}")
-                        decorator = f"@Nodes.template_node({', '.join(params)})\n"
-                    else:
-                        decorator = f"@Nodes.define(output={repr(node_def.output or f'{node_name}_result')})\n"
-                    f.write(f"{decorator}{func_body}\n\n")
+                    
+                    # Build decorator parameters
+                    default_output = f'{node_name}_result'
+                    params = [f"output={repr(node_def.output or default_output)}"]
+                    
+                    # Add input mappings if present
+                    if node_def.inputs_mapping:
+                        mapping_dict = {}
+                        for key, value in node_def.inputs_mapping.items():
+                            mapping_dict[key] = value
+                        params.append(f"inputs_mapping={repr(mapping_dict)}")
+                    
+                    decorator = f"@Nodes.define({', '.join(params)})\n"
+            
+            if decorator and func_body:
+                f.write(f"{decorator}{func_body}\n\n")
 
         # Define workflow using chaining syntax with loop support
         f.write("# Define the workflow with branch, converge, and loop support\n")
         f.write("workflow = (\n")
         start_node = workflow_def.workflow.start
-        start_func = workflow_def.nodes[start_node].function if start_node in workflow_def.nodes and workflow_def.nodes[start_node].function else start_node
-        f.write(f'    Workflow("{start_func}")\n')
+        f.write(f'    Workflow("{start_node}")\n')
 
-        added_nodes = set()
-        for node_name, node_def in workflow_def.nodes.items():
-            if node_name in added_nodes:
-                continue
-            func_name = node_def.function if node_def.function else node_name
-            if loop_nodes and node_name == loop_nodes[0]:
-                f.write("    .start_loop()\n")
-            if node_def.sub_workflow:
-                sub_start = node_def.sub_workflow.start or f"{node_name}_start"
-                sub_start_func = workflow_def.nodes[sub_start].function if sub_start in workflow_def.nodes and workflow_def.nodes[sub_start].function else sub_start
-                f.write(f'    .add_sub_workflow("{node_name}", Workflow("{sub_start_func}"), ')
-                if node_def.inputs_mapping:
-                    inputs_mapping_str = "{"
-                    for k, v in node_def.inputs_mapping.items():
-                        if v.startswith("lambda ctx:"):
-                            inputs_mapping_str += f"{repr(k)}: {v}, "
-                        else:
-                            inputs_mapping_str += f"{repr(k)}: {repr(v)}, "
-                    inputs_mapping_str = inputs_mapping_str.rstrip(", ") + "}"
-                    f.write(f"inputs={inputs_mapping_str}, ")
-                else:
-                    inputs = []
-                    if sub_start in workflow_def.nodes and workflow_def.nodes[sub_start].function in workflow_def.functions:
-                        func_def = workflow_def.functions[workflow_def.nodes[sub_start].function]
-                        if func_def.code:
-                            try:
-                                tree = ast.parse(func_def.code)
-                                for node in ast.walk(tree):
-                                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                                        inputs = [param.arg for param in node.args.args]
-                                        break
-                            except SyntaxError:
-                                pass
-                    f.write(f'inputs={{{", ".join(f"{k!r}: {k!r}" for k in inputs)}}}, ')
-                f.write(f'output="{node_def.output or f"{node_name}_result"}")\n')
-            else:
-                if node_def.inputs_mapping:
-                    inputs_mapping_str = "{"
-                    for k, v in node_def.inputs_mapping.items():
-                        if v.startswith("lambda ctx:"):
-                            inputs_mapping_str += f"{repr(k)}: {v}, "
-                        else:
-                            inputs_mapping_str += f"{repr(k)}: {repr(v)}, "
-                    inputs_mapping_str = inputs_mapping_str.rstrip(", ") + "}"
-                    f.write(f'    .node("{func_name}", inputs_mapping={inputs_mapping_str})\n')
-                else:
-                    f.write(f'    .node("{func_name}")\n')
-            added_nodes.add(node_name)
-
-        for trans in workflow_def.workflow.transitions:
-            from_node = trans.from_node
-            _from_func = workflow_def.nodes[from_node].function if from_node in workflow_def.nodes and workflow_def.nodes[from_node].function else from_node
-            if from_node not in added_nodes:
-                continue  # Skip if already added via .node()
-            to_node = trans.to_node
-            if isinstance(to_node, str):
-                if loop_nodes and from_node in loop_nodes and to_node in loop_nodes:
-                    continue  # Skip loop-back transition, handled by end_loop
-                to_func = workflow_def.nodes[to_node].function if to_node in workflow_def.nodes and workflow_def.nodes[to_node].function else to_node
-                condition = f"lambda ctx: {trans.condition}" if trans.condition else "None"
-                if loop_nodes and from_node == loop_nodes[-1] and to_node == loop_exit_node:
-                    f.write(f'    .end_loop(condition=lambda ctx: {loop_condition}, next_node="{to_func}")\n')
-                else:
-                    f.write(f'    .then("{to_func}", condition={condition})\n')
-            elif all(isinstance(tn, str) for tn in to_node):
-                to_funcs = [workflow_def.nodes[tn].function if tn in workflow_def.nodes and workflow_def.nodes[tn].function else tn for tn in to_node]
-                f.write(f'    .parallel({", ".join(f"{n!r}" for n in to_funcs)})\n')
-            else:  # BranchCondition list
+        # Build sequence from transitions
+        # Look for simple sequential transitions (no conditions, single targets)
+        # But first check if start node has multiple transitions (indicating branches)
+        start_transitions = [t for t in workflow_def.workflow.transitions if t.from_node == start_node]
+        
+        sequence_nodes = []
+        current = start_node
+        processed_transitions = set()
+        
+        # Only look for sequences if start node doesn't have multiple transitions
+        if len(start_transitions) <= 1:
+            # Find sequential chain from start node  
+            while True:
+                found_next = False
+                for trans in workflow_def.workflow.transitions:
+                    if (trans.from_node == current and 
+                        isinstance(trans.to_node, str) and 
+                        trans.condition is None):
+                        sequence_nodes.append(trans.to_node)
+                        processed_transitions.add((trans.from_node, trans.to_node))
+                        current = trans.to_node
+                        found_next = True
+                        break
+                if not found_next:
+                    break
+        
+        # If we found a sequence, use .sequence()
+        if sequence_nodes:
+            # Use node names directly
+            node_names_quoted = [f'"{node_name}"' for node_name in sequence_nodes]
+            f.write(f'    .sequence({", ".join(node_names_quoted)})\n')
+        
+        # Group remaining transitions by from_node to detect branches
+        remaining_transitions = [trans for trans in workflow_def.workflow.transitions 
+                               if (trans.from_node, trans.to_node) not in processed_transitions]
+        
+        transitions_by_node = {}
+        for trans in remaining_transitions:
+            if trans.from_node not in transitions_by_node:
+                transitions_by_node[trans.from_node] = []
+            transitions_by_node[trans.from_node].append(trans)
+        
+        # Process grouped transitions
+        for from_node, transitions in transitions_by_node.items():
+            if len(transitions) > 1:
+                # Multiple transitions from same node = branch
                 branches = []
-                for branch in to_node:
-                    branch_func = workflow_def.nodes[branch.to_node].function if branch.to_node in workflow_def.nodes and workflow_def.nodes[branch.to_node].function else branch.to_node
-                    cond = f"lambda ctx: {branch.condition}" if branch.condition else "None"
-                    branches.append(f'("{branch_func}", {cond})')
-                f.write(f'    .branch([{", ".join(branches)}])\n')
+                default_branch = None
+                
+                for trans in transitions:
+                    if isinstance(trans.to_node, str):
+                        if trans.condition:
+                            # Remove "lambda ctx: " prefix if it exists to avoid double lambda
+                            condition = trans.condition
+                            if condition.startswith("lambda ctx: "):
+                                condition = condition[12:]  # Remove "lambda ctx: " prefix
+                            cond = f"lambda ctx: {condition}"
+                            branches.append(f'("{trans.to_node}", {cond})')
+                        else:
+                            default_branch = trans.to_node
+                
+                if branches:
+                    if default_branch:
+                        f.write(f'    .branch([{", ".join(branches)}], default="{default_branch}")\n')
+                    else:
+                        f.write(f'    .branch([{", ".join(branches)}])\n')
+            else:
+                # Single transition
+                trans = transitions[0]
+                if isinstance(trans.to_node, str):
+                    condition = f"lambda ctx: {trans.condition}" if trans.condition else "None"
+                    f.write(f'    .then("{trans.to_node}", condition={condition})\n')
+                elif all(isinstance(tn, str) for tn in trans.to_node):
+                    to_nodes_quoted = [f'"{tn}"' for tn in trans.to_node]
+                    f.write(f'    .parallel({", ".join(to_nodes_quoted)})\n')
+                else:  # BranchCondition list
+                    branches = []
+                    for branch in trans.to_node:
+                        cond = f"lambda ctx: {branch.condition}" if branch.condition else "None"
+                        branches.append(f'("{branch.to_node}", {cond})')
+                    f.write(f'    .branch([{", ".join(branches)}])\n')
+
+        # Generate loops (including nested loops)
+        for loop in loops:
+            if loop['nodes']:
+                f.write('    .start_loop()\n')
+                # Add nodes in loop sequence
+                for i, node in enumerate(loop['nodes']):
+                    if i == 0:
+                        f.write(f'    .node("{node}")\n')
+                    else:
+                        f.write(f'    .then("{node}")\n')
+                # End loop with condition
+                condition = loop['condition']
+                if not condition.startswith('lambda ctx:'):
+                    condition = f"lambda ctx: {condition}"
+                f.write(f'    .end_loop({condition}, "{loop["exit_node"]}")\n')
 
         for conv_node in workflow_def.workflow.convergence_nodes:
-            conv_func = workflow_def.nodes[conv_node].function if conv_node in workflow_def.nodes and workflow_def.nodes[conv_node].function else conv_node
-            f.write(f'    .converge("{conv_func}")\n')
+            # Always use node names for workflow construction
+            f.write(f'    .converge("{conv_node}")\n')
 
         if hasattr(workflow_def, 'observers'):
             for observer in workflow_def.observers:

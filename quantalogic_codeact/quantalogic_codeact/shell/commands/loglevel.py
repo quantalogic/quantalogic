@@ -41,7 +41,16 @@ async def loglevel_command(shell, args: List[str]) -> str:
         shell.agent_config.log_level = level
         shell.log_level = level
         
-        return f"Log level set to {level}"
+        # Provide helpful feedback based on the level set
+        feedback = f"Log level set to {level}"
+        if level == "DEBUG":
+            feedback += "\n💡 Debug mode enabled - you'll see detailed execution traces"
+        elif level == "INFO":
+            feedback += "\n💡 Info mode enabled - you'll see toolbox loading and agent status"
+        elif level == "ERROR":
+            feedback += "\n💡 Clean mode enabled - only errors will be shown"
+        
+        return feedback
     except Exception as e:
         console.print(f"[red]Error setting log level: {e}[/red]")
         return f"Error setting log level: {e}"

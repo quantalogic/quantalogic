@@ -4,7 +4,7 @@
 from pathlib import Path
 from typing import List
 
-from quantalogic.flow import Nodes, Workflow
+from quantalogic_flow.flow import Nodes, Workflow
 
 # Global variables
 MODEL = "gemini/gemini-2.0-flash"
@@ -53,7 +53,6 @@ workflow = (
         condition=lambda ctx: ctx["completed_chapters"] >= ctx["num_chapters"],
         next_node="workflow_complete"
     )
-    .node("workflow_complete")
 )
 
 def story_observer(event_type, data=None):

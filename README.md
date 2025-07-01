@@ -41,6 +41,64 @@
 
 ---
 
+## 🏗️ Component Architecture
+
+QuantaLogic is built with a modular component architecture for maximum flexibility and extensibility:
+
+```mermaid
+graph TB
+    subgraph "QuantaLogic Ecosystem"
+        Main[quantalogic]
+        React[quantalogic_react]
+        CodeAct[quantalogic_codeact] 
+        Flow[quantalogic_flow]
+        Toolbox[quantalogic_toolbox]
+    end
+    
+    User[Users] --> Main
+    Main --> React
+    Main --> CodeAct
+    Main --> Flow
+    Main --> Toolbox
+    
+    React --> Tools[40+ Built-in Tools]
+    CodeAct --> Python[Python Code Execution]
+    Flow --> YAML[YAML Workflows]
+    Toolbox --> Plugins[Plugin System]
+    
+    style Main fill:#E8F4FD,stroke:#2E86AB,stroke-width:3px,color:#1B4F72
+    style React fill:#FFF2CC,stroke:#D6B656,stroke-width:2px,color:#7D6608
+    style CodeAct fill:#F8D7DA,stroke:#D73A49,stroke-width:2px,color:#721C24
+    style Flow fill:#E8F5E8,stroke:#28A745,stroke-width:2px,color:#155724
+    style Toolbox fill:#F3E5F5,stroke:#8E24AA,stroke-width:2px,color:#4A148C
+    style User fill:#E0F2F1,stroke:#00695C,stroke-width:2px,color:#004D40
+```
+
+### 🧩 Component Overview
+
+| Component | Purpose | When to Use | Documentation |
+|-----------|---------|-------------|---------------|
+| **[QuantaLogic React](./quantalogic_react/README.md)** | Core ReAct agent with 40+ tools | General AI tasks, automation, tool-based workflows | [📖 Detailed Guide](./quantalogic_react/README.md) |
+| **[QuantaLogic CodeAct](./quantalogic_codeact/README.md)** | Code-first agent implementation | Programming, data analysis, mathematical problems | [📖 Detailed Guide](./quantalogic_codeact/README.md) |
+| **[QuantaLogic Flow](./quantalogic_flow/README.md)** | YAML-based workflow engine | Structured processes, data pipelines, automation | [📖 Detailed Guide](./quantalogic_flow/README.md) |
+| **[QuantaLogic Toolbox](./quantalogic_toolbox/README.md)** | External tool integrations | Custom tools, enterprise plugins, extensions | [📖 Detailed Guide](./quantalogic_toolbox/README.md) |
+
+### 🔧 How It Works
+
+When you install `quantalogic`, you get:
+- **Unified API**: `from quantalogic import Agent` works seamlessly
+- **Component Integration**: Automatic access to all components  
+- **Backward Compatibility**: All existing code continues to work
+- **Modular Design**: Use only what you need, extend with custom components
+
+The main package acts as a intelligent wrapper that delegates to the appropriate component based on your needs.
+
+> � **Behind the Scenes**: The `quantalogic` package is a wrapper that re-exports functionality from `quantalogic_react` (the core implementation). When you import `Agent`, you're getting the proven ReAct agent with access to 40+ tools. Additional components like CodeAct and Flow extend this foundation with specialized capabilities.
+
+> �📋 **Architecture Details**: See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for complete technical specifications and component interaction patterns.
+
+---
+
 ## CodeAct vs ReAct: What's the Difference?
 
 QuantaLogic supports both the classic **ReAct** paradigm and its advanced extension, **CodeAct**:
@@ -104,16 +162,30 @@ For detailed CodeAct documentation, see [CodeAct Module](quantalogic_codeact/REA
 - Poetry (optional; for source builds)
 
 #### Installation
-Install the core CLI and (optionally) CodeAct extension:
+Install the core framework and (optionally) specific components:
+
+**Core Installation** (includes React agent):
 ```bash
 pip install quantalogic
-pip install quantalogic-codeact
 ```
-Or with pipx:
+
+**With CodeAct Extension**:
+```bash
+pip install quantalogic quantalogic-codeact
+```
+
+**All Components** (for comprehensive functionality):
+```bash
+pip install quantalogic quantalogic-codeact quantalogic-flow quantalogic-toolbox
+```
+
+**Using pipx** (recommended for CLI usage):
 ```bash
 pipx install quantalogic
-pipx install quantalogic-codeact
+pipx inject quantalogic quantalogic-codeact  # Add CodeAct to same environment
 ```
+
+> 💡 **What gets installed**: The main `quantalogic` package provides the unified API and includes the React component. Additional components add specialized capabilities while maintaining the same simple import: `from quantalogic import Agent`.
 
 #### Developer Build (optional)
 ```bash
@@ -284,6 +356,40 @@ print(response)
 
 ---
 
+### 🎯 Quick Component Guide
+
+Need help choosing the right component for your project?
+
+```mermaid
+flowchart TD
+    Start([What do you want to build?]) --> Q1{Need code execution?}
+    Q1 -->|Yes, as primary action| CodeAct[Use CodeAct]
+    Q1 -->|Yes, as tool| React[Use React]
+    Q1 -->|No| Q2{Structured workflow?}
+    
+    Q2 -->|Yes, repeatable process| Flow[Use Flow]
+    Q2 -->|No, conversational| Chat[Use React Chat Mode]
+    
+    CodeAct --> CResult[Mathematical problems<br/>Data analysis<br/>Programming tasks]
+    React --> RResult[General automation<br/>Tool-based tasks<br/>Research & analysis]
+    Flow --> FResult[Data pipelines<br/>Business processes<br/>Content workflows]
+    Chat --> ChResult[Interactive Q&A<br/>Natural conversations<br/>Quick assistance]
+    
+    style Start fill:#E8F4FD,stroke:#2E86AB,stroke-width:2px,color:#1B4F72
+    style CodeAct fill:#F8D7DA,stroke:#D73A49,stroke-width:2px,color:#721C24
+    style React fill:#FFF2CC,stroke:#D6B656,stroke-width:2px,color:#7D6608
+    style Flow fill:#E8F5E8,stroke:#28A745,stroke-width:2px,color:#155724
+    style Chat fill:#F3E5F5,stroke:#8E24AA,stroke-width:2px,color:#4A148C
+```
+
+**Quick Decision Matrix**:
+- **Complex calculations?** → CodeAct
+- **Need 40+ tools?** → React  
+- **Structured pipeline?** → Flow
+- **Just want to chat?** → React Chat Mode
+
+---
+
 ### CLI Mastery
 
 The QuantaLogic CLI is your mission control. Here’s the scoop:
@@ -377,7 +483,24 @@ result = agent.solve_task("Write a poem")
 
 **Why**: Make AI better for everyone!  
 **What**: Add features, squash bugs, or suggest ideas.  
-**How**: Fork, branch, code, and PR. Check [CONTRIBUTING.md](./CONTRIBUTING.md).
+**How**: Fork, branch, code, and PR.
+
+📋 **Getting Started**: Our [CONTRIBUTING.md](./CONTRIBUTING.md) covers:
+- Component-specific development workflows
+- Multi-component architecture guidelines  
+- Testing strategies across the ecosystem
+- Documentation standards with professional Mermaid diagrams
+- Code style and review process
+
+🏗️ **Architecture**: Review [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for technical component details.
+
+**Component-Specific Guidelines**:
+- **React Agent**: Add tools, enhance reasoning, improve performance
+- **CodeAct**: Extend code execution capabilities, add language support  
+- **Flow**: Create workflow templates, enhance YAML DSL
+- **Toolbox**: Build external integrations, create plugin systems
+
+We welcome contributions to any component! Each has its own focused development environment while maintaining ecosystem compatibility.
 
 ---
 

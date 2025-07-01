@@ -1,0 +1,1 @@
+"""Examples tests init file."""
