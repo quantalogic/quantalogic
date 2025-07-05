@@ -1,0 +1,177 @@
+{
+  "facts_list": {
+    "facts": [
+      {
+        "title": "Educational Questionnaire Generator Overview",
+        "claims": "The Educational Questionnaire Generator is a Python script designed to transform markdown files into interactive quizzes using AI. It extracts facts, generates multiple-choice questions, evaluates their quality and accuracy, shuffles the options, and saves the output as a JSON file. The tool is suitable for teachers, learners, and trivia enthusiasts, aiming to make knowledge acquisition more engaging and efficient. It leverages cutting-edge LLMs like Gemini for intelligent fact extraction and question creation, streamlining the quiz-making process and boosting learning through tailored content. The script automates the traditionally manual task of quiz creation, saving time and offering versatility across various educational contexts, from classrooms to self-study.",
+        "sources": [
+          "Introduction",
+          "Why & What",
+          "What Does It Do?"
+        ]
+      },
+      {
+        "title": "`uv`-Powered Shebang and Dependency Management",
+        "claims": "The script utilizes a `uv`-powered shebang (`#!/usr/bin/env -S uv run`) to specify its execution environment. This shebang tells the system to run the script with `uv`, a Rust-based Python tool known for its speed and efficiency. The script also includes a metadata block specifying Python 3.12+ and a list of dependencies (e.g., loguru, litellm, pydantic). When `uv` executes the script, it automatically downloads the required Python version (if needed) and installs all listed packages in a temporary, isolated environment. This approach eliminates the need for manual installations using `pip install` and ensures a conflict-free execution environment, enhancing portability and simplifying setup.",
+        "sources": [
+          "Step 2: The `uv` Shebang Magic ✨",
+          "What's This Do? 🧐",
+          "Why It Rocks 🌟"
+        ]
+      },
+      {
+        "title": "Pydantic Models for Data Handling",
+        "claims": "The script employs Pydantic models to structure and handle data. These models include `Fact`, `FactsList`, `QuestionnaireItem`, and `Questionnaire`. The `Fact` model consists of a title, claims, and sources. The `FactsList` model contains a list of `Fact` objects. The `QuestionnaireItem` model includes fields for the fact title, question, options (ranging from 3 to 6), correct answers (as a list of 1-based indices), an explanation, and a flag indicating if multiple-choice answers are possible. The `Questionnaire` model comprises a list of `QuestionnaireItem` objects. These models ensure data integrity and facilitate structured data processing throughout the script's workflow.",
+        "sources": [
+          "Step 3: Data Structures"
+        ]
+      },
+      {
+        "title": "Fact Extraction and Question Generation Example",
+        "claims": "The fact extraction process involves reading a markdown file, extracting detailed facts using AI, and then generating questions based on these facts. For example, given a markdown file containing information about the Moon landing, the script extracts the key fact that \"On July 20, 1969, NASA's Apollo 11 mission landed humans on the Moon. Neil Armstrong and Buzz Aldrin walked the surface, while Michael Collins orbited.\" The AI then generates a question such as \"Who walked on the Moon during Apollo 11?\" with options like \"Armstrong & Aldrin\", \"Collins & Glenn\", and \"Shepard & Grissom\", identifying \"Armstrong & Aldrin\" as the correct answer. This demonstrates the AI's ability to extract relevant information and formulate meaningful questions.",
+        "sources": [
+          "Step 4: Workflow Details with Example",
+          "🧠 Node 2: Extract Facts",
+          "❓ Node 3: Generate Question"
+        ]
+      },
+      {
+        "title": "Question Verification Process",
+        "claims": "The script includes a question verification step where each generated question is evaluated for quality. This involves assessing the question's relevance, plausibility, correctness, clarity, and the quality of the explanation provided. The evaluation process assigns ratings (on a scale of 1-5) for each of these aspects and provides specific comments on the question's strengths and weaknesses. This ensures that only high-quality, accurate, and informative questions are included in the final questionnaire, enhancing the overall educational value of the generated quiz. This rigorous evaluation helps maintain the integrity and reliability of the quiz content.",
+        "sources": [
+          "✅ Node 4: Verify Question"
+        ]
+      }
+    ]
+  },
+  "questionnaire": {
+    "items": [
+      {
+        "fact_title": "Educational Questionnaire Generator Overview",
+        "question": "What is the primary function of the Educational Questionnaire Generator?",
+        "options": [
+          "Creates video summaries of textbooks.",
+          "Analyzes social media trends for educational content.",
+          "Transforms markdown files into interactive quizzes using AI.",
+          "Converts PDFs into editable text files."
+        ],
+        "correct_answers": [
+          3
+        ],
+        "explanation": "The Educational Questionnaire Generator transforms markdown files into interactive quizzes using AI, streamlining the quiz-making process and boosting learning through tailored content.",
+        "is_multiple_choice_possible": false
+      },
+      {
+        "fact_title": "uv-Powered Shebang and Dependency Management",
+        "question": "What does the `uv`-powered shebang (`#!/usr/bin/env -S uv run`) in the script do?",
+        "options": [
+          "It requires manual installations using `pip install`.",
+          "It only works with Python 2.7.",
+          "It disables dependency management.",
+          "It specifies the execution environment using `uv`, a Rust-based Python tool."
+        ],
+        "correct_answers": [
+          4
+        ],
+        "explanation": "The `uv`-powered shebang in the script tells the system to run the script with `uv`, a Rust-based Python tool known for its speed and efficiency. `uv` automatically handles the Python version and dependencies.",
+        "is_multiple_choice_possible": false
+      },
+      {
+        "fact_title": "Pydantic Models for Data Handling",
+        "question": "Which of the following are Pydantic models used in the script for data handling?",
+        "options": [
+          "QuestionnaireItem",
+          "Questionnaire",
+          "FactsList",
+          "Fact"
+        ],
+        "correct_answers": [
+          4,
+          3,
+          1,
+          2
+        ],
+        "explanation": "All the mentioned models (`Fact`, `FactsList`, `QuestionnaireItem`, and `Questionnaire`) are Pydantic models used for structuring and handling data within the script.",
+        "is_multiple_choice_possible": true
+      },
+      {
+        "fact_title": "Fact Extraction and Question Generation Example",
+        "question": "Who walked on the Moon during Apollo 11?",
+        "options": [
+          "Shepard & Grissom",
+          "Armstrong & Aldrin",
+          "Collins & Glenn"
+        ],
+        "correct_answers": [
+          2
+        ],
+        "explanation": "The passage clearly states that Armstrong and Aldrin walked on the Moon during the Apollo 11 mission.",
+        "is_multiple_choice_possible": false
+      },
+      {
+        "fact_title": "Question Verification Process",
+        "question": "What is the primary goal of the question verification step?",
+        "options": [
+          "Ensuring high-quality, accurate, and informative questions are included in the final questionnaire.",
+          "Checking for grammatical errors only.",
+          "Identifying the source of the question."
+        ],
+        "correct_answers": [
+          1
+        ],
+        "explanation": "The question verification process assesses generated questions for relevance, plausibility, correctness, clarity, and explanation quality to ensure high educational value and quiz integrity.",
+        "is_multiple_choice_possible": false
+      }
+    ]
+  },
+  "evaluation": {
+    "items": [
+      {
+        "question_number": 1,
+        "relevance": 5,
+        "plausibility": 4,
+        "correctness": 5,
+        "clarity": 5,
+        "explanation_quality": 5,
+        "comments": "The question is clear and directly addresses the primary function of the Educational Questionnaire Generator as described in the fact. The options are sufficiently plausible, though options 3, 4, and 5 are clearly unrelated. The correct answer is accurate, and the explanation reinforces the tool's primary function."
+      },
+      {
+        "question_number": 2,
+        "relevance": 5,
+        "plausibility": 5,
+        "correctness": 5,
+        "clarity": 5,
+        "explanation_quality": 5,
+        "comments": "The question is clear and directly asks about the function of the `uv`-powered shebang. The options are plausible and cover common misconceptions about dependency management and Python versions. The correct answer is accurate, and the explanation is informative and concise."
+      },
+      {
+        "question_number": 3,
+        "relevance": 5,
+        "plausibility": 5,
+        "correctness": 5,
+        "clarity": 5,
+        "explanation_quality": 5,
+        "comments": "The question is clear and directly asks about the Pydantic models used. The options are all valid and directly related to the fact. The correct answers accurately reflect the models mentioned in the fact. The explanation is concise and reinforces the correct answers."
+      },
+      {
+        "question_number": 4,
+        "relevance": 5,
+        "plausibility": 5,
+        "correctness": 5,
+        "clarity": 5,
+        "explanation_quality": 5,
+        "comments": "The question is very clear and directly related to the fact. The options are plausible, and the correct answer is accurate. The explanation is concise and helpful."
+      },
+      {
+        "question_number": 5,
+        "relevance": 5,
+        "plausibility": 5,
+        "correctness": 5,
+        "clarity": 5,
+        "explanation_quality": 5,
+        "comments": "The question is clear and directly addresses the primary goal of the question verification step as described in the fact. The options are plausible, and the correct answer is accurate. The explanation provided reinforces the purpose of the verification process effectively."
+      }
+    ],
+    "overall_assessment": "Evaluated 5 questions based on 5 facts. The questionnaire appears consistent and well-structured overall."
+  }
+}

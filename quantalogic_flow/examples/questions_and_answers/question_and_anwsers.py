@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "anyio",
-#     "quantalogic-flow>=0.6.5",
+#     "quantalogic-flow>=0.6.7",
 #     "typer>=0.9.0"
 # ]
 # ///
@@ -18,7 +18,7 @@ import typer
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from quantalogic.flow.flow import Nodes, Workflow
+from quantalogic_flow.flow import Nodes, Workflow
 
 # Initialize Typer app
 app = typer.Typer(help="Extract facts from a markdown file and generate an educational questionnaire")
