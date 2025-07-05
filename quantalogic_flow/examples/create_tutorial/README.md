@@ -2,11 +2,14 @@
 
 – Build Your Own Tutorial Generator
 
-Ready to transform raw ideas into polished tutorials with ease? In this guide, we’ll harness **Quantalogic Flow**—a workflow wizard from `quantalogic.flow`—to craft a **tutorial generator**. 
+
+Ready to transform raw ideas into polished tutorials with ease? In this guide, we’ll harness **Quantalogic Flow**—a workflow wizard from `quantalogic_flow`—to craft a **tutorial generator**. 
+
 
 > Using markdown input, Large Language Models (LLMs), and clever Jinja2 templates, you’ll create structured, engaging content in no time. 
 
-We’ll dive into `examples/flow/create_tutorial/create_tutorial.py`, sprinkle in insights from its templates, and reference `quantalogic/flow/flow_yaml.md` and `quantalogic/flow/flow.py`. 
+
+We’ll dive into `quantalogic_flow/examples/create_tutorial/create_tutorial.py`, sprinkle in insights from its templates, and reference `quantalogic_flow/flow/flow_yaml.md` and `quantalogic_flow/flow/flow.py`. 
 
 Let’s get started! 🚀
 
@@ -41,20 +44,47 @@ Our tutorial generator takes a markdown file and churns out a multi-chapter mast
 1. **Load Content**: Grab the markdown input.
 2. **Outline It**: Use an LLM to plan chapters with `Why`, `What`, and `How` sections.
 3. **Draft Chapters**: Generate detailed content, optionally refining it.
+
 4. **Polish Up**: Add formatting, emojis, and diagrams.
-5. **Wrap It**: Compile and save the tutorial.
+5. **Validate Structure**: Ensure the generated structure matches the requested number of chapters (with a warning if not).
+6. **Clipboard Option**: Optionally copy the final tutorial to your clipboard for quick sharing.
+7. **Wrap It**: Compile and save the tutorial.
+
+
+
+
+**Note:**
+- The workflow uses robust logging (Loguru) for transparency and debugging.
+- File operations are handled with care, but you may want to add more explicit error handling for production use.
+- The CLI option for skipping refinement is called `skip_refinement` in the code (sometimes referred to as `skip_polish` in this tutorial).
 
 Here’s a high-level view:
 
 ```mermaid
+%%{init: {"themeVariables": {
+  "background": "#f7f7fa",
+  "primaryColor": "#b3e5fc",
+  "secondaryColor": "#ffe082",
+  "tertiaryColor": "#c8e6c9",
+  "primaryBorderColor": "#607d8b",
+  "lineColor": "#90a4ae",
+  "fontFamily": "Inter, Arial, sans-serif",
+  "fontSize": "16px",
+  "textColor": "#263238",
+  "nodeTextColor": "#263238",
+  "edgeLabelBackground":"#ffffffcc"
+}}}%%
 flowchart TD
-    A["Input Markdown"] --> B["Structure (LLM)"]
-    B --> C["Draft Chapters"]
-    C --> D{"Refine?"}
-    D -->|"Yes"| E["Critique & Polish"]
-    D -->|"No"| F["Compile"]
+    A["Input Markdown"]:::node --> B["Structure (LLM)"]:::node
+    B --> C["Draft Chapters"]:::node
+    C --> D{"Refine?"}:::decision
+    D -->|"Yes"| E["Critique & Polish"]:::node
+    D -->|"No"| F["Compile"]:::node
     E --> F["Compile"]
-    F --> G["Output Tutorial"]
+    F --> G["Output Tutorial"]:::node
+
+    classDef node fill:#b3e5fc,stroke:#607d8b,color:#263238;
+    classDef decision fill:#ffe082,stroke:#607d8b,color:#263238;
 ```
 
 ---
@@ -246,17 +276,33 @@ workflow = (
 
 **Flow Diagram**:
 ```mermaid
+%%{init: {"themeVariables": {
+  "background": "#f7f7fa",
+  "primaryColor": "#b3e5fc",
+  "secondaryColor": "#ffe082",
+  "tertiaryColor": "#c8e6c9",
+  "primaryBorderColor": "#607d8b",
+  "lineColor": "#90a4ae",
+  "fontFamily": "Inter, Arial, sans-serif",
+  "fontSize": "16px",
+  "textColor": "#263238",
+  "nodeTextColor": "#263238",
+  "edgeLabelBackground":"#ffffffcc"
+}}}%%
 flowchart TD
-    A["read_markdown"] --> B["generate_structure"]
-    B --> C["initialize"]
-    C --> D["generate_draft"]
-    D --> E{"skip_polish?"}
-    E -->|"Yes"| F["update_chapters"]
-    E -->|"No"| G["revise_formatting"]
-    G --> F
-    F --> H{"More Chapters?"}
+    A["read_markdown"]:::node --> B["generate_structure"]:::node
+    B --> C["initialize"]:::node
+    C --> D["generate_draft"]:::node
+    D --> E{"skip_polish?"}:::decision
+    E -->|"Yes"| F["update_chapters"]:::node
+    E -->|"No"| G["revise_formatting"]:::node
+    G --> F["update_chapters"]
+    F --> H{"More Chapters?"}:::decision
     H -->|"Yes"| D
-    H -->|"No"| I["compile_book"]
+    H -->|"No"| I["compile_book"]:::node
+
+    classDef node fill:#b3e5fc,stroke:#607d8b,color:#263238;
+    classDef decision fill:#ffe082,stroke:#607d8b,color:#263238;
 ```
 
 ### Step 4: Add a CLI
@@ -330,13 +376,29 @@ workflow:
 
 **Structure Diagram**:
 ```mermaid
+%%{init: {"themeVariables": {
+  "background": "#f7f7fa",
+  "primaryColor": "#b3e5fc",
+  "secondaryColor": "#ffe082",
+  "tertiaryColor": "#c8e6c9",
+  "primaryBorderColor": "#607d8b",
+  "lineColor": "#90a4ae",
+  "fontFamily": "Inter, Arial, sans-serif",
+  "fontSize": "16px",
+  "textColor": "#263238",
+  "nodeTextColor": "#263238",
+  "edgeLabelBackground":"#ffffffcc"
+}}}%%
 flowchart TD
-    A["YAML File"] --> B["Nodes"]
-    B --> C["LLM Tasks"]
-    B --> D["Functions"]
-    A --> E["Workflow"]
-    E --> F["Transitions"]
-    F --> G["Branches"]
+    A["YAML File"]:::node --> B["Nodes"]:::node
+    B --> C["LLM Tasks"]:::node
+    B --> D["Functions"]:::node
+    A --> E["Workflow"]:::node
+    E --> F["Transitions"]:::node
+    F --> G["Branches"]:::decision
+
+    classDef node fill:#b3e5fc,stroke:#607d8b,color:#263238;
+    classDef decision fill:#ffe082,stroke:#607d8b,color:#263238;
 ```
 
 ---

@@ -1,0 +1,9 @@
+loguru
+anyio
+quantalogic-flow>=0.6.6
+typer
+pyperclip
+jinja2
+pydantic>=2.0
+instructor
+litellm
