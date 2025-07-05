@@ -1,0 +1,8 @@
+asyncio
+quantalogic-flow>=0.6.6
+typer>=0.9.0
+rich>=13.0.0
+pyperclip>=1.8.2
+tenacity>=8.0.0
+loguru
+pydantic

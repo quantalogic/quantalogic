@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "asyncio",
-#     "quantalogic-flow>=0.6.5",
+#     "quantalogic-flow>=0.6.6",
 #     "typer>=0.9.0",
 #     "rich>=13.0.0",
 #     "pyperclip>=1.8.2",
@@ -25,7 +25,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from quantalogic.flow.flow import Nodes, Workflow, WorkflowEvent, WorkflowEventType
+from quantalogic_flow.flow.flow import Nodes, Workflow, WorkflowEvent, WorkflowEventType
 
 # Initialize Typer app and rich console
 app = typer.Typer(help="Convert a markdown file to a viral LinkedIn post")
