@@ -1,4 +1,14 @@
-#!/usr/bin/env python
+#!/usr/bin/env -S uv run
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "loguru",
+#     "anyio",
+#     "quantalogic-flow>=0.6.6",
+#     "jinja2"
+# ]
+# ///
+
 # A simple workflow example for story generation with external Jinja2 template
 
 from pathlib import Path

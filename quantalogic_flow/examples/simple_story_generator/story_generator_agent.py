@@ -1,5 +1,13 @@
-#!/usr/bin/env python
-# Improved story generator workflow
+#!/usr/bin/env -S uv run
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "loguru",
+#     "anyio",
+#     "quantalogic-flow>=0.6.6",
+#     "jinja2"
+# ]
+# ///
 
 from typing import List
 
