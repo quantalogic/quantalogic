@@ -639,3 +639,115 @@ class TestWorkflow:
         # Test operations with None current_node
         workflow.then("start_node")  # Should work
         assert workflow.current_node == "start_node"
+
+    def test_sequence_prevents_self_loop(self, nodes_registry_backup):
+        """Test that sequence method prevents self-loops."""
+        @Nodes.define(output="output1")
+        def node1(input1):
+            return input1
+        
+        @Nodes.define(output="output2")
+        def node2(input2):
+            return input2
+        
+        workflow = Workflow("node1")
+        
+        # This should NOT create a self-loop
+        workflow.sequence("node1", "node2")
+        
+        # Check that no self-loop was created
+        node1_transitions = workflow.transitions.get("node1", [])
+        self_loops = [t for t in node1_transitions if t[0] == "node1"]
+        assert len(self_loops) == 0, "Self-loop should not be created"
+        
+        # Check that correct transition was created
+        next_transitions = [t for t in node1_transitions if t[0] == "node2"]
+        assert len(next_transitions) == 1, "Transition to node2 should exist"
+        
+        # Check that transition between sequence nodes still works
+        assert ("node2", None) in workflow.transitions.get("node1", [])
+        assert workflow.current_node == "node2"
+
+    def test_then_prevents_self_loop(self, nodes_registry_backup):
+        """Test that then method prevents self-loops."""
+        @Nodes.define(output="output1")
+        def node1(input1):
+            return input1
+        
+        workflow = Workflow("node1")
+        
+        # This should NOT create a self-loop
+        workflow.then("node1")
+        
+        # Check that no self-loop was created
+        node1_transitions = workflow.transitions.get("node1", [])
+        self_loops = [t for t in node1_transitions if t[0] == "node1"]
+        assert len(self_loops) == 0, "Self-loop should not be created"
+        
+        # Current node should still be updated
+        assert workflow.current_node == "node1"
+
+    def test_sequence_with_valid_transitions(self, nodes_registry_backup):
+        """Test that sequence method still works correctly for valid transitions."""
+        @Nodes.define(output="output1")
+        def node1(input1):
+            return input1
+        
+        @Nodes.define(output="output2")
+        def node2(input2):
+            return input2
+        
+        @Nodes.define(output="output3")
+        def node3(input3):
+            return input3
+        
+        workflow = Workflow("node1")
+        
+        # This should create normal transitions
+        workflow.sequence("node2", "node3")
+        
+        # Check transitions
+        assert ("node2", None) in workflow.transitions.get("node1", [])
+        assert ("node3", None) in workflow.transitions.get("node2", [])
+        assert workflow.current_node == "node3"
+
+    def test_then_with_valid_transitions(self, nodes_registry_backup):
+        """Test that then method still works correctly for valid transitions."""
+        @Nodes.define(output="output1")
+        def node1(input1):
+            return input1
+        
+        @Nodes.define(output="output2")
+        def node2(input2):
+            return input2
+        
+        workflow = Workflow("node1")
+        
+        # This should create normal transition
+        workflow.then("node2")
+        
+        # Check transition
+        assert ("node2", None) in workflow.transitions.get("node1", [])
+        assert workflow.current_node == "node2"
+
+    def test_conditional_then_prevents_self_loop(self, nodes_registry_backup):
+        """Test that conditional then method prevents self-loops."""
+        @Nodes.define(output="output1")
+        def node1(input1):
+            return input1
+        
+        def condition(ctx):
+            return ctx.get("proceed", True)
+        
+        workflow = Workflow("node1")
+        
+        # This should NOT create a self-loop even with condition
+        workflow.then("node1", condition)
+        
+        # Check that no self-loop was created
+        node1_transitions = workflow.transitions.get("node1", [])
+        self_loops = [t for t in node1_transitions if t[0] == "node1"]
+        assert len(self_loops) == 0, "Self-loop should not be created even with condition"
+        
+        # Current node should still be updated
+        assert workflow.current_node == "node1"

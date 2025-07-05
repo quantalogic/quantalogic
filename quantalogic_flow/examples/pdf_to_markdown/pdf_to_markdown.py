@@ -4,13 +4,13 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "asyncio",
-#     "py-zerox",
+#     "quantalogic-py-zerox",
 #     "pdf2image",
 #     "pillow",
 #     "typer",
 #     "pathlib",
 #     "pathspec",
-#     "quantalogic-flow>=0.6.5",
+#     "quantalogic-flow>=0.6.6",
 # ]
 # ///
 
@@ -28,7 +28,7 @@ from loguru import logger
 from pyzerox import zerox
 
 # Import the flow API (assumes quantalogic/flow/flow.py is in your project structure)
-from quantalogic.flow.flow import Nodes, Workflow
+from quantalogic_flow import Nodes, Workflow
 
 
 def validate_pdf_path(pdf_path: str) -> bool:
@@ -44,6 +44,7 @@ def validate_pdf_path(pdf_path: str) -> bool:
         return False
     return True
 
+
 # Node to convert PDF to Markdown
 @Nodes.define(output="markdown_content")
 async def convert_node(
@@ -51,7 +52,7 @@ async def convert_node(
     model: str,
     custom_system_prompt: Optional[str] = None,
     output_dir: Optional[str] = None,
-    select_pages: Optional[Union[int, list[int]]] = None
+    select_pages: Optional[Union[int, list[int]]] = None,
 ) -> str:
     """Convert a PDF to Markdown using a vision model."""
     if not validate_pdf_path(pdf_path):
@@ -72,20 +73,19 @@ async def convert_node(
             model=model,
             system_prompt=custom_system_prompt,
             output_dir=output_dir,
-            select_pages=select_pages
+            select_pages=select_pages,
         )
 
         markdown_content = ""
-        if hasattr(zerox_result, 'pages') and zerox_result.pages:
+        if hasattr(zerox_result, "pages") and zerox_result.pages:
             markdown_content = "\n\n".join(
-                page.content for page in zerox_result.pages
-                if hasattr(page, 'content') and page.content
+                page.content for page in zerox_result.pages if hasattr(page, "content") and page.content
             )
         elif isinstance(zerox_result, str):
             markdown_content = zerox_result
-        elif hasattr(zerox_result, 'markdown'):
+        elif hasattr(zerox_result, "markdown"):
             markdown_content = zerox_result.markdown
-        elif hasattr(zerox_result, 'text'):
+        elif hasattr(zerox_result, "text"):
             markdown_content = zerox_result.text
         else:
             markdown_content = str(zerox_result)
@@ -102,6 +102,7 @@ async def convert_node(
         logger.error(f"Error converting PDF to Markdown: {e}")
         raise
 
+
 # Node to save Markdown content to a file
 @Nodes.define(output="output_path")
 async def save_node(markdown_content: str, output_md: str) -> str:
@@ -117,23 +118,28 @@ async def save_node(markdown_content: str, output_md: str) -> str:
         logger.error(f"Error saving Markdown to {output_md}: {e}")
         raise
 
+
 # Define the workflow
 def create_pdf_to_md_workflow():
-    workflow = (
-        Workflow("convert_node")
-        .sequence("convert_node", "save_node")
-    )
+    workflow = Workflow("convert_node").then("save_node")
     return workflow
+
 
 # Typer CLI app
 app = typer.Typer()
 
+
 @app.command()
 def convert(
     input_pdf: str = typer.Argument(..., help="Path to the input PDF file"),
-    output_md: Optional[str] = typer.Argument(None, help="Path to save the output Markdown file (defaults to input_pdf_name.md)"),
-    model: str = typer.Option("gemini/gemini-2.0-flash", help="LiteLLM-compatible model name (e.g., 'openai/gpt-4o-mini', 'gemini/gemini-2.0-flash')"),
-    system_prompt: Optional[str] = typer.Option(None, help="Custom system prompt for the vision model")
+    output_md: Optional[str] = typer.Argument(
+        None, help="Path to save the output Markdown file (defaults to input_pdf_name.md)"
+    ),
+    model: str = typer.Option(
+        "gemini/gemini-2.0-flash",
+        help="LiteLLM-compatible model name (e.g., 'openai/gpt-4o-mini', 'gemini/gemini-2.0-flash')",
+    ),
+    system_prompt: Optional[str] = typer.Option(None, help="Custom system prompt for the vision model"),
 ):
     """
     Convert a PDF file to Markdown using a two-step workflow: convert and save.
@@ -165,7 +171,7 @@ def convert(
         "pdf_path": input_pdf,
         "model": model,
         "custom_system_prompt": system_prompt,
-        "output_md": output_md
+        "output_md": output_md,
     }
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -185,6 +191,7 @@ def convert(
         except Exception as e:
             typer.echo(f"Error during workflow execution: {e}", err=True)
             raise typer.Exit(code=1)
+
 
 if __name__ == "__main__":
     app()

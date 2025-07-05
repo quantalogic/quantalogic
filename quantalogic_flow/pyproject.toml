@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic-flow"
-version = "0.6.6"
+version = "0.6.7"
 description = "Quantalogic Flow"
 readme = "README.md"
 authors = ["QuantaLogic Team <raphael.mansuy@quantalogic.app>"]

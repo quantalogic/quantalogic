@@ -319,9 +319,12 @@ class Workflow:
             self.node_outputs[node] = output
         
         # Add transition from current node to first node in sequence
-        if self.current_node and nodes:
+        # Prevent self-loops by checking if current_node is the same as the first node
+        if self.current_node and nodes and self.current_node != nodes[0]:
             self.transitions.setdefault(self.current_node, []).append((nodes[0], None))
             logger.debug(f"Added transition from {self.current_node} to {nodes[0]}")
+        elif self.current_node and nodes and self.current_node == nodes[0]:
+            logger.debug(f"Skipped self-loop transition from {self.current_node} to {nodes[0]}")
         
         # Add transitions between sequential nodes
         for i in range(len(nodes) - 1):
@@ -343,11 +346,16 @@ class Workflow:
         """
         if next_node not in self.nodes:
             self._register_node(next_node)
-        if self.current_node:
+        
+        # Prevent self-loops by checking if current_node is the same as next_node
+        if self.current_node and self.current_node != next_node:
             self.transitions.setdefault(self.current_node, []).append((next_node, condition))
             logger.debug(f"Added transition from {self.current_node} to {next_node} with condition {condition}")
-        else:
+        elif self.current_node and self.current_node == next_node:
+            logger.debug(f"Skipped self-loop transition from {self.current_node} to {next_node}")
+        elif not self.current_node:
             logger.warning("No current node set for transition")
+        
         self.current_node = next_node
         return self
 
