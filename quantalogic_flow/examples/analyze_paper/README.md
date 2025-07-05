@@ -55,8 +55,8 @@ python analyze_paper.py /path/to/your/paper.pdf
 
 ```bash
 python analyze_paper.py /path/to/your/paper.pdf \
-  --text-extraction-model "gemini/gemini-2.0-flash" \
-  --cleaning-model "gemini/gemini-2.0-flash" \
+  --text-extraction-model "gemini/gemini-2.5-flash" \
+  --cleaning-model "gemini/gemini-2.5-flash" \
   --writing-model "openrouter/deepseek/deepseek-r1" \
   --output-dir "/path/to/output" \
   --max-character-count 3000 \
@@ -68,8 +68,8 @@ python analyze_paper.py /path/to/your/paper.pdf \
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `file_path` | Path to the file (PDF, .txt, or .md) | (Required) |
-| `--text-extraction-model` | LLM model for PDF text extraction | gemini/gemini-2.0-flash |
-| `--cleaning-model` | LLM model for title/author extraction | gemini/gemini-2.0-flash |
+| `--text-extraction-model` | LLM model for PDF text extraction | gemini/gemini-2.5-flash |
+| `--cleaning-model` | LLM model for title/author extraction | gemini/gemini-2.5-flash |
 | `--writing-model` | LLM model for article writing and formatting | openrouter/deepseek/deepseek-r1 |
 | `--output-dir` | Directory to save output files | Current directory |
 | `--save / --no-save` | Save output to a markdown file | True |
@@ -82,8 +82,25 @@ The script uses QuantaLogic's Flow framework to create a directed workflow of no
 
 ### Workflow Architecture
 
+
 ```mermaid
 flowchart TD
+    %% Pastel color palette for professional, pleasant look
+    %% Node styles
+    style A fill:#f6e6ff,stroke:#a084ca,stroke-width:2px,color:#3d246c
+    style B fill:#e0f7fa,stroke:#0097a7,stroke-width:2px,color:#004d40
+    style C fill:#ffe0b2,stroke:#ffb300,stroke-width:2px,color:#6d4c41
+    style D fill:#e1f5fe,stroke:#039be5,stroke-width:2px,color:#01579b
+    style E fill:#f8bbd0,stroke:#c2185b,stroke-width:2px,color:#4a148c
+    style F fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,color:#827717
+    style G fill:#dcedc8,stroke:#689f38,stroke-width:2px,color:#33691e
+    style H fill:#ffe082,stroke:#ffa000,stroke-width:2px,color:#e65100
+    style I fill:#b3e5fc,stroke:#0288d1,stroke-width:2px,color:#01579b
+    style J fill:#c8e6c9,stroke:#388e3c,stroke-width:2px,color:#1b5e20
+    style K fill:#f0f4c3,stroke:#afb42b,stroke-width:2px,color:#827717
+    style L fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#4a148c
+    style M fill:#fffde7,stroke:#fbc02d,stroke-width:2px,color:#827717
+
     A[Check File Type] -->|PDF| B[Convert PDF to Markdown]
     A -->|Text/Markdown| C[Read Text or Markdown]
     B --> D[Save Markdown Content]
@@ -129,48 +146,74 @@ Each node in the workflow performs a specific function:
 
 ```mermaid
 graph TD
+    %% Pastel color palette for professional, pleasant look
+    %% Node styles
+    style A fill:#f6e6ff,stroke:#a084ca,stroke-width:2px,color:#3d246c
+    style B fill:#e0f7fa,stroke:#0097a7,stroke-width:2px,color:#004d40
+    style C fill:#ffe0b2,stroke:#ffb300,stroke-width:2px,color:#6d4c41
+    style D fill:#e1f5fe,stroke:#039be5,stroke-width:2px,color:#01579b
+    style E fill:#f8bbd0,stroke:#c2185b,stroke-width:2px,color:#4a148c
+    style F fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,color:#827717
+    style G fill:#dcedc8,stroke:#689f38,stroke-width:2px,color:#33691e
+    style H fill:#ffe082,stroke:#ffa000,stroke-width:2px,color:#e65100
+    style I fill:#b3e5fc,stroke:#0288d1,stroke-width:2px,color:#01579b
+    style J fill:#c8e6c9,stroke:#388e3c,stroke-width:2px,color:#1b5e20
+    style K fill:#f0f4c3,stroke:#afb42b,stroke-width:2px,color:#827717
+    style L fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#4a148c
+
     subgraph "Input Processing"
-        A[File Path] --> B[File Type]
-        B --> C[Markdown Content]
+        A[File Path]
+        B[File Type]
+        C[Markdown Content]
+        A --> B
+        B --> C
     end
     
     subgraph "Metadata Extraction"
-        C --> D[First 100 Lines]
-        D --> E[Paper Info]
-        E --> F[Title String]
-        E --> G[Authors String]
+        D[First 100 Lines]
+        E[Paper Info]
+        F[Title String]
+        G[Authors String]
+        C --> D
+        D --> E
+        E --> F
+        E --> G
     end
     
     subgraph "Content Generation"
-        C --> H[LinkedIn Post]
+        H[LinkedIn Post]
+        I[Draft Post File]
+        J[Formatted Post]
+        K[Cleaned Post]
+        L[Clipboard]
+        C --> H
         F --> H
         G --> H
-        H --> I[Draft Post File]
-        H --> J[Formatted Post]
-        J --> K[Cleaned Post]
-        K --> L[Clipboard]
+        H --> I
+        H --> J
+        J --> K
+        K --> L
     end
-    
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style L fill:#bbf,stroke:#333,stroke-width:2px
 ```
 
 ## Implementation Details
 
+
 ### LLM Node Types
 
-The workflow uses two types of LLM nodes:
+The workflow uses two types of LLM nodes, following best practices for clarity and maintainability:
 
-1. **Standard LLM Nodes**: Process text using prompts and return unstructured text
+1. **Standard LLM Nodes**: For unstructured text generation
    ```python
    @Nodes.llm_node(
        system_prompt="You are an AI expert who enjoys sharing interesting papers...",
        output="draft_post_content",
        prompt_template="..."
    )
+   # WHY: Keeps text generation logic modular and reusable
    ```
 
-2. **Structured LLM Nodes**: Return structured data using Pydantic models
+2. **Structured LLM Nodes**: For extracting structured data (e.g., with Pydantic models)
    ```python
    @Nodes.structured_llm_node(
        system_prompt="You are an AI assistant tasked with extracting...",
@@ -178,6 +221,7 @@ The workflow uses two types of LLM nodes:
        response_model=PaperInfo,
        prompt_template="..."
    )
+   # WHY: Ensures reliable, typed outputs for downstream processing
    ```
 
 ### Workflow Definition
@@ -186,22 +230,45 @@ The workflow is defined using QuantaLogic's Flow framework:
 
 ```python
 def create_file_to_linkedin_workflow() -> Workflow:
+    """Create a workflow to convert a file (PDF, text, or Markdown) to a LinkedIn post."""
     wf = Workflow("check_file_type")
     
-    # Add nodes with input mappings
+    # Add all nodes with input mappings for dynamic model passing
     wf.node("check_file_type")
     wf.node("convert_pdf_to_markdown", inputs_mapping={"model": "text_extraction_model"})
-    # ... more nodes ...
+    wf.node("read_text_or_markdown")
+    wf.node("save_markdown_content")
+    wf.node("extract_first_100_lines")
+    wf.node("extract_paper_info", inputs_mapping={"model": "cleaning_model"})
+    wf.node("extract_title_str")
+    wf.node("extract_authors_str")
+    wf.node("generate_linkedin_post", inputs_mapping={"model": "writing_model"})
+    wf.node("save_draft_post_content")
+    wf.node("format_linkedin_post", inputs_mapping={"model": "cleaning_model"})
+    wf.node("clean_markdown_syntax")  # Add the new node to the workflow
+    wf.node("copy_to_clipboard")
     
-    # Define branching logic
+    # Define the workflow structure with explicit transitions to prevent loops
+    wf.current_node = "check_file_type"
     wf.branch([
         ("convert_pdf_to_markdown", lambda ctx: ctx["file_type"] == "pdf"),
         ("read_text_or_markdown", lambda ctx: ctx["file_type"] in ["text", "markdown"])
     ])
     
-    # Define transitions
+    # Explicitly set transitions from branches to convergence point
     wf.transitions["convert_pdf_to_markdown"] = [("save_markdown_content", None)]
-    # ... more transitions ...
+    wf.transitions["read_text_or_markdown"] = [("save_markdown_content", None)]
+    
+    # Define linear sequence after convergence without re-converging
+    wf.transitions["save_markdown_content"] = [("extract_first_100_lines", None)]
+    wf.transitions["extract_first_100_lines"] = [("extract_paper_info", None)]
+    wf.transitions["extract_paper_info"] = [("extract_title_str", None)]
+    wf.transitions["extract_title_str"] = [("extract_authors_str", None)]
+    wf.transitions["extract_authors_str"] = [("generate_linkedin_post", None)]
+    wf.transitions["generate_linkedin_post"] = [("save_draft_post_content", None)]
+    wf.transitions["save_draft_post_content"] = [("format_linkedin_post", None)]
+    wf.transitions["format_linkedin_post"] = [("clean_markdown_syntax", None)]  # Add transition to new node
+    wf.transitions["clean_markdown_syntax"] = [("copy_to_clipboard", None)]  # Add transition from new node
     
     return wf
 ```

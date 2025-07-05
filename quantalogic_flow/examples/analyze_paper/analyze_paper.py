@@ -3,10 +3,10 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "asyncio",
-#     "py-zerox",
+#     "quantalogic-py-zerox",
 #     "pdf2image",
 #     "pillow",
-#     "quantalogic-flow>=0.6.5",
+#     "quantalogic-flow>=0.6.6",
 #     "typer>=0.9.0",
 #     "rich>=13.0.0",
 #     "pyperclip>=1.8.2",
