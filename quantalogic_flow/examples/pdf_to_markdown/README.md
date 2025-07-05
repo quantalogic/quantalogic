@@ -9,17 +9,22 @@ This tutorial teaches intermediate Python developers how to create a pipeline th
 ## Quantalogic Flow Visualization
 
 ```mermaid
-graph LR
-    A[PDF File] --> B[Workflow]
-    B --> C[convert_node]
-    C -->|markdown_content| D[save_node]
-    D --> E[Markdown File]
-    
-    style B fill:#f5f5f5,stroke:#333,stroke-width:1px
-    style C fill:#bbdefb,stroke:#1976d2,stroke-width:1px
-    style D fill:#bbdefb,stroke:#1976d2,stroke-width:1px
-    style A fill:#c8e6c9,stroke:#388e3c,stroke-width:1px
-    style E fill:#c8e6c9,stroke:#388e3c,stroke-width:1px
+flowchart LR
+    A([PDF File]):::input --> B([Workflow]):::workflow
+    B --> C([convert_node]):::node
+    C -->|markdown_content| D([save_node]):::node
+    D --> E([Markdown File]):::output
+
+    %% Pastel, high-contrast, professional color classes
+    classDef input fill:#f8f9fa,stroke:#6c757d,stroke-width:2px,color:#212529;
+    classDef workflow fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#0d47a1;
+    classDef node fill:#ffe0b2,stroke:#ff9800,stroke-width:2px,color:#4e342e;
+    classDef output fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#1b5e20;
+
+    class A input;
+    class B workflow;
+    class C,D node;
+    class E output;
 ```
 
 The diagram shows the simple flow of the PDF-to-Markdown conversion process:
@@ -88,7 +93,7 @@ Quantalogic Flow uses `Nodes` to define tasks and `Workflow` to arrange them. He
 
 #### Sequential PDF Processing
 ```python
-from quantalogic.flow.flow import Nodes, Workflow
+from quantalogic_flow import Nodes, Workflow
 import asyncio
 
 @Nodes.define(output="text")
@@ -99,7 +104,7 @@ async def extract_text(pdf_path: str) -> str:
 async def format_markdown(text: str) -> str:
     return f"# Extracted Content\n\n{text}"
 
-workflow = Workflow("extract_text").sequence("extract_text", "format_markdown")
+workflow = Workflow("extract_text").then("format_markdown")
 result = asyncio.run(workflow.build().run({"pdf_path": "sample.pdf"}))
 print(result["markdown"])  # "# Extracted Content\n\nSample PDF text"
 ```
@@ -144,14 +149,19 @@ The script leverages `uv`, a fast Python tool, via this header:
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "loguru", "litellm", "pydantic>=2.0", "asyncio", "jinja2",
-#     "py-zerox @ git+https://github.com/getomni-ai/zerox.git@abc123",  # Pinned commit
-#     "pdf2image", "pillow", "typer", "pathlib", "pathspec", "quantalogic"
+#     "asyncio",
+#     "quantalogic-py-zerox",
+#     "pdf2image",
+#     "pillow",
+#     "typer",
+#     "pathlib",
+#     "pathspec",
+#     "quantalogic-flow>=0.6.7",
 # ]
 # ///
 ```
 
-- **Shebang**: Run with `./pdf_to_md_flow.py` after `chmod +x`.
+- **Shebang**: Run with `./pdf_to_markdown.py` after `chmod +x`.
 - **Metadata**: Specifies Python 3.12+ and auto-installs dependencies.
 - **Install UV**: `curl -LsSf https://astral.sh/uv/install.sh | sh` (see [Astral docs](https://astral.sh/uv)).
 
@@ -163,9 +173,11 @@ This eliminates manual setup, enhancing portability.
 
 ### Python Dependencies
 The `uv` metadata handles packages like:
-- `py-zerox`: AI PDF parsing.
-- `quantalogic`: Workflow logic.
+- `quantalogic-py-zerox`: AI PDF parsing.
+- `quantalogic-flow`: Workflow logic.
 - `pdf2image`: PDF-to-image conversion.
+- `typer`: CLI interface.
+- `loguru`: Logging (imported by quantalogic-flow).
 
 ### System Requirements
 Install `poppler` for `pdf2image`:
@@ -177,22 +189,61 @@ Install `poppler` for `pdf2image`:
 The `--model` option (e.g., `gemini/gemini-2.0-flash`) requires API keys:
 1. **Gemini**: Get a key from [Google AI Studio](https://aistudio.google.com/). Set `export GEMINI_API_KEY=your_key`.
 2. **OpenAI**: From [OpenAI dashboard](https://platform.openai.com/). Set `export OPENAI_API_KEY=your_key`.
-3. Verify: `echo $GEMINI_API_KEY` should show your key.
+3. **Azure**: Set `AZURE_API_KEY`, `AZURE_API_BASE`, `AZURE_API_VERSION`.
+4. **Vertex AI**: Set `VERTEX_CREDENTIALS`.
+5. Verify: `echo $GEMINI_API_KEY` should show your key.
 
 ---
 
 ## Code Walkthrough
 
+
 ### `convert_node`: PDF to Markdown
 
 ```python
 @Nodes.define(output="markdown_content")
-async def convert_node(pdf_path: str, model: str, custom_system_prompt: Optional[str] = None) -> str:
-    if not os.path.exists(pdf_path) or not pdf_path.endswith(".pdf"):
+async def convert_node(
+    pdf_path: str,
+    model: str,
+    custom_system_prompt: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    select_pages: Optional[Union[int, list[int]]] = None,
+) -> str:
+    if not validate_pdf_path(pdf_path):
         raise ValueError("Invalid PDF path")
-    prompt = custom_system_prompt or "Convert to clean Markdown, describing images and charts literally."
-    result = await zerox(file_path=pdf_path, model=model, system_prompt=prompt)
-    return "\n\n".join(page.content for page in result.pages if page.content) or ""
+    try:
+        if custom_system_prompt is None:
+            custom_system_prompt = (
+                "Convert the PDF page to a clean, well-formatted Markdown document. "
+                "Preserve structure, headings, and any code or mathematical notation. "
+                "For the images and chart, create a literal description what is visible. "
+                "Return only pure Markdown content, excluding any metadata or non-Markdown elements."
+            )
+        zerox_result = await zerox(
+            file_path=pdf_path,
+            model=model,
+            system_prompt=custom_system_prompt,
+            output_dir=output_dir,
+            select_pages=select_pages,
+        )
+        markdown_content = ""
+        if hasattr(zerox_result, "pages") and zerox_result.pages:
+            markdown_content = "\n\n".join(
+                page.content for page in zerox_result.pages if hasattr(page, "content") and page.content
+            )
+        elif isinstance(zerox_result, str):
+            markdown_content = zerox_result
+        elif hasattr(zerox_result, "markdown"):
+            markdown_content = zerox_result.markdown
+        elif hasattr(zerox_result, "text"):
+            markdown_content = zerox_result.text
+        else:
+            markdown_content = str(zerox_result)
+        if not markdown_content.strip():
+            return ""
+        return markdown_content
+    except Exception as e:
+        raise
 ```
 - **Role**: Uses `pyzerox` to parse PDFs with an AI model.
 - **Output**: Markdown with text and visual descriptions.
@@ -202,11 +253,14 @@ async def convert_node(pdf_path: str, model: str, custom_system_prompt: Optional
 ```python
 @Nodes.define(output="output_path")
 async def save_node(markdown_content: str, output_md: str) -> str:
-    output_path = Path(output_md)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8") as f:
-        f.write(markdown_content)
-    return str(output_path)
+    try:
+        output_path = Path(output_md)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", encoding="utf-8") as f:
+            f.write(markdown_content)
+        return str(output_path)
+    except Exception as e:
+        raise
 ```
 - **Role**: Writes Markdown to a file, creating directories as needed.
 
@@ -214,7 +268,8 @@ async def save_node(markdown_content: str, output_md: str) -> str:
 
 ```python
 def create_pdf_to_md_workflow():
-    return Workflow("convert_node").sequence("convert_node", "save_node")
+    workflow = Workflow("convert_node").then("save_node")
+    return workflow
 ```
 - **Flow**: `convert_node` → `save_node`, passing `markdown_content`.
 
@@ -224,14 +279,14 @@ def create_pdf_to_md_workflow():
 
 ### Basic Usage
 ```bash
-chmod +x pdf_to_md_flow.py
-./pdf_to_md_flow.py convert input.pdf
+chmod +x pdf_to_markdown.py
+./pdf_to_markdown.py convert input.pdf
 ```
 - Output: `input.md`.
 
 ### Custom Options
 ```bash
-./pdf_to_md_flow.py convert input.pdf output.md --model openai/gpt-4o-mini --system-prompt "Focus on tables only"
+./pdf_to_markdown.py convert input.pdf output.md --model openai/gpt-4o-mini --system-prompt "Focus on tables only"
 ```
 - Specify model, output file, and prompt.
 
@@ -260,16 +315,17 @@ The study analyzed trends over five years.
 A line graph shows values rising from 45 in 2020 to 55 in 2024, peaking at 60 in 2023.
 ```
 
-This shows how `pyzerox` interprets visuals into text.
+This shows how `pyzerox` interprets visuals into structured text, providing a comprehensive view of the document's content.
 
 ---
 
 ## Customization Ideas
 
-- **Model**: Try `--model gemini/gemini-2.0-flash`.
-- **Prompt**: `--system-prompt "Extract code snippets only"`.
-- **Pages**: Edit `convert` to add `select_pages=[1, 2]` in `initial_context`.
+- **Model**: Try `--model gemini/gemini-2.0-flash` or `--model openai/gpt-4o-mini`.
+- **Prompt**: Use `--system-prompt "Extract code snippets only"` for custom extraction.
+- **Pages**: Add `select_pages` parameter to process specific pages.
 - **New Node**: Add a `clean_markdown` node to refine output.
+- **Parallel Processing**: Modify workflow to process multiple PDFs simultaneously.
 
 ---
 
@@ -289,16 +345,23 @@ flowchart TD
     B -->|markdown_content| C[save_node]
     C -->|output_path| D((End))
 
-    subgraph "convert_node"
-        B1[Validate PDF] --> B2[zerox AI Call] --> B3[Join Pages]
+    subgraph "convert_node Details"
+        B1[Validate PDF Path] --> B2[Call zerox AI]
+        B2 --> B3[Process Pages]
+        B3 --> B4[Join Content]
     end
 
-    subgraph "save_node"
-        C1[Make Directory] --> C2[Write File]
+    subgraph "save_node Details"
+        C1[Create Directory] --> C2[Write Markdown File]
     end
 
-    style A fill:#e6f3ff,stroke:#333
-    style D fill:#e6ffe6,stroke:#333
+    %% Professional pastel color scheme with high contrast
+    classDef default fill:#f1f8ff,stroke:#2563eb,stroke-width:2px,color:#1e40af
+    classDef process fill:#fce7f3,stroke:#ec4899,stroke-width:1px,color:#be185d
+    
+    class A,D default
+    class B,C default
+    class B1,B2,B3,B4,C1,C2 process
 ```
 
 ---
