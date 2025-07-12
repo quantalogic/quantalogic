@@ -10,7 +10,7 @@
 #     "typer",
 #     "pathlib",
 #     "pathspec",
-#     "quantalogic-flow>=0.6.7",
+#     "quantalogic-flow>=0.6.8",
 # ]
 # ///
 

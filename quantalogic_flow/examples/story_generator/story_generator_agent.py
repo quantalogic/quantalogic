@@ -5,7 +5,7 @@
 # dependencies = [
 #     "loguru",
 #     "anyio",
-#     "quantalogic_flow>=0.6.7",
+#     "quantalogic_flow>=0.6.8",
 #     "jinja2"  # Added for Jinja2 templating support
 # ]
 # ///
