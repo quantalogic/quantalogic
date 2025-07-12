@@ -135,7 +135,7 @@ class TestNodes:
         result = await func(number_input=5)
         assert result == "result: 10"  # 5 * 2 = 10
     
-    @patch("quantalogic_flow.flow.flow.acompletion")
+    @patch("quantalogic_flow.flow.nodes.acompletion")
     async def test_llm_node_decorator_basic(self, mock_acompletion, nodes_registry_backup):
         """Test basic @Nodes.llm_node decorator."""
         # Setup mock response
@@ -172,7 +172,7 @@ class TestNodes:
         assert call_args[1]["messages"][0]["role"] == "system"
         assert call_args[1]["messages"][1]["role"] == "user"
     
-    @patch("quantalogic_flow.flow.flow.acompletion")
+    @patch("quantalogic_flow.flow.nodes.acompletion")
     async def test_llm_node_with_callable_model(self, mock_acompletion, nodes_registry_backup):
         """Test LLM node with callable model parameter."""
         mock_response = MagicMock()
@@ -204,7 +204,7 @@ class TestNodes:
         await func(query="test", use_gpt4=True)
         assert mock_acompletion.call_args[1]["model"] == "gpt-4"
     
-    @patch("quantalogic_flow.flow.flow.instructor.from_litellm")
+    @patch("quantalogic_flow.flow.nodes.instructor.from_litellm")
     async def test_structured_llm_node(self, mock_instructor, nodes_registry_backup):
         """Test @Nodes.structured_llm_node decorator."""
         
