@@ -4,7 +4,7 @@
 # dependencies = [
 #     "loguru",
 #     "anyio",
-#     "quantalogic-flow>=0.6.6",
+#     "quantalogic-flow>=0.6.8",
 #     "jinja2"
 # ]
 # ///
