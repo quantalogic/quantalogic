@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "asyncio",
-#     "quantalogic-flow>=0.6.6",
+#     "quantalogic-flow>=0.6.8",
 #     "typer>=0.9.0",
 #     "rich>=13.0.0",
 #     "pyperclip>=1.8.2",

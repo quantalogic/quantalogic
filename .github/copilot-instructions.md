@@ -11,9 +11,16 @@ Code Rules:
 - ≤20 lines
 - ≤3 parameters
 - Descriptive names
-- Type hints
+- Type hints (Python 3.10+ compatible)
 
-3. Project Structure
+3. Python Version Compatibility
+- Support Python 3.10+ syntax
+- Use `Union[X, Y]` instead of `X | Y` for type hints
+- Use `Optional[X]` instead of `X | None`
+- Import `Union` and `Optional` from `typing`
+- Avoid features requiring Python 3.11+
+
+4. Project Structure
 - Group by feature
 - Flat > nested
 - Keep related code together
@@ -26,7 +33,7 @@ Code Rules:
     ...
   main.py
 
-4. Development Practice
+5. Development Practice
 - Use standard libs/tools
 - Choose well-maintained libs
 - Handle errors explicitly 
@@ -34,7 +41,7 @@ Code Rules:
 - Document WHY not WHAT
 - Executable scripts
 
-5. Code Reviews
+6. Code Reviews
 - Question complexity
 - Check for dupes
 - Verify error handling

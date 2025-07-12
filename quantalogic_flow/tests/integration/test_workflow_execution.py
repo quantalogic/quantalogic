@@ -92,7 +92,7 @@ class TestWorkflowIntegration:
         assert result["zero_processing"] == "zero processing: neutral value"
     
     @pytest.mark.integration
-    @patch("quantalogic_flow.flow.flow.acompletion")
+    @patch("quantalogic_flow.flow.nodes.acompletion")
     async def test_llm_workflow_integration(self, mock_acompletion, nodes_registry_backup):
         """Test workflow integration with LLM nodes."""
         # Setup LLM mocks

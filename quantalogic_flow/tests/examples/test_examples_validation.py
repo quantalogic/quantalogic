@@ -12,7 +12,7 @@ class TestExampleValidation:
     """Validate that examples work correctly."""
     
     @pytest.mark.examples
-    @patch("quantalogic_flow.flow.flow.acompletion")
+    @patch("quantalogic_flow.flow.nodes.acompletion")
     async def test_simple_story_generator_workflow(self, mock_acompletion):
         """Test the simple story generator example workflow."""        # Setup mock responses for the story generator
         mock_acompletion.side_effect = [
@@ -77,7 +77,7 @@ class TestExampleValidation:
             sys.path.remove(str(example_path))
     
     @pytest.mark.examples
-    @patch("quantalogic_flow.flow.flow.acompletion")
+    @patch("quantalogic_flow.flow.nodes.acompletion")
     async def test_story_generator_input_validation(self, mock_acompletion):
         """Test story generator input validation."""
         import sys

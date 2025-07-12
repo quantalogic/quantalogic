@@ -6,7 +6,7 @@ from importlib.metadata import version as _version
 try:
     __version__ = _version("quantalogic-flow")
 except PackageNotFoundError:
-    __version__ = "0.6.5"
+    __version__ = "0.6.8"
 
 from loguru import logger
 
