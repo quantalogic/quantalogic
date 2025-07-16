@@ -143,7 +143,9 @@ class Nodes:
                         drop_params=True,
                         **kwargs,
                     )
-                    content = response.choices[0].message.content.strip()
+                    # Handle None content gracefully
+                    raw_content = response.choices[0].message.content
+                    content = raw_content.strip() if raw_content is not None else ""
                     wrapped_func.usage = {
                         "prompt_tokens": response.usage.prompt_tokens,
                         "completion_tokens": response.usage.completion_tokens,
