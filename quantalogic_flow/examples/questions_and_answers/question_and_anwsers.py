@@ -222,69 +222,63 @@ async def shuffle_options(combined_questionnaire: Questionnaire) -> Questionnair
 # Workflow
 def create_fact_extraction_workflow() -> Workflow:
     """Create a workflow to extract facts and generate/verify a questionnaire one fact at a time."""
-    wf = Workflow("read_markdown_file")
-    
-    # Initial sequence: read file, extract and select facts
-    wf.node("read_markdown_file").then("extract_facts")
-    wf.then("select_facts")
-    wf.then("initialize_question_processing")
-    
-    # Fact-by-fact processing loop
-    wf.then("get_current_fact")
-    wf.then("generate_questionnaire_item")
-    wf.then("append_questionnaire_item")
-    wf.then("verify_questionnaire_item")
-    wf.then("append_evaluation_item")
-    wf.then("increment_fact_index")
-    
-    # Conditional transitions to simulate loop
-    wf.transitions["increment_fact_index"] = [
+    wf = (Workflow("read_markdown_file")
+          # Register nodes that need input mappings
+          .node("get_current_fact", inputs_mapping={
+              "selected_facts": "selected_facts",
+              "fact_index": "fact_index"
+          })
+          .node("generate_questionnaire_item", inputs_mapping={
+              "current_fact": "current_fact",
+              "model": "model"
+          })
+          .node("append_questionnaire_item", inputs_mapping={
+              "questionnaire_item": "questionnaire_item",
+              "combined_questionnaire": "combined_questionnaire"
+          })
+          .node("verify_questionnaire_item", inputs_mapping={
+              "current_fact": "current_fact",
+              "questionnaire_item": "questionnaire_item",
+              "model": "model",
+              "question_number": lambda ctx: ctx.get("fact_index", 0) + 1  # 1-based question number
+          })
+          .node("append_evaluation_item", inputs_mapping={
+              "evaluation_item": "evaluation_item",
+              "combined_evaluation": "combined_evaluation"
+          })
+          .node("increment_fact_index", inputs_mapping={
+              "fact_index": "fact_index"
+          })
+          .node("finalize_evaluation", inputs_mapping={
+              "combined_evaluation": "combined_evaluation",
+              "selected_facts": "selected_facts"
+          })
+          .node("shuffle_options", inputs_mapping={
+              "combined_questionnaire": "combined_questionnaire"
+          })
+          .node("extract_facts", inputs_mapping={
+              "markdown_content": "markdown_content",
+              "model": "model"
+          })
+          # Define workflow structure
+          .then("extract_facts")
+          .then("select_facts")
+          .then("initialize_question_processing")
+          .then("get_current_fact")
+          .then("generate_questionnaire_item")
+          .then("append_questionnaire_item")
+          .then("verify_questionnaire_item")
+          .then("append_evaluation_item")
+          .then("increment_fact_index"))
+          
+    # Add conditional transitions for the processing loop using the correct pattern
+    wf.transitions.setdefault("increment_fact_index", []).extend([
         ("get_current_fact", lambda ctx: ctx.get("fact_index", 0) < len(ctx.get("selected_facts", FactsList(facts=[])).facts)),
         ("finalize_evaluation", lambda ctx: ctx.get("fact_index", 0) >= len(ctx.get("selected_facts", FactsList(facts=[])).facts))
-    ]
+    ])
     
-    # Post-loop: finalize evaluation and shuffle options
-    wf.node("finalize_evaluation").then("shuffle_options")
-    
-    # Input mappings
-    wf.node_input_mappings["get_current_fact"] = {
-        "selected_facts": "selected_facts",
-        "fact_index": "fact_index"
-    }
-    wf.node_input_mappings["generate_questionnaire_item"] = {
-        "current_fact": "current_fact",
-        "model": "model"
-    }
-    wf.node_input_mappings["append_questionnaire_item"] = {
-        "questionnaire_item": "questionnaire_item",
-        "combined_questionnaire": "combined_questionnaire"
-    }
-    wf.node_input_mappings["verify_questionnaire_item"] = {
-        "current_fact": "current_fact",
-        "questionnaire_item": "questionnaire_item",
-        "model": "model",
-        "question_number": lambda ctx: ctx.get("fact_index", 0) + 1  # 1-based question number
-    }
-    wf.node_input_mappings["append_evaluation_item"] = {
-        "evaluation_item": "evaluation_item",
-        "combined_evaluation": "combined_evaluation"
-    }
-    wf.node_input_mappings["increment_fact_index"] = {
-        "fact_index": "fact_index"
-    }
-    wf.node_input_mappings["finalize_evaluation"] = {
-        "combined_evaluation": "combined_evaluation",
-        "selected_facts": "selected_facts"
-    }
-    wf.node_input_mappings["shuffle_options"] = {
-        "combined_questionnaire": "combined_questionnaire"
-    }
-    
-    # Added input mapping for extract_facts to use the context-provided model
-    wf.node_input_mappings["extract_facts"] = {
-        "markdown_content": "markdown_content",
-        "model": "model"
-    }
+    # Complete the workflow
+    wf.transitions.setdefault("finalize_evaluation", []).append(("shuffle_options", None))
     
     logger.info("Workflow created with fact-by-fact processing loop")
     return wf

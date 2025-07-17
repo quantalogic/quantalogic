@@ -21,7 +21,7 @@ import asyncio
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
 import typer
 from loguru import logger
@@ -50,9 +50,9 @@ def validate_pdf_path(pdf_path: str) -> bool:
 async def convert_node(
     pdf_path: str,
     model: str,
-    custom_system_prompt: Optional[str] = None,
-    output_dir: Optional[str] = None,
-    select_pages: Optional[Union[int, list[int]]] = None,
+    custom_system_prompt: Union[str, None] = None,
+    output_dir: Union[str, None] = None,
+    select_pages: Union[Union[int, list[int]], None] = None,
 ) -> str:
     """Convert a PDF to Markdown using a vision model."""
     if not validate_pdf_path(pdf_path):
@@ -119,10 +119,10 @@ async def save_node(markdown_content: str, output_md: str) -> str:
         raise
 
 
-# Define the workflow
+# Define the workflow using fluent API
 def create_pdf_to_md_workflow():
-    workflow = Workflow("convert_node").then("save_node")
-    return workflow
+    """Create a workflow to convert PDF to Markdown and save to file."""
+    return Workflow("convert_node").then("save_node")
 
 
 # Typer CLI app
@@ -132,14 +132,14 @@ app = typer.Typer()
 @app.command()
 def convert(
     input_pdf: str = typer.Argument(..., help="Path to the input PDF file"),
-    output_md: Optional[str] = typer.Argument(
+    output_md: Union[str, None] = typer.Argument(
         None, help="Path to save the output Markdown file (defaults to input_pdf_name.md)"
     ),
     model: str = typer.Option(
         "gemini/gemini-2.0-flash",
         help="LiteLLM-compatible model name (e.g., 'openai/gpt-4o-mini', 'gemini/gemini-2.0-flash')",
     ),
-    system_prompt: Optional[str] = typer.Option(None, help="Custom system prompt for the vision model"),
+    system_prompt: Union[str, None] = typer.Option(None, help="Custom system prompt for the vision model"),
 ):
     """
     Convert a PDF file to Markdown using a two-step workflow: convert and save.

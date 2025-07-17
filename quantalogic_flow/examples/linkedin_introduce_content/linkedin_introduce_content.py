@@ -14,7 +14,7 @@
 import asyncio
 import os
 from pathlib import Path
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Union
 
 import pyperclip
 import typer
@@ -206,7 +206,7 @@ async def generate_linkedin_post(
     viral_strategy: ViralStrategy, 
     markdown_content: str,
     model: str,
-    intent: Optional[str] = None
+    intent: Union[str, None] = None
 ) -> str:
     """Generate a LinkedIn post designed for maximum virality."""
     logger.debug(f"generate_linkedin_post called with model: {model}")
@@ -301,28 +301,23 @@ async def copy_to_clipboard(cleaned_post: str, do_copy: bool) -> str:
 # Create the workflow using fluent API
 def create_linkedin_content_workflow() -> Workflow:
     """Create a workflow to convert a markdown file to a viral LinkedIn post."""
-    # Create workflow starting with the first node
-    workflow = (
-        Workflow("read_markdown_file")
-        .then("analyze_content")  # Analysis node with dynamically mapped model
-        .then("determine_viral_strategy")  # Strategy node with dynamically mapped model
-        .then("generate_linkedin_post")  # Generate post with dynamically mapped model
-        .then("clean_linkedin_post")  # Clean post with dynamically mapped model
-        .then("format_linkedin_post")  # Format post for LinkedIn platform
-        .then("save_linkedin_post")  # Save to file
-        .then("copy_to_clipboard")  # Copy to clipboard if requested
-    )
-    
-    # Add input mappings for model parameters
-    workflow.node_input_mappings = {
-        "analyze_content": {"model": "analysis_model", "mock": "mock"},
-        "determine_viral_strategy": {"model": "analysis_model"},
-        "generate_linkedin_post": {"model": "writing_model", "intent": "intent"},
-        "clean_linkedin_post": {"model": "cleaning_model"},
-        "format_linkedin_post": {"model": "formatting_model"},
-    }
-    
-    return workflow
+    return (Workflow("read_markdown_file")
+            # Register nodes that need input mappings
+            .node("analyze_content", inputs_mapping={"model": "analysis_model", "mock": "mock"})
+            .node("determine_viral_strategy", inputs_mapping={"model": "analysis_model"})
+            .node("generate_linkedin_post", inputs_mapping={"model": "writing_model", "intent": "intent"})
+            .node("clean_linkedin_post", inputs_mapping={"model": "cleaning_model"})
+            .node("format_linkedin_post", inputs_mapping={"model": "formatting_model"})
+            # Define workflow structure using sequence for linear flow
+            .sequence(
+                "analyze_content",
+                "determine_viral_strategy",
+                "generate_linkedin_post",
+                "clean_linkedin_post",
+                "format_linkedin_post",
+                "save_linkedin_post",
+                "copy_to_clipboard"
+            ))
 
 # Observer for tracking workflow progress
 def progress_observer(event: WorkflowEvent) -> None:
@@ -362,7 +357,7 @@ async def run_workflow(
     cleaning_model: str,
     formatting_model: str,
     copy_to_clipboard_flag: bool = True,
-    intent: Optional[str] = None,
+    intent: Union[str, None] = None,
     mock_analysis: bool = False
 ) -> dict:
     """Execute the workflow with the given file path and models."""
@@ -430,7 +425,7 @@ def create_post(
     cleaning_model: Annotated[str, typer.Option(help="LLM model for cleaning LinkedIn post")] = DEFAULT_CLEANING_MODEL,
     formatting_model: Annotated[str, typer.Option(help="LLM model for formatting LinkedIn post")] = DEFAULT_FORMATTING_MODEL,
     copy_to_clipboard_flag: Annotated[bool, typer.Option("--copy/--no-copy", help="Copy the final post to clipboard")] = True,
-    intent: Annotated[Optional[str], typer.Option("--intent", "-i", help="Intent or specific focus for the LinkedIn post")] = None,
+    intent: Annotated[Union[str, None], typer.Option("--intent", "-i", help="Intent or specific focus for the LinkedIn post")] = None,
     mock_analysis: Annotated[bool, typer.Option("--mock-analysis/--no-mock", help="Mock the analysis step for testing")] = False,
 ):
     """Generate a viral LinkedIn post from a markdown file containing a tutorial or software introduction."""
