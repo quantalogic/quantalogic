@@ -19,7 +19,7 @@ import asyncio
 import os
 import subprocess
 from pathlib import Path
-from typing import Annotated, List, Optional, Union
+from typing import Annotated, List, Union
 
 import pyperclip
 import typer
@@ -103,9 +103,9 @@ async def read_text_or_markdown(file_path: str, file_type: str) -> str:
 async def convert_pdf_to_markdown(
     file_path: str,
     model: str,
-    custom_system_prompt: Optional[str] = None,
-    output_dir: Optional[str] = None,
-    select_pages: Optional[Union[int, List[int]]] = None
+    custom_system_prompt: str | None = None,
+    output_dir: str | None = None,
+    select_pages: Union[int, List[int]] | None = None
 ) -> str:
     """Convert a PDF to Markdown using a vision model."""
     file_path = os.path.expanduser(file_path)
@@ -356,12 +356,12 @@ async def copy_to_clipboard(post_content: str, do_copy: bool) -> str:
         logger.info("Clipboard copying skipped as per user preference")
         return "Clipboard copying skipped"
 
-# Define the Updated Workflow with Model Fix and Loop Prevention
+# Define the Updated Workflow with Fluent API
 def create_file_to_linkedin_workflow() -> Workflow:
     """Create a workflow to convert a file (PDF, text, or Markdown) to a LinkedIn post."""
     wf = Workflow("check_file_type")
     
-    # Add all nodes with input mappings for dynamic model passing
+    # Register all nodes with input mappings for dynamic model passing
     wf.node("check_file_type")
     wf.node("convert_pdf_to_markdown", inputs_mapping={"model": "text_extraction_model"})
     wf.node("read_text_or_markdown")
@@ -373,30 +373,38 @@ def create_file_to_linkedin_workflow() -> Workflow:
     wf.node("generate_linkedin_post", inputs_mapping={"model": "writing_model"})
     wf.node("save_draft_post_content")
     wf.node("format_linkedin_post", inputs_mapping={"model": "cleaning_model"})
-    wf.node("clean_markdown_syntax")  # Add the new node to the workflow
+    wf.node("clean_markdown_syntax")
     wf.node("copy_to_clipboard")
     
-    # Define the workflow structure with explicit transitions to prevent loops
+    # Reset current node to the start node after registration
     wf.current_node = "check_file_type"
-    wf.branch([
+    
+    # Define the workflow structure using fluent API
+    # Branch based on file type from check_file_type
+    (wf.branch([
         ("convert_pdf_to_markdown", lambda ctx: ctx["file_type"] == "pdf"),
         ("read_text_or_markdown", lambda ctx: ctx["file_type"] in ["text", "markdown"])
     ], default="convert_pdf_to_markdown")
+    )
     
-    # Explicitly set transitions from branches to convergence point
+    # Set up explicit transitions for convergence
     wf.transitions["convert_pdf_to_markdown"] = [("save_markdown_content", None)]
     wf.transitions["read_text_or_markdown"] = [("save_markdown_content", None)]
     
-    # Define linear sequence after convergence without re-converging
-    wf.transitions["save_markdown_content"] = [("extract_first_100_lines", None)]
-    wf.transitions["extract_first_100_lines"] = [("extract_paper_info", None)]
-    wf.transitions["extract_paper_info"] = [("extract_title_str", None)]
-    wf.transitions["extract_title_str"] = [("extract_authors_str", None)]
-    wf.transitions["extract_authors_str"] = [("generate_linkedin_post", None)]
-    wf.transitions["generate_linkedin_post"] = [("save_draft_post_content", None)]
-    wf.transitions["save_draft_post_content"] = [("format_linkedin_post", None)]
-    wf.transitions["format_linkedin_post"] = [("clean_markdown_syntax", None)]  # Add transition to new node
-    wf.transitions["clean_markdown_syntax"] = [("copy_to_clipboard", None)]  # Add transition from new node
+    # Set current node to the convergence point and continue with fluent API
+    wf.current_node = "save_markdown_content"
+    
+    # Define the linear processing sequence using fluent API
+    (wf.then("extract_first_100_lines")
+     .then("extract_paper_info")
+     .then("extract_title_str")
+     .then("extract_authors_str")
+     .then("generate_linkedin_post")
+     .then("save_draft_post_content")
+     .then("format_linkedin_post")
+     .then("clean_markdown_syntax")
+     .then("copy_to_clipboard")
+    )
     
     return wf
 
@@ -406,7 +414,7 @@ async def run_workflow(
     text_extraction_model: str,
     cleaning_model: str,
     writing_model: str,
-    output_dir: Optional[str] = None,
+    output_dir: str | None = None,
     copy_to_clipboard_flag: bool = True,
     max_character_count: int = 3000
 ) -> dict:
@@ -472,7 +480,7 @@ def analyze(
     text_extraction_model: Annotated[str, typer.Option(help="LLM model for PDF text extraction")] = DEFAULT_TEXT_EXTRACTION_MODEL,
     cleaning_model: Annotated[str, typer.Option(help="LLM model for title/author extraction")] = DEFAULT_CLEANING_MODEL,
     writing_model: Annotated[str, typer.Option(help="LLM model for article writing and formatting")] = DEFAULT_WRITING_MODEL,
-    output_dir: Annotated[Optional[str], typer.Option(help="Directory to save output files (supports ~ expansion)")] = None,
+    output_dir: Annotated[str | None, typer.Option(help="Directory to save output files (supports ~ expansion)")] = None,
     save: Annotated[bool, typer.Option(help="Save output to a markdown file")] = True,
     copy_to_clipboard_flag: Annotated[bool, typer.Option(help="Copy the final post to clipboard")] = True,
     max_character_count: Annotated[int, typer.Option(help="Maximum character count for the LinkedIn post")] = 3000
