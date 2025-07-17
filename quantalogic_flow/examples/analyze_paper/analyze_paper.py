@@ -376,23 +376,13 @@ def create_file_to_linkedin_workflow() -> Workflow:
     wf.node("clean_markdown_syntax")
     wf.node("copy_to_clipboard")
     
-    # Reset current node to the start node after registration
-    wf.current_node = "check_file_type"
-    
     # Define the workflow structure using fluent API
-    # Branch based on file type from check_file_type
+    # Branch based on file type with automatic convergence to save_markdown_content
     (wf.branch([
         ("convert_pdf_to_markdown", lambda ctx: ctx["file_type"] == "pdf"),
         ("read_text_or_markdown", lambda ctx: ctx["file_type"] in ["text", "markdown"])
-    ], default="convert_pdf_to_markdown")
+    ]).then("save_markdown_content")
     )
-    
-    # Set up explicit transitions for convergence
-    wf.transitions["convert_pdf_to_markdown"] = [("save_markdown_content", None)]
-    wf.transitions["read_text_or_markdown"] = [("save_markdown_content", None)]
-    
-    # Set current node to the convergence point and continue with fluent API
-    wf.current_node = "save_markdown_content"
     
     # Define the linear processing sequence using fluent API
     (wf.then("extract_first_100_lines")

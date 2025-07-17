@@ -37,6 +37,10 @@ class Workflow:
         self.parallel_source_node: str | None = None
         self.convergence_nodes: Dict[str, str] = {}
         self.parallel_blocks: Dict[str, List[str]] = {}
+        # Branch state tracking (similar to parallel state tracking)
+        self.is_branching = False
+        self.branch_nodes: List[str] = []
+        self.branch_source_node: str | None = None
         self._observers: List[WorkflowObserver] = []
         self.loop_stack: List[Tuple[str, List[str]]] = []
         self.loop_nodes: List[str] = []
@@ -95,8 +99,10 @@ class Workflow:
                 self.transitions.setdefault(node_name, []).append((name, None))
             self.is_parallel = False
             self.parallel_nodes = []
+            # Only set current_node if we're handling parallel convergence
+            self.current_node = name
 
-        self.current_node = name
+        # Do not change current_node when just registering nodes
         return self
 
     def sequence(self, *nodes: str):
@@ -143,13 +149,13 @@ class Workflow:
             logger.warning(f"Skipping self-loop transition from {self.current_node} to {next_node}")
             return self
 
-        if self.current_node is None and not self.is_parallel:
+        if self.current_node is None and not self.is_parallel and not self.is_branching:
             raise ValueError("Cannot call .then() without a current node.")
 
         self._register_node(next_node)
 
         if self.is_parallel:
-            # This is a convergence point
+            # This is a convergence point for parallel execution
             if self.parallel_source_node:
                 self.convergence_nodes[self.parallel_source_node] = next_node
             if not self.parallel_nodes:  # Handle empty parallel block
@@ -159,6 +165,23 @@ class Workflow:
                 self.transitions.setdefault(node_name, []).append((next_node, None))
             self.is_parallel = False
             self.parallel_nodes = []
+        elif self.is_branching:
+            # This is a convergence point for branching - automatically set up convergence
+            logger.debug(f"Auto-convergence detected: {self.branch_nodes} -> {next_node}")
+            if self.branch_source_node:
+                self.convergence_nodes[self.branch_source_node] = next_node
+            
+            # Set up convergence transitions from all branch nodes to next_node
+            for branch_node in self.branch_nodes:
+                # Only add convergence transition if the branch node doesn't already have transitions
+                if branch_node not in self.transitions or not self.transitions[branch_node]:
+                    self.transitions.setdefault(branch_node, []).append((next_node, None))
+                    logger.debug(f"Added auto-convergence transition from {branch_node} to {next_node}")
+            
+            # Reset branch state
+            self.is_branching = False
+            self.branch_nodes = []
+            self.branch_source_node = None
         else:
             if self.current_node:
                 self.transitions.setdefault(self.current_node, []).append((next_node, condition))
@@ -169,15 +192,17 @@ class Workflow:
     def branch(
         self,
         branches: List[Tuple[str, Callable | None]],
-        default: str | None,
+        default: str | None = None,
         next_node: str | None = None,
     ) -> Workflow:
         """Add multiple conditional branches from the current node with an optional default and next node.
 
         Args:
             branches: List of tuples (next_node, condition), where condition takes context and returns a boolean.
-            default: Optional node to transition to if no branch conditions are met.
+            default: Optional node to transition to if no branch conditions are met. 
+                    If None, uses the first branch node as default.
             next_node: Optional node to set as current_node after branching (e.g., for convergence).
+                      If None, branch state is tracked for automatic convergence in next then() call.
 
         Returns:
             Self for method chaining.
@@ -185,19 +210,56 @@ class Workflow:
         if not self.current_node:
             logger.warning("No current node set for branching")
             return self
+        
+        if not branches:
+            raise ValueError("Branch must have at least one branch condition.")
+        
+        # Auto-deduce default from first branch if not provided
+        if default is None:
+            default = branches[0][0]
+            logger.debug(f"Auto-deduced default '{default}' from first branch")
+        
+        # Track branch nodes for convergence
+        branch_nodes = []
+        
         for next_node_name, condition in branches:
             if next_node_name not in self.nodes:
                 self._register_node(next_node_name)
             self.transitions.setdefault(self.current_node, []).append((next_node_name, condition))
+            branch_nodes.append(next_node_name)
             logger.debug(f"Added branch from {self.current_node} to {next_node_name} with condition {condition}")
-        if default:
-            if default not in self.nodes:
-                self._register_node(default)
+        
+        if default not in self.nodes:
+            self._register_node(default)
+        # Only add default transition if it's not already in the branch nodes
+        if default not in [node for node, _ in branches]:
             self.transitions.setdefault(self.current_node, []).append((default, None))
+            branch_nodes.append(default)
             logger.debug(f"Added default transition from {self.current_node} to {default}")
 
-        if not self.is_parallel:
-            self.current_node = next_node  # Explicitly set next_node if provided
+        # If next_node is provided, set up immediate convergence
+        if next_node:
+            if next_node not in self.nodes:
+                self._register_node(next_node)
+            
+            # Set up transitions from all branch nodes to the convergence node
+            for branch_node in branch_nodes:
+                # Only add convergence transition if the branch node doesn't already have transitions
+                if branch_node not in self.transitions or not self.transitions[branch_node]:
+                    self.transitions.setdefault(branch_node, []).append((next_node, None))
+                    logger.debug(f"Added convergence transition from {branch_node} to {next_node}")
+            
+            self.current_node = next_node
+        else:
+            # Set up branch state tracking for automatic convergence detection
+            self.is_branching = True
+            self.branch_nodes = branch_nodes
+            self.branch_source_node = self.current_node
+            logger.debug(f"Set up branch state tracking for automatic convergence from {branch_nodes}")
+            
+            # Set current node to default for chaining
+            self.current_node = default
+
         return self
 
     def converge(self, convergence_node: str) -> Workflow:
