@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+import typer
 
 from quantalogic_flow.flow import Nodes
 
@@ -48,14 +49,25 @@ class MockLLMResponse:
 class TestAnalyzePaper:
     """Test suite for analyze_paper.py functionality."""
 
+    @classmethod
+    def setup_class(cls):
+        """Set up the test class by importing analyze_paper module."""
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent / "examples" / "analyze_paper"))
+        # Import the module to register all nodes globally
+        import analyze_paper  # noqa: F401
+        cls.analyze_paper = analyze_paper
+
     @pytest.fixture(autouse=True)
     def clear_node_registry(self):
         """Clear node registry before and after each test."""
-        # Clear any existing nodes
-        Nodes.NODE_REGISTRY.clear()
+        # Save existing nodes
+        saved_nodes = Nodes.NODE_REGISTRY.copy()
+        # Don't clear at the beginning - let tests register their own nodes
         yield
-        # Clear again after test
+        # Restore saved nodes instead of clearing
         Nodes.NODE_REGISTRY.clear()
+        Nodes.NODE_REGISTRY.update(saved_nodes)
 
     @pytest.fixture
     def temp_text_file(self):
@@ -129,7 +141,7 @@ class TestAnalyzePaper:
         sys.path.insert(0, str(Path(__file__).parent.parent.parent / "examples" / "analyze_paper"))
         
         try:
-            import analyze_paper
+            import analyze_paper  # noqa: F401
             
             # Test that key functions and classes exist
             assert hasattr(analyze_paper, 'check_file_type')
@@ -149,6 +161,8 @@ class TestAnalyzePaper:
         sys.path.insert(0, str(Path(__file__).parent.parent.parent / "examples" / "analyze_paper"))
         
         try:
+            # Import the module to register all nodes
+            import analyze_paper  # noqa: F401
             from analyze_paper import PaperInfo
             
             # Test valid data
@@ -170,51 +184,44 @@ class TestAnalyzePaper:
 
     def test_workflow_creation(self):
         """Test workflow structure creation."""
-        import sys
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent / "examples" / "analyze_paper"))
+        from analyze_paper import create_file_to_linkedin_workflow
         
-        try:
-            from analyze_paper import create_file_to_linkedin_workflow
-            
-            workflow = create_file_to_linkedin_workflow()
-            
-            # Check that the workflow has the expected structure
-            assert workflow.start_node == "check_file_type"
-            
-            # Check that key nodes are registered
-            expected_nodes = [
-                "check_file_type",
-                "convert_pdf_to_markdown",
-                "read_text_or_markdown",
-                "save_markdown_content",
-                "extract_first_100_lines",
-                "extract_paper_info",
-                "extract_title_str",
-                "extract_authors_str",
-                "generate_linkedin_post",
-                "save_draft_post_content",
-                "format_linkedin_post",
-                "clean_markdown_syntax",
-                "copy_to_clipboard"
-            ]
-            
-            for node_name in expected_nodes:
-                assert node_name in workflow.nodes
-                
-        finally:
-            sys.path.remove(str(Path(__file__).parent.parent.parent / "examples" / "analyze_paper"))
-
+        workflow = create_file_to_linkedin_workflow()
+        
+        # Check that the workflow has the expected structure
+        assert workflow.start_node == "check_file_type"
+        
+        # Check that all expected nodes are present
+        expected_nodes = [
+            "check_file_type", "read_text_or_markdown", "convert_pdf_to_markdown",
+            "save_markdown_content", "extract_first_100_lines", "extract_paper_info",
+            "extract_title_str", "extract_authors_str", "generate_linkedin_post",
+            "save_draft_post_content", "format_linkedin_post", "clean_markdown_syntax",
+            "copy_to_clipboard"
+        ]
+        
+        # Check each expected node exists in the workflow
+        for node_name in expected_nodes:
+            assert node_name in workflow.nodes, f"Node {node_name} missing from workflow"
+        
+        # Check that the workflow has at least the expected number of nodes
+        assert len(workflow.nodes) >= len(expected_nodes)
+    
+    
     def test_cli_command_help(self):
         """Test CLI command help functionality."""
         import sys
         sys.path.insert(0, str(Path(__file__).parent.parent.parent / "examples" / "analyze_paper"))
         
         try:
+            # Import the module to register all nodes
+            import analyze_paper  # noqa: F401
             from analyze_paper import app
             
             # Test that the app is a typer app
             assert hasattr(app, 'info')
-            assert hasattr(app, 'commands')
+            # Typer apps have registered_commands instead of commands
+            assert hasattr(app, 'registered_commands') or hasattr(app, 'registered_callback')
             
         finally:
             sys.path.remove(str(Path(__file__).parent.parent.parent / "examples" / "analyze_paper"))
@@ -225,9 +232,9 @@ class TestAnalyzePaper:
         sys.path.insert(0, str(Path(__file__).parent.parent.parent / "examples" / "analyze_paper"))
         
         try:
-            from analyze_paper import check_poppler
-            
-            # Mock subprocess to test both success and failure cases
+            # Import the module to register all nodes
+            import analyze_paper  # noqa: F401
+            from analyze_paper import check_poppler            # Mock subprocess to test both success and failure cases
             with patch('subprocess.run') as mock_run:
                 # Test successful poppler check
                 mock_run.return_value = None
@@ -239,7 +246,7 @@ class TestAnalyzePaper:
                 
                 # Test failed poppler check
                 mock_run.side_effect = FileNotFoundError()
-                with pytest.raises(SystemExit):
+                with pytest.raises(typer.Exit):
                     check_poppler()
                     
         finally:
@@ -253,6 +260,8 @@ class TestAnalyzePaper:
         sys.path.insert(0, str(Path(__file__).parent.parent.parent / "examples" / "analyze_paper"))
         
         try:
+            # Import the module to register all nodes
+            import analyze_paper  # noqa: F401
             from analyze_paper import run_workflow, PaperInfo
             
             # Create a proper mock for structured responses
@@ -329,6 +338,8 @@ class TestAnalyzePaper:
         sys.path.insert(0, str(Path(__file__).parent.parent.parent / "examples" / "analyze_paper"))
         
         try:
+            # Import the module to register all nodes
+            import analyze_paper  # noqa: F401
             from analyze_paper import run_workflow
             
             # Mock LLM responses
@@ -367,6 +378,8 @@ class TestAnalyzePaper:
         sys.path.insert(0, str(Path(__file__).parent.parent.parent / "examples" / "analyze_paper"))
         
         try:
+            # Import the module to register all nodes
+            import analyze_paper  # noqa: F401
             from analyze_paper import run_workflow
             
             with pytest.raises(ValueError, match="File not found"):
@@ -388,7 +401,7 @@ class TestAnalyzePaper:
         
         try:
             # Import the module to load the nodes
-            import analyze_paper
+            import analyze_paper  # noqa: F401
             
             # Mock zerox response
             mock_result = Mock()
@@ -420,7 +433,7 @@ class TestAnalyzePaper:
         
         try:
             # Import the module to load the nodes
-            import analyze_paper
+            import analyze_paper  # noqa: F401
             
             # Get the registered node function
             node_func = Nodes.NODE_REGISTRY['check_file_type'][0]
@@ -447,7 +460,7 @@ class TestAnalyzePaper:
         
         try:
             # Import the module to load the nodes
-            import analyze_paper
+            import analyze_paper  # noqa: F401
             
             # Get the registered node function
             node_func = Nodes.NODE_REGISTRY['read_text_or_markdown'][0]
@@ -474,7 +487,7 @@ class TestAnalyzePaper:
         
         try:
             # Import the module to load the nodes
-            import analyze_paper
+            import analyze_paper  # noqa: F401
             
             # Get the registered node function
             node_func = Nodes.NODE_REGISTRY['clean_markdown_syntax'][0]
