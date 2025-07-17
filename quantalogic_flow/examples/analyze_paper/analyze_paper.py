@@ -381,7 +381,7 @@ def create_file_to_linkedin_workflow() -> Workflow:
     wf.branch([
         ("convert_pdf_to_markdown", lambda ctx: ctx["file_type"] == "pdf"),
         ("read_text_or_markdown", lambda ctx: ctx["file_type"] in ["text", "markdown"])
-    ])
+    ], default="convert_pdf_to_markdown")
     
     # Explicitly set transitions from branches to convergence point
     wf.transitions["convert_pdf_to_markdown"] = [("save_markdown_content", None)]
