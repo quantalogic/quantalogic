@@ -85,7 +85,7 @@ graph TD
 
 Quantalogic Flow is built on a revolutionary **three-way duality architecture** that bridges the gap between declarative workflows, fluent programming, and visual workflow building. This unique design eliminates the traditional "configuration vs. code" debate by offering **seamless bidirectional conversion** between all three approaches.
 
-**🔗 [Deep Dive: The Quantalogic Flow Duality Architecture](./DUALITY_ARCHITECTURE.md)**
+**🔗 [Deep Dive: The Quantalogic Flow Duality Architecture](docs/study/DUALITY_ARCHITECTURE.md)**
 
 This comprehensive guide explores:
 - **The Collaboration Crisis**: How different teams (business analysts, developers, DevOps) need different representations of the same workflow

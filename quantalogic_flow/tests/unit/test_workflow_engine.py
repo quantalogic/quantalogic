@@ -305,12 +305,43 @@ class TestWorkflowEngine:
         engine = workflow.build()
         
         # The workflow should handle missing nodes gracefully and not crash
-        result = await engine.run({"data": "test"})
+        with pytest.raises(ValueError, match="Node missing_node not found"):
+            await engine.run({"data": "test"})
         
-        # The result should contain the output from the existing node
-        assert result["result"] == "test"
-        # The workflow should stop execution when missing node is encountered
-        assert "missing_node_result" not in result
+    async def test_workflow_with_conditional_branching(self, nodes_registry_backup):
+        """Test a workflow with conditional branching."""
+        @Nodes.define(output="result")
+        def check_node(value):
+            return value > 10
+        
+        @Nodes.define(output="high_result")
+        def high_node(value):
+            return f"high: {value}"
+        
+        @Nodes.define(output="low_result")
+        def low_node(value):
+            return f"low: {value}"
+        
+        def is_high(ctx):
+            return ctx.get("result", False)
+        
+        workflow = Workflow("check_node")
+        workflow.branch([("high_node", is_high)], default="low_node")
+        
+        engine = workflow.build()
+        
+        # Test high value path
+        high_context = await engine.run({"value": 15})
+        assert high_context["result"] is True
+        assert high_context["high_result"] == "high: 15"
+        assert "low_result" not in high_context
+        
+        # Test low value path
+        engine = workflow.build()  # Reset engine
+        low_context = await engine.run({"value": 5})
+        assert low_context["result"] is False
+        assert low_context["low_result"] == "low: 5"
+        assert "high_result" not in low_context
     
     async def test_workflow_execution_with_node_error(self, nodes_registry_backup):
         """Test workflow execution handles node errors."""

@@ -92,9 +92,7 @@ def create_story_workflow():
         Workflow("validate_input")
         .then("generate_title")
         .then("generate_outline")
-        .start_loop()
-        .node("generate_chapter")
-        .node("update_progress")
+        .loop("generate_chapter", "update_progress")
         .end_loop(
             condition=lambda ctx: ctx["completed_chapters"] >= ctx["num_chapters"],
             next_node="compile_book"

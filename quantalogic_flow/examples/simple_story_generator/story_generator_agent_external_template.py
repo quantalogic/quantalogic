@@ -56,9 +56,7 @@ async def workflow_complete(chapters: List[str]):
 # Define the workflow
 workflow = (
     Workflow("generate_outline")
-    .start_loop()
-    .node("generate_chapter")
-    .node("update_progress")
+    .loop("generate_chapter", "update_progress")
     .end_loop(
         condition=lambda ctx: ctx["completed_chapters"] >= ctx["num_chapters"],
         next_node="workflow_complete"
