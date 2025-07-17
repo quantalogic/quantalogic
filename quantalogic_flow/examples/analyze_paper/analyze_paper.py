@@ -359,44 +359,29 @@ async def copy_to_clipboard(post_content: str, do_copy: bool) -> str:
 # Define the Updated Workflow with Fluent API
 def create_file_to_linkedin_workflow() -> Workflow:
     """Create a workflow to convert a file (PDF, text, or Markdown) to a LinkedIn post."""
-    wf = Workflow("check_file_type")
-    
-    # Register all nodes with input mappings for dynamic model passing
-    wf.node("check_file_type")
-    wf.node("convert_pdf_to_markdown", inputs_mapping={"model": "text_extraction_model"})
-    wf.node("read_text_or_markdown")
-    wf.node("save_markdown_content")
-    wf.node("extract_first_100_lines")
-    wf.node("extract_paper_info", inputs_mapping={"model": "cleaning_model"})
-    wf.node("extract_title_str")
-    wf.node("extract_authors_str")
-    wf.node("generate_linkedin_post", inputs_mapping={"model": "writing_model"})
-    wf.node("save_draft_post_content")
-    wf.node("format_linkedin_post", inputs_mapping={"model": "cleaning_model"})
-    wf.node("clean_markdown_syntax")
-    wf.node("copy_to_clipboard")
-    
-    # Define the workflow structure using fluent API
-    # Branch based on file type with automatic convergence to save_markdown_content
-    (wf.branch([
-        ("convert_pdf_to_markdown", lambda ctx: ctx["file_type"] == "pdf"),
-        ("read_text_or_markdown", lambda ctx: ctx["file_type"] in ["text", "markdown"])
-    ]).then("save_markdown_content")
-    )
-    
-    # Define the linear processing sequence using fluent API
-    (wf.then("extract_first_100_lines")
-     .then("extract_paper_info")
-     .then("extract_title_str")
-     .then("extract_authors_str")
-     .then("generate_linkedin_post")
-     .then("save_draft_post_content")
-     .then("format_linkedin_post")
-     .then("clean_markdown_syntax")
-     .then("copy_to_clipboard")
-    )
-    
-    return wf
+    return (Workflow("check_file_type")
+            # Register only nodes that need input mappings for dynamic model passing
+            .node("convert_pdf_to_markdown", inputs_mapping={"model": "text_extraction_model"})
+            .node("extract_paper_info", inputs_mapping={"model": "cleaning_model"})
+            .node("generate_linkedin_post", inputs_mapping={"model": "writing_model"})
+            .node("format_linkedin_post", inputs_mapping={"model": "cleaning_model"})
+            # Define the workflow structure using fluent API
+            # Branch based on file type with automatic convergence, then continue with linear sequence
+            .branch([
+                ("convert_pdf_to_markdown", lambda ctx: ctx["file_type"] == "pdf"),
+                ("read_text_or_markdown", lambda ctx: ctx["file_type"] in ["text", "markdown"])
+            ]).then("save_markdown_content")
+             .sequence(
+                "extract_first_100_lines",
+                "extract_paper_info", 
+                "extract_title_str",
+                "extract_authors_str",
+                "generate_linkedin_post",
+                "save_draft_post_content",
+                "format_linkedin_post",
+                "clean_markdown_syntax",
+                "copy_to_clipboard"
+            ))
 
 # Function to Run the Workflow
 async def run_workflow(
