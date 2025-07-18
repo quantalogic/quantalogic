@@ -2,34 +2,47 @@
 
 A sophisticated AI-powered story generation workflow built with Quantalogic Flow. This example demonstrates how to create engaging multi-chapter stories with automated validation, quality checks, and intelligent content generation.
 
-## 🎯 Overview
-
-The Simple Story Generator creates complete narratives by:
-- **Validating** input parameters for genre and chapter count
-- **Generating** creative titles and detailed outlines
-- **Creating** chapter content with consistent style
-- **Compiling** the complete manuscript
-- **Performing** automated quality checks
-
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Python 3.12+
 - UV package manager (recommended)
 
 ### Installation
+
 ```bash
 # Clone the repository
-git clone https://github.com/your-repo/quantalogic
 cd quantalogic/quantalogic_flow/examples/simple_story_generator
+```
 
-# Run directly with UV
+### Running the Main Agent
+
+```bash
 ./story_generator_agent.py
 ```
 
-### Basic Usage
+### Running the External Template Agent
+
+```bash
+# Ensure the templates directory and story_outline.j2 exist
+mkdir -p templates
+
+# Place your Jinja2 template in templates/story_outline.j2
+# Example minimal template:
+# """
+# Create a story outline for a {{ genre }} story with {{ num_chapters }} chapters.
+# """
+
+# Run the template-based agent
+./story_generator_agent_external_template.py
+```
+
+### Basic Usage (Main Agent)
+
 ```python
 #!/usr/bin/env -S uv run
+
 from story_generator_agent import create_story_workflow
 import anyio
 
@@ -41,7 +54,6 @@ async def main():
         "completed_chapters": 0,
         "style": "descriptive"
     }
-    
     workflow = create_story_workflow()
     engine = workflow.build()
     result = await engine.run(context)
@@ -50,9 +62,32 @@ async def main():
 anyio.run(main)
 ```
 
+### Basic Usage (External Template Agent)
+
+```python
+#!/usr/bin/env -S uv run
+from story_generator_agent_external_template import workflow
+import anyio
+
+async def main():
+    context = {
+        "genre": "fantasy",
+        "num_chapters": 2,
+        "chapters": [],
+        "completed_chapters": 0,
+        "style": "epic"
+    }
+    engine = workflow.build()
+    result = await engine.run(context)
+    print(f"Chapters: {result.get('final_chapters', [])}")
+
+anyio.run(main)
+```
+
 ## 📊 Workflow Architecture
 
 ### High-Level Flow
+
 ```mermaid
 %%{init: {
   "theme": "base",
@@ -80,7 +115,7 @@ graph TD
     G -->|Yes| H[📚 Book Compilation]
     H --> I[🔍 Quality Check]
     I --> J[✅ Complete]
-    
+
     style A fill:#E8F5E8,stroke:#27AE60,stroke-width:2px,color:#2C3E50
     style B fill:#FFF2E8,stroke:#F39C12,stroke-width:2px,color:#2C3E50
     style C fill:#E8F4FD,stroke:#3498DB,stroke-width:2px,color:#2C3E50
@@ -94,6 +129,7 @@ graph TD
 ```
 
 ### Detailed Node Architecture
+
 ```mermaid
 %%{init: {
   "theme": "base",
@@ -114,22 +150,22 @@ graph TB
     subgraph "🔧 Validation Layer"
         A[validate_input<br/>📋 Validation Node]
     end
-    
+
     subgraph "🎨 Creative Layer"
         B[generate_title<br/>🤖 LLM Node]
         C[generate_outline<br/>🤖 LLM Node]
         D[generate_chapter<br/>🤖 LLM Node]
     end
-    
+
     subgraph "📊 Processing Layer"
         E[update_progress<br/>⚙️ Function Node]
         F[compile_book<br/>⚙️ Function Node]
     end
-    
+
     subgraph "🔍 Quality Layer"
         G[quality_check<br/>🤖 LLM Node]
     end
-    
+
     A --> B
     B --> C
     C --> D
@@ -137,7 +173,7 @@ graph TB
     E --> D
     E --> F
     F --> G
-    
+
     style A fill:#E8F5E8,stroke:#27AE60,stroke-width:2px,color:#2C3E50
     style B fill:#FFF2E8,stroke:#F39C12,stroke-width:2px,color:#2C3E50
     style C fill:#E8F4FD,stroke:#3498DB,stroke-width:2px,color:#2C3E50
@@ -150,17 +186,20 @@ graph TB
 ## 🏗️ Node Specifications
 
 ### 📋 Validation Nodes
+
 - **`validate_input`**: Ensures genre and chapter count are within acceptable ranges
   - Genres: science fiction, fantasy, mystery, romance
   - Chapters: 1-20
 
 ### 🤖 LLM Nodes
+
 - **`generate_title`**: Creates engaging titles based on genre
 - **`generate_outline`**: Develops detailed story structure
 - **`generate_chapter`**: Writes individual chapters with consistent style
 - **`quality_check`**: Reviews manuscript for coherence and quality
 
 ### ⚙️ Function Nodes
+
 - **`update_progress`**: Tracks chapter completion and updates context
 - **`compile_book`**: Assembles final manuscript from all components
 
@@ -183,7 +222,7 @@ graph LR
     A[📋 Validation Node] --> B[🤖 LLM Node]
     B --> C[⚙️ Function Node]
     C --> D[🔄 Loop Control]
-    
+
     style A fill:#E8F5E8,stroke:#27AE60,stroke-width:3px,color:#2C3E50
     style B fill:#F8E8FF,stroke:#9B59B6,stroke-width:3px,color:#2C3E50
     style C fill:#E8F4FD,stroke:#3498DB,stroke-width:3px,color:#2C3E50
@@ -192,19 +231,21 @@ graph LR
 
 ## 📁 File Structure
 
-```
+```text
 simple_story_generator/
-├── story_generator_agent.py          # Main workflow implementation
-├── story_generator_agent_external_template.py  # Template-based version
+├── story_generator_agent.py                  # Main workflow implementation
+├── story_generator_agent_external_template.py # Template-based version (uses Jinja2 template)
 ├── templates/
-│   └── story_outline.j2              # Jinja2 template for outlines
-└── README.md                         # This documentation
+│   └── story_outline.j2                     # Jinja2 template for outlines (required for external template agent)
+└── README.md                                 # This documentation
 ```
 
 ## 💡 Key Features
 
 ### 🔄 Loop Control
+
 The workflow implements intelligent looping to generate multiple chapters:
+
 ```python
 .start_loop()
 .node("generate_chapter")
@@ -216,7 +257,9 @@ The workflow implements intelligent looping to generate multiple chapters:
 ```
 
 ### 🎯 Dynamic Context Management
+
 Each node can access and modify the workflow context:
+
 ```python
 @Nodes.define(output=None)
 async def update_progress(chapters: List[str], chapter: str, completed_chapters: int):
@@ -225,7 +268,9 @@ async def update_progress(chapters: List[str], chapter: str, completed_chapters:
 ```
 
 ### 🤖 LLM Integration
+
 Seamless integration with language models for creative content generation:
+
 ```python
 @Nodes.llm_node(
     system_prompt="You are a creative writer specializing in story titles.",
@@ -240,6 +285,7 @@ async def generate_title(genre: str):
 ## 🎮 Usage Examples
 
 ### Basic Story Generation
+
 ```python
 context = {
     "genre": "fantasy",
@@ -251,6 +297,7 @@ context = {
 ```
 
 ### Science Fiction Adventure
+
 ```python
 context = {
     "genre": "science fiction",
@@ -262,6 +309,7 @@ context = {
 ```
 
 ### Mystery Thriller
+
 ```python
 context = {
     "genre": "mystery",
@@ -275,6 +323,7 @@ context = {
 ## 🔧 Configuration
 
 ### Model Settings
+
 ```python
 DEFAULT_LLM_PARAMS = {
     "model": "gemini/gemini-2.0-flash",
@@ -287,6 +336,7 @@ DEFAULT_LLM_PARAMS = {
 ```
 
 ### Supported Genres
+
 - **Science Fiction**: Futuristic, technological themes
 - **Fantasy**: Magic, mythical creatures, alternate worlds
 - **Mystery**: Puzzles, investigation, suspense
@@ -313,7 +363,7 @@ sequenceDiagram
     participant V as Validator
     participant L as LLM
     participant C as Compiler
-    
+
     U->>W: Start with context
     W->>V: Validate inputs
     V-->>W: ✅ Validation passed
@@ -321,13 +371,13 @@ sequenceDiagram
     L-->>W: "Epic Space Adventure"
     W->>L: Generate outline
     L-->>W: Chapter structure
-    
+
     loop For each chapter
         W->>L: Generate chapter content
         L-->>W: Chapter text
         W->>W: Update progress
     end
-    
+
     W->>C: Compile manuscript
     C-->>W: Complete book
     W->>L: Quality check
@@ -338,14 +388,18 @@ sequenceDiagram
 ## 🎯 Best Practices
 
 ### 1. **Input Validation**
+
 Always validate user inputs before processing:
+
 ```python
 if not (1 <= num_chapters <= 20 and genre.lower() in VALID_GENRES):
     raise ValueError("Invalid parameters")
 ```
 
 ### 2. **Error Handling**
+
 Implement comprehensive error handling:
+
 ```python
 try:
     engine = workflow.build()
@@ -356,7 +410,9 @@ except Exception as e:
 ```
 
 ### 3. **Context Management**
+
 Keep context clean and well-structured:
+
 ```python
 initial_context = {
     "genre": genre,
@@ -370,7 +426,9 @@ initial_context = {
 ## 🚀 Advanced Features
 
 ### Observer Pattern
+
 Monitor workflow execution in real-time:
+
 ```python
 def story_observer(event_type, data=None):
     print(f"Event: {event_type} - Data: {data}")
@@ -379,7 +437,9 @@ workflow.add_observer(story_observer)
 ```
 
 ### Template Integration
+
 Use external Jinja2 templates for complex prompts:
+
 ```python
 @Nodes.llm_node(
     prompt_file="templates/story_outline.j2",
@@ -391,22 +451,24 @@ def generate_outline(genre, num_chapters):
 
 ## 📈 Performance Metrics
 
-| Metric | Value |
-|--------|-------|
+| Metric                  | Value       |
+| ----------------------- | ----------- |
 | Average Generation Time | 2-5 minutes |
-| Supported Chapters | 1-20 |
-| Memory Usage | ~50MB |
-| Token Efficiency | 95% |
+| Supported Chapters      | 1-20        |
+| Memory Usage            | ~50MB       |
+| Token Efficiency        | 95%         |
 
 ## 🎨 Styling Guide
 
 ### Color Palette
+
 - **Validation**: Light Green (#E8F5E8) - Reliability
 - **LLM Nodes**: Light Purple (#F8E8FF) - Creativity
 - **Function Nodes**: Light Blue (#E8F4FD) - Processing
 - **Loop Control**: Light Orange (#FFF2E8) - Flow Control
 
 ### Typography
+
 - **Headers**: Bold, clear hierarchy
 - **Code**: Monospace, syntax highlighted
 - **Descriptions**: Clean, readable font
@@ -416,10 +478,12 @@ def generate_outline(genre, num_chapters):
 ### Common Issues
 
 1. **Invalid Genre Error**
+
    - Ensure genre is one of: science fiction, fantasy, mystery, romance
    - Check spelling and case sensitivity
 
 2. **Chapter Count Error**
+
    - Verify chapter count is between 1-20
    - Ensure it's a positive integer
 
@@ -429,7 +493,9 @@ def generate_outline(genre, num_chapters):
    - Review rate limits
 
 ### Debug Mode
+
 Enable detailed logging:
+
 ```python
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -437,7 +503,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 ## 📚 Related Examples
 
-- **[External Template Version](./story_generator_agent_external_template.py)**: Uses Jinja2 templates
+- **[External Template Version](./story_generator_agent_external_template.py)**: Uses Jinja2 templates for outline generation
 - **[Advanced Story Generator](../story_generator/story_generator_agent.py)**: More complex workflow
 - **[Tutorial Generator](../create_tutorial/)**: Educational content creation
 
@@ -454,4 +520,4 @@ This project is part of the Quantalogic Flow framework and follows the same lice
 
 ---
 
-*Built with ❤️ using Quantalogic Flow - Your Workflow Automation Powerhouse*
+Built with ❤️ using Quantalogic Flow - Your Workflow Automation Powerhouse

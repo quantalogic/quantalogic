@@ -2,15 +2,15 @@
   "facts_list": {
     "facts": [
       {
-        "title": "The Water Cycle Description",
-        "claims": "The water cycle is a continuous process where water moves around the Earth. It begins with water evaporating from various surfaces like oceans, lakes, and rivers due to the sun's energy. This water vapor rises into the atmosphere, where it cools and condenses, forming clouds. Eventually, the water returns to the Earth's surface in the form of precipitation, such as rain, snow, sleet, or hail. This cycle is crucial for distributing water resources across the planet, replenishing freshwater sources, and supporting ecosystems. The continuous movement ensures water availability in different regions and climates, playing an integral role in maintaining life and environmental balance. Without the water cycle, many regions would become arid and unable to sustain plant and animal life.",
+        "title": "The Water Cycle: A Continuous Process",
+        "claims": "The water cycle is a continuous process that describes the movement of water on Earth.  It involves three primary stages: evaporation, condensation, and precipitation. Evaporation is the process where water transforms from a liquid state to a gaseous state (water vapor), primarily driven by solar energy. This water vapor then rises into the atmosphere. Condensation occurs when this water vapor cools and changes back into a liquid state, forming clouds.  Clouds are essentially massive collections of tiny water droplets or ice crystals. Finally, precipitation happens when these water droplets or ice crystals in the clouds become too heavy and fall back to the Earth's surface in the form of rain, snow, sleet, or hail. The water cycle is crucial for the distribution of freshwater resources across the globe, impacting weather patterns, climate, and the availability of water for plants, animals, and humans.  Disruptions to the water cycle, such as deforestation or climate change, can significantly alter weather patterns and water availability, leading to droughts, floods, and other ecological imbalances. Understanding the water cycle is fundamental to comprehending Earth's climate system and managing water resources sustainably.",
         "sources": [
           "Fact 1: The Water Cycle"
         ]
       },
       {
-        "title": "Photosynthesis Process and Importance",
-        "claims": "Photosynthesis is a fundamental biological process carried out by plants, algae, and some bacteria. During photosynthesis, these organisms convert light energy, typically from sunlight, along with carbon dioxide from the air and water from the soil, into glucose, a type of sugar that serves as food for the plant. As a byproduct of this conversion, oxygen is released into the atmosphere. Photosynthesis is essential for life on Earth because it is the primary source of energy for most ecosystems. Plants, as primary producers, form the base of many food chains, providing nourishment for herbivores, which in turn support carnivores. Furthermore, the oxygen produced during photosynthesis is vital for the respiration of many organisms, including animals and humans. Without photosynthesis, the Earth's atmosphere would have significantly less oxygen, and most complex life forms would not be able to survive.",
+        "title": "Photosynthesis: Converting Light Energy into Chemical Energy",
+        "claims": "Photosynthesis is a fundamental biological process used by plants and other organisms to convert light energy into chemical energy.  This process occurs within chloroplasts, specialized organelles found in plant cells and some other organisms.  During photosynthesis, plants absorb carbon dioxide from the atmosphere and water from the soil.  Using sunlight as an energy source, they convert these inorganic substances into glucose, a simple sugar that serves as their primary source of energy, and oxygen, a byproduct released into the atmosphere.  The chemical equation for photosynthesis is often simplified as 6CO2 + 6H2O + Light Energy → C6H12O6 + 6O2.  The glucose produced during photosynthesis fuels the plant's growth and metabolic processes.  Critically, the oxygen released is essential for the respiration of most living organisms, including animals and humans, making photosynthesis a cornerstone of life on Earth.  Any disruption to photosynthesis, such as through deforestation, pollution, or climate change, would have far-reaching consequences for the entire ecosystem.",
         "sources": [
           "Fact 2: Photosynthesis"
         ]
@@ -20,34 +20,38 @@
   "questionnaire": {
     "items": [
       {
-        "fact_title": "The Water Cycle Description",
-        "question": "Which of the following processes starts the water cycle?",
+        "fact_title": "The Water Cycle: A Continuous Process",
+        "question": "Which of the following are primary stages of the water cycle?",
         "options": [
-          "Precipitation",
-          "Condensation",
           "Evaporation",
-          "Collection"
+          "Transpiration",
+          "Condensation",
+          "Precipitation",
+          "Sublimation"
         ],
         "correct_answers": [
+          1,
           3
         ],
-        "explanation": "The water cycle starts with evaporation, where water turns into vapor and rises into the atmosphere.",
-        "is_multiple_choice_possible": false
+        "explanation": "Evaporation, condensation, and precipitation are the three primary stages of the water cycle.  These stages describe the continuous movement of water on Earth, from liquid to gas to liquid and back to the Earth's surface.",
+        "is_multiple_choice_possible": true
       },
       {
-        "fact_title": "Photosynthesis Process and Importance",
-        "question": "Which of the following does photosynthesis consume?",
+        "fact_title": "Photosynthesis: Converting Light Energy into Chemical Energy",
+        "question": "Which of the following statements accurately describe the process of photosynthesis?",
         "options": [
-          "Glucose",
-          "Oxygen",
-          "Nitrogen",
-          "Carbon Dioxide"
+          "It converts light energy into chemical energy",
+          "It occurs in chloroplasts",
+          "It uses nitrogen and oxygen as inputs",
+          "It produces glucose and oxygen",
+          "It is only performed by animals"
         ],
         "correct_answers": [
+          1,
           4
         ],
-        "explanation": "Photosynthesis converts light energy, carbon dioxide, and water into glucose and oxygen. Therefore, it consumes carbon dioxide.",
-        "is_multiple_choice_possible": false
+        "explanation": "Photosynthesis is the process by which plants convert light energy into chemical energy, using carbon dioxide and water as inputs and releasing oxygen as a byproduct.  Glucose is the primary energy source produced.",
+        "is_multiple_choice_possible": true
       }
     ]
   },
@@ -57,19 +61,19 @@
         "question_number": 1,
         "relevance": 5,
         "plausibility": 5,
-        "correctness": 5,
+        "correctness": 4,
         "clarity": 5,
-        "explanation_quality": 5,
-        "comments": "The question is clear and directly asks about the starting process of the water cycle. The options are plausible and related to the water cycle. The correct answer is accurate, and the explanation is informative and concise."
+        "explanation_quality": 4,
+        "comments": "The question accurately reflects the fact and is clearly written.  The explanation is also good, though it could mention the other stages (like transpiration and sublimation) and how they relate to the primary stages."
       },
       {
         "question_number": 2,
         "relevance": 5,
-        "plausibility": 5,
-        "correctness": 5,
-        "clarity": 5,
-        "explanation_quality": 5,
-        "comments": "The question is very clear and directly asks what is consumed during photosynthesis."
+        "plausibility": 4,
+        "correctness": 4,
+        "clarity": 4,
+        "explanation_quality": 4,
+        "comments": "The question is clear and understandable. Options 3 and 4 are not ideal, as they are partially true, while option 4 is entirely true.  The explanation is good, but could be more precise by mentioning the role of chloroplasts."
       }
     ],
     "overall_assessment": "Evaluated 2 questions based on 2 facts. The questionnaire appears consistent and well-structured overall."

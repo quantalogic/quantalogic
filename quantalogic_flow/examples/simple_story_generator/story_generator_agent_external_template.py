@@ -4,7 +4,7 @@
 # dependencies = [
 #     "loguru",
 #     "anyio",
-#     "quantalogic-flow>=0.6.8",
+#     "quantalogic-flow>=0.6.9",
 #     "jinja2"
 # ]
 # ///
@@ -17,7 +17,7 @@ from typing import List
 from quantalogic_flow.flow import Nodes, Workflow
 
 # Global variables
-MODEL = "gemini/gemini-2.0-flash"
+MODEL = "gemini/gemini-2.5-flash"
 DEFAULT_LLM_PARAMS = {
     "model": MODEL,
     "temperature": 0.7,
