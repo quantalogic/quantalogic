@@ -10,7 +10,7 @@
 #     "typer",
 #     "pathlib",
 #     "pathspec",
-#     "quantalogic-flow>=0.6.8",
+#     "quantalogic-flow>=0.6.9",
 # ]
 # ///
 
@@ -136,7 +136,7 @@ def convert(
         None, help="Path to save the output Markdown file (defaults to input_pdf_name.md)"
     ),
     model: str = typer.Option(
-        "gemini/gemini-2.0-flash",
+        "gemini/gemini-2.5-flash",
         help="LiteLLM-compatible model name (e.g., 'openai/gpt-4o-mini', 'gemini/gemini-2.0-flash')",
     ),
     system_prompt: Union[str, None] = typer.Option(None, help="Custom system prompt for the vision model"),
