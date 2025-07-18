@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "anyio",
-#     "quantalogic-flow>=0.6.8",
+#     "quantalogic-flow>=0.6.9",
 #     "typer>=0.9.0"
 # ]
 # ///
@@ -366,7 +366,7 @@ async def run_workflow(file_path: str, model: str, num_questions: int, token_lim
         "num_questions": num_questions,
         "token_limit": token_limit
     }
-    workflow = create_fact_extraction_workflow()
+    workflow = create_fact_extraction_workflow_detailed()
     engine = workflow.build()
     result = await engine.run(initial_context)
     
