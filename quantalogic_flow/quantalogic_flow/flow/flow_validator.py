@@ -322,11 +322,30 @@ def get_function_params(code: str, func_name: str) -> List[str]:
 def get_sub_workflow_nodes(sub_workflow: WorkflowStructure) -> Set[str]:
     """Extract the actual node names from a sub-workflow structure.
     
+    This function fixes a critical bug where sub-workflow validation incorrectly
+    iterated over ALL top-level nodes instead of only the nodes that actually
+    belong to the sub-workflow. The original buggy code:
+    
+        # BUGGY: Iterates over ALL nodes for each sub-workflow
+        for sub_node_name, sub_node_def in workflow_def.nodes.items():
+    
+    This caused false validation errors and polluted the dependency graph with
+    invalid namespaced entries. The fix extracts only the actual sub-nodes by
+    examining the sub-workflow structure itself.
+    
     Args:
         sub_workflow: The WorkflowStructure to extract nodes from.
         
     Returns:
         Set of node names that belong to this sub-workflow.
+        
+    Example:
+        >>> sub_workflow = WorkflowStructure(start="sub_start")
+        >>> sub_workflow.transitions = [
+        ...     TransitionDefinition(from_node="sub_start", to_node="sub_end")
+        ... ]
+        >>> get_sub_workflow_nodes(sub_workflow)
+        {"sub_start", "sub_end"}
     """
     sub_nodes = set()
     
@@ -555,7 +574,8 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
         if node_def.output:
             output_to_node[node_def.output] = node_name
         if node_def.sub_workflow:
-            # Get actual sub-nodes from the sub-workflow structure
+            # CRITICAL FIX: Get actual sub-nodes from the sub-workflow structure
+            # instead of iterating over ALL workflow nodes (original bug).
             sub_nodes = get_sub_workflow_nodes(node_def.sub_workflow)
             for sub_node_name in sub_nodes:
                 if sub_node_name in workflow_def.nodes:
@@ -620,7 +640,10 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
                     cleaned_inputs.add(base_var)
             required_inputs = cleaned_inputs
         elif node_def.sub_workflow:
-            # Get actual sub-nodes from the sub-workflow structure
+            # CRITICAL FIX: Get actual sub-nodes from the sub-workflow structure
+            # instead of iterating over ALL workflow nodes. The original buggy code:
+            #   for sub_node_name, sub_node_def in workflow_def.nodes.items():
+            # caused false validation errors by treating ALL nodes as sub-nodes.
             sub_nodes = get_sub_workflow_nodes(node_def.sub_workflow)
             for sub_node_name in sub_nodes:
                 # Check if the sub-node exists in the workflow definition
