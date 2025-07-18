@@ -207,6 +207,34 @@ async def finalize_evaluation(combined_evaluation: Evaluation, selected_facts: F
     logger.info("Finalizing evaluation with overall assessment")
     return Evaluation(items=combined_evaluation.items, overall_assessment=overall_assessment)
 
+@Nodes.define(output=None)
+async def process_single_fact(
+    current_fact: Fact, 
+    model: str, 
+    combined_questionnaire: Questionnaire, 
+    combined_evaluation: Evaluation,
+    question_number: int
+) -> dict:
+    """Process a single fact: generate question, append to questionnaire, verify, and append evaluation."""
+    # Generate questionnaire item
+    questionnaire_item = await generate_questionnaire_item(current_fact, model)
+    
+    # Append to questionnaire
+    updated_questionnaire = await append_questionnaire_item(questionnaire_item, combined_questionnaire)
+    
+    # Verify questionnaire item
+    evaluation_item = await verify_questionnaire_item(current_fact, questionnaire_item, model, question_number)
+    
+    # Append evaluation
+    updated_evaluation = await append_evaluation_item(evaluation_item, combined_evaluation)
+    
+    logger.debug(f"Processed fact: {current_fact.title}")
+    
+    return {
+        "combined_questionnaire": updated_questionnaire,
+        "combined_evaluation": updated_evaluation
+    }
+
 @Nodes.define(output="questionnaire")
 async def shuffle_options(combined_questionnaire: Questionnaire) -> Questionnaire:
     """Shuffle the options for each question and update the correct answers' indices."""
@@ -221,67 +249,113 @@ async def shuffle_options(combined_questionnaire: Questionnaire) -> Questionnair
 
 # Workflow
 def create_fact_extraction_workflow() -> Workflow:
-    """Create a workflow to extract facts and generate/verify a questionnaire one fact at a time."""
-    wf = (Workflow("read_markdown_file")
-          # Register nodes that need input mappings
-          .node("get_current_fact", inputs_mapping={
-              "selected_facts": "selected_facts",
-              "fact_index": "fact_index"
-          })
-          .node("generate_questionnaire_item", inputs_mapping={
-              "current_fact": "current_fact",
-              "model": "model"
-          })
-          .node("append_questionnaire_item", inputs_mapping={
-              "questionnaire_item": "questionnaire_item",
-              "combined_questionnaire": "combined_questionnaire"
-          })
-          .node("verify_questionnaire_item", inputs_mapping={
-              "current_fact": "current_fact",
-              "questionnaire_item": "questionnaire_item",
-              "model": "model",
-              "question_number": lambda ctx: ctx.get("fact_index", 0) + 1  # 1-based question number
-          })
-          .node("append_evaluation_item", inputs_mapping={
-              "evaluation_item": "evaluation_item",
-              "combined_evaluation": "combined_evaluation"
-          })
-          .node("increment_fact_index", inputs_mapping={
-              "fact_index": "fact_index"
-          })
-          .node("finalize_evaluation", inputs_mapping={
-              "combined_evaluation": "combined_evaluation",
-              "selected_facts": "selected_facts"
-          })
-          .node("shuffle_options", inputs_mapping={
-              "combined_questionnaire": "combined_questionnaire"
-          })
-          .node("extract_facts", inputs_mapping={
-              "markdown_content": "markdown_content",
-              "model": "model"
-          })
-          # Define workflow structure
-          .then("extract_facts")
-          .then("select_facts")
-          .then("initialize_question_processing")
-          .then("get_current_fact")
-          .then("generate_questionnaire_item")
-          .then("append_questionnaire_item")
-          .then("verify_questionnaire_item")
-          .then("append_evaluation_item")
-          .then("increment_fact_index"))
-          
-    # Add conditional transitions for the processing loop using the correct pattern
-    wf.transitions.setdefault("increment_fact_index", []).extend([
-        ("get_current_fact", lambda ctx: ctx.get("fact_index", 0) < len(ctx.get("selected_facts", FactsList(facts=[])).facts)),
-        ("finalize_evaluation", lambda ctx: ctx.get("fact_index", 0) >= len(ctx.get("selected_facts", FactsList(facts=[])).facts))
-    ])
-    
-    # Complete the workflow
-    wf.transitions.setdefault("finalize_evaluation", []).append(("shuffle_options", None))
-    
-    logger.info("Workflow created with fact-by-fact processing loop")
-    return wf
+    """Create a workflow to extract facts and generate/verify a questionnaire using fluent loop patterns."""
+    return (Workflow("read_markdown_file")
+            # Register nodes that need input mappings
+            .node("extract_facts", inputs_mapping={
+                "markdown_content": "markdown_content",
+                "model": "model"
+            })
+            .node("get_current_fact", inputs_mapping={
+                "selected_facts": "selected_facts",
+                "fact_index": "fact_index"
+            })
+            .node("process_single_fact", inputs_mapping={
+                "current_fact": "current_fact",
+                "model": "model",
+                "combined_questionnaire": "combined_questionnaire",
+                "combined_evaluation": "combined_evaluation",
+                "question_number": lambda ctx: ctx.get("fact_index", 0) + 1
+            })
+            .node("increment_fact_index", inputs_mapping={
+                "fact_index": "fact_index"
+            })
+            .node("finalize_evaluation", inputs_mapping={
+                "combined_evaluation": "combined_evaluation",
+                "selected_facts": "selected_facts"
+            })
+            .node("shuffle_options", inputs_mapping={
+                "combined_questionnaire": "combined_questionnaire"
+            })
+            # Define workflow structure using fluent patterns
+            .sequence(
+                "extract_facts",
+                "select_facts", 
+                "initialize_question_processing"
+            )
+            # Process each fact in a clean, simplified loop
+            .loop(
+                "get_current_fact",
+                "process_single_fact",
+                "increment_fact_index"
+            )
+            .end_loop(
+                condition=lambda ctx: ctx.get("fact_index", 0) >= len(ctx.get("selected_facts", FactsList(facts=[])).facts),
+                next_node="finalize_evaluation"
+            )
+            .then("shuffle_options"))
+
+# Alternative: More Granular Workflow (Original Pattern but Cleaned Up)
+def create_fact_extraction_workflow_detailed() -> Workflow:
+    """Create a workflow with detailed step-by-step fact processing using fluent patterns."""
+    return (Workflow("read_markdown_file")
+            # Register nodes that need input mappings
+            .node("extract_facts", inputs_mapping={
+                "markdown_content": "markdown_content",
+                "model": "model"
+            })
+            .node("get_current_fact", inputs_mapping={
+                "selected_facts": "selected_facts",
+                "fact_index": "fact_index"
+            })
+            .node("generate_questionnaire_item", inputs_mapping={
+                "current_fact": "current_fact",
+                "model": "model"
+            })
+            .node("append_questionnaire_item", inputs_mapping={
+                "questionnaire_item": "questionnaire_item",
+                "combined_questionnaire": "combined_questionnaire"
+            })
+            .node("verify_questionnaire_item", inputs_mapping={
+                "current_fact": "current_fact",
+                "questionnaire_item": "questionnaire_item",
+                "model": "model",
+                "question_number": lambda ctx: ctx.get("fact_index", 0) + 1
+            })
+            .node("append_evaluation_item", inputs_mapping={
+                "evaluation_item": "evaluation_item",
+                "combined_evaluation": "combined_evaluation"
+            })
+            .node("increment_fact_index", inputs_mapping={
+                "fact_index": "fact_index"
+            })
+            .node("finalize_evaluation", inputs_mapping={
+                "combined_evaluation": "combined_evaluation",
+                "selected_facts": "selected_facts"
+            })
+            .node("shuffle_options", inputs_mapping={
+                "combined_questionnaire": "combined_questionnaire"
+            })
+            # Define workflow structure using fluent patterns
+            .sequence(
+                "extract_facts",
+                "select_facts", 
+                "initialize_question_processing"
+            )
+            # Process each fact in a clean loop with detailed steps
+            .loop(
+                "get_current_fact",
+                "generate_questionnaire_item",
+                "append_questionnaire_item", 
+                "verify_questionnaire_item",
+                "append_evaluation_item",
+                "increment_fact_index"
+            )
+            .end_loop(
+                condition=lambda ctx: ctx.get("fact_index", 0) >= len(ctx.get("selected_facts", FactsList(facts=[])).facts),
+                next_node="finalize_evaluation"
+            )
+            .then("shuffle_options"))
 
 # Run Workflow
 async def run_workflow(file_path: str, model: str, num_questions: int, token_limit: int = 2000) -> dict:
