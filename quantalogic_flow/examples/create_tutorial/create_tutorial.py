@@ -237,56 +237,56 @@ async def save_and_display(final_book: str, original_path: str) -> None:
     print("Saved to:", output_path)
 
 
-# Define the Workflow with explicit transitions
-workflow = (
-    Workflow("read_markdown")
-    .add_observer(tutorial_progress_observer)
-    .then("generate_structure")
-    .then("validate_structure")
-    .then("initialize_chapters")
-    .then("generate_draft")
-    .node("generate_draft", inputs_mapping={
-        "chapter_structure": lambda ctx: ctx["structure"].chapters[ctx["completed_chapters_count"]].model_dump(),
-        "markdown_content": "markdown_content",
-        "words_per_chapter": "words_per_chapter",
-        "model": "model",
-        "max_tokens": lambda ctx: int(ctx["words_per_chapter"] * 1.5 * 1.2)
-    })
-    .branch([
-        # Skip refinement path - go directly to update_chapters with draft_chapter
-        ("update_chapters", lambda ctx: ctx.get("skip_refinement", False)),
-        # Full refinement path - go through critique, improve, revise
-        ("critique_draft", lambda ctx: not ctx.get("skip_refinement", False))
-    ])
+# Define the Workflow with fluent API
+def create_tutorial_workflow() -> Workflow:
+    """Create a workflow to generate tutorials from markdown content."""
+    wf = (Workflow("read_markdown")
+          .add_observer(tutorial_progress_observer)
+          # Register nodes that need input mappings
+          .node("generate_draft", inputs_mapping={
+              "chapter_structure": lambda ctx: ctx["structure"].chapters[ctx["completed_chapters_count"]].model_dump(),
+              "markdown_content": "markdown_content",
+              "words_per_chapter": "words_per_chapter",
+              "model": "model",
+              "max_tokens": lambda ctx: int(ctx["words_per_chapter"] * 1.5 * 1.2)
+          })
+          .node("update_chapters", inputs_mapping={
+              "completed_chapters": "completed_chapters",
+              "revised_chapter": lambda ctx: (
+                  ctx.get("revised_chapter") if "revised_chapter" in ctx 
+                  else ctx.get("draft_chapter")
+              ),
+              "completed_chapters_count": "completed_chapters_count"
+          })
+          # Define workflow structure
+          .then("generate_structure")
+          .then("validate_structure")
+          .then("initialize_chapters")
+          .then("generate_draft")
+          .branch([
+              # Skip refinement path - go directly to update_chapters with draft_chapter
+              ("update_chapters", lambda ctx: ctx.get("skip_refinement", False)),
+              # Full refinement path - go through critique, improve, revise
+              ("critique_draft", lambda ctx: not ctx.get("skip_refinement", False))
+          ]))
+          
+    # The critique path will converge to update_chapters automatically
+    # The fluent API should handle the manual transitions properly  
+    wf.then("improve_draft").then("revise_formatting").then("update_chapters")
     
-    # Define the critique path separately
-    .node("critique_draft")
-    .then("improve_draft")
-    .then("revise_formatting")
-    .then("update_chapters")
-    
-    # Define update_chapters node with different input mappings depending on path
-    .node("update_chapters", inputs_mapping={
-        "completed_chapters": "completed_chapters",
-        "revised_chapter": lambda ctx: (
-            ctx.get("revised_chapter") if "revised_chapter" in ctx 
-            else ctx.get("draft_chapter")
-        ),
-        "completed_chapters_count": "completed_chapters_count"
-    })
-    .branch([
+    # Handle the looping logic manually since this is complex conditional flow
+    wf.transitions.setdefault("update_chapters", []).extend([
         ("generate_draft", lambda ctx: ctx.get("completed_chapters_count", 0) < len(ctx["structure"].chapters)),
         ("compile_book", lambda ctx: ctx.get("completed_chapters_count", 0) >= len(ctx["structure"].chapters))
     ])
     
-    # Define the path for continuing with another chapter
-    .node("generate_draft")
+    # Complete the workflow chain
+    wf.then("optional_copy_to_clipboard").then("save_and_display")
     
-    # Define the path for finishing the tutorial
-    .node("compile_book")
-    .then("optional_copy_to_clipboard")
-    .then("save_and_display")
-)
+    return wf
+
+# Create the workflow instance
+workflow = create_tutorial_workflow()
 
 # CLI with Typer
 app = typer.Typer()
@@ -310,7 +310,7 @@ def generate_tutorial(
     }
     logger.info(f"Starting tutorial generation for {path}")
     engine = workflow.build()
-    result = anyio.run(engine.run, initial_context)
+    anyio.run(engine.run, initial_context)
     logger.info("Tutorial generation completed successfully 🎉")
 
 if __name__ == "__main__":

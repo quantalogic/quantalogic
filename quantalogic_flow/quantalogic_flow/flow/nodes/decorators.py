@@ -13,33 +13,52 @@ from loguru import logger
 from .base import NODE_REGISTRY
 
 
-def define(output: str | None = None):
+def define(func=None, *, name: str | None = None, output: str | None = None):
     """Decorator for defining simple workflow nodes.
 
+    Can be used as `@define` or `@define(name="...", output="...")`.
+
     Args:
+        func: The function to decorate.
+        name: Optional name for the node. Defaults to the function name.
         output: Optional context key for the node's result.
 
     Returns:
         Decorator function wrapping the node logic.
     """
-    def decorator(func: Callable) -> Callable:
+    def decorator(fn: Callable) -> Callable:
+        node_name = name or fn.__name__
+        
         async def wrapped_func(**kwargs):
+            instance = kwargs.pop("instance", None)
             try:
-                if asyncio.iscoroutinefunction(func):
-                    result = await func(**kwargs)
+                if asyncio.iscoroutinefunction(fn):
+                    if instance:
+                        result = await fn(instance, **kwargs)
+                    else:
+                        result = await fn(**kwargs)
+                elif instance:
+                    result = fn(instance, **kwargs)
                 else:
-                    result = func(**kwargs)
-                logger.debug(f"Node {func.__name__} executed with result: {result}")
+                    result = fn(**kwargs)
+                logger.debug(f"Node {node_name} executed with result: {result}")
                 return result
             except Exception as e:
-                logger.error(f"Error in node {func.__name__}: {e}")
+                logger.error(f"Error in node {node_name}: {e}")
                 raise
-        sig = inspect.signature(func)
-        inputs = [param.name for param in sig.parameters.values()]
-        logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
-        NODE_REGISTRY.register(func.__name__, wrapped_func, inputs, output)
+
+        sig = inspect.signature(fn)
+        inputs = [param.name for param in sig.parameters.values() if param.name not in ['self', 'instance']]
+        logger.debug(f"Registering node {node_name} with inputs {inputs} and output {output}")
+        NODE_REGISTRY.register(node_name, wrapped_func, inputs, output)
         return wrapped_func
-    return decorator
+
+    if func is None:
+        # Called as @define(name=..., output=...)
+        return decorator
+    else:
+        # Called as @define
+        return decorator(func)
 
 
 def validate_node(output: str):
@@ -53,6 +72,7 @@ def validate_node(output: str):
     """
     def decorator(func: Callable) -> Callable:
         async def wrapped_func(**kwargs):
+            kwargs.pop("instance", None)  # Pop instance to avoid passing it to the user function
             try:
                 if asyncio.iscoroutinefunction(func):
                     result = await func(**kwargs)

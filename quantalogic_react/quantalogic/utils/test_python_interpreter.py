@@ -1,6 +1,15 @@
 import asyncio
+import sys
+from pathlib import Path
 
-from quantalogic_react.quantalogic.python_interpreter import AsyncExecutionResult, execute_async
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
+
+from quantalogic.python_interpreter import (  # noqa: E402
+    AsyncExecutionResult,
+    execute_async,
+)
 
 
 async def test_square_calculation() -> None:

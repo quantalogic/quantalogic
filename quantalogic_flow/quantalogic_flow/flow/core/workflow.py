@@ -6,7 +6,7 @@ This module contains the Workflow class for defining and building workflows.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Tuple
 
 from loguru import logger
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 class Workflow:
     """Workflow definition class for building and orchestrating node sequences."""
-    
+
     def __init__(self, start_node: str):
         """Initialize a workflow with a starting node.
 
@@ -27,61 +27,82 @@ class Workflow:
             start_node: The name of the initial node in the workflow.
         """
         self.start_node = start_node
-        self.nodes: Dict[str, Callable] = {}
-        self.node_inputs: Dict[str, List[str]] = {}
-        self.node_outputs: Dict[str, str | None] = {}
+        self.nodes: Dict[str, Any] = {}
         self.transitions: Dict[str, List[Tuple[str, Callable | None]]] = {}
-        self.node_input_mappings: Dict[str, Dict[str, Any]] = {}
-        self.current_node = None
+        self.current_node: str | None = start_node
+        self.is_looping = False
+        self.loop_start_node: str | None = None
+        self.is_parallel = False
+        self.parallel_nodes: List[str] = []
+        self.parallel_source_node: str | None = None
+        self.convergence_nodes: Dict[str, str] = {}
+        self.parallel_blocks: Dict[str, List[str]] = {}
+        # Branch state tracking (similar to parallel state tracking)
+        self.is_branching = False
+        self.branch_nodes: List[str] = []
+        self.branch_source_node: str | None = None
         self._observers: List[WorkflowObserver] = []
+        self.loop_stack: List[Tuple[str, List[str]]] = []
+        self.loop_nodes: List[str] = []
+        self.node_inputs: Dict[str, List[str]] = {}
+        self.node_outputs: Dict[str, str] = {}
+        self.node_input_mappings: Dict[str, Dict[str, Any]] = {}
+        self.loop_entry_node: str | None = None
         self._register_node(start_node)
-        self.current_node = start_node
-        # Loop-specific attributes (support for nested loops)
-        self.loop_stack = []  # Stack of loop states: (entry_node, loop_nodes)
-    
-    @property
-    def in_loop(self) -> bool:
-        """Check if currently in a loop."""
-        return len(self.loop_stack) > 0
-    
-    @property
-    def loop_nodes(self) -> List[str]:
-        """Get the current loop's nodes."""
-        return self.loop_stack[-1][1] if self.loop_stack else []
-    
-    @property
-    def loop_entry_node(self) -> str:
-        """Get the current loop's entry node."""
-        return self.loop_stack[-1][0] if self.loop_stack else None
+
+    def is_parallel_node(self, node_name: str) -> bool:
+        """Check if a node is part of any parallel execution block."""
+        for nodes in self.parallel_blocks.values():
+            if node_name in nodes:
+                return True
+        return False
+
+    def get_parallel_source_for_node(self, node_name: str) -> str | None:
+        """Find the source node that initiated the parallel execution containing the given node."""
+        for source, nodes in self.parallel_blocks.items():
+            if node_name in nodes:
+                return source
+        return None
 
     def _register_node(self, name: str):
         """Register a node without modifying the current node."""
         # Import here to avoid circular imports
         from ..nodes import Nodes
+
         if name not in Nodes.NODE_REGISTRY:
             raise ValueError(f"Node {name} not registered")
         func, inputs, output = Nodes.NODE_REGISTRY[name]
         self.nodes[name] = func
         self.node_inputs[name] = inputs
-        self.node_outputs[name] = output
+        if output:
+            self.node_outputs[name] = output
 
-    def node(self, name: str, inputs_mapping: Dict[str, Any] | None = None):
-        """Add a node to the workflow chain with an optional inputs mapping.
+    def add_node(self, name: str, func: Callable, inputs: List[str], output: str):
+        """Add a node dynamically to the workflow."""
+        self.nodes[name] = func
+        self.transitions.setdefault(self.current_node, []).append((name, None))
+        logger.debug(f"Added node {name} to workflow with transition from {self.current_node}")
 
-        Args:
-            name: The name of the node to add.
-            inputs_mapping: Optional dictionary mapping node inputs to context keys or callables.
-
-        Returns:
-            Self for method chaining.
-        """
+    def node(self, name: str, inputs_mapping: Dict[str, Any] | None = None) -> Workflow:
+        """Add a node to the workflow without connecting it to the previous one."""
         self._register_node(name)
-        if self.in_loop:
-            self.loop_stack[-1][1].append(name)  # Add to current loop's nodes
         if inputs_mapping:
             self.node_input_mappings[name] = inputs_mapping
-            logger.debug(f"Added inputs mapping for node {name}: {inputs_mapping}")
-        self.current_node = name
+
+        if self.is_parallel:
+            # This is a convergence point
+            if self.parallel_source_node:
+                self.convergence_nodes[self.parallel_source_node] = name
+            if not self.parallel_nodes:  # Handle empty parallel block
+                self.transitions.setdefault(self.parallel_source_node, []).append((name, None))
+            for node_name in self.parallel_nodes:
+                self.transitions.setdefault(node_name, []).append((name, None))
+            self.is_parallel = False
+            self.parallel_nodes = []
+            # Only set current_node if we're handling parallel convergence
+            self.current_node = name
+
+        # Do not change current_node when just registering nodes
         return self
 
     def sequence(self, *nodes: str):
@@ -103,8 +124,9 @@ class Workflow:
             func, inputs, output = Nodes.NODE_REGISTRY[node]
             self.nodes[node] = func
             self.node_inputs[node] = inputs
-            self.node_outputs[node] = output
-        
+            if output:
+                self.node_outputs[node] = output
+
         # Add transition from current node to first node in sequence
         # Prevent self-loops by checking if current_node is the same as the first node
         if self.current_node and nodes and self.current_node != nodes[0]:
@@ -112,37 +134,58 @@ class Workflow:
             logger.debug(f"Added transition from {self.current_node} to {nodes[0]}")
         elif self.current_node and nodes and self.current_node == nodes[0]:
             logger.debug(f"Skipped self-loop transition from {self.current_node} to {nodes[0]}")
-        
+
         # Add transitions between sequential nodes
         for i in range(len(nodes) - 1):
             self.transitions.setdefault(nodes[i], []).append((nodes[i + 1], None))
             logger.debug(f"Added transition from {nodes[i]} to {nodes[i + 1]}")
-        
+
         self.current_node = nodes[-1] if nodes else self.current_node
         return self
 
-    def then(self, next_node: str, condition: Callable | None = None):
-        """Add a transition to the next node with an optional condition.
+    def then(self, next_node: str, condition: Callable | None = None) -> Workflow:
+        """Connect the current node to the next one."""
+        if self.current_node == next_node:
+            logger.warning(f"Skipping self-loop transition from {self.current_node} to {next_node}")
+            return self
 
-        Args:
-            next_node: Name of the node to transition to.
-            condition: Optional callable taking context and returning a boolean.
+        if self.current_node is None and not self.is_parallel and not self.is_branching:
+            raise ValueError("Cannot call .then() without a current node.")
 
-        Returns:
-            Self for method chaining.
-        """
-        if next_node not in self.nodes:
-            self._register_node(next_node)
-        
-        # Prevent self-loops by checking if current_node is the same as next_node
-        if self.current_node and self.current_node != next_node:
-            self.transitions.setdefault(self.current_node, []).append((next_node, condition))
-            logger.debug(f"Added transition from {self.current_node} to {next_node} with condition {condition}")
-        elif self.current_node and self.current_node == next_node:
-            logger.debug(f"Skipped self-loop transition from {self.current_node} to {next_node}")
-        elif not self.current_node:
-            logger.warning("No current node set for transition")
-        
+        self._register_node(next_node)
+
+        if self.is_parallel:
+            # This is a convergence point for parallel execution
+            if self.parallel_source_node:
+                self.convergence_nodes[self.parallel_source_node] = next_node
+            if not self.parallel_nodes:  # Handle empty parallel block
+                if self.parallel_source_node:
+                    self.transitions.setdefault(self.parallel_source_node, []).append((next_node, None))
+            for node_name in self.parallel_nodes:
+                self.transitions.setdefault(node_name, []).append((next_node, None))
+            self.is_parallel = False
+            self.parallel_nodes = []
+        elif self.is_branching:
+            # This is a convergence point for branching - automatically set up convergence
+            logger.debug(f"Auto-convergence detected: {self.branch_nodes} -> {next_node}")
+            if self.branch_source_node:
+                self.convergence_nodes[self.branch_source_node] = next_node
+            
+            # Set up convergence transitions from all branch nodes to next_node
+            for branch_node in self.branch_nodes:
+                # Only add convergence transition if the branch node doesn't already have transitions
+                if branch_node not in self.transitions or not self.transitions[branch_node]:
+                    self.transitions.setdefault(branch_node, []).append((next_node, None))
+                    logger.debug(f"Added auto-convergence transition from {branch_node} to {next_node}")
+            
+            # Reset branch state
+            self.is_branching = False
+            self.branch_nodes = []
+            self.branch_source_node = None
+        else:
+            if self.current_node:
+                self.transitions.setdefault(self.current_node, []).append((next_node, condition))
+
         self.current_node = next_node
         return self
 
@@ -151,13 +194,15 @@ class Workflow:
         branches: List[Tuple[str, Callable | None]],
         default: str | None = None,
         next_node: str | None = None,
-    ) -> "Workflow":
+    ) -> Workflow:
         """Add multiple conditional branches from the current node with an optional default and next node.
 
         Args:
             branches: List of tuples (next_node, condition), where condition takes context and returns a boolean.
-            default: Optional node to transition to if no branch conditions are met.
+            default: Optional node to transition to if no branch conditions are met. 
+                    If None, uses the first branch node as default.
             next_node: Optional node to set as current_node after branching (e.g., for convergence).
+                      If None, branch state is tracked for automatic convergence in next then() call.
 
         Returns:
             Self for method chaining.
@@ -165,20 +210,59 @@ class Workflow:
         if not self.current_node:
             logger.warning("No current node set for branching")
             return self
+        
+        if not branches:
+            raise ValueError("Branch must have at least one branch condition.")
+        
+        # Auto-deduce default from first branch if not provided
+        if default is None:
+            default = branches[0][0]
+            logger.debug(f"Auto-deduced default '{default}' from first branch")
+        
+        # Track branch nodes for convergence
+        branch_nodes = []
+        
         for next_node_name, condition in branches:
             if next_node_name not in self.nodes:
                 self._register_node(next_node_name)
             self.transitions.setdefault(self.current_node, []).append((next_node_name, condition))
+            branch_nodes.append(next_node_name)
             logger.debug(f"Added branch from {self.current_node} to {next_node_name} with condition {condition}")
-        if default:
-            if default not in self.nodes:
-                self._register_node(default)
+        
+        if default not in self.nodes:
+            self._register_node(default)
+        # Only add default transition if it's not already in the branch nodes
+        if default not in [node for node, _ in branches]:
             self.transitions.setdefault(self.current_node, []).append((default, None))
+            branch_nodes.append(default)
             logger.debug(f"Added default transition from {self.current_node} to {default}")
-        self.current_node = next_node  # Explicitly set next_node if provided
+
+        # If next_node is provided, set up immediate convergence
+        if next_node:
+            if next_node not in self.nodes:
+                self._register_node(next_node)
+            
+            # Set up transitions from all branch nodes to the convergence node
+            for branch_node in branch_nodes:
+                # Only add convergence transition if the branch node doesn't already have transitions
+                if branch_node not in self.transitions or not self.transitions[branch_node]:
+                    self.transitions.setdefault(branch_node, []).append((next_node, None))
+                    logger.debug(f"Added convergence transition from {branch_node} to {next_node}")
+            
+            self.current_node = next_node
+        else:
+            # Set up branch state tracking for automatic convergence detection
+            self.is_branching = True
+            self.branch_nodes = branch_nodes
+            self.branch_source_node = self.current_node
+            logger.debug(f"Set up branch state tracking for automatic convergence from {branch_nodes}")
+            
+            # Set current node to default for chaining
+            self.current_node = default
+
         return self
 
-    def converge(self, convergence_node: str) -> "Workflow":
+    def converge(self, convergence_node: str) -> Workflow:
         """Set a convergence point for all previous branches.
 
         Args:
@@ -189,30 +273,51 @@ class Workflow:
         """
         if convergence_node not in self.nodes:
             self._register_node(convergence_node)
-        for node in self.nodes:
-            if (node not in self.transitions or not self.transitions[node]) and node != convergence_node:
+
+        if self.is_parallel and self.parallel_source_node:
+            # The nodes that need to converge are the ones that were started in parallel.
+            parallel_nodes = self.parallel_nodes
+            for node in parallel_nodes:
                 self.transitions.setdefault(node, []).append((convergence_node, None))
-                logger.debug(f"Added convergence from {node} to {convergence_node}")
+
+            # Store the convergence mapping
+            self.convergence_nodes[self.parallel_source_node] = convergence_node
+
+            # Reset parallel state
+            self.is_parallel = False
+            self.parallel_source_node = None
+        else:
+            # Fallback for non-parallel convergence (e.g., after a branch)
+            # This connects all nodes that don't have an outgoing transition to the convergence node.
+            for node in self.nodes:
+                if (node not in self.transitions or not self.transitions[node]) and node != convergence_node:
+                    self.transitions.setdefault(node, []).append((convergence_node, None))
+                    logger.debug(f"Added convergence from {node} to {convergence_node}")
+
         self.current_node = convergence_node
         return self
 
-    def parallel(self, *nodes: str):
-        """Add parallel nodes to execute concurrently.
+    def parallel(self, *node_names: str) -> Workflow:
+        """Define parallel execution paths from the current node."""
+        if self.current_node is None:
+            raise ValueError("Cannot start parallel execution without a current node.")
 
-        Args:
-            *nodes: Variable number of node names to execute in parallel.
-
-        Returns:
-            Self for method chaining.
-        """
-        if self.current_node:
-            for node in nodes:
-                self._register_node(node)  # Register each parallel node
-                self.transitions.setdefault(self.current_node, []).append((node, None))
+        from_node = self.current_node
+        self.parallel_source_node = from_node
         self.current_node = None
+        self.is_parallel = True
+        self.parallel_nodes = list(node_names)
+        self.parallel_blocks[from_node] = self.parallel_nodes
+
+        if not node_names: # Handle empty parallel() call
+            return self
+
+        for node_name in node_names:
+            self._register_node(node_name)
+            self.transitions.setdefault(from_node, []).append((node_name, None))
         return self
 
-    def add_observer(self, observer: WorkflowObserver) -> "Workflow":
+    def add_observer(self, observer: WorkflowObserver) -> Workflow:
         """Add an event observer callback to the workflow.
 
         Args:
@@ -226,7 +331,13 @@ class Workflow:
             logger.debug(f"Added observer to workflow: {observer}")
         return self
 
-    def add_sub_workflow(self, name: str, sub_workflow: "Workflow", inputs: Dict[str, Any], output: str):
+    def add_sub_workflow(
+        self,
+        name: str,
+        sub_workflow: Workflow,
+        inputs: Dict[str, Any],
+        output: str,
+    ):
         """Add a sub-workflow as a node with flexible inputs mapping.
 
         Args:
@@ -242,84 +353,104 @@ class Workflow:
         self.nodes[name] = sub_node
         self.node_inputs[name] = []
         self.node_outputs[name] = output
-        self.current_node = name
-        logger.debug(f"Added sub-workflow {name} with inputs {inputs} and output {output}")
+        self.node_input_mappings[name] = inputs or {}
+
+        if self.current_node and self.current_node != name:
+            self.transitions.setdefault(self.current_node, []).append((name, None))
+            logger.debug(f"Added transition from {self.current_node} to sub-workflow {name}")
+
+        if not self.is_parallel:
+            self.current_node = name
         return self
 
-    def start_loop(self):
-        """Begin defining a loop in the workflow.
-
-        Raises:
-            ValueError: If called without a current node.
-
+    def loop(self, *node_names: str) -> Workflow:
+        """Define a loop with a sequence of nodes.
+        
+        Args:
+            *node_names: The nodes to execute in each loop iteration.
+            
         Returns:
             Self for method chaining.
         """
-        if self.current_node is None:
-            raise ValueError("Cannot start loop without a current node")
-        # Push new loop state onto stack
-        self.loop_stack.append((self.current_node, []))
+        if not self.current_node:
+            raise ValueError("Cannot start a loop without a current node.")
+
+        if not node_names:
+            raise ValueError("Loop must contain at least one node.")
+
+        self.loop_entry_node = self.current_node
+        self.loop_stack.append((self.current_node, list(node_names)))
+
+        # Register all nodes in the loop
+        for node in node_names:
+            self._register_node(node)
+
+        # The first node in the loop sequence becomes the current node
+        self.current_node = node_names[0]
+
         return self
 
-    def end_loop(self, condition: Callable[[Dict[str, Any]], bool], next_node: str):
-        """End the loop, setting up transitions based on the condition.
+    @property
+    def in_loop(self) -> bool:
+        """Check if the workflow is currently defining a loop."""
+        return len(self.loop_stack) > 0
+
+    def end_loop(self, condition: Callable[[Dict[str, Any]], bool], next_node: str | None = None) -> Workflow:
+        """End the current loop and set the transition to the next node.
 
         Args:
-            condition: Callable taking context and returning True when the loop should exit.
-            next_node: Name of the node to transition to after the loop exits.
-
-        Raises:
-            ValueError: If no loop nodes are defined.
+            condition: A callable that determines when the loop should exit.
+            next_node: The node to transition to when the loop ends.
 
         Returns:
             Self for method chaining.
         """
         if not self.in_loop:
-            raise ValueError("No loop nodes defined")
-        
-        # Pop current loop state
+            raise ValueError("end_loop() called without an active loop.")
+
         entry_node, loop_nodes = self.loop_stack.pop()
-        
+
         if not loop_nodes:
-            raise ValueError("No loop nodes defined")
-        
-        first_node = loop_nodes[0]
-        last_node = loop_nodes[-1]
-        
-        # Transition from the node before the loop to the first loop node
-        self.transitions.setdefault(entry_node, []).append((first_node, None))
-        
-        # Transitions within the loop
+            raise ValueError("Loop must contain at least one node.")
+
+        # Transition from the node before the loop to the first node of the loop
+        self.transitions.setdefault(entry_node, []).append((loop_nodes[0], None))
+
+        # Create transitions within the loop
         for i in range(len(loop_nodes) - 1):
-            self.transitions.setdefault(loop_nodes[i], []).append((loop_nodes[i + 1], None))
-        
-        # Conditional transitions from the last loop node
-        # If condition is False, loop back to the first node
-        self.transitions.setdefault(last_node, []).append((first_node, lambda ctx: not condition(ctx)))
-        # If condition is True, exit to the next node
-        self.transitions.setdefault(last_node, []).append((next_node, condition))
-        
-        # Register the next_node if not already present
-        if next_node not in self.nodes:
+            self.transitions.setdefault(loop_nodes[i], []).append((loop_nodes[i+1], None))
+
+        # Add conditional transition from the last loop node
+        last_node = loop_nodes[-1]
+
+        # Loop back to the first node if condition is NOT met
+        def loop_back_condition(ctx):
+            return not condition(ctx)
+        self.transitions.setdefault(last_node, []).append((loop_nodes[0], loop_back_condition))
+
+        # Transition to the next node if the condition is met
+        if next_node:
             self._register_node(next_node)
-        
-        # Update state
-        self.current_node = next_node
-        
+            self.transitions.setdefault(last_node, []).append((next_node, condition))
+            self.current_node = next_node
+        else:
+            # If there's no next node, the workflow might end here if the condition is false.
+            self.current_node = None
+
+        self.loop_entry_node = None # Reset after loop is defined
         return self
 
-    def build(self, parent_engine: "WorkflowEngine" | None = None) -> "WorkflowEngine":
-        """Build and return a WorkflowEngine instance with registered observers.
-
-        Args:
-            parent_engine: Optional parent WorkflowEngine for sub-workflows.
-
-        Returns:
-            Configured WorkflowEngine instance.
-        """
+    def build(self, **kwargs) -> WorkflowEngine:
+        """Build an executable engine from the workflow."""
         # Import here to avoid circular imports
         from .engine import WorkflowEngine
-        engine = WorkflowEngine(self, parent_engine=parent_engine)
-        for observer in self._observers:
-            engine.add_observer(observer)
-        return engine
+
+        # Reset parallel flag at build time
+        self.is_parallel = False
+        self.parallel_source_node = None
+
+        return WorkflowEngine(
+            workflow=self,
+            observers=self._observers,
+            **kwargs
+        )

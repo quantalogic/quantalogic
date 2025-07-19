@@ -1,0 +1,661 @@
+"""
+Comprehensive edge case tests for parallel execution in quantalogic flow.
+
+This module contains extensive tests for edge cases and corner scenarios
+that could occur during parallel execution, ensuring robustness and reliability.
+"""
+
+import asyncio
+import gc
+import threading
+import time
+import weakref
+
+import pytest
+
+from quantalogic_flow.flow.flow import (
+    Nodes,
+    Workflow,
+)
+
+
+class TestParallelExecutionEdgeCases:
+    """Test suite for parallel execution edge cases."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.execution_log = []
+        self.context_access_log = []
+        self.cleanup_log = []
+        self.thread_ids = []
+        self.start_times = {}
+        self.end_times = {}
+
+    # === TIMEOUT AND CANCELLATION TESTS ===
+
+    async def test_parallel_execution_timeout_handling(self, nodes_registry_backup):
+        """Test timeout handling in parallel execution."""
+        @Nodes.define(output="result")
+        async def start_node():
+            await asyncio.sleep(0.01)
+            return "start_completed"
+
+        @Nodes.define(output="result")
+        async def fast_node():
+            await asyncio.sleep(0.1)
+            return "fast_completed"
+
+        @Nodes.define(output="result")
+        async def slow_node():
+            # This node takes too long
+            await asyncio.sleep(2.0)
+            return "slow_completed"
+
+        @Nodes.define(output="result")
+        async def timeout_node():
+            # This node will timeout
+            await asyncio.sleep(5.0)
+            return "timeout_completed"
+
+        workflow = (
+            Workflow("start_node")
+            .parallel("fast_node", "slow_node", "timeout_node")
+        )
+        engine = workflow.build()
+
+        # Test with timeout
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(engine.run({}), timeout=1.0)
+
+    async def test_parallel_execution_cancellation(self, nodes_registry_backup):
+        """Test cancellation of parallel execution."""
+        @Nodes.define(output="result")
+        async def start_node():
+            await asyncio.sleep(0.01)
+            return "start_completed"
+
+        @Nodes.define(output="result")
+        async def cancellable_node():
+            try:
+                await asyncio.sleep(2.0)
+                return "completed"
+            except asyncio.CancelledError:
+                self.execution_log.append("node_cancelled")
+                raise
+
+        @Nodes.define(output="result")
+        async def quick_node():
+            await asyncio.sleep(0.1)
+            return "quick_completed"
+
+        workflow = (
+            Workflow("start_node")
+            .parallel("cancellable_node", "quick_node")
+        )
+        engine = workflow.build()
+
+        # Start execution and cancel after short delay
+        task = asyncio.create_task(engine.run({}))
+        await asyncio.sleep(0.2)
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # Verify cancellation was logged
+        assert "node_cancelled" in self.execution_log
+
+    async def test_parallel_execution_partial_cancellation(self, nodes_registry_backup):
+        """Test partial cancellation where some nodes complete before cancellation."""
+        @Nodes.define(output="result")
+        async def very_fast_node():
+            await asyncio.sleep(0.05)
+            self.execution_log.append("very_fast_completed")
+            return "very_fast_result"
+
+        @Nodes.define(output="result")
+        async def slow_cancellable_node():
+            try:
+                await asyncio.sleep(1.0)
+                return "slow_result"
+            except asyncio.CancelledError:
+                self.execution_log.append("slow_cancelled")
+                raise
+
+        workflow = Workflow().parallel("very_fast_node", "slow_cancellable_node")
+        engine = workflow.build()
+
+        task = asyncio.create_task(engine.run({}))
+        await asyncio.sleep(0.1)  # Let fast node complete
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # Fast node should have completed
+        assert "very_fast_completed" in self.execution_log
+        assert "slow_cancelled" in self.execution_log
+
+    # === CONTEXT CORRUPTION AND RACE CONDITION TESTS ===
+
+    async def test_parallel_context_race_conditions(self, nodes_registry_backup):
+        """Test race conditions when multiple nodes modify context simultaneously."""
+        @Nodes.define(output="counter")
+        async def increment_node():
+            # Simulate race condition - read, modify, write
+            await asyncio.sleep(0.01)  # Small delay to increase race condition chance
+            current = self.context.get("counter", 0)
+            await asyncio.sleep(0.01)  # Another delay
+            new_value = current + 1
+            self.context["counter"] = new_value
+            return new_value
+
+        workflow = Workflow().parallel(*["increment_node"] * 10)
+        engine = workflow.build()
+
+        # Initialize context
+        engine.context["counter"] = 0
+
+        result = await engine.run({})
+
+        # Due to race conditions, final counter might be less than 10
+        # This test documents the behavior rather than asserting correctness
+        final_counter = result.get("counter", 0)
+        assert isinstance(final_counter, int)
+        assert final_counter <= 10  # Should not exceed the number of nodes
+
+    async def test_parallel_context_isolation(self, nodes_registry_backup):
+        """Test that parallel nodes don't interfere with each other's context views."""
+        @Nodes.define(output="result")
+        async def context_reader_node(node_id: str):
+            # Record context access
+            self.context_access_log.append(f"node_{node_id}_start")
+            await asyncio.sleep(0.1)
+            
+            # Read from context
+            value = self.context.get("shared_value", f"default_{node_id}")
+            self.context_access_log.append(f"node_{node_id}_read_{value}")
+            
+            # Modify context
+            self.context[f"result_{node_id}"] = f"modified_by_{node_id}"
+            
+            await asyncio.sleep(0.1)
+            self.context_access_log.append(f"node_{node_id}_end")
+            return f"result_{node_id}"
+
+        workflow = Workflow().parallel("context_reader_node", "context_reader_node")
+        engine = workflow.build()
+
+        # Initialize shared context
+        engine.context["shared_value"] = "initial"
+
+        await engine.run({
+            "node_id": "test"  # This will be passed to both nodes
+        })
+
+        # Verify both nodes accessed context
+        assert len([log for log in self.context_access_log if "start" in log]) == 2
+        assert len([log for log in self.context_access_log if "end" in log]) == 2
+
+    # === EXCEPTION PROPAGATION VARIANTS ===
+
+    async def test_parallel_different_exception_types(self, nodes_registry_backup):
+        """Test different types of exceptions in parallel nodes."""
+        @Nodes.define(output="result")
+        async def value_error_node():
+            await asyncio.sleep(0.1)
+            raise ValueError("Value error in parallel node")
+
+        @Nodes.define(output="result")
+        async def type_error_node():
+            await asyncio.sleep(0.1)
+            raise TypeError("Type error in parallel node")
+
+        @Nodes.define(output="result")
+        async def runtime_error_node():
+            await asyncio.sleep(0.1)
+            raise RuntimeError("Runtime error in parallel node")
+
+        workflow = Workflow().parallel("value_error_node", "type_error_node", "runtime_error_node")
+        engine = workflow.build()
+
+        # Should raise one of the exceptions (non-deterministic which one)
+        with pytest.raises((ValueError, TypeError, RuntimeError)):
+            await engine.run({})
+
+    async def test_parallel_custom_exception_handling(self, nodes_registry_backup):
+        """Test custom exception handling in parallel nodes."""
+        class CustomWorkflowError(Exception):
+            """Custom exception for testing."""
+            pass
+
+        @Nodes.define(output="result")
+        async def custom_exception_node():
+            await asyncio.sleep(0.1)
+            raise CustomWorkflowError("Custom exception in parallel node")
+
+        @Nodes.define(output="result")
+        async def normal_node():
+            await asyncio.sleep(0.2)
+            return "normal_result"
+
+        workflow = Workflow().parallel("custom_exception_node", "normal_node")
+        engine = workflow.build()
+
+        with pytest.raises(CustomWorkflowError, match="Custom exception in parallel node"):
+            await engine.run({})
+
+    async def test_parallel_exception_with_cleanup(self, nodes_registry_backup):
+        """Test exception handling with proper cleanup in parallel nodes."""
+        @Nodes.define(output="result")
+        async def cleanup_node():
+            try:
+                await asyncio.sleep(0.1)
+                self.cleanup_log.append("resource_acquired")
+                raise ValueError("Error after resource acquisition")
+            except Exception:
+                self.cleanup_log.append("cleanup_performed")
+                raise
+            finally:
+                self.cleanup_log.append("finally_block_executed")
+
+        @Nodes.define(output="result")
+        async def normal_node():
+            await asyncio.sleep(0.2)
+            return "normal_result"
+
+        workflow = Workflow().parallel("cleanup_node", "normal_node")
+        engine = workflow.build()
+
+        with pytest.raises(ValueError):
+            await engine.run({})
+
+        # Verify cleanup was performed
+        assert "resource_acquired" in self.cleanup_log
+        assert "cleanup_performed" in self.cleanup_log
+        assert "finally_block_executed" in self.cleanup_log
+
+    # === PARTIAL FAILURE SCENARIOS ===
+
+    async def test_parallel_partial_success_failure(self, nodes_registry_backup):
+        """Test scenarios where some parallel nodes succeed and others fail."""
+        success_results = []
+        
+        @Nodes.define(output="result")
+        async def success_node_1():
+            await asyncio.sleep(0.1)
+            result = "success_1"
+            success_results.append(result)
+            return result
+
+        @Nodes.define(output="result")
+        async def success_node_2():
+            await asyncio.sleep(0.15)
+            result = "success_2"
+            success_results.append(result)
+            return result
+
+        @Nodes.define(output="result")
+        async def failure_node():
+            await asyncio.sleep(0.2)
+            raise ValueError("Failure in parallel execution")
+
+        workflow = Workflow().parallel("success_node_1", "success_node_2", "failure_node")
+        engine = workflow.build()
+
+        with pytest.raises(ValueError):
+            await engine.run({})
+
+        # Verify that successful nodes completed before failure
+        assert "success_1" in success_results
+        assert "success_2" in success_results
+
+    async def test_parallel_intermittent_failures(self, nodes_registry_backup):
+        """Test handling of intermittent failures in parallel execution."""
+        failure_count = 0
+        
+        @Nodes.define(output="result")
+        async def intermittent_node():
+            nonlocal failure_count
+            failure_count += 1
+            await asyncio.sleep(0.1)
+            
+            if failure_count <= 2:
+                raise ConnectionError("Intermittent connection error")
+            
+            return "finally_succeeded"
+
+        @Nodes.define(output="result")
+        async def reliable_node():
+            await asyncio.sleep(0.1)
+            return "reliable_result"
+
+        workflow = Workflow().parallel("intermittent_node", "reliable_node")
+        engine = workflow.build()
+
+        # Should fail on first few attempts
+        with pytest.raises(ConnectionError):
+            await engine.run({})
+
+    # === RESOURCE CLEANUP AND MEMORY MANAGEMENT ===
+
+    async def test_parallel_memory_cleanup_on_failure(self, nodes_registry_backup):
+        """Test memory cleanup when parallel execution fails."""
+        large_objects = []
+        
+        @Nodes.define(output="result")
+        async def memory_intensive_node():
+            # Create large object
+            large_data = [i for i in range(100000)]
+            large_objects.append(large_data)
+            await asyncio.sleep(0.1)
+            raise MemoryError("Simulated memory error")
+
+        @Nodes.define(output="result")
+        async def normal_node():
+            await asyncio.sleep(0.2)
+            return "normal_result"
+
+        workflow = Workflow().parallel("memory_intensive_node", "normal_node")
+        engine = workflow.build()
+
+        # Monitor memory before execution
+        gc.collect()
+        initial_objects = len(gc.get_objects())
+
+        with pytest.raises(MemoryError):
+            await engine.run({})
+
+        # Force garbage collection
+        large_objects.clear()
+        gc.collect()
+        final_objects = len(gc.get_objects())
+
+        # Memory should be cleaned up (allow some variance)
+        assert final_objects - initial_objects < 1000
+
+    async def test_parallel_resource_cleanup_with_weakref(self, nodes_registry_backup):
+        """Test resource cleanup using weak references."""
+        resource_refs = []
+        
+        class TestResource:
+            def __init__(self, name):
+                self.name = name
+                self.cleanup_log = []
+            
+            def cleanup(self):
+                self.cleanup_log.append(f"cleanup_{self.name}")
+        
+        @Nodes.define(output="result")
+        async def resource_node():
+            resource = TestResource("parallel_resource")
+            resource_refs.append(weakref.ref(resource))
+            
+            try:
+                await asyncio.sleep(0.1)
+                return f"used_{resource.name}"
+            finally:
+                resource.cleanup()
+
+        workflow = Workflow().parallel("resource_node", "resource_node")
+        engine = workflow.build()
+
+        await engine.run({})
+
+        # Force garbage collection
+        gc.collect()
+
+        # Verify resources were cleaned up
+        assert len(resource_refs) == 2
+        alive_refs = [ref for ref in resource_refs if ref() is not None]
+        assert len(alive_refs) == 0  # All resources should be garbage collected
+
+    # === STATE CONSISTENCY TESTS ===
+
+    async def test_parallel_workflow_state_consistency(self, nodes_registry_backup):
+        """Test that workflow state remains consistent during parallel execution."""
+        state_snapshots = []
+        
+        @Nodes.define(output="result")
+        async def state_checker_node(node_id: str):
+            # Capture state at different points
+            state_snapshots.append({
+                "node_id": node_id,
+                "time": time.time(),
+                "context_keys": list(self.context.keys()),
+                "context_size": len(self.context)
+            })
+            
+            await asyncio.sleep(0.1)
+            
+            # Modify state
+            self.context[f"state_{node_id}"] = f"modified_by_{node_id}"
+            
+            state_snapshots.append({
+                "node_id": node_id,
+                "time": time.time(),
+                "context_keys": list(self.context.keys()),
+                "context_size": len(self.context)
+            })
+            
+            return f"result_{node_id}"
+
+        workflow = Workflow().parallel("state_checker_node", "state_checker_node")
+        engine = workflow.build()
+
+        # Initialize state
+        engine.context["initial_state"] = "test"
+
+        await engine.run({
+            "node_id": "consistency_test"
+        })
+
+        # Verify state snapshots show consistent behavior
+        assert len(state_snapshots) == 4  # 2 nodes * 2 snapshots each
+        
+        # Initial state should be present in all snapshots
+        for snapshot in state_snapshots:
+            assert "initial_state" in snapshot["context_keys"]
+
+    # === NESTED PARALLEL EXECUTION TESTS ===
+
+    async def test_nested_parallel_execution(self, nodes_registry_backup):
+        """Test parallel execution within parallel execution."""
+        @Nodes.define(output="result")
+        async def outer_parallel_node():
+            # This node itself triggers parallel execution
+            await asyncio.sleep(0.1)
+            self.execution_log.append("outer_node_executed")
+            return "outer_result"
+
+        @Nodes.define(output="result")
+        async def inner_parallel_node():
+            await asyncio.sleep(0.05)
+            self.execution_log.append("inner_node_executed")
+            return "inner_result"
+
+        # Create nested workflow structure
+        workflow = Workflow().parallel("outer_parallel_node", "inner_parallel_node")
+        engine = workflow.build()
+
+        await engine.run({})
+
+        # Verify both levels executed
+        assert "outer_node_executed" in self.execution_log
+        assert "inner_node_executed" in self.execution_log
+
+    # === DYNAMIC SCENARIOS ===
+
+    async def test_parallel_dynamic_node_creation(self, nodes_registry_backup):
+        """Test dynamic node creation during parallel execution."""
+        @Nodes.define(output="result")
+        async def dynamic_creator_node():
+            # Simulate dynamic behavior
+            await asyncio.sleep(0.1)
+            
+            # Create dynamic data
+            dynamic_data = {"created_at": time.time(), "data": "dynamic"}
+            self.context["dynamic_data"] = dynamic_data
+            
+            return "dynamic_created"
+
+        @Nodes.define(output="result")
+        async def dynamic_consumer_node():
+            # Wait for dynamic data
+            await asyncio.sleep(0.2)
+            
+            # Try to consume dynamic data
+            dynamic_data = self.context.get("dynamic_data", {})
+            return f"consumed_{dynamic_data.get('data', 'none')}"
+
+        workflow = Workflow().parallel("dynamic_creator_node", "dynamic_consumer_node")
+        engine = workflow.build()
+
+        result = await engine.run({})
+
+        # Verify dynamic interaction
+        assert "result" in result
+
+    # === THREAD SAFETY TESTS ===
+
+    async def test_parallel_thread_safety(self, nodes_registry_backup):
+        """Test thread safety in parallel execution."""
+        @Nodes.define(output="result")
+        async def thread_aware_node():
+            # Record thread ID
+            thread_id = threading.current_thread().ident
+            self.thread_ids.append(thread_id)
+            
+            await asyncio.sleep(0.1)
+            
+            # Simulate thread-sensitive operation
+            self.execution_log.append(f"thread_{thread_id}_executed")
+            return f"thread_result_{thread_id}"
+
+        workflow = Workflow().parallel("thread_aware_node", "thread_aware_node", "thread_aware_node")
+        engine = workflow.build()
+
+        await engine.run({})
+
+        # Verify thread safety
+        assert len(self.thread_ids) == 3
+        assert len(set(self.thread_ids)) >= 1  # At least one thread (might be same for asyncio)
+
+    # === NETWORK/CONNECTION FAILURE SIMULATION ===
+
+    async def test_parallel_network_failure_simulation(self, nodes_registry_backup):
+        """Test handling of network failures in parallel execution."""
+        @Nodes.define(output="result")
+        async def network_node():
+            # Simulate network operation
+            await asyncio.sleep(0.1)
+            
+            # Simulate network failure
+            raise ConnectionError("Network connection failed")
+
+        @Nodes.define(output="result")
+        async def local_node():
+            # Local operation that should succeed
+            await asyncio.sleep(0.1)
+            return "local_success"
+
+        workflow = Workflow().parallel("network_node", "local_node")
+        engine = workflow.build()
+
+        with pytest.raises(ConnectionError):
+            await engine.run({})
+
+    async def test_parallel_timeout_with_retry_logic(self, nodes_registry_backup):
+        """Test timeout handling with retry logic in parallel execution."""
+        retry_count = 0
+        
+        @Nodes.define(output="result")
+        async def retry_node():
+            nonlocal retry_count
+            retry_count += 1
+            
+            if retry_count <= 2:
+                await asyncio.sleep(0.5)  # Simulate slow operation
+                raise TimeoutError("Operation timeout")
+            
+            await asyncio.sleep(0.1)
+            return "retry_success"
+
+        @Nodes.define(output="result")
+        async def stable_node():
+            await asyncio.sleep(0.1)
+            return "stable_success"
+
+        workflow = Workflow().parallel("retry_node", "stable_node")
+        engine = workflow.build()
+
+        # Should fail on first attempt
+        with pytest.raises(TimeoutError):
+            await engine.run({})
+
+    # === PERFORMANCE EDGE CASES ===
+
+    async def test_parallel_execution_under_load(self, nodes_registry_backup):
+        """Test parallel execution under high load conditions."""
+        @Nodes.define(output="result")
+        async def load_node():
+            # Simulate CPU-intensive operation
+            await asyncio.sleep(0.01)
+            
+            # Simulate some computation
+            result = sum(i * i for i in range(1000))
+            return f"computed_{result}"
+
+        # Create high load scenario
+        node_names = ["load_node" for _ in range(50)]
+        workflow = Workflow().parallel(*node_names)
+        engine = workflow.build()
+
+        start_time = time.time()
+        result = await engine.run({})
+        end_time = time.time()
+
+        # Should complete in reasonable time despite high load
+        assert end_time - start_time < 2.0
+        assert "result" in result
+
+    # === EDGE CASE COMBINATIONS ===
+
+    async def test_parallel_execution_complex_edge_case(self, nodes_registry_backup):
+        """Test complex combination of edge cases."""
+        @Nodes.define(output="result")
+        async def complex_node():
+            # Combine multiple edge case scenarios
+            try:
+                # Simulate network delay
+                await asyncio.sleep(0.1)
+                
+                # Simulate context access
+                value = self.context.get("shared_value", 0)
+                
+                # Simulate potential race condition
+                await asyncio.sleep(0.01)
+                self.context["shared_value"] = value + 1
+                
+                # Simulate potential failure
+                if value > 5:
+                    raise ValueError("Complex failure condition")
+                
+                return f"complex_result_{value}"
+                
+            except Exception as e:
+                self.execution_log.append(f"complex_error_{e}")
+                raise
+
+        workflow = Workflow().parallel("complex_node", "complex_node", "complex_node")
+        engine = workflow.build()
+
+        # Initialize context
+        engine.context["shared_value"] = 0
+
+        result = await engine.run({})
+
+        # Verify complex interaction
+        assert "result" in result
+        shared_value = engine.context.get("shared_value", 0)
+        assert isinstance(shared_value, int)

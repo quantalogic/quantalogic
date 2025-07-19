@@ -1,20 +1,62 @@
 """Example validation tests for quantalogic_flow examples."""
 
+import importlib.util
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from tests.mocks import MockLLMResponse
+from quantalogic_flow.flow import Nodes
+
+# Mark all tests in this file as 'examples'
+pytestmark = pytest.mark.examples
+
+
+class MockLLMResponse:
+    """A mock response object for language model calls."""
+    def __init__(self, text):
+        self.text = text
+        # Create a mock choices structure that matches the expected format
+        from unittest.mock import MagicMock
+        self.choices = [MagicMock()]
+        self.choices[0].message.content = text
+        # Add usage information
+        self.usage = MagicMock()
+        self.usage.prompt_tokens = 10
+        self.usage.completion_tokens = 20
+        self.usage.total_tokens = 30
+        self.cost = 0.001
 
 
 class TestExampleValidation:
-    """Validate that examples work correctly."""
-    
+    """Test suite for validating example workflows."""
+
+    def _load_agent_module(self, agent_name: str):
+        """Load an agent module dynamically from the examples directory."""
+        # Correct the path to point to the actual examples directory
+        example_path = Path(__file__).parent.parent.parent / "examples" / agent_name
+        module_path = example_path / "story_generator_agent.py"  # Fixed filename
+        
+        spec = importlib.util.spec_from_file_location("story_generator_agent", module_path)
+        if spec and spec.loader:
+            agent_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(agent_module)
+            return agent_module
+        raise ImportError(f"Could not load agent module from {module_path}")
+
+    @pytest.fixture(autouse=True)
+    def clear_node_registry(self):
+        """Fixture to clear the node registry before and after each test."""
+        Nodes.NODE_REGISTRY.clear()
+        yield
+        Nodes.NODE_REGISTRY.clear()
+
     @pytest.mark.examples
     @patch("quantalogic_flow.flow.nodes.acompletion")
     async def test_simple_story_generator_workflow(self, mock_acompletion):
-        """Test the simple story generator example workflow."""        # Setup mock responses for the story generator
+        """Test the simple story generator example workflow."""
+        # Setup mock responses for the story generator
         mock_acompletion.side_effect = [
             MockLLMResponse("The Digital Frontier"),  # Title generation
             MockLLMResponse("""
@@ -34,19 +76,19 @@ class TestExampleValidation:
             MockLLMResponse("Chapter 3: Resolution\n\nFinally, the truth..."),  # Chapter 3
             MockLLMResponse("Quality check passed: The story has good flow and coherence.")  # Quality check
         ]
-        
+
         # Import the example workflow
-        import sys
         example_path = Path(__file__).parent.parent.parent / "examples" / "simple_story_generator"
         sys.path.insert(0, str(example_path))
-        
+
         try:
-            from story_generator_agent import create_story_workflow
-            
+            # Importing the agent module will register the nodes
+            import story_generator_agent
+
             # Create and run the workflow
-            workflow = create_story_workflow()
+            workflow = story_generator_agent.create_story_workflow()
             engine = workflow.build()
-            
+
             # Test with valid inputs
             result = await engine.run({
                 "genre": "science fiction",
@@ -80,70 +122,72 @@ class TestExampleValidation:
     @patch("quantalogic_flow.flow.nodes.acompletion")
     async def test_story_generator_input_validation(self, mock_acompletion):
         """Test story generator input validation."""
-        import sys
-        example_path = Path(__file__).parent.parent.parent / "examples" / "simple_story_generator"
-        sys.path.insert(0, str(example_path))
+        story_generator_agent = self._load_agent_module("simple_story_generator")
+
+        workflow = story_generator_agent.create_story_workflow()
+        engine = workflow.build()
+
+        # Mock the acompletion call to avoid actual LLM calls
+        mock_acompletion.side_effect = [
+            MockLLMResponse("The Digital Frontier"),  # Title generation
+            MockLLMResponse("""
+- Chapter 1: Discovery
+- Chapter 2: Investigation
+- Chapter 3: Resolution
+"""),  # Outline generation
+            MockLLMResponse("Chapter 1: Discovery\n\nIn a world where..."),  # Chapter 1
+            MockLLMResponse("Chapter 2: Investigation\n\nThe next day..."),  # Chapter 2
+            MockLLMResponse("Chapter 3: Resolution\n\nFinally, the truth..."),  # Chapter 3
+            MockLLMResponse("Quality check passed: The story has good flow and coherence.")  # Quality check
+        ]
+
+        initial_context = {
+            "genre": "science fiction",
+            "num_chapters": 3,
+            "style": "descriptive",
+            "completed_chapters": 0,
+            "chapters": []
+        }
+
+        # Test invalid genre
+        with pytest.raises(ValueError, match="Invalid input"):
+            await engine.run({
+                **initial_context,
+                "genre": "invalid_genre",
+            })
         
-        try:
-            from story_generator_agent import create_story_workflow
-            
-            workflow = create_story_workflow()
-            engine = workflow.build()
-            
-            # Test invalid genre
-            with pytest.raises(ValueError, match="Invalid input"):
-                await engine.run({
-                    "genre": "invalid_genre",
-                    "num_chapters": 3,
-                    "style": "descriptive",
-                    "completed_chapters": 0,
-                    "chapters": []
-                })
-            
-            # Test invalid chapter count
-            with pytest.raises(ValueError, match="Invalid input"):
-                await engine.run({
-                    "genre": "science fiction",
-                    "num_chapters": 25,  # Too many chapters
-                    "style": "descriptive",
-                    "completed_chapters": 0,
-                    "chapters": []
-                })
+        # Test invalid chapter count
+        with pytest.raises(ValueError, match="Invalid input"):
+            await engine.run({
+                **initial_context,
+                "num_chapters": 25,  # Too many chapters
+            })
                 
-        finally:
-            sys.path.remove(str(example_path))
-    
     @pytest.mark.examples
-    async def test_story_generator_structure_validation(self):
+    @patch("quantalogic_flow.flow.nodes.acompletion")
+    async def test_story_generator_structure_validation(self, mock_acompletion):
         """Test that the story generator workflow is properly structured."""
-        import sys
-        example_path = Path(__file__).parent.parent.parent / "examples" / "simple_story_generator"
-        sys.path.insert(0, str(example_path))
+        # Mock the acompletion to allow workflow instantiation
+        mock_acompletion.return_value = MockLLMResponse("")
+        story_generator_agent = self._load_agent_module("simple_story_generator")
+
+        workflow = story_generator_agent.create_story_workflow()
+
+        # Validate start and end nodes
+        assert workflow.start_node == "validate_input"
         
-        try:
-            from story_generator_agent import create_story_workflow
-            
-            workflow = create_story_workflow()
-            
-            # Verify workflow structure
-            assert workflow.start_node == "validate_input"
-            assert "validate_input" in workflow.nodes
-            assert "generate_title" in workflow.nodes
-            assert "generate_outline" in workflow.nodes
-            assert "generate_chapter" in workflow.nodes
-            assert "compile_book" in workflow.nodes
-            
-            # Verify transitions exist
-            assert "validate_input" in workflow.transitions
-            
-            # Verify node outputs are properly configured
-            assert workflow.node_outputs["validate_input"] == "validation_result"
-            assert workflow.node_outputs["generate_title"] == "title"
-            assert workflow.node_outputs["generate_outline"] == "outline"
-            
-        finally:
-            sys.path.remove(str(example_path))
-    
+        # Check transitions
+        assert "generate_title" in [t[0] for t in workflow.transitions["validate_input"]]
+        assert "generate_outline" in [t[0] for t in workflow.transitions["generate_title"]]
+        
+        # Check loop
+        assert "generate_chapter" in [t[0] for t in workflow.transitions["generate_outline"]]
+        assert "update_progress" in [t[0] for t in workflow.transitions["generate_chapter"]]
+        
+        # Check convergence after loop
+        assert "compile_book" in [t[0] for t in workflow.transitions["update_progress"]]
+        assert "quality_check" in [t[0] for t in workflow.transitions["compile_book"]]
+        
     @pytest.mark.examples
     @pytest.mark.slow
     def test_examples_can_be_imported(self):
@@ -156,8 +200,6 @@ class TestExampleValidation:
             "story_generator", 
             # Add more as needed
         ]
-        
-        import sys
         
         for example_dir in example_dirs:
             example_path = examples_dir / example_dir

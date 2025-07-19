@@ -4,7 +4,7 @@
 # dependencies = [
 #     "loguru",
 #     "anyio",
-#     "quantalogic-flow>=0.6.8",
+#     "quantalogic-flow>=0.6.9",
 #     "jinja2"
 # ]
 # ///
@@ -17,7 +17,7 @@ from typing import List
 from quantalogic_flow.flow import Nodes, Workflow
 
 # Global variables
-MODEL = "gemini/gemini-2.0-flash"
+MODEL = "gemini/gemini-2.5-flash"
 DEFAULT_LLM_PARAMS = {
     "model": MODEL,
     "temperature": 0.7,
@@ -56,9 +56,7 @@ async def workflow_complete(chapters: List[str]):
 # Define the workflow
 workflow = (
     Workflow("generate_outline")
-    .start_loop()
-    .node("generate_chapter")
-    .node("update_progress")
+    .loop("generate_chapter", "update_progress")
     .end_loop(
         condition=lambda ctx: ctx["completed_chapters"] >= ctx["num_chapters"],
         next_node="workflow_complete"

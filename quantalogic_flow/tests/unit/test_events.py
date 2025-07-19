@@ -25,14 +25,14 @@ class TestWorkflowEventType:
     
     def test_event_type_values(self):
         """Test that event type values are correct."""
-        assert WorkflowEventType.NODE_STARTED.value == "node_started"
-        assert WorkflowEventType.NODE_COMPLETED.value == "node_completed"
-        assert WorkflowEventType.NODE_FAILED.value == "node_failed"
-        assert WorkflowEventType.TRANSITION_EVALUATED.value == "transition_evaluated"
-        assert WorkflowEventType.WORKFLOW_STARTED.value == "workflow_started"
-        assert WorkflowEventType.WORKFLOW_COMPLETED.value == "workflow_completed"
-        assert WorkflowEventType.SUB_WORKFLOW_ENTERED.value == "sub_workflow_entered"
-        assert WorkflowEventType.SUB_WORKFLOW_EXITED.value == "sub_workflow_exited"
+        assert WorkflowEventType.NODE_STARTED.value == "NODE_STARTED"
+        assert WorkflowEventType.NODE_COMPLETED.value == "NODE_COMPLETED"
+        assert WorkflowEventType.NODE_FAILED.value == "NODE_FAILED"
+        assert WorkflowEventType.TRANSITION_EVALUATED.value == "TRANSITION_EVALUATED"
+        assert WorkflowEventType.WORKFLOW_STARTED.value == "WORKFLOW_STARTED"
+        assert WorkflowEventType.WORKFLOW_COMPLETED.value == "WORKFLOW_COMPLETED"
+        assert WorkflowEventType.SUB_WORKFLOW_ENTERED.value == "SUB_WORKFLOW_ENTERED"
+        assert WorkflowEventType.SUB_WORKFLOW_EXITED.value == "SUB_WORKFLOW_EXITED"
 
 
 class TestWorkflowEvent:

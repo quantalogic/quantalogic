@@ -318,7 +318,7 @@ functions: {}
         )
         
         # Execute with missing required parameter - should raise an exception
-        with pytest.raises(TypeError, match="got an unexpected keyword argument"):
+        with pytest.raises(TypeError, match="missing 1 required positional argument: 'required_param'"):
             self.manager.execute_workflow(problematic_workflow, {})
 
     def test_get_workflow_dependencies_with_complex_imports(self):

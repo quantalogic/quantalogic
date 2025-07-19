@@ -2,766 +2,621 @@
 
 ## 1. Introduction 🌟
 
-The **Quantalogic Flow YAML DSL** is a human-readable, declarative language for defining workflows within the `quantalogic.flow` Python package. As of **March 8, 2025**, it’s packed with features for task automation:
+The **Quantalogic Flow YAML DSL** is a human-readable, declarative language for defining workflows within the `quantalogic_flow` Python package. Based on the current codebase analysis, it provides comprehensive features for workflow automation:
 
-- **Function Execution** ⚙️: Run async Python functions from embedded code, PyPI, local files, or URLs.
-- **Execution Flow** ➡️: Support sequential, conditional, parallel, branching, and converging transitions.
+- **Function Execution** ⚙️: Run async Python functions from embedded code or external modules (PyPI, local files, URLs).
+- **Execution Flow** ➡️: Support sequential, conditional, parallel, and branching transitions.
 - **Sub-Workflows** 🌳: Enable hierarchical, modular designs.
-- **LLM Integration** 🤖: Harness Large Language Models for text or structured outputs, with dynamic model selection.
+- **LLM Integration** 🤖: Harness Large Language Models for text or structured outputs with dynamic model selection.
 - **Template Nodes** 📝: Render dynamic content with Jinja2 templates.
-- **Input Mapping** 🔗: Flexibly map node parameters to context or custom logic (including lambdas).
+- **Input Mapping** 🔗: Flexibly map node parameters to context or custom logic (including lambda expressions).
 - **Context Management** 📦: Share state dynamically across nodes.
 - **Robustness** 🛡️: Include retries, delays, and timeouts.
-- **Observers** 👀: Monitor execution with custom handlers.
-- **Programmatic Control** 🧑‍💻: Manage workflows via `WorkflowManager`.
+- **Observers** 👀: Monitor execution with custom event handlers.
+- **Validation** 🕵️: Comprehensive workflow validation including circular dependency detection.
 
-This DSL integrates with `Workflow`, `WorkflowEngine`, and `Nodes` classes, making it versatile for everything from simple scripts to complex AI-driven workflows. We’ll use an updated **Story Generator Workflow** as a running example, derived from `examples/flow/simple_story_generator/story_generator_agent.py`, now enhanced with branching, convergence, input mapping, template nodes, and dynamic model selection. Let’s dive in! 🎉
+This DSL integrates with `Workflow`, `WorkflowEngine`, and `Nodes` classes, making it versatile for everything from simple scripts to complex AI-driven workflows.
 
 ---
 
 ## 2. Workflow Structure 🗺️
 
-A workflow YAML file comprises five core sections:
-
-- **`functions`**: Python code definitions.
-- **`nodes`**: Task specifications with input mappings and template support.
-- **`workflow`**: Flow orchestration with branching and convergence.
-- **`dependencies`**: Python module dependencies.
-- **`observers`**: Event monitoring.
-
-Here’s the skeleton:
+A workflow YAML file comprises these core sections:
 
 ```yaml
 functions:
-  # Python magic ✨
+  # Python function definitions (embedded or external)
 nodes:
-  # Tasks with input mappings & templates 🎯
+  # Task specifications with comprehensive configuration
 workflow:
-  # Flow control with branches & convergence 🚦
+  # Flow orchestration with transitions and control logic
 dependencies:
   # Python module dependencies (optional)
 observers:
-  # Event watchers 👀 (optional)
+  # Event monitoring functions (optional)
 ```
-
-### 3. LLM Configuration
-
-In the `llm_config` section of a node definition, you can specify a file-based system prompt using the `system_prompt_file` key (takes precedence over `system_prompt`) and a dynamic `model` using a lambda expression (e.g., `"lambda ctx: ctx['model_name']"`). This enhances flexibility for LLM-driven tasks.
-
-Example:
-
-```yaml
-llm_config:
-  model: "lambda ctx: ctx['model_name']"  # Dynamic model selection
-  system_prompt: "You are a creative writer."
-  system_prompt_file: "path/to/system_prompt_template.jinja"
-  prompt_template: "Write a story about {topic}."
-```
-
-### Story Generator Example
-We’ll evolve the Story Generator to include branching (based on story tone), convergence (finalizing the story), **input mapping** with lambdas, a **template node** for chapter summaries, and a dynamic `model`—showcasing these shiny new features step-by-step.
 
 ---
 
-## 3. Case Study: Story Generator Workflow 📖
+## 3. Functions ⚙️
 
-### Python Version (`story_generator_agent.py`)
-
-This updated script generates a story with tone-based branching, convergence, input mapping, a template node, and dynamic model selection:
-
-```python
-#!/usr/bin/env python
-from quantalogic.flow import Nodes, Workflow
-import anyio
-
-MODEL = "gemini/gemini-2.0-flash"
-DEFAULT_LLM_PARAMS = {"temperature": 0.7, "max_tokens": 1000}
-
-@Nodes.llm_node(system_prompt="You are a creative writer skilled at generating stories.", 
-                prompt_template="Create a story outline for a {genre} story with {num_chapters} chapters.", 
-                model=lambda ctx: ctx.get("model_name", MODEL),
-                output="outline", **DEFAULT_LLM_PARAMS)
-async def generate_outline(genre: str, num_chapters: int):
-    return ""
-
-@Nodes.llm_node(system_prompt="You are a creative writer.", 
-                prompt_template="Analyze the tone of this outline: {outline}.", 
-                model=lambda ctx: ctx.get("model_name", MODEL),
-                output="tone", **DEFAULT_LLM_PARAMS)
-async def analyze_tone(outline: str):
-    return ""
-
-@Nodes.llm_node(system_prompt="You are a creative writer.", 
-                prompt_template="Write chapter {chapter_num} for this story outline: {outline}. Style: {style}.", 
-                model=lambda ctx: ctx.get("model_name", MODEL),
-                output="chapter", **DEFAULT_LLM_PARAMS)
-async def generate_chapter(outline: str, chapter_num: int, style: str):
-    return ""
-
-@Nodes.llm_node(system_prompt="You are a dramatic writer.", 
-                prompt_template="Write a dramatic chapter {chapter_num} for this outline: {outline}.", 
-                model=lambda ctx: ctx.get("model_name", MODEL),
-                output="chapter", **DEFAULT_LLM_PARAMS)
-async def generate_dramatic_chapter(outline: str, chapter_num: int):
-    return ""
-
-@Nodes.template_node(output="chapter_summary", template="Chapter {chapter_num}: {chapter}")
-async def summarize_chapter(rendered_content: str, chapter: str, chapter_num: int):
-    return rendered_content
-
-@Nodes.define(output="updated_context")
-async def update_progress(**context):
-    chapters = context.get('chapters', [])
-    completed_chapters = context.get('completed_chapters', 0)
-    chapter_summary = context.get('chapter_summary', '')
-    updated_chapters = chapters + [chapter_summary]
-    return {**context, "chapters": updated_chapters, "completed_chapters": completed_chapters + 1}
-
-@Nodes.define(output="continue_generating")
-async def check_if_complete(completed_chapters: int = 0, num_chapters: int = 0, **kwargs):
-    return completed_chapters < num_chapters
-
-@Nodes.define(output="final_story")
-async def finalize_story(chapters: list):
-    return "\n".join(chapters)
-
-workflow = (
-    Workflow("generate_outline")
-    .node("generate_outline", inputs_mapping={"genre": "story_genre", "num_chapters": "chapter_count"})
-    .then("analyze_tone")
-    .branch([
-        ("generate_chapter", lambda ctx: ctx.get("tone") == "light"),
-        ("generate_dramatic_chapter", lambda ctx: ctx.get("tone") == "dark")
-    ])
-    .then("summarize_chapter")
-    .then("update_progress")
-    .then("check_if_complete")
-    .then("generate_chapter", condition=lambda ctx: ctx.get("continue_generating", False))
-    .then("summarize_chapter")
-    .then("update_progress")
-    .then("check_if_complete")
-    .converge("finalize_story")
-)
-
-def story_observer(event):
-    print(f"Event: {event.event_type.value} - Node: {event.node_name}")
-workflow.add_observer(story_observer)
-
-if __name__ == "__main__":
-    async def main():
-        initial_context = {
-            "story_genre": "science fiction",
-            "chapter_count": 3,
-            "chapters": [],
-            "completed_chapters": 0,
-            "style": "descriptive",
-            "model_name": "gemini/gemini-2.0-flash"  # Dynamic model selection
-        }
-        engine = workflow.build()
-        result = await engine.run(initial_context)
-        print(f"Final Story:\n{result.get('final_story', '')}")
-    anyio.run(main)
-```
-
-### YAML Version (`story_generator_workflow.yaml`)
-
-Here’s the updated YAML with branching, convergence, input mapping with lambdas, a template node, and dynamic model selection:
-
-```yaml
-functions:
-  update_progress:
-    type: embedded
-    code: |
-      async def update_progress(**context):
-          chapters = context.get('chapters', [])
-          completed_chapters = context.get('completed_chapters', 0)
-          chapter_summary = context.get('chapter_summary', '')
-          updated_chapters = chapters + [chapter_summary]
-          return {**context, "chapters": updated_chapters, "completed_chapters": completed_chapters + 1}
-  check_if_complete:
-    type: embedded
-    code: |
-      async def check_if_complete(completed_chapters=0, num_chapters=0, **kwargs):
-          return completed_chapters < num_chapters
-  finalize_story:
-    type: embedded
-    code: |
-      async def finalize_story(chapters):
-          return "\n".join(chapters)
-  story_observer:
-    type: embedded
-    code: |
-      def story_observer(event):
-          print(f"Event: {event.event_type.value} - Node: {event.node_name}")
-
-nodes:
-  generate_outline:
-    llm_config:
-      model: "lambda ctx: ctx['model_name']"  # Dynamic model selection
-      system_prompt: "You are a creative writer skilled at generating stories."
-      system_prompt_file: "path/to/system_prompt_template.jinja"
-      prompt_template: "Create a story outline for a {genre} story with {num_chapters} chapters."
-      temperature: 0.7
-      max_tokens: 1000
-    inputs_mapping:
-      genre: "story_genre"
-      num_chapters: "chapter_count"
-    output: outline
-  analyze_tone:
-    llm_config:
-      model: "lambda ctx: ctx['model_name']"  # Dynamic model selection
-      system_prompt: "You are a creative writer."
-      prompt_template: "Analyze the tone of this outline: {outline}."
-      temperature: 0.7
-      max_tokens: 1000
-    output: tone
-  generate_chapter:
-    llm_config:
-      model: "lambda ctx: ctx['model_name']"  # Dynamic model selection
-      system_prompt: "You are a creative writer."
-      prompt_template: "Write chapter {chapter_num} for this story outline: {outline}. Style: {style}."
-      temperature: 0.7
-      max_tokens: 1000
-    inputs_mapping:
-      chapter_num: "completed_chapters"
-      style: "style"
-    output: chapter
-  generate_dramatic_chapter:
-    llm_config:
-      model: "lambda ctx: ctx['model_name']"  # Dynamic model selection
-      system_prompt: "You are a dramatic writer."
-      prompt_template: "Write a dramatic chapter {chapter_num} for this outline: {outline}."
-      temperature: 0.7
-      max_tokens: 1000
-    inputs_mapping:
-      chapter_num: "completed_chapters"
-    output: chapter
-  summarize_chapter:
-    template_config:
-      template: "Chapter {chapter_num}: {chapter}"
-    inputs_mapping:
-      chapter_num: "completed_chapters"
-    output: chapter_summary
-  update_progress:
-    function: update_progress
-    output: updated_context
-  check_if_complete:
-    function: check_if_complete
-    output: continue_generating
-  finalize_story:
-    function: finalize_story
-    output: final_story
-
-workflow:
-  start: generate_outline
-  transitions:
-    - from_node: generate_outline
-      to_node: analyze_tone
-    - from_node: analyze_tone
-      to_node:
-        - to_node: generate_chapter
-          condition: "ctx['tone'] == 'light'"
-        - to_node: generate_dramatic_chapter
-          condition: "ctx['tone'] == 'dark'"
-    - from_node: generate_chapter
-      to_node: summarize_chapter
-    - from_node: generate_dramatic_chapter
-      to_node: summarize_chapter
-    - from_node: summarize_chapter
-      to_node: update_progress
-    - from_node: update_progress
-      to_node: check_if_complete
-    - from_node: check_if_complete
-      to_node: generate_chapter
-      condition: "ctx['continue_generating']"
-  convergence_nodes:
-    - finalize_story
-
-observers:
-  - story_observer
-```
-
-### Mermaid Diagram: Updated Story Generator Flow
-
-```mermaid
-graph TD
-    A[generate_outline] --> B[analyze_tone]
-    B -->|"'light'"| C[generate_chapter]
-    B -->|"'dark'"| D[generate_dramatic_chapter]
-    C --> E[summarize_chapter]
-    D --> E
-    E --> F[update_progress]
-    F --> G[check_if_complete]
-    G -->|"ctx['continue_generating']"| C
-    G --> H[finalize_story]
-    F --> H
-    style A fill:#CE93D8,stroke:#AB47BC,stroke-width:2px  # Purple for LLM
-    style B fill:#CE93D8,stroke:#AB47BC,stroke-width:2px  # Purple for LLM
-    style C fill:#CE93D8,stroke:#AB47BC,stroke-width:2px  # Purple for LLM
-    style D fill:#CE93D8,stroke:#AB47BC,stroke-width:2px  # Purple for LLM
-    style E fill:#FCE4EC,stroke:#F06292,stroke-width:2px  # Pink for template
-    style F fill:#90CAF9,stroke:#42A5F5,stroke-width:2px  # Blue for function
-    style G fill:#90CAF9,stroke:#42A5F5,stroke-width:2px  # Blue for function
-    style H fill:#90CAF9,stroke:#42A5F5,stroke-width:2px,stroke-dasharray:5 5  # Blue with dashed for convergence
-```
-
-#### Execution
-With `initial_context = {"story_genre": "science fiction", "chapter_count": 3, "chapters": [], "completed_chapters": 0, "style": "descriptive", "model_name": "gemini/gemini-2.0-flash"}`:
-1. `generate_outline` uses input mapping (`story_genre`, `chapter_count`) and a dynamic `model` to create an outline.
-2. `analyze_tone` determines the story’s tone with a dynamic `model`.
-3. Branches to `generate_chapter` (light tone) or `generate_dramatic_chapter` (dark tone), mapping `chapter_num` to `completed_chapters`.
-4. `summarize_chapter` formats the chapter using a template, mapping `chapter_num`.
-5. `update_progress` updates chapters and count with the summary.
-6. `check_if_complete` loops back if more chapters are needed.
-7. Converges at `finalize_story` to compile the final story.
-
----
-
-## 4. Functions ⚙️
-
-The `functions` section defines reusable Python code.
+The `functions` section defines reusable Python code that can be called by nodes.
 
 ### Fields 📋
-- `type` (string, required): `"embedded"` or `"external"`.
-- `code` (string, optional): Inline code for `embedded`.
-- `module` (string, optional): Source for `external` (PyPI, path, URL).
-- `function` (string, optional): Function name in `module`.
+
+- `type` (string, required): Must be `"embedded"` or `"external"`.
+- `code` (string, optional): Inline Python code for `embedded` functions.
+- `module` (string, optional): Source module for `external` functions (PyPI package, file path, or URL).
+- `function` (string, optional): Function name within the module for `external` functions.
 
 ### Rules ✅
-- Embedded: Use `async def` (if async), name matches key.
-- External: Requires `module` and `function`, no `code`.
+
+- **Embedded functions**: Must include `code` field, no `module` or `function` fields.
+- **External functions**: Must include both `module` and `function` fields, no `code` field.
+- Function names in YAML must match the actual function names in the code.
 
 ### Examples 🌈
-From the story generator:
+
+**Embedded function:**
 ```yaml
 functions:
-  finalize_story:
+  process_data:
     type: embedded
     code: |
-      async def finalize_story(chapters):
-          return "\n".join(chapters)
+      async def process_data(data: str) -> str:
+          return data.upper()
 ```
-External example:
+
+**External function:**
 ```yaml
 functions:
-  fetch:
+  fetch_data:
     type: external
     module: requests
     function: get
 ```
 
-```mermaid
-graph TD
-    A[Function Definition] --> B{Type?}
-    B -->|embedded| C[Code: async def ...]
-    B -->|external| D[Module: PyPI, Path, URL]
-    D --> E[Function Name]
-    style A fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
-    style B fill:#fff,stroke:#333
-    style C fill:#cce6ff,stroke:#0066cc
-    style D fill:#cce6ff,stroke:#0066cc
-    style E fill:#cce6ff,stroke:#0066cc
-```
-
 ---
 
-## 5. Dependencies 🐍
+## 4. Nodes 🧩
 
-The `dependencies` section lists required Python modules.
+Nodes define the computational tasks in your workflow. Each node can be one of four types:
 
-### Fields 📋
-- `dependencies` (list, optional): PyPI packages (e.g., `requests>=2.28.0`), local paths (e.g., `/path/to/module.py`), or URLs (e.g., `https://example.com/module.py`).
+### Node Types
 
-### Example 🌈
-```yaml
-dependencies:
-  - requests>=2.28.0
-  - /path/to/my_custom_module.py
-  - https://example.com/another_module.py
-```
-
----
-
-## 6. Nodes 🧩
-
-Nodes define tasks, now enhanced with **input mappings** (including lambdas), **template nodes**, and dynamic `model` selection in LLM nodes, alongside functions and sub-workflows.
+1. **Function nodes**: Execute Python functions
+2. **LLM nodes**: Use Large Language Models
+3. **Template nodes**: Apply Jinja2 templates
+4. **Sub-workflow nodes**: Execute nested workflows
 
 ### Fields 📋
-- `function` (string, optional): Links to `functions`.
-- `sub_workflow` (object, optional):
-  - `start` (string)
-  - `transitions` (list)
-  - `convergence_nodes` (list, optional)
-- `llm_config` (object, optional):
-  - `model` (string, default: `"gpt-3.5-turbo"`): Can be a static name or lambda (e.g., `"lambda ctx: ctx['model_name']"`).
-  - `system_prompt` (string, optional)
-  - `system_prompt_file` (string, optional): Path to a Jinja2 template file (overrides `system_prompt`).
-  - `prompt_template` (string, default: `"{{ input }}"`)
-  - `prompt_file` (string, optional): Path to a Jinja2 template file (overrides `prompt_template`).
-  - `temperature` (float, default: `0.7`)
-  - `max_tokens` (int, optional)
-  - `top_p` (float, default: `1.0`)
-  - `presence_penalty` (float, default: `0.0`)
-  - `frequency_penalty` (float, default: `0.0`)
-  - `response_model` (string, optional)
-- `template_config` (object, optional):
-  - `template` (string, default: `""`): Jinja2 template string.
-  - `template_file` (string, optional): Path to a Jinja2 template file (overrides `template`).
-- `inputs_mapping` (dict, optional): Maps node parameters to context keys or lambda expressions (e.g., `"lambda ctx: ctx['x'] + 1"`).
-- `output` (string, optional): Context key for the result.
-- `retries` (int, default: `3`)
-- `delay` (float, default: `1.0`)
-- `timeout` (float/null, default: `null`)
-- `parallel` (bool, default: `false`)
+
+- `function` (string, optional): Reference to a function in the `functions` section
+- `llm_config` (object, optional): LLM configuration for AI-powered nodes
+- `template_config` (object, optional): Template configuration for formatting nodes
+- `sub_workflow` (object, optional): Sub-workflow definition
+- `inputs_mapping` (object, optional): Map node inputs to context keys or lambda expressions
+- `output` (string, optional): Context key for storing the node's result
+- `retries` (integer, default: 3): Number of retry attempts on failure
+- `delay` (float, default: 1.0): Delay between retries in seconds
+- `timeout` (float, optional): Maximum execution time in seconds
+- `parallel` (boolean, default: false): Whether this node can run in parallel
 
 ### Rules ✅
-- Exactly one of `function`, `sub_workflow`, `llm_config`, or `template_config`.
-- LLM and template inputs derived from `prompt_template`/`template` or `prompt_file`/`template_file`, overridden by `inputs_mapping`.
-- `inputs_mapping` values can be strings (context keys) or serialized lambdas.
+
+- Exactly one of `function`, `llm_config`, `template_config`, or `sub_workflow` must be specified
+- `inputs_mapping` can reference context keys directly or use lambda expressions as strings
+- LLM and template node inputs are derived from templates but can be overridden by `inputs_mapping`
 
 ### Examples 🌈
-Using a template node with an external Jinja2 file:
+
+**Function node:**
+```yaml
+nodes:
+  process:
+    function: process_data
+    inputs_mapping:
+      data: "raw_input"
+    output: processed_result
+```
+
+**LLM node:**
+```yaml
+nodes:
+  generate_story:
+    llm_config:
+      model: "gemini/gemini-2.0-flash"
+      system_prompt: "You are a creative writer."
+      prompt_template: "Write a {{ genre }} story about {{ topic }}."
+      temperature: 0.7
+      max_tokens: 2000
+    inputs_mapping:
+      genre: "story_genre"
+      topic: "story_topic"
+    output: story_content
+```
+
+**Template node:**
+```yaml
+nodes:
+  format_output:
+    template_config:
+      template: "Result: {{ data }}\nProcessed at: {{ timestamp }}"
+    inputs_mapping:
+      data: "processed_result"
+      timestamp: "lambda ctx: datetime.now().isoformat()"
+    output: formatted_result
+```
+
+---
+
+## 5. LLM Configuration 🤖
+
+LLM nodes support comprehensive configuration for AI model interaction:
+
+### Fields 📋
+
+- `model` (string): Model name or lambda expression for dynamic selection
+- `system_prompt` (string, optional): System prompt defining the LLM's role
+- `system_prompt_file` (string, optional): Path to Jinja2 template file for system prompt
+- `prompt_template` (string): Jinja2 template for user prompt
+- `prompt_file` (string, optional): Path to external prompt template file
+- `temperature` (float, 0.0-1.0): Controls randomness of output
+- `max_tokens` (integer, optional): Maximum response tokens
+- `top_p` (float, 0.0-1.0): Nucleus sampling parameter
+- `presence_penalty` (float, -2.0-2.0): Penalty for topic repetition
+- `frequency_penalty` (float, -2.0-2.0): Penalty for word repetition
+- `stop` (list of strings, optional): Stop sequences
+- `response_model` (string, optional): Path to Pydantic model for structured output
+- `api_key` (string, optional): Custom API key
+
+### Dynamic Model Selection
+
+```yaml
+llm_config:
+  model: "lambda ctx: ctx.get('model_name', 'gpt-3.5-turbo')"
+  prompt_template: "Answer this question: {{ question }}"
+```
+
+### Structured Output
+
+```yaml
+llm_config:
+  model: "gpt-4"
+  response_model: "my_models:PersonDetails"
+  prompt_template: "Extract person details from: {{ text }}"
+```
+
+---
+
+## 6. Template Configuration 📝
+
+Template nodes use Jinja2 for dynamic content generation:
+
+### Fields 📋
+
+- `template` (string): Inline Jinja2 template
+- `template_file` (string, optional): Path to external template file
+
+### Example
+
 ```yaml
 nodes:
   format_report:
     template_config:
-      template_file: "templates/report.j2"
+      template: |
+        # Report: {{ title }}
+        
+        ## Summary
+        {{ summary }}
+        
+        ## Details
+        {% for item in items %}
+        - {{ item }}
+        {% endfor %}
     inputs_mapping:
       title: "report_title"
-      data: "report_data"
+      summary: "report_summary"
+      items: "report_items"
     output: formatted_report
 ```
-(`templates/report.j2`: `Report: {{ title }}\nData: {{ data }}`)
-
-With input mapping, lambda, and dynamic model in an LLM node:
-```yaml
-nodes:
-  generate_outline:
-    llm_config:
-      model: "lambda ctx: ctx['model_name']"  # Dynamic model selection
-      system_prompt: "You are a creative writer skilled at generating stories."
-      system_prompt_file: "path/to/system_prompt_template.jinja"
-      prompt_template: "Create a story outline for a {genre} story with {num_chapters} chapters."
-      temperature: 0.7
-      max_tokens: 1000
-    inputs_mapping:
-      genre: "story_genre"
-      num_chapters: "lambda ctx: ctx['chapter_count'] + 1"
-    output: outline
-```
-
-From the story generator (template node):
-```yaml
-nodes:
-  summarize_chapter:
-    template_config:
-      template: "Chapter {chapter_num}: {chapter}"
-    inputs_mapping:
-      chapter_num: "completed_chapters"
-    output: chapter_summary
-```
-
-```mermaid
-graph TD
-    A[Node] --> B{Type?}
-    B -->|function| C[Function Ref]
-    B -->|sub_workflow| D[Start + Transitions + Convergence]
-    B -->|llm_config| E[LLM Setup]
-    B -->|template_config| F[Template Setup]
-    A --> G[Inputs Mapping?]
-    G -->|Yes| H[Context Keys or Lambdas]
-    E --> I{Structured?}
-    I -->|Yes| J[response_model]
-    I -->|No| K[Plain Text]
-    F --> L[Jinja2 Template]
-    E --> M[Dynamic Model?]
-    M -->|Yes| N[Lambda Expression]
-    style A fill:#e6ffe6,stroke:#009933,stroke-width:2px
-    style B fill:#fff,stroke:#333
-    style C fill:#ccffcc,stroke:#009933
-    style D fill:#ccffcc,stroke:#009933
-    style E fill:#ccffcc,stroke:#009933
-    style F fill:#ccffcc,stroke:#009933
-    style G fill:#fff,stroke:#333
-    style H fill:#b3ffb3,stroke:#009933
-    style I fill:#fff,stroke:#333
-    style J fill:#b3ffb3,stroke:#009933
-    style K fill:#b3ffb3,stroke:#009933
-    style L fill:#b3ffb3,stroke:#009933
-    style M fill:#fff,stroke:#333
-    style N fill:#b3ffb3,stroke:#009933
-```
 
 ---
 
-## 6. Input Mapping with LLM Nodes and Template Nodes 🔗
+## 7. Workflow Structure 🌐
 
-Input mapping allows flexible parameter passing to nodes, enabling dynamic behavior based on workflow context. This is particularly powerful with LLM nodes (including dynamic models) and template nodes.
-
-### Implementation Details
-
-- **Input Mapping Types**:
-  - Direct context references (e.g., `"story_genre"`)
-  - Lambda expressions (e.g., `"lambda ctx: ctx['chapter_count'] + 1"`)
-  - Static values
-
-- **Supported Node Types**:
-  - LLM nodes
-  - Template nodes
-  - Function nodes
-  - Sub-workflow nodes
-
-### LLM Node Input Mapping
-
-LLM nodes support input mapping for prompts and dynamic model selection:
-
-```yaml
-nodes:
-  generate_outline:
-    llm_config:
-      model: "lambda ctx: ctx['model_name']"  # Dynamic model selection
-      system_prompt: "You are a creative writer skilled in {genre} stories."
-      system_prompt_file: "path/to/system_prompt_template.jinja"
-      prompt_template: "Create a story outline for a {genre} story with {num_chapters} chapters."
-      temperature: 0.7
-      max_tokens: 1000
-    inputs_mapping:
-      genre: "story_genre"  # Map from context
-      num_chapters: "lambda ctx: ctx['chapter_count'] + 1"  # Dynamic value
-    output: outline
-```
-
-### Template Node Input Mapping
-
-Template nodes use mapped inputs in Jinja2 templates:
-
-```yaml
-nodes:
-  summarize_chapter:
-    template_config:
-      template: "Chapter {chapter_num}: {chapter}\n\nSummary: {summary}"
-    inputs_mapping:
-      chapter_num: "current_chapter"
-      chapter: "lambda ctx: ctx['chapters'][ctx['current_chapter']]"
-      summary: "lambda ctx: ctx['summaries'][ctx['current_chapter']]"
-    output: chapter_summary
-```
-
-### Combined Example
-
-Here’s an example combining both LLM and template nodes with input mapping:
-
-```yaml
-nodes:
-  generate_character:
-    llm_config:
-      model: "lambda ctx: ctx['model_name']"  # Dynamic model selection
-      system_prompt: "You are a character designer."
-      prompt_template: "Create a character for a {genre} story."
-    inputs_mapping:
-      genre: "story_genre"
-    output: character_description
-
-  format_character:
-    template_config:
-      template: "Character Profile:\n\n{description}\n\nTraits: {traits}"
-    inputs_mapping:
-      description: "character_description"
-      traits: "lambda ctx: ', '.join(ctx['character_traits'])"
-    output: formatted_character
-```
-
-### Key Points
-
-- Use `inputs_mapping` to map context values to node parameters.
-- Support both direct context references and lambda expressions.
-- Works seamlessly with LLM (including dynamic `model`), template, and other node types.
-- Enables dynamic, context-aware workflows.
-- Input mapping is validated against node parameters.
-
----
-
-## 7. Workflow 🌐
-
-The `workflow` section orchestrates execution, leveraging branching and convergence.
+The `workflow` section orchestrates node execution:
 
 ### Fields 📋
-- `start` (string, optional): First node.
-- `transitions` (list):
-  - `from_node` (string)
-  - `to_node` (string or list):
-    - String: Sequential or parallel transition.
-    - List of objects: Branching with `to_node` and `condition`.
-  - `condition` (string, optional): For sequential transitions.
-- `convergence_nodes` (list, optional): Nodes where branches merge.
 
-### Example 🌈
-From the story generator:
+- `start` (string): Name of the first node to execute
+- `transitions` (list): Defines how nodes connect and flow
+- `loops` (list): Loop definitions (legacy, use conditions instead)
+- `convergence_nodes` (list): Nodes where multiple paths converge
+
+### Transition Structure
+
+Each transition contains:
+- `from_node` (string): Source node name
+- `to_node` (string): Target node name
+- `condition` (string, optional): Lambda expression for conditional transitions
+
+### Examples 🌈
+
+**Sequential workflow:**
 ```yaml
 workflow:
-  start: generate_outline
+  start: node_a
   transitions:
-    - from_node: generate_outline
-      to_node: analyze_tone
-    - from_node: analyze_tone
-      to_node:
-        - to_node: generate_chapter
-          condition: "ctx['tone'] == 'light'"
-        - to_node: generate_dramatic_chapter
-          condition: "ctx['tone'] == 'dark'"
-    - from_node: generate_chapter
-      to_node: summarize_chapter
-    - from_node: generate_dramatic_chapter
-      to_node: summarize_chapter
-    - from_node: summarize_chapter
-      to_node: update_progress
-    - from_node: update_progress
-      to_node: check_if_complete
-    - from_node: check_if_complete
-      to_node: generate_chapter
-      condition: "ctx['continue_generating']"
-  convergence_nodes:
-    - finalize_story
+    - from_node: node_a
+      to_node: node_b
+    - from_node: node_b
+      to_node: node_c
 ```
 
-```mermaid
-graph TD
-    A[Workflow] --> B[Start Node]
-    A --> C[Transitions]
-    C --> D[From Node]
-    D --> E{To Node}
-    E -->|Sequential| F[Single Node]
-    E -->|Parallel| G[List of Nodes]
-    E -->|Branching| H[List with Conditions]
-    C --> I[Condition?]
-    I -->|Yes| J[ctx-based Logic]
-    A --> K[Convergence Nodes]
-    K --> L[Merge Points]
-    style A fill:#fff0e6,stroke:#cc3300,stroke-width:2px
-    style B fill:#ffe6cc,stroke:#cc3300
-    style C fill:#ffe6cc,stroke:#cc3300
-    style D fill:#ffd9b3,stroke:#cc3300
-    style E fill:#fff,stroke:#333
-    style F fill:#ffd9b3,stroke:#cc3300
-    style G fill:#ffd9b3,stroke:#cc3300
-    style H fill:#ffd9b3,stroke:#cc3300
-    style I fill:#fff,stroke:#333
-    style J fill:#ffd9b3,stroke:#cc3300
-    style K fill:#ffe6cc,stroke:#cc3300
-    style L fill:#ffd9b3,stroke:#cc3300
+**Conditional branching:**
+```yaml
+workflow:
+  start: validate
+  transitions:
+    - from_node: validate
+      to_node: process_success
+      condition: "lambda ctx: ctx['validation_result'] == 'valid'"
+    - from_node: validate
+      to_node: handle_error
+      condition: "lambda ctx: ctx['validation_result'] == 'invalid'"
+```
+
+**Loop pattern:**
+```yaml
+workflow:
+  start: initialize
+  transitions:
+    - from_node: initialize
+      to_node: process_item
+    - from_node: process_item
+      to_node: check_complete
+    - from_node: check_complete
+      to_node: process_item
+      condition: "lambda ctx: ctx['current_index'] < ctx['total_items']"
+    - from_node: check_complete
+      to_node: finalize
+      condition: "lambda ctx: ctx['current_index'] >= ctx['total_items']"
 ```
 
 ---
 
-## 8. Workflow Validation 🕵️‍♀️
+## 8. Input Mapping 🔗
 
-`validate_workflow_definition()` ensures integrity:
-- Checks node connectivity, circular references, undefined nodes, missing start.
-- Validates branch conditions, convergence points (at least two incoming transitions), and input mappings (including lambda syntax).
-- Returns `NodeError` objects (`node_name`, `description`).
+Input mapping allows flexible parameter passing to nodes:
 
-### Example
-```python
-issues = validate_workflow_definition(workflow)
-if issues:
-    for issue in issues:
-        print(f"Node '{issue.node_name}': {issue.description}")
+### Mapping Types
+
+1. **Direct context reference**: `"context_key"`
+2. **Lambda expression**: `"lambda ctx: expression"`
+3. **Static value**: Any JSON-serializable value
+
+### Examples
+
+```yaml
+nodes:
+  advanced_node:
+    llm_config:
+      model: "lambda ctx: ctx['selected_model']"
+      prompt_template: "Process {{ data }} with style {{ style }}"
+    inputs_mapping:
+      data: "raw_data"  # Direct reference
+      style: "lambda ctx: 'formal' if ctx['is_business'] else 'casual'"  # Lambda
+      temperature: 0.5  # Static value
+    output: result
 ```
 
 ---
 
 ## 9. Observers 👀
 
-Monitor events like node starts, completions, or failures.
+Observers monitor workflow execution events:
 
-### Example
-From the story generator:
 ```yaml
+functions:
+  log_progress:
+    type: embedded
+    code: |
+      def log_progress(event):
+          print(f"[{event.event_type.value}] {event.node_name}")
+
 observers:
-  - story_observer
+  - log_progress
+```
+
+**Available event types:**
+- `WORKFLOW_STARTED`
+- `WORKFLOW_COMPLETED`
+- `WORKFLOW_FAILED`
+- `NODE_STARTED`
+- `NODE_COMPLETED`
+- `NODE_FAILED`
+
+---
+
+## 10. Dependencies 🐍
+
+Specify Python packages required by your workflow:
+
+```yaml
+dependencies:
+  - "requests>=2.25.0"
+  - "pandas"
+  - "numpy>=1.20.0"
 ```
 
 ---
 
-## 10. Context 📦
+## 11. Validation 🕵️‍♀️
 
-The `ctx` dictionary shares data, enhanced by input mappings:
-- `generate_outline` → `ctx["outline"]` (mapped from `story_genre`, `chapter_count`, dynamic `model`)
-- `summarize_chapter` → `ctx["chapter_summary"]` (mapped from `completed_chapters`)
-- `finalize_story` → `ctx["final_story"]`
+The workflow engine provides comprehensive validation:
 
----
+### Validation Features
 
-## 11. Execution Flow 🏃‍♂️
+- **Node connectivity**: Ensures all referenced nodes exist
+- **Circular dependencies**: Detects infinite loops
+- **Unreachable nodes**: Identifies orphaned nodes
+- **Syntax validation**: Checks lambda expression syntax
+- **Configuration validation**: Validates LLM and template configs
 
-The `WorkflowEngine`:
-1. Starts at `workflow.start`.
-2. Executes nodes, applying input mappings and updating `ctx`.
-3. Follows transitions (sequential, parallel, or branching) based on conditions.
-4. Converges at specified nodes.
-5. Notifies observers.
-6. Ends when transitions are exhausted.
+### Using Validation
 
----
-
-## 12. Converting Between Python and YAML 🔄
-
-### Python to YAML (`flow_extractor.py`)
 ```python
-from quantalogic.flow.flow_extractor import extract_workflow_from_file
-from quantalogic.flow.flow_manager import WorkflowManager
-
-wf_def, globals = extract_workflow_from_file("story_generator_agent.py")
-WorkflowManager(wf_def).save_to_yaml("story_generator_workflow.yaml")
-```
-
-### YAML to Python (`flow_generator.py`)
-```python
-from quantalogic.flow.flow_generator import generate_executable_script
+from quantalogic_flow.flow.flow_manager import WorkflowManager
+from quantalogic_flow.flow.flow_validator import WorkflowValidator
 
 manager = WorkflowManager()
-manager.load_from_yaml("story_generator_workflow.yaml")
-generate_executable_script(manager.workflow, {}, "standalone_story.py")
-```
+manager.load_from_yaml("workflow.yaml")
 
-```mermaid
-graph TD
-    A[Python Workflow] -->|flow_extractor.py| B[WorkflowDefinition]
-    B -->|WorkflowManager| C[YAML File]
-    C -->|WorkflowManager| D[WorkflowDefinition]
-    D -->|flow_generator.py| E[Standalone Python Script]
-    style A fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
-    style B fill:#fff,stroke:#333
-    style C fill:#e6ffe6,stroke:#009933,stroke-width:2px
-    style D fill:#fff,stroke:#333
-    style E fill:#fff0e6,stroke:#cc3300,stroke-width:2px
+validator = WorkflowValidator()
+result = validator.validate(manager.workflow)
+
+if not result.is_valid:
+    for error in result.errors:
+        print(f"Error in {error.node_name}: {error.message}")
 ```
 
 ---
 
-## 13. WorkflowManager 🧑‍💻
+## 12. Complete Example: Story Generator 📖
 
-Programmatic workflow creation with new features:
+This example demonstrates a complete workflow with LLM integration, conditional logic, and template formatting:
+
+```yaml
+functions:
+  update_progress:
+    type: embedded
+    code: |
+      async def update_progress(chapters, chapter_content, completed_chapters):
+          updated_chapters = chapters + [chapter_content]
+          return {
+              "chapters": updated_chapters, 
+              "completed_chapters": completed_chapters + 1
+          }
+
+  compile_story:
+    type: embedded
+    code: |
+      async def compile_story(title, chapters):
+          story = f"# {title}\n\n"
+          for i, chapter in enumerate(chapters, 1):
+              story += f"## Chapter {i}\n\n{chapter}\n\n"
+          return story
+
+nodes:
+  generate_title:
+    llm_config:
+      model: "gemini/gemini-2.0-flash"
+      system_prompt: "You are a creative writer specializing in compelling titles."
+      prompt_template: "Generate a captivating title for a {{ genre }} story."
+      temperature: 0.8
+      max_tokens: 50
+    inputs_mapping:
+      genre: "story_genre"
+    output: title
+
+  generate_outline:
+    llm_config:
+      model: "gemini/gemini-2.0-flash"
+      system_prompt: "You are an expert story planner."
+      prompt_template: |
+        Create a detailed outline for "{{ title }}" - a {{ genre }} story 
+        with {{ num_chapters }} chapters.
+      temperature: 0.7
+      max_tokens: 1000
+    inputs_mapping:
+      genre: "story_genre"
+      num_chapters: "chapter_count"
+    output: outline
+
+  write_chapter:
+    llm_config:
+      model: "gemini/gemini-2.0-flash"
+      system_prompt: "You are a skilled storyteller."
+      prompt_template: |
+        Write chapter {{ chapter_num }} for "{{ title }}".
+        Outline: {{ outline }}
+        Previous chapters: {{ completed_chapters }}
+      temperature: 0.7
+      max_tokens: 2000
+    inputs_mapping:
+      chapter_num: "lambda ctx: ctx['completed_chapters'] + 1"
+      completed_chapters: "lambda ctx: len(ctx['chapters'])"
+    output: chapter_content
+
+  update_progress:
+    function: update_progress
+    output: progress_update
+
+  check_completion:
+    template_config:
+      template: "{{ completed_chapters >= total_chapters }}"
+    inputs_mapping:
+      completed_chapters: "completed_chapters"
+      total_chapters: "chapter_count"
+    output: is_complete
+
+  finalize_story:
+    function: compile_story
+    output: final_story
+
+workflow:
+  start: generate_title
+  transitions:
+    - from_node: generate_title
+      to_node: generate_outline
+    - from_node: generate_outline
+      to_node: write_chapter
+    - from_node: write_chapter
+      to_node: update_progress
+    - from_node: update_progress
+      to_node: check_completion
+    - from_node: check_completion
+      to_node: write_chapter
+      condition: "lambda ctx: not ctx['is_complete']"
+    - from_node: check_completion
+      to_node: finalize_story
+      condition: "lambda ctx: ctx['is_complete']"
+
+observers: []
+dependencies:
+  - "jinja2>=3.0.0"
+```
+
+**Usage:**
 ```python
-manager = WorkflowManager()
-manager.add_node(
-    "start",
-    llm_config={"model": "lambda ctx: ctx['model_name']", "prompt_template": "Say hi to {name}"},
-    inputs_mapping={"name": "user_name"}
-)
-manager.add_node(
-    "format",
-    template_config={"template": "Message: {text}"},
-    inputs_mapping={"text": "start_result"}
-)
-manager.set_start_node("start")
-manager.add_transition("start", "format")
-manager.add_convergence_node("format")
-manager.save_to_yaml("hi.yaml")
+import asyncio
+from quantalogic_flow.flow.flow_manager import WorkflowManager
+
+async def main():
+    manager = WorkflowManager()
+    manager.load_from_yaml("story_workflow.yaml")
+    
+    workflow = manager.instantiate_workflow()
+    engine = workflow.build()
+    
+    context = {
+        "story_genre": "science fiction",
+        "chapter_count": 3,
+        "chapters": [],
+        "completed_chapters": 0
+    }
+    
+    result = await engine.run(context)
+    print(result["final_story"])
+
+asyncio.run(main())
 ```
 
 ---
 
-## 14. Conclusion 🎉
+## 13. WorkflowManager API 🧑‍💻
 
-The Quantalogic Flow YAML DSL (March 8, 2025) is a powerful, flexible tool for workflow automation, exemplified by the updated Story Generator case study. With new **input mapping** (including lambdas), **template nodes**, and **dynamic model selection** in LLM nodes, alongside sub-workflows, branching, convergence, and conversion tools, it seamlessly bridges Python and YAML. Whether crafting dynamic stories with formatted chapters or managing complex processes, this DSL, paired with `WorkflowManager`, unlocks efficient, scalable workflows. 🚀
+The `WorkflowManager` class provides programmatic workflow management:
+
+### Core Methods
+
+```python
+from quantalogic_flow.flow.flow_manager import WorkflowManager
+
+# Create and configure
+manager = WorkflowManager()
+
+# Load from YAML
+manager.load_from_yaml("workflow.yaml")
+
+# Save to YAML
+manager.save_to_yaml("output.yaml")
+
+# Add nodes programmatically
+manager.add_node(
+    name="custom_node",
+    llm_config={
+        "model": "gpt-4",
+        "prompt_template": "Process {{ input }}"
+    },
+    inputs_mapping={"input": "raw_data"},
+    output="processed_data"
+)
+
+# Set workflow structure
+manager.set_start_node("custom_node")
+manager.add_transition("custom_node", "next_node")
+
+# Build executable workflow
+workflow = manager.instantiate_workflow()
+engine = workflow.build()
+```
+
+---
+
+## 14. Conversion Tools 🔄
+
+Convert between YAML and Python representations:
+
+### YAML to Python
+
+```python
+from quantalogic_flow.flow.flow_generator import generate_executable_script
+from quantalogic_flow.flow.flow_manager import WorkflowManager
+
+manager = WorkflowManager()
+manager.load_from_yaml("workflow.yaml")
+generate_executable_script(manager.workflow, {}, "workflow.py")
+```
+
+### Python to YAML
+
+```python
+from quantalogic_flow.flow.flow_extractor import extract_workflow_from_file
+from quantalogic_flow.flow.flow_manager import WorkflowManager
+
+workflow_def, globals_dict = extract_workflow_from_file("workflow.py")
+manager = WorkflowManager(workflow_def)
+manager.save_to_yaml("workflow.yaml")
+```
+
+---
+
+## 15. Best Practices 🌟
+
+### Performance
+- Use `inputs_mapping` to avoid unnecessary context passing
+- Set appropriate `timeout` values for long-running operations
+- Configure `retries` and `delay` based on operation reliability
+
+### Debugging
+- Use observers to monitor execution flow
+- Validate workflows before deployment
+- Test lambda expressions in isolation
+
+### Maintainability
+- Keep templates simple and focused
+- Use external template files for complex formatting
+- Document lambda expressions with comments
+- Group related functions logically
+
+### Error Handling
+- Configure appropriate retry policies
+- Use validation to catch errors early
+- Implement graceful failure paths
+
+---
+
+## 16. Conclusion 🎉
+
+The Quantalogic Flow YAML DSL provides a powerful, flexible foundation for workflow automation. With comprehensive support for LLM integration, template processing, dynamic input mapping, and robust validation, it enables everything from simple data processing pipelines to complex AI-driven applications.
+
+Key advantages:
+- **Declarative**: Human-readable workflow definitions
+- **Flexible**: Multiple node types and execution patterns
+- **Robust**: Built-in validation and error handling
+- **Interoperable**: Seamless Python integration
+- **Scalable**: Support for complex, hierarchical workflows
+
+Whether you're building content generation systems, data processing pipelines, or AI-powered applications, the Quantalogic Flow YAML DSL provides the tools you need for efficient, maintainable workflow automation. 🚀

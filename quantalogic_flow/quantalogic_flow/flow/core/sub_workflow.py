@@ -30,6 +30,6 @@ class SubWorkflowNode:
                 sub_context[sub_key] = engine.context.get(mapping)
             else:
                 sub_context[sub_key] = mapping
-        sub_engine = self.sub_workflow.build(parent_engine=engine)
+        sub_engine = self.sub_workflow.build(instance=engine.instance)
         result = await sub_engine.run(sub_context)
-        return result.get(self.output)
+        return result
