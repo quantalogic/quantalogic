@@ -319,6 +319,58 @@ def get_function_params(code: str, func_name: str) -> List[str]:
         raise ValueError(f"Invalid syntax in code: {e}")
 
 
+def get_sub_workflow_nodes(sub_workflow: WorkflowStructure) -> Set[str]:
+    """Extract the actual node names from a sub-workflow structure.
+    
+    This function fixes a critical bug where sub-workflow validation incorrectly
+    iterated over ALL top-level nodes instead of only the nodes that actually
+    belong to the sub-workflow. The original buggy code:
+    
+        # BUGGY: Iterates over ALL nodes for each sub-workflow
+        for sub_node_name, sub_node_def in workflow_def.nodes.items():
+    
+    This caused false validation errors and polluted the dependency graph with
+    invalid namespaced entries. The fix extracts only the actual sub-nodes by
+    examining the sub-workflow structure itself.
+    
+    Args:
+        sub_workflow: The WorkflowStructure to extract nodes from.
+        
+    Returns:
+        Set of node names that belong to this sub-workflow.
+        
+    Example:
+        >>> sub_workflow = WorkflowStructure(start="sub_start")
+        >>> sub_workflow.transitions = [
+        ...     TransitionDefinition(from_node="sub_start", to_node="sub_end")
+        ... ]
+        >>> get_sub_workflow_nodes(sub_workflow)
+        {"sub_start", "sub_end"}
+    """
+    sub_nodes = set()
+    
+    # Add start node if it exists
+    if sub_workflow.start:
+        sub_nodes.add(sub_workflow.start)
+    
+    # Add nodes from transitions
+    for trans in sub_workflow.transitions:
+        # Add from_node
+        sub_nodes.add(trans.from_node)
+        
+        # Add to_node(s)
+        if isinstance(trans.to_node, str):
+            sub_nodes.add(trans.to_node)
+        elif isinstance(trans.to_node, list):
+            for target in trans.to_node:
+                if isinstance(target, str):
+                    sub_nodes.add(target)
+                else:  # BranchCondition
+                    sub_nodes.add(target.to_node)
+    
+    return sub_nodes
+
+
 def validate_loops(workflow_def: WorkflowDefinition) -> List[NodeError]:
     """Validate loop structures including nested loops."""
     issues: List[NodeError] = []
@@ -522,9 +574,14 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
         if node_def.output:
             output_to_node[node_def.output] = node_name
         if node_def.sub_workflow:
-            for sub_node_name, sub_node_def in workflow_def.nodes.items():
-                if sub_node_def.output:
-                    output_to_node[sub_node_def.output] = f"{node_name}/{sub_node_name}"
+            # CRITICAL FIX: Get actual sub-nodes from the sub-workflow structure
+            # instead of iterating over ALL workflow nodes (original bug).
+            sub_nodes = get_sub_workflow_nodes(node_def.sub_workflow)
+            for sub_node_name in sub_nodes:
+                if sub_node_name in workflow_def.nodes:
+                    sub_node_def = workflow_def.nodes[sub_node_name]
+                    if sub_node_def.output:
+                        output_to_node[sub_node_def.output] = f"{node_name}/{sub_node_name}"
 
     # Check each node's inputs against ancestors' outputs, including sub-workflows
     for node_name, node_def in workflow_def.nodes.items():
@@ -583,8 +640,24 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
                     cleaned_inputs.add(base_var)
             required_inputs = cleaned_inputs
         elif node_def.sub_workflow:
-            for sub_node_name, sub_node_def in workflow_def.nodes.items():
+            # CRITICAL FIX: Get actual sub-nodes from the sub-workflow structure
+            # instead of iterating over ALL workflow nodes. The original buggy code:
+            #   for sub_node_name, sub_node_def in workflow_def.nodes.items():
+            # caused false validation errors by treating ALL nodes as sub-nodes.
+            sub_nodes = get_sub_workflow_nodes(node_def.sub_workflow)
+            for sub_node_name in sub_nodes:
+                # Check if the sub-node exists in the workflow definition
+                if sub_node_name not in workflow_def.nodes:
+                    issues.append(NodeError(
+                        node_name=node_name,
+                        description=f"Sub-node '{sub_node_name}' not defined in workflow nodes"
+                    ))
+                    continue
+                
+                sub_node_def = workflow_def.nodes[sub_node_name]
                 full_node_name = f"{node_name}/{sub_node_name}"
+                required_inputs = set()
+                
                 if sub_node_def.function:
                     maybe_func_def = workflow_def.functions.get(sub_node_def.function)
                     if maybe_func_def is None:
@@ -626,8 +699,8 @@ def validate_workflow_definition(workflow_def: WorkflowDefinition) -> List[NodeE
                     ancestors = get_ancestors(full_node_name)
                     for input_name in required_inputs:
                         # Check if input is mapped
-                        if node_def.inputs_mapping and input_name in node_def.inputs_mapping:
-                            mapping = node_def.inputs_mapping[input_name]
+                        if sub_node_def.inputs_mapping and input_name in sub_node_def.inputs_mapping:
+                            mapping = sub_node_def.inputs_mapping[input_name]
                             if not mapping.startswith("lambda ctx:") and mapping in output_to_node:
                                 producer_node = output_to_node.get(mapping)
                                 if producer_node not in ancestors:
