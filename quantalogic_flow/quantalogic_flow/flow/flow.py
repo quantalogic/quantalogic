@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.10"
 # dependencies = [
 #     "loguru>=0.7.2",              # Logging utility
 #     "litellm>=1.0.0",             # LLM integration
@@ -19,6 +19,7 @@ using a modular architecture underneath. All imports and usage patterns remain i
 """
 
 import asyncio
+from typing import List
 
 from loguru import logger
 
@@ -33,13 +34,13 @@ from .core import (
 )
 from .examples import example_workflow
 from .nodes import Nodes
-from .template import TEMPLATES_DIR, get_template_path
+from .template import TEMPLATES_DIR, TemplateEngine, get_template_path
 
 # Re-export everything to maintain API compatibility
-__all__ = [
+__all__: List[str] = [
     'WorkflowEventType', 'WorkflowEvent', 'WorkflowObserver',
     'SubWorkflowNode', 'WorkflowEngine', 'Workflow', 
-    'Nodes', 'get_template_path', 'TEMPLATES_DIR',
+    'Nodes', 'TemplateEngine', 'get_template_path', 'TEMPLATES_DIR',
     'example_workflow'
 ]
 

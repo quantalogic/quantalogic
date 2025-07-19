@@ -17,8 +17,7 @@ Key Visualization Utilities:
 from loguru import logger
 
 # Expose key components for easy importing
-from .flow import Nodes, Workflow, WorkflowEngine
-from .flow import WorkflowEvent, WorkflowEventType
+from .flow import Nodes, TemplateEngine, Workflow, WorkflowEngine, WorkflowEvent, WorkflowEventType
 from .flow_extractor import extract_workflow_from_file
 from .flow_generator import generate_executable_script
 from .flow_manager import WorkflowManager
@@ -33,6 +32,7 @@ __all__ = [
     "WorkflowEngine",
     "WorkflowEvent",
     "WorkflowEventType",
+    "TemplateEngine",
     "generate_mermaid_diagram",
     "extract_workflow_from_file",
     "generate_executable_script",
