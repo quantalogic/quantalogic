@@ -14,7 +14,7 @@ import asyncio
 import os
 from typing import Dict, Any
 
-from quantalogic_flow.flow import Workflow, Nodes
+from quantalogic_flow import Workflow, Nodes
 
 
 # Example 1: Basic POE Usage
