@@ -135,7 +135,7 @@ class TestNodes:
         result = await func(number_input=5)
         assert result == "result: 10"  # 5 * 2 = 10
     
-    @patch("quantalogic_react.quantalogic.quantlitellm.acompletion")
+    @patch("quantalogic_flow.flow.nodes.acompletion")
     async def test_llm_node_decorator_basic(self, mock_acompletion, nodes_registry_backup):
         """Test basic @Nodes.llm_node decorator."""
         # Setup mock response
@@ -172,7 +172,7 @@ class TestNodes:
         assert call_args[1]["messages"][0]["role"] == "system"
         assert call_args[1]["messages"][1]["role"] == "user"
     
-    @patch("quantalogic_react.quantalogic.quantlitellm.acompletion")
+    @patch("quantalogic_flow.flow.nodes.acompletion")
     async def test_llm_node_with_callable_model(self, mock_acompletion, nodes_registry_backup):
         """Test LLM node with callable model parameter."""
         mock_response = MagicMock()
@@ -298,7 +298,7 @@ class TestNodes:
         with pytest.raises(ValueError, match="Test error"):
             await func(data="test")
 
-    @patch("quantalogic_react.quantalogic.quantlitellm.acompletion")
+    @patch("quantalogic_flow.flow.nodes.acompletion")
     async def test_poe_provider_integration(self, mock_acompletion, nodes_registry_backup):
         """Test POE provider integration through LLM nodes."""
         # Setup mock response for POE model

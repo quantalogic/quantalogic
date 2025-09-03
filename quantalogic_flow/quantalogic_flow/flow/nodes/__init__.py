@@ -5,18 +5,46 @@ This module maintains the original Nodes API while using modular components.
 """
 
 import inspect
+import os
 from typing import Any, Callable, Dict, Type, Union
 
 import instructor
+from litellm import acompletion as _litellm_acompletion
 from loguru import logger
 from pydantic import BaseModel, ValidationError
-
-from quantalogic_react.quantalogic.quantlitellm import acompletion
 
 from ..template import TemplateEngine
 from .base import NODE_REGISTRY
 from .decorators import define as _define, transform_node as _transform_node, validate_node as _validate_node
 from .template_nodes import template_node as _template_node
+
+
+# POE Provider Configuration for independence from quantalogic_react
+def _configure_poe_provider(model: str, kwargs: Dict[str, Any]) -> None:
+    """Configure POE provider settings for litellm."""
+    if model.startswith("poe/"):
+        # Remove the poe/ prefix for the actual API call
+        kwargs["model"] = model.replace("poe/", "")
+        kwargs["custom_llm_provider"] = "openai"
+        kwargs["base_url"] = "https://api.poe.com/v1"
+        
+        # Get POE API key from environment
+        api_key = os.getenv("POE_API_KEY")
+        if not api_key:
+            raise ValueError("POE_API_KEY is not set in the environment variables.")
+        kwargs["api_key"] = api_key
+
+
+async def acompletion(**kwargs: Dict[str, Any]) -> Any:
+    """Wrapped acompletion function with POE provider support."""
+    model = kwargs.get("model", "")
+    
+    # Configure POE provider if needed
+    if model.startswith("poe/"):
+        _configure_poe_provider(model, kwargs)
+    
+    # Call the original litellm acompletion
+    return await _litellm_acompletion(**kwargs)
 
 
 class Nodes:
