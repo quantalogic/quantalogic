@@ -225,6 +225,11 @@ async def vertex_analysis(data: str):
 ### 🔮 **POE (Poe by Quora)**
 Access Claude, Gemini, Grok, and other frontier models through POE's unified API.
 
+**API Details:**
+- Base URL: `https://api.poe.com/v1`
+- Authentication: API key via `POE_API_KEY`
+- Compatible with OpenAI API format
+
 **Setup:**
 ```bash
 export POE_API_KEY="your-poe-api-key"

@@ -69,4 +69,56 @@ model_info = {
         max_output_tokens=8 * 1024,
         input_cost_per_token=0.0000001,
     ),
+    # POE API Models
+    "poe/Claude-Sonnet-4": ModelInfo(
+        model_name="poe/Claude-Sonnet-4",
+        max_input_tokens=200000,  # Claude's context window
+        max_output_tokens=8192,   # Standard output limit
+    ),
+    "poe/Claude-Opus-4.1": ModelInfo(
+        model_name="poe/Claude-Opus-4.1",
+        max_input_tokens=200000,
+        max_output_tokens=8192,
+    ),
+    "poe/Claude-Haiku-3.5": ModelInfo(
+        model_name="poe/Claude-Haiku-3.5",
+        max_input_tokens=200000,
+        max_output_tokens=8192,
+    ),
+    "poe/Gemini-2.0-Flash": ModelInfo(
+        model_name="poe/Gemini-2.0-Flash",
+        max_input_tokens=1000000,  # Gemini's large context window
+        max_output_tokens=8192,
+    ),
+    "poe/Gemini-1.5-Pro": ModelInfo(
+        model_name="poe/Gemini-1.5-Pro",
+        max_input_tokens=2000000,  # Gemini Pro's extended context
+        max_output_tokens=8192,
+    ),
+    "poe/Grok-4": ModelInfo(
+        model_name="poe/Grok-4",
+        max_input_tokens=131072,   # Grok's context window
+        max_output_tokens=8192,
+    ),
+    "poe/Grok-3": ModelInfo(
+        model_name="poe/Grok-3",
+        max_input_tokens=131072,
+        max_output_tokens=8192,
+    ),
+    "poe/GPT-4o": ModelInfo(
+        model_name="poe/GPT-4o",
+        max_input_tokens=128000,   # GPT-4o context window
+        max_output_tokens=16384,   # GPT-4o output limit
+    ),
+    "poe/o3-mini": ModelInfo(
+        model_name="poe/o3-mini",
+        max_input_tokens=128000,
+        max_output_tokens=65536,   # o3-mini has higher output limit
+    ),
+    "poe/DeepSeek-R1": ModelInfo(
+        model_name="poe/DeepSeek-R1",
+        max_input_tokens=131072,   # DeepSeek R1 context window
+        max_output_tokens=8192,
+        max_cot_tokens=32768,      # DeepSeek R1 supports chain-of-thought
+    ),
 }
