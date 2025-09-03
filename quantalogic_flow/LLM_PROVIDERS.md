@@ -222,6 +222,36 @@ async def vertex_analysis(data: str):
 
 ---
 
+### 🔮 **POE (Poe by Quora)**
+Access Claude, Gemini, Grok, and other frontier models through POE's unified API.
+
+**Setup:**
+```bash
+export POE_API_KEY="your-poe-api-key"
+```
+
+**Popular Models:**
+- `poe/Claude-Sonnet-4` - Latest Claude Sonnet
+- `poe/Claude-Opus-4.1` - Claude Opus 4.1 
+- `poe/Claude-Haiku-3.5` - Claude Haiku 3.5
+- `poe/Gemini-2.0-Flash` - Latest Gemini Flash
+- `poe/Gemini-1.5-Pro` - Gemini 1.5 Pro
+- `poe/Grok-4` - Latest Grok model
+- `poe/GPT-4o` - OpenAI GPT-4o
+- `poe/o3-mini` - OpenAI o3-mini
+- `poe/DeepSeek-R1` - DeepSeek R1
+
+**Example Usage:**
+```python
+@Nodes.llm_node(model="poe/Claude-Sonnet-4", output="analysis")
+async def analyze_with_claude(text: str):
+    return f"Analyze this text: {text}"
+```
+
+📖 **Documentation:** [POE API Documentation](https://developer.poe.com/api-key)
+
+---
+
 ## 🚀 **Quick Model Comparison**
 
 | Provider | Best For | Cost | Setup Complexity | Popular Models |
@@ -233,6 +263,7 @@ async def vertex_analysis(data: str):
 | **Bedrock** | AWS ecosystem | $$$ | Medium | claude-3-5-sonnet |
 | **LM Studio** | Desktop local models | Free | Easy | Any local model |
 | **VertexAI** | Google Cloud integration | $$ | Medium | vertex_ai/gemini-pro |
+| **POE** | Multiple frontier models | $$ | Easy | claude-sonnet-4, grok-4 |
 
 ## 💡 **Pro Tips**
 

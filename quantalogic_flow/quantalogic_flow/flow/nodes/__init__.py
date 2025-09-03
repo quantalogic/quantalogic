@@ -8,9 +8,10 @@ import inspect
 from typing import Any, Callable, Dict, Type, Union
 
 import instructor
-from litellm import acompletion
 from loguru import logger
 from pydantic import BaseModel, ValidationError
+
+from quantalogic_react.quantalogic.quantlitellm import acompletion
 
 from ..template import TemplateEngine
 from .base import NODE_REGISTRY

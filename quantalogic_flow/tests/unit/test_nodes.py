@@ -135,7 +135,7 @@ class TestNodes:
         result = await func(number_input=5)
         assert result == "result: 10"  # 5 * 2 = 10
     
-    @patch("quantalogic_flow.flow.nodes.acompletion")
+    @patch("quantalogic_react.quantalogic.quantlitellm.acompletion")
     async def test_llm_node_decorator_basic(self, mock_acompletion, nodes_registry_backup):
         """Test basic @Nodes.llm_node decorator."""
         # Setup mock response
@@ -172,7 +172,7 @@ class TestNodes:
         assert call_args[1]["messages"][0]["role"] == "system"
         assert call_args[1]["messages"][1]["role"] == "user"
     
-    @patch("quantalogic_flow.flow.nodes.acompletion")
+    @patch("quantalogic_react.quantalogic.quantlitellm.acompletion")
     async def test_llm_node_with_callable_model(self, mock_acompletion, nodes_registry_backup):
         """Test LLM node with callable model parameter."""
         mock_response = MagicMock()
@@ -297,3 +297,40 @@ class TestNodes:
         
         with pytest.raises(ValueError, match="Test error"):
             await func(data="test")
+
+    @patch("quantalogic_react.quantalogic.quantlitellm.acompletion")
+    async def test_poe_provider_integration(self, mock_acompletion, nodes_registry_backup):
+        """Test POE provider integration through LLM nodes."""
+        # Setup mock response for POE model
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "POE API response"
+        mock_response.usage.prompt_tokens = 12
+        mock_response.usage.completion_tokens = 18
+        mock_response.usage.total_tokens = 30
+        mock_acompletion.return_value = mock_response
+
+        @Nodes.llm_node(
+            system_prompt="You are Claude via POE API",
+            prompt_template="Analyze: {{ text }}",
+            output="poe_analysis",
+            model="poe/Claude-Sonnet-4"
+        )
+        def poe_analysis_node(text):
+            pass  # LLM decorator handles the logic
+
+        func, inputs, output = Nodes.NODE_REGISTRY["poe_analysis_node"]
+        assert inputs == ["text"]
+        assert output == "poe_analysis"
+
+        # Test execution with POE model
+        result = await func(text="test input")
+        assert result == "POE API response"
+
+        # Verify the model was passed correctly
+        mock_acompletion.assert_called_once()
+        call_args = mock_acompletion.call_args
+        assert call_args[1]["model"] == "poe/Claude-Sonnet-4"
+        assert len(call_args[1]["messages"]) == 2
+        assert call_args[1]["messages"][0]["content"] == "You are Claude via POE API"
+        assert "Analyze: test input" in call_args[1]["messages"][1]["content"]

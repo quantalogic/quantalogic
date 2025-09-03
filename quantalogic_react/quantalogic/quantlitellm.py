@@ -49,6 +49,12 @@ PROVIDERS = {
         base_url="https://deepseek-r1-distill-llama-70b.endpoints.kepler.ai.cloud.ovh.net/api/openai_compat/v1",
         env_var="OVH_API_KEY",
     ),
+    "poe": ModelProviderConfig(
+        prefix="poe/",
+        provider="openai",
+        base_url="https://api.poe.com/v1",
+        env_var="POE_API_KEY",
+    ),
 }
 
 
