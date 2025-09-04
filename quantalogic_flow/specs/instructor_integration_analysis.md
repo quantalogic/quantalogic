@@ -2,16 +2,26 @@
 
 ## Executive Summary
 
-This document analyzes the current LiteLLM integration in Quantalogic Flow and proposes a migration strategy to make Instructor the primary LLM interface while maintaining backward compatibility and the same model naming syntax.
+This document analyzes the current LiteLLM integration in Quantalogic Flow and proposes a migration strategy to make Instructor the primary LLM interface while maintaining backward compatibility and the same model naming syntax. The approach avoids complex model mapping logic by leveraging Instructor's native model resolution capabilities.
+
+## Key Updates (September 2025)
+
+- **Instructor Version**: Updated from v1.7.2 to v1.11.3 (latest)
+- **Unified Provider Interface**: `from_provider()` method introduced in v1.8.0 is now the recommended approach
+- **Simplified Model Handling**: Removed complex model mapping logic in favor of native Instructor resolution
+- **Google Provider**: `google-generativeai` deprecated in favor of `google-genai` in v1.10.0
+- **Enhanced Features**: Added native caching, improved error handling, and better streaming support
+- **OpenAI Integration**: Now included in main dependencies (no extra needed)
+- **Backward Compatibility**: Both legacy `from_litellm()` and modern `from_provider()` approaches supported
 
 ## Current Architecture
 
 ### LiteLLM Integration
 
 - **Primary Interface**: LiteLLM (`litellm.acompletion`)
-- **Structured Outputs**: Instructor via `instructor.from_litellm(acompletion)`
+- **Structured Outputs**: Instructor via `instructor.from_litellm(acompletion)` or `instructor.from_provider("litellm/model")`
 - **Model Syntax**: Provider/model format (e.g., `gpt-4o`, `gemini/gemini-2.0-flash`, `ollama/llama3.2`)
-- **Dependencies**: `litellm = "^1.73.6"`, `instructor = "^1.7.2"`
+- **Dependencies**: `litellm = "^1.73.6"`, `instructor = "^1.11.0"`
 
 ### Current Implementation
 
@@ -20,11 +30,20 @@ This document analyzes the current LiteLLM integration in Quantalogic Flow and p
 from litellm import acompletion
 import instructor
 
-# For structured outputs
+# For structured outputs (legacy approach)
 client = instructor.from_litellm(acompletion)
 
 # For plain text outputs
 response = await acompletion(model=model_name, ...)
+```
+
+### Modern Instructor Integration
+
+```python
+# Recommended modern approach using unified provider interface
+client = instructor.from_provider("openai/gpt-4o")
+# or for LiteLLM compatibility
+client = instructor.from_provider("litellm/gpt-4o")
 ```
 
 ## Proposed Instructor-Centric Architecture
@@ -55,9 +74,10 @@ response = await acompletion(model=model_name, ...)
 [tool.poetry.dependencies]
 # Keep litellm for backward compatibility during transition
 litellm = "^1.73.6"
-instructor = {extras = ["litellm"], version = "^1.7.2"}
-# Add direct provider support
-instructor = {extras = ["openai", "google-genai", "anthropic"], version = "^1.7.2"}
+# Updated to latest Instructor version with modern provider support
+instructor = {extras = ["litellm"], version = "^1.11.0"}
+# Add direct provider support (openai is now in main dependencies)
+instructor = {extras = ["google-genai", "anthropic"], version = "^1.11.0"}
 ```
 
 #### 1.2 Create Unified Client Factory
@@ -74,26 +94,16 @@ class LLMClient:
 
     def get_client(self, model_name: str):
         """Get or create instructor client for model"""
-        provider = self._extract_provider(model_name)
-
-        if provider not in self._clients:
-            if provider == "openai":
-                self._clients[provider] = instructor.from_openai(...)
-            elif provider == "google":
-                self._clients[provider] = instructor.from_google(...)
-            elif provider == "anthropic":
-                self._clients[provider] = instructor.from_anthropic(...)
-            else:
+        if model_name not in self._clients:
+            # Use from_provider directly - let Instructor handle model resolution
+            try:
+                self._clients[model_name] = instructor.from_provider(model_name)
+            except Exception:
                 # Fallback to LiteLLM for unsupported providers
                 from litellm import acompletion
-                self._clients[provider] = instructor.from_litellm(acompletion)
+                self._clients[model_name] = instructor.from_litellm(acompletion)
 
-        return self._clients[provider]
-
-    def _extract_provider(self, model_name: str) -> str:
-        """Extract provider from model name (e.g., 'gpt-4o' -> 'openai')"""
-        # Implementation to map model names to providers
-        pass
+        return self._clients[model_name]
 ```
 
 #### 1.3 Update Node Decorators
@@ -114,9 +124,10 @@ class Nodes:
         def decorator(func):
             async def wrapper(**kwargs):
                 client = self.client_factory.get_client(model)
+                # Use modern Instructor API
                 response = await client.chat.completions.create(
                     model=model,
-                    messages=[...],
+                    messages=[{"role": "user", "content": kwargs.get("prompt", "")}],
                     **kwargs
                 )
                 return response.choices[0].message.content
@@ -145,12 +156,15 @@ try:
     result = await client.chat.completions.create(
         model="gpt-4o",
         response_model=UserModel,
-        messages=[...],
+        messages=[{"role": "user", "content": "..."}],
         max_retries=3  # Instructor handles retries automatically
     )
 except instructor.ValidationError as e:
     logger.error(f"Validation failed: {e}")
     # Instructor automatically retries on validation errors
+except instructor.exceptions.InstructorError as e:
+    logger.error(f"Instructor error: {e}")
+    # Handle other Instructor-specific errors
 ```
 
 ### Phase 3: Advanced Features Integration
@@ -164,11 +178,26 @@ async def stream_response(model: str, prompt: str):
     stream = await client.chat.completions.create_partial(
         model=model,
         messages=[{"role": "user", "content": prompt}],
-        response_model=MyModel
+        response_model=MyModel,
+        stream=True
     )
 
     async for partial in stream:
         yield partial
+```
+
+#### 3.1.1 Alternative Streaming with Full Responses
+
+```python
+# Full streaming responses
+async def stream_full_response(model: str, prompt: str):
+    client = instructor.from_provider(model)
+    async for chunk in await client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        stream=True
+    ):
+        yield chunk.choices[0].delta.content
 ```
 
 #### 3.2 Batch Processing
@@ -182,64 +211,40 @@ batch_results = await client.chat.completions.create(
 )
 ```
 
-## Model Name Mapping Strategy
+## Simplified Model Handling
 
-### Provider Detection Logic
+### Direct Provider Usage
+
+Instructor's `from_provider()` method handles model name resolution automatically:
 
 ```python
-def detect_provider(model_name: str) -> str:
-    """Map model names to providers for Instructor client selection"""
-
-    # Direct provider prefixes
-    if model_name.startswith(("openai/", "gpt-", "o1-")):
-        return "openai"
-    elif model_name.startswith(("google/", "gemini/")):
-        return "google"
-    elif model_name.startswith(("anthropic/", "claude-")):
-        return "anthropic"
-
-    # Common model name patterns
-    model_patterns = {
-        "openai": ["gpt-", "o1-", "dall-e"],
-        "google": ["gemini-", "palm-"],
-        "anthropic": ["claude-"],
-        "meta": ["llama", "codellama"],
-        "mistral": ["mistral-"],
-        "ollama": ["ollama/"],
-        "azure": ["azure/"],
-        "bedrock": ["bedrock/"]
-    }
-
-    for provider, patterns in model_patterns.items():
-        if any(pattern in model_name for pattern in patterns):
-            return provider
-
-    # Default fallback to LiteLLM
-    return "litellm"
+# Instructor automatically detects the provider and creates the appropriate client
+client = instructor.from_provider("gpt-4o")           # OpenAI
+client = instructor.from_provider("openai/gpt-4o")    # Explicit provider
+client = instructor.from_provider("gemini-pro")       # Google
+client = instructor.from_provider("claude-3-sonnet")  # Anthropic
+client = instructor.from_provider("llama3.2")         # Ollama/Local
 ```
 
-### Backward Compatibility Layer
+### Unified Provider Interface
+
+The `from_provider()` method is the recommended approach for all model types:
 
 ```python
-class ModelNameAdapter:
-    """Adapter to maintain LiteLLM-style model names"""
+# Modern approach (recommended)
+client = instructor.from_provider("openai/gpt-4o")
+client = instructor.from_provider("google/gemini-2.0-flash")
+client = instructor.from_provider("anthropic/claude-3-5-sonnet")
 
-    @staticmethod
-    def to_instructor_format(model_name: str) -> str:
-        """Convert LiteLLM format to Instructor format"""
-        if "/" in model_name:
-            return model_name  # Already in provider/model format
+# With API keys
+client = instructor.from_provider("openai/gpt-4o", api_key="sk-...")
+client = instructor.from_provider("anthropic/claude-3-5-sonnet", api_key="sk-ant-...")
 
-        # Map common models to provider/model format
-        model_mappings = {
-            "gpt-4o": "openai/gpt-4o",
-            "gpt-4o-mini": "openai/gpt-4o-mini",
-            "gemini-2.0-flash": "google/gemini-2.0-flash",
-            "claude-3-5-sonnet": "anthropic/claude-3-5-sonnet",
-            "llama3.2": "ollama/llama3.2"
-        }
-
-        return model_mappings.get(model_name, f"litellm/{model_name}")
+# All use the same API
+response = await client.chat.completions.create(
+    response_model=MyModel,
+    messages=[{"role": "user", "content": "Extract data from this text..."}]
+)
 ```
 
 ## Migration Benefits
@@ -247,53 +252,60 @@ class ModelNameAdapter:
 ### 1. Simplified Architecture
 
 - Single client interface instead of dual LiteLLM + Instructor
+- Unified provider interface with `from_provider()` method
 - Reduced dependency complexity
-- Cleaner error handling
+- Cleaner error handling with comprehensive exception hierarchy
 
 ### 2. Enhanced Type Safety
 
 - Native Pydantic validation
 - Automatic retries on validation failures
 - Better IDE support and autocomplete
+- Improved error messages and debugging
 
 ### 3. Advanced Features
 
-- Streaming responses
-- Partial result processing
-- Batch operations
+- Streaming responses with partial object generation
+- Partial result processing for real-time updates
+- Batch operations support
+- Native caching support with AutoCache and RedisCache adapters
 - Cost tracking integration
 
 ### 4. Future-Proofing
 
-- Active Instructor development
+- Active Instructor development (current version: 1.11.3)
 - Modern LLM patterns support
-- Easy addition of new providers
+- Easy addition of new providers through unified interface
+- Regular updates and community support
 
 ## Implementation Timeline
 
 ### Week 1-2: Core Infrastructure
 
-- Create unified client factory
-- Implement provider detection
-- Update basic LLM node decorator
+- Update dependencies to Instructor v1.11.0+
+- Create unified client factory using `from_provider()` API
+- Update basic LLM node decorator to use modern Instructor API
+- Test direct model name usage without complex mapping
 
 ### Week 3-4: Structured Outputs
 
-- Migrate structured_llm_node decorator
-- Add enhanced validation
-- Implement error handling
+- Migrate structured_llm_node decorator to use response_model parameter
+- Add enhanced validation with comprehensive error handling
+- Implement automatic retry logic for validation failures
 
 ### Week 5-6: Advanced Features
 
-- Add streaming support
-- Implement batch processing
-- Update documentation
+- Add streaming support with partial object generation
+- Implement batch processing capabilities
+- Integrate caching support (AutoCache/RedisCache)
+- Update documentation with modern API examples
 
 ### Week 7-8: Testing & Optimization
 
-- Comprehensive testing
-- Performance optimization
+- Comprehensive testing with all supported providers
+- Performance optimization and benchmarking
 - Backward compatibility validation
+- Migration guides and tooling development
 
 ## Risk Mitigation
 
@@ -317,13 +329,14 @@ class ModelNameAdapter:
 
 ## Conclusion
 
-Migrating to Instructor as the primary LLM interface will modernize Quantalogic Flow's architecture while maintaining the same model naming syntax. The unified approach will simplify development, enhance type safety, and unlock advanced features like streaming and batch processing.
+Migrating to Instructor as the primary LLM interface will modernize Quantalogic Flow's architecture while maintaining the same model naming syntax. The unified `from_provider()` interface (introduced in v1.8.0) provides a clean, consistent API across all LLM providers, while the latest version (1.11.3) offers enhanced features like native caching, improved error handling, and better performance.
 
-The migration can be done incrementally with backward compatibility, minimizing disruption to existing users while providing a clear path to the improved architecture.
+The migration can be done incrementally with backward compatibility, minimizing disruption to existing users while providing a clear path to the improved architecture. By avoiding complex model mapping logic and letting Instructor handle model resolution natively, the implementation becomes simpler and more maintainable. The modern approach eliminates the complexity of managing multiple client types and provides better type safety, streaming support, and future-proofing for new LLM providers.
 
 ## References
 
-- [Instructor Documentation](https://python.useinstructor.com/)
+- [Instructor Documentation](https://python.useinstructor.com/) - Current v1.11.3
+- [Instructor GitHub](https://github.com/567-labs/instructor) - Latest releases and updates
 - [LiteLLM Provider Support](https://docs.litellm.ai/docs/providers)
 - [Current Quantalogic Flow Implementation](./quantalogic_flow/flow/nodes/__init__.py)
 - [LLM Providers Guide](./LLM_PROVIDERS.md)
