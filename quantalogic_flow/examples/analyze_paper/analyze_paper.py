@@ -6,7 +6,7 @@
 #     "quantalogic-py-zerox",
 #     "pdf2image",
 #     "pillow",
-#     "quantalogic-flow>=0.6.9",
+#     "quantalogic-flow>=0.7.0",
 #     "typer>=0.9.0",
 #     "rich>=13.0.0",
 #     "pyperclip>=1.8.2",
