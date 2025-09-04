@@ -50,9 +50,9 @@ def check_poppler():
 app = typer.Typer(help="Convert a file (PDF, text, or Markdown) to a LinkedIn post using LLMs")
 console = Console()
 
-# Default models for different phases (updated to Gemini 2.5)
-DEFAULT_TEXT_EXTRACTION_MODEL = "gemini/gemini-2.5-flash"
-DEFAULT_CLEANING_MODEL = "gemini/gemini-2.5-flash"
+# Default models for different phases (updated to correct Gemini models)
+DEFAULT_TEXT_EXTRACTION_MODEL = "gemini/gemini-1.5-pro"
+DEFAULT_CLEANING_MODEL = "gemini/gemini-1.5-flash"
 #DEFAULT_WRITING_MODEL = "deepseek/deepseek-reasoner"
 #DEFAULT_WRITING_MODEL = "openrouter/openai/gpt-4o-mini"
 DEFAULT_WRITING_MODEL = "openrouter/deepseek/deepseek-r1"

@@ -51,6 +51,44 @@ export GROQ_API_KEY="your-groq-key"
 
 ## Comprehensive Provider Guide
 
+### POE (Poe.com)
+
+Poe provides access to multiple AI models through a unified API with OpenAI compatibility.
+
+**Setup:**
+
+```bash
+export POE_API_KEY="your-poe-api-key"
+# Get your API key from: https://poe.com/api_key
+```
+
+**Popular Models:**
+
+- `poe/Claude-Sonnet-4` - Anthropic's latest Claude model
+- `poe/Grok-4` - xAI's Grok model
+- `poe/GPT-4o` - OpenAI's GPT-4o
+- `poe/Gemini-1.5-Pro` - Google's Gemini model
+- `poe/Llama-3.1-405B` - Meta's Llama model
+
+**Features:**
+
+- Access to 100+ models from different providers
+- OpenAI-compatible API
+- Pay-per-use pricing
+- No rate limits for API usage
+
+**Example Usage:**
+
+```python
+@Nodes.llm_node(model="poe/Claude-Sonnet-4", output="response")
+async def analyze_text(text: str):
+    return f"Analyze this text: {text}"
+```
+
+📖 **Documentation:** [Poe API Documentation](https://creator.poe.com/docs/api)
+
+---
+
 ### 🤖 **OpenAI**
 
 The most popular cloud LLM provider with GPT models.
@@ -744,6 +782,7 @@ async def deepseek_response(prompt: str):
 
 | Provider | Best For | Speed | Cost | Key Features |
 |----------|----------|-------|------|--------------|
+| **POE** | Multi-model access, variety | Medium | $$$ | 100+ models, unified API |
 | **OpenAI** | General purpose, reliable | Medium | $$$ | Best overall performance |
 | **Anthropic** | Reasoning, tool calling | Medium | $$$ | Excellent reasoning, multimodal |
 | **Google Gemini** | Multimodal, fast | Fast | $$ | Great multimodal, streaming |

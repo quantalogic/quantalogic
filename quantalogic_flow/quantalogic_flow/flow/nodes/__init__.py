@@ -5,6 +5,7 @@ This module maintains the original Nodes API while using modular components.
 """
 
 import inspect
+import os
 from typing import Any, Callable, Dict, Type, Union
 
 import instructor
@@ -134,6 +135,18 @@ class Nodes:
                 # Handle callable model parameter
                 if callable(model_to_use):
                     model_to_use = model_to_use(func_kwargs)
+
+                # Handle POE models - convert to OpenAI format with POE API base
+                if model_to_use.startswith("poe/"):
+                    # Extract the actual model name from poe/model_name
+                    actual_model = model_to_use[4:]  # Remove 'poe/' prefix
+                    model_to_use = f"openai/{actual_model}"
+                    # Set POE API base if not already set
+                    if "api_base" not in kwargs:
+                        kwargs["api_base"] = "https://api.poe.com/v1"
+                    # Set POE API key if available and not already set
+                    if "api_key" not in kwargs and "POE_API_KEY" in os.environ:
+                        kwargs["api_key"] = os.environ["POE_API_KEY"]
 
                 # Load system prompt from file if specified
                 if system_prompt_file_to_use:
@@ -275,6 +288,18 @@ class Nodes:
                 # Handle callable model parameter
                 if callable(model_to_use):
                     model_to_use = model_to_use(func_kwargs)
+
+                # Handle POE models - convert to OpenAI format with POE API base
+                if model_to_use.startswith("poe/"):
+                    # Extract the actual model name from poe/model_name
+                    actual_model = model_to_use[4:]  # Remove 'poe/' prefix
+                    model_to_use = f"openai/{actual_model}"
+                    # Set POE API base if not already set
+                    if "api_base" not in kwargs:
+                        kwargs["api_base"] = "https://api.poe.com/v1"
+                    # Set POE API key if available and not already set
+                    if "api_key" not in kwargs and "POE_API_KEY" in os.environ:
+                        kwargs["api_key"] = os.environ["POE_API_KEY"]
 
                 # Load system prompt from file if specified
                 if system_prompt_file_to_use:

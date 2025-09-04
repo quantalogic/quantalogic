@@ -1165,7 +1165,7 @@ The core class for building and executing workflows.
 ### Common Parameters
 
 #### LLM Parameters
-- `model`: Model identifier (e.g., "gpt-4o", "gemini/gemini-2.0-flash")
+- `model`: Model identifier (e.g., "gpt-4o", "gemini/gemini-2.0-flash", "poe/Claude-Sonnet-4")
 - `temperature`: Randomness (0.0-1.0)
 - `max_tokens`: Maximum response length
 - `system_prompt`: Behavior instructions
