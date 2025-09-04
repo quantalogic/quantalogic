@@ -357,9 +357,14 @@ class WorkflowManager:
                 if node_def.function not in functions:
                     raise ValueError(f"Function '{node_def.function}' for node '{node_name}' not found")
                 func = functions[node_def.function]
+                # Derive inputs from function signature instead of hardcoding
+                import inspect
+                sig = inspect.signature(func)
+                inputs = [param.name for param in sig.parameters.values() if param.name not in ['self', 'instance']]
+                
                 Nodes.NODE_REGISTRY[node_name] = (
                     Nodes.define(output=node_def.output)(func),
-                    ["user_name"],  # Explicitly define inputs based on function signature
+                    inputs,
                     node_def.output
                 )
             elif node_def.llm_config:
