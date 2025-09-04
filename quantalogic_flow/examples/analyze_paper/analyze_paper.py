@@ -51,11 +51,11 @@ app = typer.Typer(help="Convert a file (PDF, text, or Markdown) to a LinkedIn po
 console = Console()
 
 # Default models for different phases (updated to correct Gemini models)
-DEFAULT_TEXT_EXTRACTION_MODEL = "gemini/gemini-1.5-pro"
-DEFAULT_CLEANING_MODEL = "gemini/gemini-1.5-flash"
+DEFAULT_TEXT_EXTRACTION_MODEL = "gemini/gemini-2.5-flash"
+DEFAULT_CLEANING_MODEL = "gemini/gemini-2.5-flash"
 #DEFAULT_WRITING_MODEL = "deepseek/deepseek-reasoner"
 #DEFAULT_WRITING_MODEL = "openrouter/openai/gpt-4o-mini"
-DEFAULT_WRITING_MODEL = "openrouter/deepseek/deepseek-r1"
+DEFAULT_WRITING_MODEL = "poe/Claude-Sonnet-4"
 
 # Define a Pydantic model for structured output of title and authors
 class PaperInfo(BaseModel):
