@@ -288,11 +288,23 @@ class Workflow:
             self.parallel_source_node = None
         else:
             # Fallback for non-parallel convergence (e.g., after a branch)
-            # This connects all nodes that don't have an outgoing transition to the convergence node.
-            for node in self.nodes:
-                if (node not in self.transitions or not self.transitions[node]) and node != convergence_node:
-                    self.transitions.setdefault(node, []).append((convergence_node, None))
-                    logger.debug(f"Added convergence from {node} to {convergence_node}")
+            if self.is_branching and self.branch_nodes:
+                # Connect only the branch nodes to the convergence node
+                for node in self.branch_nodes:
+                    if node != convergence_node:
+                        self.transitions.setdefault(node, []).append((convergence_node, None))
+                        logger.debug(f"Added convergence from branch node {node} to {convergence_node}")
+                
+                # Reset branch state after convergence
+                self.is_branching = False
+                self.branch_nodes = []
+                self.branch_source_node = None
+            else:
+                # Legacy fallback: connect all nodes without outgoing transitions
+                for node in self.nodes:
+                    if (node not in self.transitions or not self.transitions[node]) and node != convergence_node:
+                        self.transitions.setdefault(node, []).append((convergence_node, None))
+                        logger.debug(f"Added convergence from {node} to {convergence_node}")
 
         self.current_node = convergence_node
         return self

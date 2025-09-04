@@ -86,7 +86,7 @@ def validate_node(output: str):
                 logger.error(f"Validation error in {func.__name__}: {e}")
                 raise
         sig = inspect.signature(func)
-        inputs = [param.name for param in sig.parameters.values()]
+        inputs = [param.name for param in sig.parameters.values() if param.name not in ['self', 'instance']]
         logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
         NODE_REGISTRY.register(func.__name__, wrapped_func, inputs, output)
         return wrapped_func
@@ -105,6 +105,7 @@ def transform_node(output: str, transformer: Callable[[Any], Any]):
     """
     def decorator(func: Callable) -> Callable:
         async def wrapped_func(**kwargs):
+            kwargs.pop("instance", None)  # Pop instance to avoid passing it to the user function
             try:
                 input_key = list(kwargs.keys())[0] if kwargs else None
                 if input_key:
@@ -120,7 +121,7 @@ def transform_node(output: str, transformer: Callable[[Any], Any]):
                 logger.error(f"Error in transform node {func.__name__}: {e}")
                 raise
         sig = inspect.signature(func)
-        inputs = [param.name for param in sig.parameters.values()]
+        inputs = [param.name for param in sig.parameters.values() if param.name not in ['self', 'instance']]
         logger.debug(f"Registering node {func.__name__} with inputs {inputs} and output {output}")
         NODE_REGISTRY.register(func.__name__, wrapped_func, inputs, output)
         return wrapped_func
