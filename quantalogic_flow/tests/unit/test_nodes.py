@@ -1,5 +1,6 @@
 """Unit tests for Nodes class and decorators."""
 
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -286,6 +287,76 @@ class TestNodes:
         assert "node1" in Nodes.NODE_REGISTRY
         assert "node2" in Nodes.NODE_REGISTRY
         assert len(Nodes.NODE_REGISTRY) >= 2
+    
+    @patch("quantalogic_flow.flow.nodes.acompletion")
+    async def test_llm_node_poe_model_conversion(self, mock_acompletion, nodes_registry_backup):
+        """Test POE model conversion in @Nodes.llm_node decorator."""
+        import os
+        
+        # Setup mock response
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "POE response"
+        mock_response.usage.prompt_tokens = 8
+        mock_response.usage.completion_tokens = 15
+        mock_response.usage.total_tokens = 23
+        mock_acompletion.return_value = mock_response
+        
+        # Mock environment variable
+        with patch.dict(os.environ, {"POE_API_KEY": "test-poe-key"}):
+            @Nodes.llm_node(
+                prompt_template="Test: {{ message }}",
+                output="poe_output",
+                model="poe/Claude-Sonnet-4"
+            )
+            def poe_test_node(message):
+                pass
+            
+            func, inputs, output = Nodes.NODE_REGISTRY["poe_test_node"]
+            
+            # Test execution
+            result = await func(message="Hello POE")
+            assert result == "POE response"
+            
+            # Verify the model was converted correctly
+            call_args = mock_acompletion.call_args
+            assert call_args[1]["model"] == "openai/Claude-Sonnet-4"
+            assert call_args[1]["api_base"] == "https://api.poe.com/v1"
+            assert call_args[1]["api_key"] == "test-poe-key"
+    
+    @patch("quantalogic_flow.flow.nodes.acompletion")
+    async def test_llm_node_poe_without_api_key(self, mock_acompletion, nodes_registry_backup):
+        """Test POE model without POE_API_KEY environment variable."""
+        # Setup mock response
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "POE response without key"
+        mock_acompletion.return_value = mock_response
+        
+        # Remove POE_API_KEY from environment for this test
+        with patch.dict(os.environ, {}, clear=False):
+            if "POE_API_KEY" in os.environ:
+                del os.environ["POE_API_KEY"]
+                
+            @Nodes.llm_node(
+                prompt_template="Test: {{ message }}",
+                output="poe_output_no_key",
+                model="poe/Grok-4"
+            )
+            def poe_no_key_node(message):
+                pass
+            
+            func, _, _ = Nodes.NODE_REGISTRY["poe_no_key_node"]
+            
+            # Test execution
+            result = await func(message="Hello POE")
+            assert result == "POE response without key"
+            
+            # Verify the model was converted but no API key was set
+            call_args = mock_acompletion.call_args
+            assert call_args[1]["model"] == "openai/Grok-4"
+            assert call_args[1]["api_base"] == "https://api.poe.com/v1"
+            assert "api_key" not in call_args[1]  # No API key should be set
     
     async def test_node_error_handling(self, nodes_registry_backup):
         """Test error handling in node execution."""

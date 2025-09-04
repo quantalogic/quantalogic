@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quantalogic-flow"
-version = "0.6.9"
+version = "0.7.0"
 description = "Quantalogic Flow"
 readme = "README.md"
 authors = ["QuantaLogic Team <raphael.mansuy@quantalogic.app>"]
@@ -11,12 +11,13 @@ packages = [ { include = "quantalogic_flow" } ]
 python = "<4.0,>=3.10"
 loguru = "^0.7.3"
 litellm = "^1.73.6"
-instructor = "^1.7.2"
+instructor = "^1.11.2"
 pathspec = "^0.12.1"
 pydantic = "^2.10.4"
 jinja2 = "^3.1.5"
 typing-extensions = "^4.12.2"
 rich = ">=14.0.0,<15.0.0"
+google-auth = "^2.40.3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

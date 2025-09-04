@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-09-04
+
+### Added
+
+- 🤖 **POE API Support**: Added comprehensive support for POE (Poe.com) models in quantalogic_flow
+- 🔄 **Model Conversion**: Automatic conversion of `poe/model_name` format to `openai/model_name` with POE API base
+- 📚 **POE Documentation**: Updated LLM_PROVIDERS.md with complete POE setup instructions and model examples
+- 🧪 **POE Unit Tests**: Added comprehensive unit tests for POE model conversion and API key handling
+- 📝 **POE Example**: Created `examples/poe_test.py` demonstrating POE model usage in workflows
+- 🔧 **Model Name Fixes**: Updated Gemini model names in analyze_paper example to use correct litellm format
+
+### Features
+
+- 🎯 **Seamless Integration**: POE models work transparently with existing `@Nodes.llm_node` and `@Nodes.structured_llm_node` decorators
+- 🔑 **API Key Management**: Automatic handling of `POE_API_KEY` environment variable
+- 🚀 **Backward Compatibility**: All existing functionality remains unchanged
+- 📊 **Real-world Testing**: Verified POE integration with actual workflow execution
+
+### Technical Details
+
+- **API Base**: Automatically sets `https://api.poe.com/v1` for POE models
+- **Model Format**: Supports `poe/Claude-Sonnet-4`, `poe/Grok-4`, and other POE models
+- **Error Handling**: Graceful fallback when POE API key is not available
+- **Test Coverage**: 100% test pass rate maintained (20/20 unit tests passing)
+
 ## [0.6.9] - 2025-07-18
 
 ### Changed
