@@ -84,6 +84,52 @@ Create a config file (`mcp.json`) in `mcp_config/` with the following structure:
 
 Environment variables in `env` entries can use `{{ env.VAR_NAME }}` and will be resolved at runtime.
 
+### Remote servers over Streamable HTTP
+
+Set `transport` to `streamable_http` and supply a URL instead of `command` and `args`:
+
+```json
+{
+  "mcpServers": {
+    "parallel": {
+      "transport": "streamable_http",
+      "url": "https://search.parallel.ai/mcp"
+    }
+  }
+}
+```
+
+Command-based configurations still use stdio by default. Remote servers use the
+same discovery, dynamic tools, response parsing and configuration cache. Optional
+`headers` support `{{ env.VAR_NAME }}` values, for servers that need authentication.
+The default HTTP User-Agent is `quantalogic-toolbox-mcp/0.13.0`; an explicit
+`User-Agent` header overrides it. Optional positive `timeout` and
+`sse_read_timeout` values are in seconds, with MCP SDK defaults of 30 and 300.
+Only Streamable HTTP is supported for remote URLs.
+
+### Try anonymous Parallel search and fetch
+
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) provides
+`web_search` and `web_fetch` without a Parallel API key at
+`https://search.parallel.ai/mcp`. Anonymous access has lower rate limits and
+server-managed fast-mode search settings. Model inference, if you use an agent,
+is separate. The example calls the tools directly and needs no model credentials.
+
+From `toolboxes/quantalogic-toolbox-mcp/`, install this checkout and run:
+
+```bash
+pip install -e .
+MCP_CONFIG_DIR=./examples/parallel python examples/parallel/search.py
+```
+
+The separate example directory enables Parallel explicitly and leaves your
+existing server configuration unchanged. It contains no authentication headers.
+The example discovers the tools through `get_tools()`, prints search results with
+source URLs and excerpts, then fetches the Python asyncio documentation. It uses
+one conversation `session_id` for both calls. The toolbox writes its usual
+`config_cache.json` inside the selected directory; delete that cache to refresh
+the discovered schemas.
+
 ---
 
 ## 🏃 Quickstart Example

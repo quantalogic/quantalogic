@@ -20,7 +20,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
-mcp = "^1.6.0"
+mcp = "^1.10.0"
 loguru = "^0.7.3"
 
 [build-system]

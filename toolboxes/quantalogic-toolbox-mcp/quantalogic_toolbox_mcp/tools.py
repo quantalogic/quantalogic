@@ -16,11 +16,13 @@ import re
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any, AsyncIterator, Dict, List, Union
 
 from loguru import logger
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+
+from .http_transport import HttpServerParameters, http_session_context, server_parameters
 
 # **Configure Logging**
 logger.remove()
@@ -33,7 +35,7 @@ logger.add(
 )
 
 # **Global Variables**
-servers: Dict[str, StdioServerParameters] = {}
+servers: Dict[str, Union[StdioServerParameters, HttpServerParameters]] = {}
 tools_cache: Dict[str, Any] = {}  # Cache for storing tools_result per server
 CONFIG_DIR = os.getenv("MCP_CONFIG_DIR", "./mcp_config")
 CONFIG_FILE = os.getenv("MCP_CONFIG_FILE")
@@ -204,21 +206,7 @@ def load_configs(config_dir: str = CONFIG_DIR) -> None:
                 servers.clear()
                 tools_cache.clear()
                 for server_name, server_data in cache_data["servers"].items():
-                    # Create params dictionary with required fields
-                    params = {
-                        "command": server_data["command"],
-                        "args": server_data["args"]
-                    }
-                    
-                    # Add optional parameters if they exist and are not None
-                    if "env" in server_data and server_data["env"] is not None:
-                        params["env"] = server_data["env"]
-                        logger.debug(f"Loaded environment variables for server {server_name} from cache: {list(params['env'].keys())}")
-                        
-                    if "cwd" in server_data and server_data["cwd"] is not None:
-                        params["cwd"] = server_data["cwd"]
-                    
-                    server_params = StdioServerParameters(**params)
+                    server_params = server_parameters(server_data)
                     servers[server_name] = server_params
                     tools_cache[server_name] = type('ToolsResult', (), {'tools': [
                         type('Tool', (), {
@@ -258,22 +246,7 @@ def load_configs(config_dir: str = CONFIG_DIR) -> None:
                 config = load_mcp_config(config_path)
                 server_configs = config.get("mcpServers", config.get("mcp_servers", {config.get("server_name", filename[:-5]): config}))
                 for server_name, server_data in server_configs.items():
-                    # Create server parameters with environment variables if provided
-                    params = {
-                        "command": server_data["command"],
-                        "args": server_data["args"]
-                    }
-                    
-                    # Add environment variables if specified
-                    if "env" in server_data:
-                        params["env"] = server_data["env"]
-                        logger.debug(f"Using environment variables for server {server_name}: {list(params['env'].keys())}")
-                    
-                    # Add working directory if specified
-                    if "cwd" in server_data:
-                        params["cwd"] = server_data["cwd"]
-                    
-                    server_params = StdioServerParameters(**params)
+                    server_params = server_parameters(server_data)
                     servers[server_name] = server_params
                     cache_tools[server_name] = {}
                     try:
@@ -293,10 +266,7 @@ def load_configs(config_dir: str = CONFIG_DIR) -> None:
         "config_hash": current_hash,
         "servers": {
             name: {
-                "command": params.command,
-                "args": params.args,
-                "env": params.env if hasattr(params, 'env') and params.env else None,
-                "cwd": params.cwd if hasattr(params, 'cwd') and params.cwd else None,
+                **params.model_dump(mode="json", exclude_none=True),
                 "tools": cache_tools.get(name, {})
             }
             for name, params in servers.items()
@@ -311,7 +281,7 @@ def load_configs(config_dir: str = CONFIG_DIR) -> None:
 
 # **MCP Session Management**
 @asynccontextmanager
-async def mcp_session_context(server_params: StdioServerParameters) -> AsyncIterator[ClientSession]:
+async def mcp_session_context(server_params: Union[StdioServerParameters, HttpServerParameters]) -> AsyncIterator[ClientSession]:
     """Async context manager for MCP sessions with separate handling for Docker and direct commands.
 
     Args:
@@ -327,6 +297,11 @@ async def mcp_session_context(server_params: StdioServerParameters) -> AsyncIter
         Added retry mechanism for direct commands to match Docker logic, improving robustness.
         Handles GeneratorExit exceptions gracefully to prevent session context issues.
     """
+    if isinstance(server_params, HttpServerParameters):
+        async with http_session_context(server_params) as session:
+            yield session
+        return
+
     logger.debug(f"Starting session with params: {server_params}")
 
     try:
@@ -559,7 +534,7 @@ def normalize_args(tool: Any) -> List[Dict[str, Any]]:
     arg_list = None
     if hasattr(tool, 'inputSchema') and tool.inputSchema:
         arg_list = tool.inputSchema.get('properties', {})
-        required_args = getattr(tool.inputSchema, 'required', [])
+        required_args = tool.inputSchema.get('required', [])
     elif hasattr(tool, 'arguments') and tool.arguments:
         arg_list = tool.arguments
         required_args = getattr(tool, 'required', [])

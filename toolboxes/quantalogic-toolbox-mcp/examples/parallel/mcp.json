@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "parallel": {
+      "transport": "streamable_http",
+      "url": "https://search.parallel.ai/mcp"
+    }
+  }
+}
